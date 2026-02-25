@@ -68,15 +68,26 @@ jobs:
           # 先更新远端，避免 push 冲突
           git pull --rebase origin main || true
 
-          # 忽略 pycache（避免未跟踪文件导致误判）
+          # 双保险：清理 pycache（就算生成也不让它影响提交）
+          find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
+          find . -type f -name "*.pyc" -delete || true
+
+          # 也写入 exclude，防止未来其它步骤又生成
           echo "__pycache__/" >> .git/info/exclude
           echo "*.pyc" >> .git/info/exclude
 
-          # ✅ 关键：把归档日报也 add 进去
+          # ✅ 精准 add：把所有需要落库/发布的产物全纳入
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
           git add docs/signals/top10_latest.csv || true
+
+          # ✅ 关键：日报（覆盖版 + 归档版）都纳入
           git add docs/reports/*.md || true
+          # 保险：如果未来 reports 里还有子目录或新文件，也能纳入
+          git add -A docs/reports || true
+
+          echo "[git] status after add:"
+          git status --porcelain || true
 
           # 仅当有变更时提交
           if [ -n "$(git status --porcelain)" ]; then
