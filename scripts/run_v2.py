@@ -4,20 +4,11 @@
 """
 top10-decision — V2 P0 pipeline runner
 
-Pipeline (P0):
-1) Ingest: load latest pred CSV (data/pred/pred_top10_latest.csv)
-2) Regime: decide regime + risk_budget (P0 fixed)
-3) Guardrails: stop_trading gate (P0 allow)
-4) Strategy Router: (P0 passthrough)
-5) Position: allocate weights (equal weight * risk_budget)
-6) Output: write docs/signals/top10_latest.csv (for GitHub Pages)
-7) Report:
-   - docs/reports/daily_latest.md (简报)
-   - docs/reports/top10_latest.md (人类可读 Top10 名单)
-
-Notes:
-- This script assumes you already ran: python scripts/sync_from_a_top10.py
-- GitHub Pages should point to /docs as source
+Outputs:
+- docs/signals/top10_latest.csv                      (给聚宽执行)
+- docs/reports/daily_latest.md                       (覆盖版：人类日报 latest)
+- docs/reports/daily_YYYYMMDD.md                     (归档版：人类日报 dated)
+- docs/reports/exec_check_latest.md                  (覆盖版：执行核验)
 """
 
 from __future__ import annotations
@@ -32,7 +23,7 @@ from top10decision.risk.guardrails import guardrails
 from top10decision.strategies.score_router import score_router
 from top10decision.position.allocator import allocate_equal_weight
 from top10decision.adapters.joinquant.write_latest_signal import write_latest_signal
-from top10decision.reporting.daily_report import write_daily_report, write_human_top10_list
+from top10decision.reporting.daily_report import write_daily_report_human, write_exec_check_report
 
 
 def _ensure_cols(df: pd.DataFrame, cols: list[str]) -> None:
@@ -42,21 +33,11 @@ def _ensure_cols(df: pd.DataFrame, cols: list[str]) -> None:
 
 
 def build_signal_df(pred_df: pd.DataFrame, risk_budget: float, regime_name: str) -> pd.DataFrame:
-    """
-    Convert pred_df -> signal_df (for JoinQuant execution)
-    Required input columns: ts_code
-    Optional columns: trade_date, target_trade_date
-    """
-    df = pred_df.copy()
-
-    # 固定取前10（你已确认每日固定10支；但这里仍做保护）
-    df = df.head(10).copy()
-
+    df = pred_df.copy().head(10).copy()
     _ensure_cols(df, ["ts_code"])
 
     df["jq_code"] = df["ts_code"].apply(to_jq_code)
 
-    # 日期字段保留（有则保留，无则置空）
     if "trade_date" not in df.columns:
         df["trade_date"] = ""
     if "target_trade_date" not in df.columns:
@@ -83,64 +64,70 @@ def build_signal_df(pred_df: pd.DataFrame, risk_budget: float, regime_name: str)
     return df[out_cols].copy()
 
 
+def _get_trade_date(df: pd.DataFrame) -> str:
+    if df is None or df.empty or "trade_date" not in df.columns:
+        return ""
+    s = df["trade_date"].dropna()
+    return "" if s.empty else str(s.iloc[0])
+
+
 def main() -> int:
-    # 1) ingest
     pred_df = load_latest_pred()
 
-    # 2) regime
     reg = simple_regime(pred_df)
-
-    # 3) guardrails
     gr = guardrails(pred_df)
+
+    # router
+    routed_df = score_router(pred_df).head(10).copy()
+
+    # build signal
     if getattr(gr, "stop_trading", False):
         empty = pd.DataFrame(
             columns=["trade_date", "target_trade_date", "jq_code", "target_weight", "risk_budget", "regime", "reason"]
         )
-        empty_out = write_latest_signal(empty, out_path="docs/signals/top10_latest.csv")
+        write_latest_signal(empty, out_path="docs/signals/top10_latest.csv")
+        write_exec_check_report(empty, out_path="docs/reports/exec_check_latest.md")
 
-        rep_out = Path("docs/reports/daily_latest.md")
-        rep_out.parent.mkdir(parents=True, exist_ok=True)
-        rep_out.write_text(
+        rep_path = Path("docs/reports/daily_latest.md")
+        rep_path.parent.mkdir(parents=True, exist_ok=True)
+        rep_path.write_text(
             f"# Daily Decision Report (latest)\n\n"
             f"- stop_trading: True\n"
             f"- reason: {getattr(gr, 'reason', '')}\n",
             encoding="utf-8",
         )
-
-        # 也写一份人类可读名单（空）
-        write_human_top10_list(empty, out_path="docs/reports/top10_latest.md")
-
-        print(f"[run_v2] STOP_TRADING -> wrote {empty_out} and reports")
         return 0
 
-    # 4) strategies router (P0 passthrough)
-    routed_df = score_router(pred_df)
-
-    # 5) build signal (include position sizing)
     signal_df = build_signal_df(
         pred_df=routed_df,
         risk_budget=float(getattr(reg, "risk_budget", 1.0)),
         regime_name=str(getattr(reg, "regime", "RISK_ON")),
     )
 
-    # 6) write latest signal for GitHub Pages
-    out_sig = write_latest_signal(signal_df, out_path="docs/signals/top10_latest.csv")
+    # write signal
+    write_latest_signal(signal_df, out_path="docs/signals/top10_latest.csv")
 
-    # 7) reports
-    out_daily = write_daily_report(signal_df, out_path="docs/reports/daily_latest.md")
+    # merge pred+signal for human report
+    if "jq_code" not in routed_df.columns:
+        routed_df["jq_code"] = routed_df["ts_code"].apply(to_jq_code)
+    merged = pd.merge(routed_df, signal_df, on="jq_code", how="left", suffixes=("", "_sig"))
 
-    # 人类可读 Top10：把 pred 原字段和 signal 字段合并展示
-    # 用 jq_code 作为连接键（routed_df 里可能没 jq_code，所以先补一列）
-    show_pred = routed_df.head(10).copy()
-    if "jq_code" not in show_pred.columns and "ts_code" in show_pred.columns:
-        show_pred["jq_code"] = show_pred["ts_code"].apply(to_jq_code)
+    # report paths
+    trade_date = _get_trade_date(signal_df)  # 通常是 8位 YYYYMMDD
+    dated_name = f"daily_{trade_date}.md" if trade_date else "daily_unknown.md"
 
-    merged = pd.merge(show_pred, signal_df, on=["jq_code"], how="left", suffixes=("", "_sig"))
-    out_human = write_human_top10_list(merged, out_path="docs/reports/top10_latest.md")
+    write_daily_report_human(
+        merged,
+        out_path="docs/reports/daily_latest.md",
+        title="Daily Decision Report (latest)",
+    )
+    write_daily_report_human(
+        merged,
+        out_path=f"docs/reports/{dated_name}",
+        title=f"Daily Decision Report ({trade_date})" if trade_date else "Daily Decision Report (unknown)",
+    )
 
-    print(f"[run_v2] wrote signal: {out_sig}")
-    print(f"[run_v2] wrote report: {out_daily}")
-    print(f"[run_v2] wrote human list: {out_human}")
+    write_exec_check_report(signal_df, out_path="docs/reports/exec_check_latest.md")
     return 0
 
 
