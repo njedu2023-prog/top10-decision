@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 
@@ -12,47 +12,53 @@ def _pick_cols(df: pd.DataFrame, wanted: List[str]) -> List[str]:
     return [c for c in wanted if c in df.columns]
 
 
-def write_daily_report(signal_df: pd.DataFrame, out_path: str = "docs/reports/daily_latest.md") -> Path:
-    """
-    简报：主要用于“今天系统输出是否正常”
-    """
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+def _md_table(df: pd.DataFrame, cols: List[str]) -> str:
+    if df is None or df.empty:
+        return "_（空）_\n"
+    if not cols:
+        return "_（无可展示字段）_\n"
 
     lines = []
-    lines.append("# Daily Decision Report (latest)\n\n")
-    lines.append("本页用于快速核验：信号是否生成、数量是否为 10、权重是否合理。\n\n")
-
-    # 只做简表，避免冗长
-    lines.append("| jq_code | target_weight | regime | risk_budget | reason |\n")
-    lines.append("|---|---:|---|---:|---|\n")
-    for _, r in signal_df.iterrows():
-        lines.append(
-            f"| {r.get('jq_code','')} | {r.get('target_weight','')} | {r.get('regime','')} | {r.get('risk_budget','')} | {r.get('reason','')} |\n"
-        )
-
-    out_path.write_text("".join(lines), encoding="utf-8")
-    return out_path
+    lines.append("| " + " | ".join(cols) + " |\n")
+    lines.append("|" + "|".join(["---"] * len(cols)) + "|\n")
+    for _, row in df.iterrows():
+        vals = []
+        for c in cols:
+            v = row.get(c, "")
+            if pd.isna(v):
+                v = ""
+            vals.append(str(v))
+        lines.append("| " + " | ".join(vals) + " |\n")
+    return "".join(lines)
 
 
-def write_human_top10_list(
+def _first_non_empty(df: pd.DataFrame, col: str) -> str:
+    if df is None or df.empty or col not in df.columns:
+        return ""
+    s = df[col].dropna()
+    if s.empty:
+        return ""
+    return str(s.iloc[0])
+
+
+def write_daily_report_human(
     merged_df: pd.DataFrame,
-    out_path: str = "docs/reports/top10_latest.md",
+    out_path: str,
+    title: str = "Daily Decision Report",
+    extra_notes: Optional[str] = None,
 ) -> Path:
     """
-    人类可读 Top10 名单（用于审阅/复盘/展示）
-    merged_df：建议包含 pred 原字段 + signal 字段
+    人类可读日报：以 a-top10 原信息为主，并附带 V2 决策字段
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 优先展示的字段（存在则展示，不存在就跳过）
+    trade_date = _first_non_empty(merged_df, "trade_date")
+    target_trade_date = _first_non_empty(merged_df, "target_trade_date")
+
     preferred = [
-        "trade_date",
-        "target_trade_date",
         "rank",
         "ts_code",
-        "jq_code",
         "name",
         "board",
         "Probability",
@@ -61,6 +67,7 @@ def write_human_top10_list(
         "st_flag",
         "st_penalty",
         "score",
+        "jq_code",
         "target_weight",
         "risk_budget",
         "regime",
@@ -68,23 +75,40 @@ def write_human_top10_list(
     ]
     show_cols = _pick_cols(merged_df, preferred)
 
-    # 生成 markdown 表
     lines = []
-    lines.append("# Top10 执行名单（latest）\n\n")
-    lines.append("说明：本名单由 top10-decision 生成；CSV 用于聚宽执行，本页用于人类审阅。\n\n")
+    lines.append(f"# {title}\n\n")
+    lines.append(f"- trade_date（信号生成日）: **{trade_date}**\n")
+    lines.append(f"- target_trade_date（执行交易日）: **{target_trade_date}**\n\n")
+    lines.append("本页为**人类可读**版本：原始信息（ts_code/name/board/Probability…）+ 决策字段（target_weight/regime…）。\n\n")
+    if extra_notes:
+        lines.append(extra_notes.strip() + "\n\n")
+    lines.append(_md_table(merged_df, show_cols))
 
-    # 表头
-    lines.append("| " + " | ".join(show_cols) + " |\n")
-    lines.append("|" + "|".join(["---"] * len(show_cols)) + "|\n")
+    out_path.write_text("".join(lines), encoding="utf-8")
+    return out_path
 
-    for _, row in merged_df.iterrows():
-        vals = []
-        for c in show_cols:
-            v = row.get(c, "")
-            if pd.isna(v):
-                v = ""
-            vals.append(str(v))
-        lines.append("| " + " | ".join(vals) + " |\n")
+
+def write_exec_check_report(
+    signal_df: pd.DataFrame,
+    out_path: str,
+) -> Path:
+    """
+    执行核验页：只展示聚宽执行字段
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    trade_date = _first_non_empty(signal_df, "trade_date")
+    target_trade_date = _first_non_empty(signal_df, "target_trade_date")
+
+    preferred = ["jq_code", "target_weight", "risk_budget", "regime", "reason"]
+    show_cols = _pick_cols(signal_df, preferred)
+
+    lines = []
+    lines.append("# Exec Check\n\n")
+    lines.append(f"- trade_date: **{trade_date}**\n")
+    lines.append(f"- target_trade_date: **{target_trade_date}**\n\n")
+    lines.append(_md_table(signal_df, show_cols))
 
     out_path.write_text("".join(lines), encoding="utf-8")
     return out_path
