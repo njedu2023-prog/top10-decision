@@ -1,0 +1,36 @@
+name: run_decision_daily
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 13 * * 1-5"  # 13:15 UTC ~= 21:15 Beijing
+
+jobs:
+  decision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Sync from a-top10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/sync_from_a_top10.py
+
+      - name: Run decision v2
+        run: python scripts/run_v2.py
+
+      - name: Commit outputs (docs/signals) and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add docs signals || true
+          git add docs/signals/top10_latest.csv
+          git commit -m "Update top10_latest signal" || true
+          git push
