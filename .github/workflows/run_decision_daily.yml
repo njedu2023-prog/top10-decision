@@ -35,11 +35,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 关键：让 Python 能 import src/top10decision
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> $GITHUB_ENV
 
-      # 关键：同步 a-top10 的最新 pred 文件（带重试）
       - name: Sync latest pred_top10 from a-top10 (retry)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,13 +54,11 @@ jobs:
             sleep 5
           done
 
-      # 决策 + 写出 docs/signals/top10_latest.csv + docs/reports/daily_latest.md
       - name: Run decision pipeline (P0)
         run: |
           set -e
           python scripts/run_v2.py
 
-      # 推送前先 pull/rebase，避免冲突；仅有变化才 commit
       - name: Commit & push outputs (safe)
         run: |
           set -e
@@ -72,11 +68,15 @@ jobs:
           # 先更新远端，避免 push 冲突
           git pull --rebase origin main || true
 
-          # 精准 add：只 add 我们产生的产物
+          # 忽略 pycache（避免未跟踪文件导致误判）
+          echo "__pycache__/" >> .git/info/exclude
+          echo "*.pyc" >> .git/info/exclude
+
+          # ✅ 关键：把归档日报也 add 进去
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
           git add docs/signals/top10_latest.csv || true
-          git add docs/reports/daily_latest.md || true
+          git add docs/reports/*.md || true
 
           # 仅当有变更时提交
           if [ -n "$(git status --porcelain)" ]; then
