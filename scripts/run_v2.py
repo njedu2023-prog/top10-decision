@@ -30,6 +30,40 @@ def _ensure_cols(df: pd.DataFrame, cols: list[str]) -> None:
         raise ValueError(f"缺少必要字段：{miss}. 现有字段：{list(df.columns)}")
 
 
+def _norm_ymd(v) -> str:
+    """
+    把 trade_date 规范成 'YYYYMMDD'（去掉 .0 / 科学计数法 / 空值）
+    """
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return ""
+    try:
+        # pandas 可能读成 numpy 类型
+        if pd.isna(v):
+            return ""
+    except Exception:
+        pass
+
+    s = str(v).strip()
+    if not s:
+        return ""
+
+    # 常见：'20260225.0'
+    if s.endswith(".0"):
+        s = s[:-2]
+
+    # 常见：'20260225'
+    if len(s) == 8 and s.isdigit():
+        return s
+
+    # 尝试转成 int 再格式化（防科学计数）
+    try:
+        i = int(float(s))
+        s2 = str(i)
+        return s2 if (len(s2) == 8 and s2.isdigit()) else s2
+    except Exception:
+        return s
+
+
 def build_signal_df(pred_df: pd.DataFrame, risk_budget: float, regime_name: str) -> pd.DataFrame:
     """
     聚宽执行用信号（保留 jq_code 等字段）
@@ -61,7 +95,9 @@ def _get_first_value(df: pd.DataFrame, col: str) -> str:
     if df is None or df.empty or col not in df.columns:
         return ""
     s = df[col].dropna()
-    return "" if s.empty else str(s.iloc[0])
+    if s.empty:
+        return ""
+    return _norm_ymd(s.iloc[0]) if col in ("trade_date", "target_trade_date") else str(s.iloc[0])
 
 
 def _fmt_num(x, nd=6):
@@ -86,25 +122,17 @@ def _write_human_report(pred_top10: pd.DataFrame, out_path: str, title: str, sto
 
     lines: list[str] = []
     lines.append(f"# {title}\n\n")
-    if trade_date:
-        lines.append(f"- trade_date（信号生成日）: **{trade_date}**\n")
-    else:
-        lines.append(f"- trade_date（信号生成日）: **未知**\n")
-
-    # target_trade_date 可能为空：允许为空，但要明确展示
+    lines.append(f"- trade_date（信号生成日）: **{trade_date if trade_date else '未知'}**\n")
     lines.append(f"- target_trade_date（执行交易日）: **{target_trade_date if target_trade_date else '未知/未填'}**\n\n")
 
     if stop_note:
         lines.append(f"**停手：{stop_note}**\n\n")
 
-    # 表头（按你截图的中文风格）
     lines.append("| 排名 | 代码 | 股票 | Probability | 强度得分 | 题材加成 | 板块 |\n")
     lines.append("|---:|---|---|---:|---:|---:|---|\n")
 
-    # 取前10行输出
     d = pred_top10.head(10).copy()
 
-    # 字段映射（兼容缺字段）
     for _, r in d.iterrows():
         rank = r.get("rank", "")
         ts_code = r.get("ts_code", "")
@@ -126,14 +154,11 @@ def main() -> int:
     reg = simple_regime(pred_df)
     gr = guardrails(pred_df)
 
-    # Step: router（取前10）
     routed_df = score_router(pred_df).head(10).copy()
 
-    # 生成 trade_date（用于归档文件名）
     trade_date = _get_first_value(routed_df, "trade_date")
     dated_name = f"daily_{trade_date}.md" if trade_date else "daily_unknown.md"
 
-    # 停手：仍输出空 signal；日报明确“停手原因”，并仍然生成 latest+dated（但表格仍展示 routed_df 的 Top10 信息，方便你看当日信号源）
     if getattr(gr, "stop_trading", False):
         empty = pd.DataFrame(
             columns=["trade_date", "target_trade_date", "jq_code", "target_weight", "risk_budget", "regime", "reason"]
@@ -155,7 +180,6 @@ def main() -> int:
         )
         return 0
 
-    # 正常：生成聚宽执行信号
     signal_df = build_signal_df(
         pred_df=routed_df,
         risk_budget=float(getattr(reg, "risk_budget", 1.0)),
@@ -163,7 +187,6 @@ def main() -> int:
     )
     write_latest_signal(signal_df, out_path="docs/signals/top10_latest.csv")
 
-    # 生成人类日报（latest + dated）
     trade_date2 = _get_first_value(signal_df, "trade_date") or trade_date
     dated_name2 = f"daily_{trade_date2}.md" if trade_date2 else dated_name
 
