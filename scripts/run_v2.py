@@ -11,7 +11,9 @@ Pipeline (P0):
 4) Strategy Router: (P0 passthrough)
 5) Position: allocate weights (equal weight * risk_budget)
 6) Output: write docs/signals/top10_latest.csv (for GitHub Pages)
-7) Report: write docs/reports/daily_latest.md
+7) Report:
+   - docs/reports/daily_latest.md (简报)
+   - docs/reports/top10_latest.md (人类可读 Top10 名单)
 
 Notes:
 - This script assumes you already ran: python scripts/sync_from_a_top10.py
@@ -20,9 +22,7 @@ Notes:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-
 import pandas as pd
 
 from top10decision.ingest import load_latest_pred
@@ -32,7 +32,7 @@ from top10decision.risk.guardrails import guardrails
 from top10decision.strategies.score_router import score_router
 from top10decision.position.allocator import allocate_equal_weight
 from top10decision.adapters.joinquant.write_latest_signal import write_latest_signal
-from top10decision.reporting.daily_report import write_daily_report
+from top10decision.reporting.daily_report import write_daily_report, write_human_top10_list
 
 
 def _ensure_cols(df: pd.DataFrame, cols: list[str]) -> None:
@@ -54,26 +54,23 @@ def build_signal_df(pred_df: pd.DataFrame, risk_budget: float, regime_name: str)
 
     _ensure_cols(df, ["ts_code"])
 
-    # code mapping
     df["jq_code"] = df["ts_code"].apply(to_jq_code)
 
-    # 补齐日期字段
+    # 日期字段保留（有则保留，无则置空）
     if "trade_date" not in df.columns:
         df["trade_date"] = ""
     if "target_trade_date" not in df.columns:
         df["target_trade_date"] = ""
 
-    # regime fields
     df["risk_budget"] = float(risk_budget)
     df["regime"] = str(regime_name)
-
-    # 先留 reason，后面策略路由/风控可覆盖
     df["reason"] = "P0_equal_weight"
 
-    # allocate weights
     df = allocate_equal_weight(df, risk_budget=float(risk_budget))
 
-    # 输出契约（聚宽拉取的最小字段集合）
+    if "target_weight" not in df.columns:
+        raise ValueError("Position allocator 未产生 target_weight，请检查 src/top10decision/position/allocator.py")
+
     out_cols = [
         "trade_date",
         "target_trade_date",
@@ -83,10 +80,6 @@ def build_signal_df(pred_df: pd.DataFrame, risk_budget: float, regime_name: str)
         "regime",
         "reason",
     ]
-    # 保险：万一 allocator 没写 target_weight
-    if "target_weight" not in df.columns:
-        raise ValueError("Position allocator 未产生 target_weight，请检查 src/top10decision/position/allocator.py")
-
     return df[out_cols].copy()
 
 
@@ -100,11 +93,11 @@ def main() -> int:
     # 3) guardrails
     gr = guardrails(pred_df)
     if getattr(gr, "stop_trading", False):
-        # 停手：输出一个空信号（但仍落盘，保证系统“有输出”）
         empty = pd.DataFrame(
             columns=["trade_date", "target_trade_date", "jq_code", "target_weight", "risk_budget", "regime", "reason"]
         )
         empty_out = write_latest_signal(empty, out_path="docs/signals/top10_latest.csv")
+
         rep_out = Path("docs/reports/daily_latest.md")
         rep_out.parent.mkdir(parents=True, exist_ok=True)
         rep_out.write_text(
@@ -113,7 +106,11 @@ def main() -> int:
             f"- reason: {getattr(gr, 'reason', '')}\n",
             encoding="utf-8",
         )
-        print(f"[run_v2] STOP_TRADING -> wrote {empty_out} and {rep_out}")
+
+        # 也写一份人类可读名单（空）
+        write_human_top10_list(empty, out_path="docs/reports/top10_latest.md")
+
+        print(f"[run_v2] STOP_TRADING -> wrote {empty_out} and reports")
         return 0
 
     # 4) strategies router (P0 passthrough)
@@ -129,11 +126,21 @@ def main() -> int:
     # 6) write latest signal for GitHub Pages
     out_sig = write_latest_signal(signal_df, out_path="docs/signals/top10_latest.csv")
 
-    # 7) write report
-    out_rep = write_daily_report(signal_df, out_path="docs/reports/daily_latest.md")
+    # 7) reports
+    out_daily = write_daily_report(signal_df, out_path="docs/reports/daily_latest.md")
+
+    # 人类可读 Top10：把 pred 原字段和 signal 字段合并展示
+    # 用 jq_code 作为连接键（routed_df 里可能没 jq_code，所以先补一列）
+    show_pred = routed_df.head(10).copy()
+    if "jq_code" not in show_pred.columns and "ts_code" in show_pred.columns:
+        show_pred["jq_code"] = show_pred["ts_code"].apply(to_jq_code)
+
+    merged = pd.merge(show_pred, signal_df, on=["jq_code"], how="left", suffixes=("", "_sig"))
+    out_human = write_human_top10_list(merged, out_path="docs/reports/top10_latest.md")
 
     print(f"[run_v2] wrote signal: {out_sig}")
-    print(f"[run_v2] wrote report: {out_rep}")
+    print(f"[run_v2] wrote report: {out_daily}")
+    print(f"[run_v2] wrote human list: {out_human}")
     return 0
 
 
