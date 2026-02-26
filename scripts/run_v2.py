@@ -6,6 +6,7 @@ top10-decision — V2 P0 runner
 
 Outputs:
 - docs/signals/top10_latest.csv          (聚宽执行)
+- docs/signals/top10_YYYYMMDD.csv        (按 trade_date 归档，永远新增 ✅新增)
 - docs/reports/daily_latest.md           (人类可读，覆盖更新：表格风格如截图)
 - docs/reports/daily_YYYYMMDD.md         (人类可读，按 trade_date 归档)
 """
@@ -37,7 +38,6 @@ def _norm_ymd(v) -> str:
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return ""
     try:
-        # pandas 可能读成 numpy 类型
         if pd.isna(v):
             return ""
     except Exception:
@@ -47,15 +47,12 @@ def _norm_ymd(v) -> str:
     if not s:
         return ""
 
-    # 常见：'20260225.0'
     if s.endswith(".0"):
         s = s[:-2]
 
-    # 常见：'20260225'
     if len(s) == 8 and s.isdigit():
         return s
 
-    # 尝试转成 int 再格式化（防科学计数）
     try:
         i = int(float(s))
         s2 = str(i)
@@ -149,6 +146,22 @@ def _write_human_report(pred_top10: pd.DataFrame, out_path: str, title: str, sto
     out_path.write_text("".join(lines), encoding="utf-8")
 
 
+def _write_signals(latest_df: pd.DataFrame, trade_date: str) -> None:
+    """
+    写两份信号：
+    - latest：docs/signals/top10_latest.csv（覆盖）
+    - dated：docs/signals/top10_YYYYMMDD.csv（永远新增）
+    """
+    # 1) latest（覆盖）
+    write_latest_signal(latest_df, out_path="docs/signals/top10_latest.csv")
+
+    # 2) dated（永远新增）
+    td = _norm_ymd(trade_date)
+    if td:
+        dated_path = f"docs/signals/top10_{td}.csv"
+        write_latest_signal(latest_df, out_path=dated_path)
+
+
 def main() -> int:
     pred_df = load_latest_pred()
     reg = simple_regime(pred_df)
@@ -163,7 +176,9 @@ def main() -> int:
         empty = pd.DataFrame(
             columns=["trade_date", "target_trade_date", "jq_code", "target_weight", "risk_budget", "regime", "reason"]
         )
-        write_latest_signal(empty, out_path="docs/signals/top10_latest.csv")
+
+        # ✅ stop 分支：也落盘 dated（空表），保证可追溯
+        _write_signals(empty, trade_date=trade_date)
 
         stop_note = getattr(gr, "reason", "STOP_TRADING")
         _write_human_report(
@@ -185,10 +200,12 @@ def main() -> int:
         risk_budget=float(getattr(reg, "risk_budget", 1.0)),
         regime_name=str(getattr(reg, "regime", "RISK_ON")),
     )
-    write_latest_signal(signal_df, out_path="docs/signals/top10_latest.csv")
 
     trade_date2 = _get_first_value(signal_df, "trade_date") or trade_date
     dated_name2 = f"daily_{trade_date2}.md" if trade_date2 else dated_name
+
+    # ✅ 正常分支：写 latest + dated
+    _write_signals(signal_df, trade_date=trade_date2)
 
     _write_human_report(
         routed_df,
