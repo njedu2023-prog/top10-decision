@@ -37,11 +37,24 @@ jobs:
 
       - name: Install deps
         run: |
+          set -e
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> $GITHUB_ENV
+
+      # ✅ 关键：先把会产生/会落库/会发布的目录建好，避免脚本/commit 阶段因为目录不存在而漏产物
+      - name: Ensure output dirs
+        run: |
+          set -e
+          mkdir -p data/pred
+          mkdir -p data/decision
+          mkdir -p docs/signals
+          mkdir -p docs/reports
+          mkdir -p docs/weights
+          mkdir -p outputs/decision
+          mkdir -p outputs/learning
 
       # 先同步 latest（保底）
       - name: Sync latest pred_top10 from a-top10 (retry)
@@ -82,12 +95,13 @@ jobs:
 
           mkdir -p data/pred
 
-          # ✅ 以你截图为准：a-top10 文件名为 pred_top10_YYYYMMDD.csv
+          # ✅ a-top10 文件名：pred_top10_YYYYMMDD.csv
           FILE_IN_A_TOP10="outputs/learning/pred_top10_${TRADE_DATE}.csv"
           RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
 
           echo "[manual] fetching: ${RAW_URL}"
 
+          # 注：仓库为 public 时其实不需要 token；保留 header 仅用于更稳的限流/访问
           curl -fL \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3.raw" \
@@ -121,10 +135,24 @@ jobs:
           echo "*.pyc" >> .git/info/exclude
 
           # ✅ 精准 add：把所有需要落库/发布的产物全纳入
+          # --- a-top10 同步输入快照（可追溯）
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
 
-          # ✅ signals：latest + dated（永远新增）都纳入（关键修复点）
+          # --- decision 输出（你定义的“可执行权重 + 决策报告 + 评估”）
+          git add docs/weights/weights_latest.csv || true
+          git add docs/weights/weights_*.csv || true
+
+          git add outputs/decision/* || true
+          git add outputs/decision/**/*.md || true
+          git add outputs/decision/**/*.json || true
+
+          # --- 三张必落库表（自学习不跑偏）
+          git add data/decision/decision_candidates_*.csv || true
+          git add data/decision/decision_execution_*.csv || true
+          git add data/decision/decision_learning.csv || true
+
+          # ✅ signals：latest + dated（永远新增）都纳入
           git add docs/signals/top10_latest.csv || true
           git add docs/signals/top10_*.csv || true
 
