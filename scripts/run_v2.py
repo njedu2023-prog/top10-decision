@@ -14,7 +14,7 @@ P0.1 关键增强：
 - 支持从环境变量读取数据源：
   1) TOP10_PRED_URL  : 直接拉取远端 CSV（GitHub Raw）
   2) TOP10_PRED_PATH : 读取本地路径 CSV
-  3) fallback        : 调用原 load_latest_pred()
+  3) fallback        : 调用原 load_latest_pred()（仅允许本地调试；Actions 默认禁止）
 - 自动兼容 a-top10 decisio 输出字段：
   - target_trade_date <- verify_date
   - Probability <- prob
@@ -164,12 +164,21 @@ def _download_to(url: str, dst: Path) -> None:
     dst.write_bytes(data)
 
 
+def _is_actions() -> bool:
+    return str(os.getenv("GITHUB_ACTIONS", "")).strip().lower() in ("1", "true", "yes")
+
+
+def _allow_fallback() -> bool:
+    # 只允许显式开启：TOP10_ALLOW_FALLBACK=1
+    return str(os.getenv("TOP10_ALLOW_FALLBACK", "")).strip().lower() in ("1", "true", "yes")
+
+
 def _load_pred_df() -> pd.DataFrame:
     """
     数据源优先级：
     1) TOP10_PRED_URL  : 远端 CSV（GitHub raw）
     2) TOP10_PRED_PATH : 本地 CSV
-    3) fallback        : load_latest_pred()
+    3) fallback        : load_latest_pred() —— 默认仅本地调试允许；Actions 下禁止静默回退
     """
     url = (os.getenv("TOP10_PRED_URL") or "").strip()
     path = (os.getenv("TOP10_PRED_PATH") or "").strip()
@@ -192,7 +201,14 @@ def _load_pred_df() -> pd.DataFrame:
             pass
         df.attrs["pred_source"] = f"path:{p}"
     else:
-        print("[INGEST] fallback to load_latest_pred()")
+        # ✅ 关键：Actions 默认禁止“静默吃旧数据”
+        if _is_actions() and not _allow_fallback():
+            raise RuntimeError(
+                "未提供 TOP10_PRED_URL / TOP10_PRED_PATH，且当前在 GitHub Actions 环境。"
+                "为防止静默回退旧数据链路，已禁止 fallback。"
+                "请在 workflow 中设置 env: TOP10_PRED_URL=<a-top10 decisio raw url>。"
+            )
+        print("[INGEST] fallback to load_latest_pred()  (TOP10_ALLOW_FALLBACK enabled or non-actions)")
         df = load_latest_pred()
         df.attrs["pred_source"] = "fallback:load_latest_pred"
 
@@ -214,7 +230,6 @@ def _normalize_pred_fields(df: pd.DataFrame) -> pd.DataFrame:
 
     # 必要字段兜底
     if "ts_code" not in d.columns:
-        # 尝试兼容 code
         if "code" in d.columns:
             d["ts_code"] = d["code"]
     if "name" not in d.columns:
@@ -229,7 +244,6 @@ def _normalize_pred_fields(df: pd.DataFrame) -> pd.DataFrame:
             d["target_trade_date"] = ""
 
     if "trade_date" not in d.columns:
-        # 极端兜底
         d["trade_date"] = ""
 
     # 概率字段
@@ -517,14 +531,27 @@ def main() -> int:
     if src:
         print(f"[INGEST] pred_source={src}")
 
+    # ✅ 关键保护：如果候选数 <= TOPN，很可能又吃回“Top10 10行文件”
+    try:
+        n_rows = int(len(pred_df))
+    except Exception:
+        n_rows = 0
+    if n_rows > 0 and n_rows <= TOPN_DEFAULT:
+        print(f"[WARN] pred_df rows={n_rows} <= TOPN({TOPN_DEFAULT}). 这通常意味着数据源仍是 Top10（10行）而非 decisio 全量。")
+
     reg = simple_regime(pred_df)
     gr = guardrails(pred_df)
 
     regime_name = str(getattr(reg, "regime", "RISK_ON"))
     risk_budget = float(getattr(reg, "risk_budget", 1.0))
 
-    topk = int(getattr(gr, "topk", TOPK_DEFAULT)) if hasattr(gr, "topk") else TOPK_DEFAULT
-    routed_df = score_router(pred_df).head(max(10, topk)).copy()
+    # topk：不超过数据本身行数；guardrails 若不给/给0，则用默认
+    gr_topk = int(getattr(gr, "topk", TOPK_DEFAULT)) if hasattr(gr, "topk") else TOPK_DEFAULT
+    if gr_topk <= 0:
+        gr_topk = TOPK_DEFAULT
+    topk = min(max(10, gr_topk), max(10, len(pred_df)))
+
+    routed_df = score_router(pred_df).head(topk).copy()
 
     trade_date = _get_first_value(routed_df, "trade_date")
     target_trade_date = _get_first_value(routed_df, "target_trade_date")
