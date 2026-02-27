@@ -9,11 +9,22 @@ P0.1 关键增强：
   - 目标行：weight>0, target_rank=1..TopN
   - 候补行：weight=0, backup_rank=1..(TopK-TopN)
 - 兼容旧 joinquant signals：只输出 weight>0 的目标行，避免影响现有聚宽策略
+
+【本次修复：数据来源路径（PRED source path/url）】
+- 支持从环境变量读取数据源：
+  1) TOP10_PRED_URL  : 直接拉取远端 CSV（GitHub Raw）
+  2) TOP10_PRED_PATH : 读取本地路径 CSV
+  3) fallback        : 调用原 load_latest_pred()
+- 自动兼容 a-top10 decisio 输出字段：
+  - target_trade_date <- verify_date
+  - Probability <- prob
 """
 
 from __future__ import annotations
 
 import json
+import os
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -87,7 +98,7 @@ def _get_first_value(df: pd.DataFrame, col: str) -> str:
     s = df[col].dropna()
     if s.empty:
         return ""
-    if col in ("trade_date", "target_trade_date", "exec_date", "exit_date", "signal_date"):
+    if col in ("trade_date", "target_trade_date", "exec_date", "exit_date", "signal_date", "verify_date"):
         return _norm_ymd(s.iloc[0])
     return str(s.iloc[0])
 
@@ -132,6 +143,106 @@ def _choose_exec_date(trade_date: str, target_trade_date: str) -> str:
     td = _norm_ymd(trade_date)
     ttd = _norm_ymd(target_trade_date)
     return ttd or td
+
+
+def _read_csv_any(path: Path) -> pd.DataFrame:
+    if path is None or not path.exists():
+        return pd.DataFrame()
+    for enc in ("utf-8", "utf-8-sig", "gbk"):
+        try:
+            return pd.read_csv(path, encoding=enc)
+        except Exception:
+            pass
+    return pd.DataFrame()
+
+
+def _download_to(url: str, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    req = urllib.request.Request(url, headers={"User-Agent": "top10-decision"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = resp.read()
+    dst.write_bytes(data)
+
+
+def _load_pred_df() -> pd.DataFrame:
+    """
+    数据源优先级：
+    1) TOP10_PRED_URL  : 远端 CSV（GitHub raw）
+    2) TOP10_PRED_PATH : 本地 CSV
+    3) fallback        : load_latest_pred()
+    """
+    url = (os.getenv("TOP10_PRED_URL") or "").strip()
+    path = (os.getenv("TOP10_PRED_PATH") or "").strip()
+
+    cache_path = Path("data/pred/pred_source_latest.csv")
+
+    if url:
+        print(f"[INGEST] use TOP10_PRED_URL={url}")
+        _download_to(url, cache_path)
+        df = _read_csv_any(cache_path)
+        df.attrs["pred_source"] = f"url:{url}"
+    elif path:
+        p = Path(path)
+        print(f"[INGEST] use TOP10_PRED_PATH={p}")
+        df = _read_csv_any(p)
+        # 同样缓存一份，便于验收
+        try:
+            df.to_csv(cache_path, index=False, encoding="utf-8-sig")
+        except Exception:
+            pass
+        df.attrs["pred_source"] = f"path:{p}"
+    else:
+        print("[INGEST] fallback to load_latest_pred()")
+        df = load_latest_pred()
+        df.attrs["pred_source"] = "fallback:load_latest_pred"
+
+    if df is None:
+        df = pd.DataFrame()
+    return df
+
+
+def _normalize_pred_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    兼容 a-top10 decisio 输出字段（pred_decisio_latest.csv）：
+    - target_trade_date <- verify_date
+    - Probability <- prob
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    d = df.copy()
+
+    # 必要字段兜底
+    if "ts_code" not in d.columns:
+        # 尝试兼容 code
+        if "code" in d.columns:
+            d["ts_code"] = d["code"]
+    if "name" not in d.columns:
+        if "stock_name" in d.columns:
+            d["name"] = d["stock_name"]
+
+    # 交易日字段
+    if "target_trade_date" not in d.columns:
+        if "verify_date" in d.columns:
+            d["target_trade_date"] = d["verify_date"]
+        else:
+            d["target_trade_date"] = ""
+
+    if "trade_date" not in d.columns:
+        # 极端兜底
+        d["trade_date"] = ""
+
+    # 概率字段
+    if "Probability" not in d.columns:
+        if "prob" in d.columns:
+            d["Probability"] = d["prob"]
+
+    # 保证存在，避免后续逻辑空引用（值允许为空）
+    for c in ("prob", "StrengthScore", "ThemeBoost", "board"):
+        if c not in d.columns:
+            d[c] = ""
+
+    return d
 
 
 # =========================
@@ -396,8 +507,15 @@ def build_signal_df_for_joinquant(
 def main() -> int:
     _ensure_dirs()
 
-    pred_df = load_latest_pred()
+    pred_df = _load_pred_df()
+    pred_df = _normalize_pred_fields(pred_df)
+
     _ensure_cols(pred_df, ["ts_code", "name"])
+
+    # 标记来源，写入日志，便于你验收
+    src = getattr(pred_df, "attrs", {}).get("pred_source", "")
+    if src:
+        print(f"[INGEST] pred_source={src}")
 
     reg = simple_regime(pred_df)
     gr = guardrails(pred_df)
