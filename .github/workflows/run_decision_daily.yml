@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       trade_date:
-        description: "手动指定交易日 YYYYMMDD（留空=使用 a-top10 latest）"
+        description: "手动指定交易日 YYYYMMDD（留空=使用 a-top10 decisio latest）"
         required: false
         type: string
 
@@ -56,32 +56,15 @@ jobs:
           mkdir -p outputs/decision
           mkdir -p outputs/learning
 
-      # 先同步 latest（保底）
-      - name: Sync latest pred_top10 from a-top10 (retry)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          A_TOP10_OWNER: njedu2023-prog
-          A_TOP10_REPO: a-top10
-          A_TOP10_BRANCH: main
-          A_TOP10_DIR: outputs/learning
-        run: |
-          set -e
-          for i in 1 2 3; do
-            echo "[sync] attempt $i/3"
-            python scripts/sync_from_a_top10.py && break
-            echo "[sync] failed attempt $i/3"
-            sleep 5
-          done
-
-      # ✅ 手动指定日期：拉取 pred_top10_{trade_date}.csv，并覆盖为 pred_top10_latest.csv
-      - name: If trade_date provided, fetch pred_top10_{trade_date}.csv and overwrite latest
+      # ✅ 手动指定日期：拉取 a-top10 的 decisio 归档文件 pred_decisio_{trade_date}.csv
+      # 保存为 data/pred/pred_source_latest.csv，并让 run_v2.py 走 TOP10_PRED_PATH
+      - name: If trade_date provided, fetch pred_decisio_{trade_date}.csv to local cache
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.trade_date != '' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRADE_DATE: ${{ inputs.trade_date }}
           A_TOP10_OWNER: njedu2023-prog
           A_TOP10_REPO: a-top10
           A_TOP10_BRANCH: main
-          TRADE_DATE: ${{ inputs.trade_date }}
         run: |
           set -e
 
@@ -95,24 +78,25 @@ jobs:
 
           mkdir -p data/pred
 
-          # ✅ a-top10 文件名：pred_top10_YYYYMMDD.csv
-          FILE_IN_A_TOP10="outputs/learning/pred_top10_${TRADE_DATE}.csv"
+          FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
           RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
 
           echo "[manual] fetching: ${RAW_URL}"
 
-          # 注：仓库为 public 时其实不需要 token；保留 header 仅用于更稳的限流/访问
-          curl -fL \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github.v3.raw" \
-            "${RAW_URL}" \
-            -o "data/pred/pred_top10_latest.csv"
+          curl -fL "${RAW_URL}" -o "data/pred/pred_source_latest.csv"
 
-          echo "[manual] overwritten data/pred/pred_top10_latest.csv from pred_top10_${TRADE_DATE}.csv"
+          echo "[manual] saved -> data/pred/pred_source_latest.csv"
           echo "[manual] head:"
-          head -n 3 data/pred/pred_top10_latest.csv || true
+          head -n 3 data/pred/pred_source_latest.csv || true
+          echo "[manual] lines:"
+          wc -l data/pred/pred_source_latest.csv || true
 
-      - name: Run decision pipeline (P0)
+      - name: Run decision pipeline (P0)  # 默认吃 decisio latest；手动则吃本地 pred_source_latest.csv
+        env:
+          # 默认：a-top10 全量排名（decisio latest）
+          TOP10_PRED_URL: https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv
+          # 手动指定日期时，用本地文件覆盖数据源（run_v2.py 优先用 PATH）
+          TOP10_PRED_PATH: ${{ github.event_name == 'workflow_dispatch' && inputs.trade_date != '' && 'data/pred/pred_source_latest.csv' || '' }}
         run: |
           set -e
           python scripts/run_v2.py
@@ -135,11 +119,14 @@ jobs:
           echo "*.pyc" >> .git/info/exclude
 
           # ✅ 精准 add：把所有需要落库/发布的产物全纳入
-          # --- a-top10 同步输入快照（可追溯）
+          # --- a-top10 全量输入快照（可追溯）
+          git add data/pred/pred_source_latest.csv || true
+
+          # --- 保留旧路径的 add（即便未来不再写入也不影响）
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
 
-          # --- decision 输出（你定义的“可执行权重 + 决策报告 + 评估”）
+          # --- decision 输出（可执行权重 + 决策报告 + 评估）
           git add docs/weights/weights_latest.csv || true
           git add docs/weights/weights_*.csv || true
 
@@ -147,7 +134,7 @@ jobs:
           git add outputs/decision/**/*.md || true
           git add outputs/decision/**/*.json || true
 
-          # --- 三张必落库表（自学习不跑偏）
+          # --- 三张必落库表
           git add data/decision/decision_candidates_*.csv || true
           git add data/decision/decision_execution_*.csv || true
           git add data/decision/decision_learning.csv || true
