@@ -1,0 +1,18 @@
+{
+  "signal_date": "20260227",
+  "exec_date": "20260227",
+  "regime": "RISK_ON",
+  "risk_budget": 1.0,
+  "topk": 10,
+  "picked": 10,
+  "cost_est": 0.0008,
+  "risk_penalty": 0.0,
+  "paths": {
+    "candidates": "data/decision/decision_candidates_20260227.csv",
+    "execution": "data/decision/decision_execution_20260227.csv",
+    "learning": "data/decision/decision_learning.csv",
+    "weights_latest": "docs/weights/weights_latest.csv",
+    "weights_dated": "docs/weights/weights_20260227.csv",
+    "decision_report": "outputs/decision/decision_report_20260227.md"
+  }
+}
