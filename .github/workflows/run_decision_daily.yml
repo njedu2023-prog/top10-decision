@@ -102,6 +102,12 @@ jobs:
           set -e
           python scripts/run_v2.py
 
+      # ✅ IO 契约闸门：文件必须存在 + 必要列必须齐（否则直接 fail）
+      - name: Validate IO contract (must pass)
+        run: |
+          set -e
+          python scripts/validate_io_contract.py
+
       - name: Commit & push outputs (safe)
         run: |
           set -e
