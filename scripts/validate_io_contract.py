@@ -7,9 +7,9 @@ validate_io_contract.py
 目标：锁死 top10-decision 的 IO 契约（路径/命名/字段不允许悄悄改变）
 
 ✅ 修复点（2026-03-01）：
-- signals 的 dated 文件命名应使用 trade_date（不是 exec_date）
+- signals 的 dated 文件命名使用 trade_date：
   docs/signals/top10_{trade_date}.csv
-- candidates_snapshot 命名应使用 signal_date（本系统 signal_date == trade_date）
+- candidates_snapshot 命名使用 signal_date（本系统 signal_date == trade_date）：
   data/decision/decision_candidates_{trade_date}.csv
 - weights/report/eval/execution 使用 exec_date：
   docs/weights/weights_{exec_date}.csv
@@ -21,6 +21,7 @@ validate_io_contract.py
 - 产物文件存在（latest + dated）
 - 关键 CSV 必要列存在（允许额外列）
 - eval/report 与 exec_date 对齐（最小一致性）
+- ✅ P1：learning_table 结构锁死（字段升级后仍要强校验）
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List
 
 import pandas as pd
 
@@ -96,13 +97,83 @@ def _norm_ymd(v) -> str:
         return s
 
 
-def _pick_first_ymd_from_csv(path: Path, col: str, label: str) -> str:
-    df = _read_csv_any(path)
-    _ensure_cols(df, [col], label)
+def _first_ymd_from_col(df: pd.DataFrame, col: str) -> str:
+    if col not in df.columns:
+        return ""
     s = df[col].dropna()
     if s.empty:
         return ""
     return _norm_ymd(s.iloc[0])
+
+
+def _get_learning_required_cols() -> List[str]:
+    """
+    ✅ P1：learning_table 的字段不允许漂移。
+    优先从 writers.filesystem 导入 LEARNING_COLUMNS（最稳），导入失败再用兜底。
+    """
+    try:
+        from top10decision.writers.filesystem import LEARNING_COLUMNS  # type: ignore
+        # 这里不要求“全列都必须出现”，但至少要包含其中的关键列
+        # 为避免未来扩展导致 validate 过于严格，我们取一个“必须集合”
+        must = [
+            "signal_date",
+            "exec_date",
+            "exit_date",
+            "ts_code",
+            "jq_code",
+            "name",
+            "weight_exec",
+            "filled_flag",
+            "fill_rate_real",
+            "buy_price",
+            "sell_price",
+            "ret_exec",
+            "p_fill_pred",
+            "e_ret_pred",
+            "cost_est",
+            "risk_penalty",
+            "ev_pred",
+            "e_ret_real",
+            "ev_real",
+            "regime",
+            "risk_budget",
+            "version",
+            "generated_at_bjt",
+            "commit_sha",
+        ]
+        # 如果 LEARNING_COLUMNS 里缺了 must 里的任何一个，说明 filesystem 与 validate 不一致，应立即失败
+        miss_in_schema = [c for c in must if c not in LEARNING_COLUMNS]
+        if miss_in_schema:
+            _fail(f"writers.filesystem.LEARNING_COLUMNS 缺少关键字段：{miss_in_schema}（请先修复 schema 定义）")
+        return must
+    except Exception:
+        # 兜底：按我们当前 P1 约定的 must 集合
+        return [
+            "signal_date",
+            "exec_date",
+            "exit_date",
+            "ts_code",
+            "jq_code",
+            "name",
+            "weight_exec",
+            "filled_flag",
+            "fill_rate_real",
+            "buy_price",
+            "sell_price",
+            "ret_exec",
+            "p_fill_pred",
+            "e_ret_pred",
+            "cost_est",
+            "risk_penalty",
+            "ev_pred",
+            "e_ret_real",
+            "ev_real",
+            "regime",
+            "risk_budget",
+            "version",
+            "generated_at_bjt",
+            "commit_sha",
+        ]
 
 
 # =========================
@@ -137,14 +208,13 @@ def main() -> int:
     learn_df = _read_csv_any(learning_table)
     _ensure_cols(
         learn_df,
-        ["signal_date", "exec_date", "exit_date", "ts_code", "jq_code", "filled_flag", "buy_price", "sell_price", "ret_exec",
-         "p_fill_pred", "e_ret_pred", "ev_pred"],
+        _get_learning_required_cols(),
         "decision_learning.csv",
     )
 
     # ---- 关键日期：trade_date 来自 signals_latest；exec_date 来自 weights_latest
-    trade_date = _norm_ymd(sig_df["trade_date"].dropna().iloc[0]) if not sig_df["trade_date"].dropna().empty else ""
-    exec_date = _norm_ymd(w_df["exec_date"].dropna().iloc[0]) if not w_df["exec_date"].dropna().empty else ""
+    trade_date = _first_ymd_from_col(sig_df, "trade_date")
+    exec_date = _first_ymd_from_col(w_df, "exec_date")
 
     if not trade_date or len(trade_date) != 8:
         _fail(f"无法从 signals_latest.csv 推导 trade_date（得到：{trade_date}）")
