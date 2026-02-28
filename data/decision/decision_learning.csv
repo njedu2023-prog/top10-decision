@@ -1,1 +1,1 @@
-﻿signal_date,exec_date,exit_date,ts_code,jq_code,filled_flag,buy_price,sell_price,ret_exec,p_fill_pred,e_ret_pred,ev_pred
+﻿signal_date,exec_date,exit_date,ts_code,jq_code,name,weight_exec,filled_flag,fill_rate_real,buy_price,sell_price,ret_exec,e_ret_real,p_fill_pred,e_ret_pred,cost_est,risk_penalty,ev_pred,ev_real,regime,risk_budget,version,generated_at_bjt,commit_sha
