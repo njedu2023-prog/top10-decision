@@ -1,36 +1,34 @@
 # -*- coding: utf-8 -*-
 
 """
-Ingest - 预测输入层（Top10-Decision）
+Ingest - 预测输入层（Top10-Decision）【收敛版 / 新链路唯一入口】
 
-职责：
-- 统一读取“上游预测源文件”（优先新链路 pred_source_latest.csv）
-- 提供最小字段契约校验与标准化（避免下游到处写 if/else）
-- 兼容旧链路文件名，保证历史可跑，但会给出警告
+职责（单一）：
+- 只读取本仓库预测快照：data/pred/pred_source_latest.csv
+- 允许用 TOP10_PRED_PATH / pred_path 显式覆盖（用于回放/应急/测试）
+- 做最小字段契约校验 + 标准化，向下游提供稳定 DataFrame
 
-默认策略（优先级从高到低）：
-1) 显式参数 pred_path
-2) 环境变量 TOP10_PRED_PATH
-3) data/pred/pred_source_latest.csv   （新链路）
-4) data/pred/pred_top10_latest.csv    （旧链路兼容）
-5) data/pred/pred_top10_latest.csv    （你之前仓库里曾出现过的路径变体）
-
-输出：
-- 返回 pandas.DataFrame，至少包含：
-  ts_code, trade_date, name, prob, StrengthScore, ThemeBoost
+注意：
+- 本模块不再兼容旧链路文件名（pred_top10_latest.csv 等），避免技术债膨胀。
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import pandas as pd
 
 
+DEFAULT_PRED_PATH = Path("data/pred/pred_source_latest.csv")
+
+
+def _log(msg: str) -> None:
+    print(f"[ingest] {msg}")
+
+
 def _warn(msg: str) -> None:
-    # 统一 warning 输出（Actions / 本地都能看到）
     print(f"[ingest][WARN] {msg}")
 
 
@@ -44,10 +42,8 @@ def _normalize_yyyymmdd(x) -> str:
     s = str(x).strip()
     if not s:
         return ""
-    # 纯 8 位数字
     if s.isdigit() and len(s) == 8:
         return s
-    # 尝试用 pandas 解析日期
     try:
         ts = pd.to_datetime(s, errors="coerce")
         if pd.isna(ts):
@@ -57,70 +53,58 @@ def _normalize_yyyymmdd(x) -> str:
         return ""
 
 
-def _pick_pred_path(pred_dir: str = "data/pred", pred_path: Optional[str] = None) -> Tuple[Path, str]:
+def _resolve_pred_path(pred_path: Optional[str] = None) -> Path:
     """
-    返回： (path, source_tag)
-    source_tag 用于标记来源：explicit/env/new/old
+    路径优先级：
+    1) 显式参数 pred_path
+    2) 环境变量 TOP10_PRED_PATH
+    3) 默认 DEFAULT_PRED_PATH（data/pred/pred_source_latest.csv）
     """
-    # 1) 显式参数
-    if pred_path:
-        p = Path(pred_path)
-        return p, "explicit"
+    if pred_path and str(pred_path).strip():
+        return Path(str(pred_path).strip())
 
-    # 2) 环境变量
     env_path = os.getenv("TOP10_PRED_PATH", "").strip()
     if env_path:
-        return Path(env_path), "env"
+        return Path(env_path)
 
-    # 3) 默认目录下候选文件（按优先级）
-    d = Path(pred_dir)
-    candidates = [
-        (d / "pred_source_latest.csv", "new"),
-        (d / "pred_top10_latest.csv", "old"),
-        (d / "pred_top10_latest.csv", "old_alt"),
-    ]
-    for p, tag in candidates:
-        if p.exists():
-            return p, tag
-
-    # 如果都不存在，仍返回“新链路默认路径”，便于报错信息更明确
-    return d / "pred_source_latest.csv", "missing"
+    return DEFAULT_PRED_PATH
 
 
 def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    标准化输出列，尽量不报错，但会给出警告。
-    下游最关心：ts_code + (prob / StrengthScore / ThemeBoost) + trade_date/name
+    标准化输出列：尽量“可运行”，但不做旧链路兼容。
+    最低要求：ts_code
+    强烈建议：trade_date, name
+    核心数值列：prob / StrengthScore / ThemeBoost 若缺则填 0.0
     """
-    # 统一列名大小写/空格
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
 
     # 必需：ts_code
     if "ts_code" not in df.columns:
-        raise ValueError("预测文件必须包含列：ts_code")
+        raise ValueError("预测源文件必须包含列：ts_code")
 
-    # 可选但强烈建议：trade_date / name
+    # 建议：trade_date / name
     if "trade_date" not in df.columns:
-        _warn("预测文件缺少 trade_date，将填空字符串；建议上游补齐 trade_date（YYYYMMDD）。")
+        _warn("预测源文件缺少 trade_date，将填空字符串（建议上游补齐 YYYYMMDD）。")
         df["trade_date"] = ""
     if "name" not in df.columns:
-        _warn("预测文件缺少 name，将填空字符串；建议上游补齐 name。")
+        _warn("预测源文件缺少 name，将填空字符串（建议上游补齐）。")
         df["name"] = ""
 
-    # verify_date（可用于回测/对照）
+    # 可选：verify_date
     if "verify_date" not in df.columns:
         df["verify_date"] = ""
 
-    # 核心分数列：缺失则补默认值
+    # 核心分数列：缺失填 0
     if "prob" not in df.columns:
-        _warn("预测文件缺少 prob，将填 0.0；建议上游输出 prob。")
+        _warn("预测源文件缺少 prob，将填 0.0（建议上游补齐）。")
         df["prob"] = 0.0
     if "StrengthScore" not in df.columns:
-        _warn("预测文件缺少 StrengthScore，将填 0.0；建议上游输出 StrengthScore。")
+        _warn("预测源文件缺少 StrengthScore，将填 0.0（建议上游补齐）。")
         df["StrengthScore"] = 0.0
     if "ThemeBoost" not in df.columns:
-        _warn("预测文件缺少 ThemeBoost，将填 0.0；建议上游输出 ThemeBoost。")
+        _warn("预测源文件缺少 ThemeBoost，将填 0.0（建议上游补齐）。")
         df["ThemeBoost"] = 0.0
 
     # 日期规范化
@@ -137,36 +121,31 @@ def _ensure_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_latest_pred(pred_dir: str = "data/pred", pred_path: Optional[str] = None) -> pd.DataFrame:
+def load_latest_pred(pred_path: Optional[str] = None) -> pd.DataFrame:
     """
-    读取最新预测源文件（建议：pred_source_latest.csv）。
+    读取预测快照（默认：data/pred/pred_source_latest.csv）
 
     参数：
-    - pred_dir: 默认 data/pred
     - pred_path: 可显式指定文件路径（优先级最高）
     - 环境变量 TOP10_PRED_PATH 也可覆盖
 
     返回：
     - 标准化后的 DataFrame
     """
-    path, tag = _pick_pred_path(pred_dir=pred_dir, pred_path=pred_path)
+    path = _resolve_pred_path(pred_path=pred_path)
 
     if not path.exists():
         raise FileNotFoundError(
-            f"缺少预测源文件：{path}\n"
-            f"请确认：\n"
-            f"1) 新链路文件 data/pred/pred_source_latest.csv 是否存在；或\n"
-            f"2) 设置环境变量 TOP10_PRED_PATH 指向有效 CSV；或\n"
-            f"3) 使用 pred_path 显式传入路径。"
+            "缺少预测源文件：\n"
+            f"- tried: {path}\n\n"
+            "请确认：\n"
+            f"1) 默认文件是否存在：{DEFAULT_PRED_PATH}\n"
+            "2) 或设置环境变量 TOP10_PRED_PATH 指向有效 CSV\n"
+            "3) 或调用 load_latest_pred(pred_path=...) 显式传入路径\n"
         )
 
     df = pd.read_csv(path)
     df = _ensure_columns(df)
 
-    # 读到旧链路文件时给出明显提示
-    if tag.startswith("old"):
-        _warn(f"当前读取的是旧链路文件：{path.name}（tag={tag}）。建议迁移到 pred_source_latest.csv。")
-    else:
-        print(f"[ingest] loaded: {path} (tag={tag}), rows={len(df)}")
-
+    _log(f"loaded: {path} rows={len(df)} cols={len(df.columns)}")
     return df
