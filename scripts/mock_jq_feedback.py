@@ -21,8 +21,10 @@ Mock JoinQuant feedback for offline self-test (P1)
 from __future__ import annotations
 
 import random
+import subprocess
+import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import pandas as pd
 
@@ -42,7 +44,6 @@ def _find_latest_candidates() -> Optional[Path]:
     files = sorted(CAND_DIR.glob("decision_candidates_*.csv"))
     if not files:
         return None
-    # 按文件名排序即可（YYYYMMDD）
     return files[-1]
 
 
@@ -52,18 +53,21 @@ def _read_candidates(path: Path) -> pd.DataFrame:
         raise RuntimeError(f"candidates_snapshot 为空：{path}")
     if "ts_code" not in df.columns:
         raise RuntimeError(f"candidates_snapshot 缺少 ts_code：{path}")
+
     if "signal_date" not in df.columns:
-        # 兜底：从文件名提取
-        # decision_candidates_YYYYMMDD.csv
+        # 兜底：从文件名提取 decision_candidates_YYYYMMDD.csv
         ymd = path.stem.split("_")[-1]
         df["signal_date"] = ymd
+
     df["signal_date"] = df["signal_date"].apply(lambda x: norm_ymd(str(x)) or "")
     if "exec_date" in df.columns:
         df["exec_date"] = df["exec_date"].apply(lambda x: norm_ymd(str(x)) or "")
     else:
         df["exec_date"] = ""
+
     if "name" not in df.columns:
         df["name"] = ""
+
     return df
 
 
@@ -96,12 +100,10 @@ def _gen_mock_fills(df: pd.DataFrame, exec_date: str) -> pd.DataFrame:
         if not ts_code:
             continue
 
-        # 模拟：目标金额 100000，成交率随机（偏高，便于测试）
         target_amount = 100000.0
         fill_rate = random.choice([0.0, 0.3, 0.6, 0.9, 1.0])
         filled_amount = target_amount * fill_rate
 
-        # 模拟买入价：10~50
         buy_price = round(random.uniform(10, 50), 2)
         buy_time = "09:45:00" if fill_rate > 0 else ""
         fail_reason = "" if fill_rate > 0 else "MOCK_NO_LIQUIDITY"
@@ -127,10 +129,7 @@ def _gen_mock_returns(df: pd.DataFrame, exec_date: str) -> pd.DataFrame:
         if not ts_code:
             continue
 
-        # 模拟卖出价：与买入无关（自测用）
         sell_price = round(random.uniform(10, 50), 2)
-
-        # 模拟隔夜收益：-3% ~ +6%
         ret_exec = round(random.uniform(-0.03, 0.06), 5)
 
         rows.append(
@@ -142,6 +141,19 @@ def _gen_mock_returns(df: pd.DataFrame, exec_date: str) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+def _run_merge_script() -> None:
+    # ✅ 不 import scripts（scripts 不是包），直接调用脚本，兼容本地与 Actions
+    cmd = [sys.executable, "scripts/merge_feedback_to_learning_table.py"]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(
+            "merge_feedback_to_learning_table.py 执行失败。\n"
+            f"STDOUT:\n{r.stdout}\n\nSTDERR:\n{r.stderr}"
+        )
+    if r.stdout.strip():
+        print(r.stdout.strip())
 
 
 def main() -> int:
@@ -167,10 +179,7 @@ def main() -> int:
     print(f"[OK] wrote mock fills: {FILLS_PATH} rows={len(fills)}")
     print(f"[OK] wrote mock returns: {RETS_PATH} rows={len(rets)}")
 
-    # 直接调用合并脚本（同进程导入执行，避免 shell 依赖）
-    from scripts.merge_feedback_to_learning_table import main as merge_main  # noqa
-
-    merge_main()
+    _run_merge_script()
     print("[DONE] mock feedback merged into learning_table.")
     return 0
 
