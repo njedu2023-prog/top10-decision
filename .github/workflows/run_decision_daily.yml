@@ -56,10 +56,10 @@ jobs:
           mkdir -p outputs/decision
           mkdir -p outputs/learning
 
-      # ✅ 手动指定日期：拉取 a-top10 的 decisio 归档文件 pred_decisio_{trade_date}.csv
-      # 保存为 data/pred/pred_source_latest.csv，并让 run_v2.py 走 TOP10_PRED_PATH
-      - name: If trade_date provided, fetch pred_decisio_{trade_date}.csv to local cache
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.trade_date != '' }}
+      # ✅ 手动指定日期：使用 a-top10 的归档文件 pred_decisio_{trade_date}.csv
+      # ✅ 自动日跑：使用 a-top10 的 pred_decisio_latest.csv
+      # ✅ 硬规则：跨仓库拉取只允许在 scripts/sync_pred_source.py 中完成
+      - name: Sync pred source snapshot (to data/pred/pred_source_latest.csv)
         env:
           TRADE_DATE: ${{ inputs.trade_date }}
           A_TOP10_OWNER: njedu2023-prog
@@ -68,35 +68,36 @@ jobs:
         run: |
           set -e
 
-          echo "[manual] trade_date=${TRADE_DATE}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
+            echo "[sync] manual trade_date=${TRADE_DATE}"
 
-          # 基础校验：8位数字
-          if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            echo "[manual] invalid trade_date: ${TRADE_DATE} (expect YYYYMMDD)"
-            exit 1
+            # 基础校验：8位数字
+            if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
+              echo "[sync] invalid trade_date: ${TRADE_DATE} (expect YYYYMMDD)"
+              exit 1
+            fi
+
+            FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
+            RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
+            echo "[sync] TOP10_PRED_URL=${RAW_URL}"
+
+            TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
+          else
+            RAW_URL="https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv"
+            echo "[sync] TOP10_PRED_URL=${RAW_URL}"
+
+            TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
           fi
 
-          mkdir -p data/pred
-
-          FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
-          RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
-
-          echo "[manual] fetching: ${RAW_URL}"
-
-          curl -fL "${RAW_URL}" -o "data/pred/pred_source_latest.csv"
-
-          echo "[manual] saved -> data/pred/pred_source_latest.csv"
-          echo "[manual] head:"
+          echo "[sync] snapshot saved -> data/pred/pred_source_latest.csv"
+          echo "[sync] head:"
           head -n 3 data/pred/pred_source_latest.csv || true
-          echo "[manual] lines:"
+          echo "[sync] lines:"
           wc -l data/pred/pred_source_latest.csv || true
 
-      - name: Run decision pipeline (P0)  # 默认吃 decisio latest；手动则吃本地 pred_source_latest.csv
-        env:
-          # 默认：a-top10 全量排名（decisio latest）
-          TOP10_PRED_URL: https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv
-          # 手动指定日期时，用本地文件覆盖数据源（run_v2.py 优先用 PATH）
-          TOP10_PRED_PATH: ${{ github.event_name == 'workflow_dispatch' && inputs.trade_date != '' && 'data/pred/pred_source_latest.csv' || '' }}
+      # ✅ 运行决策编排器：只读 data/pred/pred_source_latest.csv
+      # ✅ 硬规则：runner 不读 URL / 不读 PATH env
+      - name: Run decision pipeline (V2 orchestrator)
         run: |
           set -e
           python scripts/run_v2.py
