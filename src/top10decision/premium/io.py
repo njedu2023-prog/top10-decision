@@ -12,6 +12,10 @@ Premium 子系统 — IO 层（读写/落盘/追溯）
 
 注意：
 - 本模块只处理文件层，不做业务计算。
+
+P1.1 工程收口：
+- load_close_table(cfg) 已被 Market Truth Layer 替代（data/market/daily_YYYYMMDD.csv）。
+  但为兼容旧代码，暂不删除，仅标记 deprecated。
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from __future__ import annotations
 import glob
 import os
 import subprocess
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,9 +151,21 @@ def load_decision_inputs(cfg: PremiumConfig) -> List[DecisionInputFile]:
 
 def load_close_table(cfg: PremiumConfig) -> pd.DataFrame:
     """
-    读取 close 真值表（需要包含 trade_date, ts_code, close）。
-    支持多个 csv 合并。
+    DEPRECATED（P1.1）：
+    - 旧链路：读取 data/close/*.csv（或 cfg.close_input_glob 指定的真值表）
+    - 新链路：请使用 Market Truth Layer（src/top10decision/premium/market_truth.py）
+      统一从 data/market/daily_YYYYMMDD.csv 获取真值（缺则自动拉取并缓存）。
+
+    说明：
+    - 本函数暂时保留仅为兼容旧代码/旧脚本；
+    - 后续将统一移除。
     """
+    warnings.warn(
+        "load_close_table(cfg) is deprecated. Use Market Truth Layer (market_truth.py) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     repo_root = cfg.repo_root()
     pattern = str((repo_root / cfg.close_input_glob).resolve())
     paths = [Path(p).resolve() for p in glob.glob(pattern)]
