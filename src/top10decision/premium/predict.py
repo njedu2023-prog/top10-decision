@@ -19,10 +19,9 @@ Premium 子系统 — Predict（V1：手工交易版，端到端落盘）
   docs/reports/premium_latest.md
   outputs/premium/_last_run.txt（每次覆盖）
 
-说明：
-- 本文件不再依赖旧的 LR/LGBM/feature/labels 链路（避免主线被训练模块牵制）
-- 预测字段（p_premium/e_premium/score_ev 等）默认从 pred_source_latest 中就地读取；
-  若缺失则给出安全兜底（p=0.5, e=0.0, score=p*e）。
+说明（工程分层）：
+- 主线目标：每日稳定产出 Top30/full/verify/md（不因训练链路状态而断更）
+- 学习模块（LR/LGBM/train/features/labels）能力不损失：后续在“可用即增强”原则下接管 p/e/score 来源
 """
 
 from __future__ import annotations
@@ -41,6 +40,7 @@ import pandas as pd
 
 from .config import PremiumConfig
 from .market_truth import ensure_daily_cached, load_daily
+from .report_md import render_premium_report_md
 
 
 _TD_RE = re.compile(r"^\d{8}$")
@@ -206,7 +206,6 @@ def _infer_trade_date(df: pd.DataFrame) -> str:
         if not s.empty:
             u = sorted(s.unique().tolist())
             return u[-1]
-    # 兜底：全表扫描
     for c in df.columns:
         s = df[c].dropna().astype(str).map(_to_yyyymmdd)
         s = s[s.str.match(r"^\d{8}$", na=False)]
@@ -300,11 +299,9 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
         "trade_date": dec["trade_date"].astype(str),
         "ts_code": dec["ts_code"].astype(str),
     })
-
     if "name" in dec.columns:
         out["name"] = dec["name"]
 
-    # 映射到 dec_ 前缀字段（缺失留空）
     m_rank = pick("dec_rank", "decision_rank", "rank", "决策排名")
     m_w = pick("dec_weight", "weight", "target_weight", "决策权重")
     m_can = pick("dec_can_buy", "can_buy", "可买提示")
@@ -319,158 +316,6 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
 
     out = out.drop_duplicates(subset=["trade_date", "ts_code"], keep="last").reset_index(drop=True)
     return out
-
-
-# ========= 报告渲染（使用 PremiumA/B.html 模板）=========
-
-def _fmt_prob(x: object) -> str:
-    try:
-        v = float(x)
-        if np.isnan(v):
-            return "-"
-        return f"{v * 100:.2f}%"
-    except Exception:
-        return "-"
-
-
-def _fmt_pct_ratio(x: object) -> str:
-    try:
-        v = float(x)
-        if np.isnan(v):
-            return "-"
-        sign = "↑" if v >= 0 else "↓"
-        return f"{sign} {v:+.2%}"
-    except Exception:
-        return "-"
-
-
-def _row_td(v: str, strong: bool = False, color_red_if_up: bool = False) -> str:
-    style = "border:1px solid #111; padding:8px;"
-    if strong:
-        style += " font-weight:700;"
-    if color_red_if_up and isinstance(v, str) and v.startswith("↑"):
-        style += " color:#d00;"
-    return f'<td style="{style}">{v}</td>'
-
-
-def _build_rows_pred(df_top: pd.DataFrame) -> str:
-    rows = []
-    for _, r in df_top.iterrows():
-        rows.append(
-            "<tr>"
-            + _row_td(str(r.get("rank", "")))
-            + _row_td(str(r.get("trade_date", "")))
-            + _row_td(str(r.get("target_date", "")))
-            + _row_td(str(r.get("ts_code", "")))
-            + _row_td(str(r.get("name", "")))
-            + _row_td(_fmt_prob(r.get("p_premium", np.nan)))
-            + _row_td(_fmt_pct_ratio(r.get("e_premium", np.nan)), strong=True, color_red_if_up=True)
-            + _row_td(str(r.get("score_ev", "")))
-            + _row_td(str(r.get("risk_flags", "")))
-            + _row_td(str(r.get("confidence", "")))
-            + _row_td(str(r.get("data_quality", "")))
-            + _row_td(str(r.get("dec_rank", "")))
-            + _row_td(str(r.get("dec_weight", "")))
-            + _row_td(str(r.get("dec_can_buy", "")))
-            + _row_td(str(r.get("dec_p_fill", "")))
-            + _row_td(str(r.get("dec_reason", "")))
-            + "</tr>"
-        )
-    return "\n".join(rows)
-
-
-def _build_rows_verify(df_verify: pd.DataFrame) -> str:
-    rows = []
-    for _, r in df_verify.iterrows():
-        pred_v = _fmt_pct_ratio(r.get("e_premium", np.nan))
-        act_v = _fmt_pct_ratio(r.get("actual_ret", np.nan))
-        rows.append(
-            "<tr>"
-            + _row_td(str(r.get("rank", "")))
-            + _row_td(str(r.get("trade_date", "")))
-            + _row_td(str(r.get("target_date", "")))
-            + _row_td(str(r.get("ts_code", "")))
-            + _row_td(str(r.get("name", "")))
-            + _row_td(pred_v, strong=True, color_red_if_up=True)
-            + _row_td(act_v, strong=True, color_red_if_up=True)
-            + _row_td(str(r.get("hit_up", "")))
-            + "</tr>"
-        )
-    return "\n".join(rows)
-
-
-def _render_md(cfg: PremiumConfig,
-               trade_date: str,
-               target_date: str,
-               df_top: pd.DataFrame,
-               df_verify: pd.DataFrame,
-               verify_pending: bool,
-               verify_reason: str,
-               gen_ts: str) -> str:
-    repo_root = cfg.repo_root()
-    tpl_a = (repo_root / "PremiumA.html").resolve()
-    tpl_b = (repo_root / "PremiumB.html").resolve()
-
-    html_a = tpl_a.read_text(encoding="utf-8")
-    html_b = tpl_b.read_text(encoding="utf-8")
-
-    title_a = f"{trade_date} → {target_date}　TOP 30 溢价概率研究报告"
-    html_a = (
-        html_a.replace("{{TITLE}}", title_a)
-        .replace("{{ROWS}}", _build_rows_pred(df_top))
-        .replace("{{GEN_TS}}", gen_ts)
-        .replace("{{TRADE_DATE}}", trade_date)
-        .replace("{{TARGET_DATE}}", target_date)
-    )
-
-    if verify_pending:
-        title_b = f"{trade_date} → {target_date}　TOP 30 溢价概率为正预测命中率：PENDING"
-        html_b = (
-            html_b.replace("{{TITLE}}", title_b)
-            .replace("{{ROWS}}", "")
-            .replace("{{GEN_TS}}", gen_ts)
-            .replace("{{TRADE_DATE}}", trade_date)
-            .replace("{{TARGET_DATE}}", target_date)
-        )
-        pending_line = f"> 验证表状态：**PENDING**（原因：{verify_reason}）\n\n"
-        hit_line = ""
-    else:
-        hit = (df_verify["hit_up"].astype(str) == "是").sum()
-        total = int(len(df_verify)) if len(df_verify) else 0
-        hit_rate = (hit / total * 100.0) if total > 0 else 0.0
-        title_b = f"{trade_date} → {target_date}　TOP 30 溢价概率为正预测命中率：{hit_rate:.2f}%"
-        html_b = (
-            html_b.replace("{{TITLE}}", title_b)
-            .replace("{{ROWS}}", _build_rows_verify(df_verify))
-            .replace("{{GEN_TS}}", gen_ts)
-            .replace("{{TRADE_DATE}}", trade_date)
-            .replace("{{TARGET_DATE}}", target_date)
-        )
-        pending_line = ""
-        hit_line = f"- 命中：{hit}/{total}（{hit_rate:.2f}%）\n\n"
-
-    md = []
-    md.append("# Premium（溢价预测）手工交易版 V1\n\n")
-    md.append(f"- trade_date（T）：**{trade_date}**\n")
-    md.append(f"- target_date（T+2）：**{target_date}**\n")
-    md.append(f"- horizon：**2 个交易日（T→T+2）**\n")
-    md.append(f"- 生成时间：{gen_ts}\n\n")
-    if pending_line:
-        md.append(pending_line)
-    if hit_line:
-        md.append(hit_line)
-
-    md.append("## 预测表（Top30）\n\n")
-    md.append(html_a + "\n\n")
-    md.append("## 验证表（Top30）\n\n")
-    md.append(html_b + "\n\n")
-    md.append("## 全量展开（full）\n\n")
-    md.append("（说明：候选=pred_source_latest 全量，不做过滤；排序同 Top30。）\n\n")
-    md.append(f"- full 文件：`outputs/premium/premium_full_{trade_date}.csv`\n")
-    md.append(f"- top30 文件：`outputs/premium/premium_top30_{trade_date}.csv`\n")
-    md.append(f"- verify 文件：`outputs/premium/premium_verify_{trade_date}.csv`\n\n")
-
-    return "".join(md)
 
 
 # ========= 主入口 =========
@@ -496,11 +341,12 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         _write_last_run(cfg, "unknown", {"ok": False, "reason": "cannot_infer_trade_date"})
         return PredictResult(False, "unknown", None, True, "无法从 pred_source_latest 推断 trade_date")
 
-    # 保底 key 列
+    # key 列
     if "trade_date" not in df0.columns:
         df0["trade_date"] = trade_date
     else:
         df0["trade_date"] = df0["trade_date"].astype(str).map(_to_yyyymmdd)
+
     if "ts_code" not in df0.columns:
         _write_last_run(cfg, trade_date, {"ok": False, "reason": "missing_ts_code"})
         return PredictResult(False, trade_date, None, True, "pred_source_latest 缺少 ts_code（或别名 code）")
@@ -524,7 +370,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df = df0.copy()
     if not dec.empty:
         m = df.merge(dec, on=["trade_date", "ts_code"], how="left", suffixes=("", "_dec"))
-        # name 补全
         if "name_dec" in m.columns:
             m["name"] = m["name"].where(m["name"].notna() & (m["name"].astype(str).str.strip() != ""), m["name_dec"])
             m = m.drop(columns=["name_dec"])
@@ -533,7 +378,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         for c in ("dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"):
             df[c] = pd.NA
 
-    # 4) 生成 Premium 字段（就地取材 + 兜底）
+    # 4) Premium 字段（就地取材 + 兜底）
     p, e, s, conf, dq, risk = _pick_pred_fields(df)
     df["p_premium"] = p
     df["e_premium"] = e
@@ -590,13 +435,12 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     p_verify = _write_csv(cfg.out_verify_csv(trade_date), df_verify)
 
-    # 8) 渲染报告 md（两张表）
+    # 8) 渲染报告 md（统一交给 report_md.py）
     gen_ts = _utc_now_iso()
-    md = _render_md(
-        cfg=cfg,
+    md = render_premium_report_md(
         trade_date=trade_date,
-        target_date=target_date if target_date else "",
-        df_top=out_top,
+        target_date=(target_date if target_date else ""),
+        df_top30=out_top,
         df_verify=df_verify,
         verify_pending=verify_pending,
         verify_reason=verify_reason,
