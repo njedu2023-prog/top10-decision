@@ -4,12 +4,12 @@
 """
 Premium 子系统 — Train（训练闭环）
 
-P0 目标：
-- 用历史 decision 表 + close 真值表，训练：
-  1) LR 分类头：P_win = P(real_premium_ret > 0)
-  2) LGBM 回归头：E_ret = E(real_premium_ret)
-- 严格 pending：第3日未到（缺 close_3）不训练、不评估
-- 输出：
+P1 目标（主线落地）：
+- close 真值改为 Market Truth Layer：
+  - 使用 data/market/daily_{YYYYMMDD}.csv 作为事实层缓存
+  - 缓存缺失时，自动从 a-share-top3-data raw daily.csv 拉取并写入缓存
+- 仍保留严格 pending：第3日未到（缺 close_3）不训练、不评估
+- 输出契约不变：
   - outputs/premium/models/premium_lr.joblib
   - outputs/premium/models/premium_lgbm.joblib
   - outputs/premium/learning/premium_eval_history.csv（追加一行）
@@ -22,7 +22,7 @@ P0 目标：
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -33,12 +33,12 @@ from .io import (
     append_eval_history,
     get_commit_sha,
     get_run_id,
-    load_close_table,
     load_decision_inputs,
     utc_now_iso,
     write_last_run,
 )
 from .labels import build_premium_labels
+from .market_truth import ensure_daily_cached, load_daily
 from .model_lr import build_y_from_real_ret, fit_lr_classifier, save_lr
 from .model_lgbm import fit_lgbm_regressor, save_lgbm
 
@@ -83,6 +83,70 @@ def _spearman_rank_ic(a: np.ndarray, b: np.ndarray) -> float:
     return float((ra * rb).sum() / denom)
 
 
+def _to_yyyymmdd(s: str) -> str:
+    s = str(s).strip()
+    if len(s) == 10 and s[4] == "-" and s[7] == "-":
+        return s.replace("-", "")
+    return s
+
+
+def _infer_next_trade_date_by_probe(cfg: PremiumConfig, trade_date: str, max_probe_days: int = 10) -> Optional[str]:
+    """
+    用“探测缓存/拉取是否成功”的方式推断 next_trade_date：
+    - 从 trade_date 的次日开始，最多探测 max_probe_days 个自然日
+    - 第一个能成功 ensure_daily_cached 的日期，视为 next_trade_date
+    这样可以跨周末/节假日，不依赖交易日历文件。
+    """
+    import datetime as dt
+
+    trade_date = _to_yyyymmdd(trade_date)
+    try:
+        d0 = dt.datetime.strptime(trade_date, "%Y%m%d").date()
+    except Exception:
+        return None
+
+    for i in range(1, int(max_probe_days) + 1):
+        d = d0 + dt.timedelta(days=i)
+        cand = d.strftime("%Y%m%d")
+        r = ensure_daily_cached(cfg, cand)
+        if r.ok:
+            return cand
+    return None
+
+
+def _build_close_df_for_label(cfg: PremiumConfig, trade_date: str) -> Tuple[pd.DataFrame, Optional[str], str]:
+    """
+    为 labels.build_premium_labels 构造 close_df（仅包含：trade_date/ts_code/close 的多日表）
+    返回：
+    - close_df
+    - next_trade_date（若可推断到）
+    - reason（ok/pending原因）
+    """
+    trade_date = _to_yyyymmdd(trade_date)
+
+    # 确保第2日存在
+    r2 = ensure_daily_cached(cfg, trade_date)
+    if not r2.ok:
+        return pd.DataFrame(), None, f"第2日 daily 缓存/拉取失败：{r2.reason}"
+
+    # 推断第3日（next_trade_date）
+    next_td = _infer_next_trade_date_by_probe(cfg, trade_date, max_probe_days=10)
+    if not next_td:
+        return pd.DataFrame(), None, "找不到 next_trade_date：第3日真实数据尚未到来（正常 pending）"
+
+    # 读第2日/第3日 daily，并拼成 close_df
+    df2 = load_daily(cfg, trade_date)[["ts_code", "trade_date", "close"]].copy()
+    df3 = load_daily(cfg, next_td)[["ts_code", "trade_date", "close"]].copy()
+
+    close_df = pd.concat([df2, df3], ignore_index=True)
+    # 字段名与 CloseLabelSchema 兼容（trade_date/ts_code/close）
+    close_df["trade_date"] = close_df["trade_date"].astype(str)
+    close_df["ts_code"] = close_df["ts_code"].astype(str).str.strip()
+    close_df["close"] = pd.to_numeric(close_df["close"], errors="coerce")
+
+    return close_df, next_td, "ok"
+
+
 def collect_training_samples(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
     """
     从历史 decision 文件中收集“可打标”的样本。
@@ -91,15 +155,16 @@ def collect_training_samples(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
     - stats：过程统计信息
     """
     decision_files = load_decision_inputs(cfg)
-    close_df = load_close_table(cfg)
 
     stats = {
         "n_decision_files": len(decision_files),
-        "n_close_rows": int(len(close_df)),
         "pending_days": 0,
         "ok_days": 0,
         "skipped_files": 0,
         "notes": [],
+        "market_cache_hit": 0,
+        "market_fetched": 0,
+        "market_failed": 0,
     }
 
     rows = []
@@ -114,7 +179,17 @@ def collect_training_samples(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
             stats["notes"].append(f"skip decision file {item.path.name}: feature error: {e}")
             continue
 
-        trade_date = feat.trade_date
+        trade_date = _to_yyyymmdd(feat.trade_date)
+
+        # 构造 close_df（来自 Market Truth Layer）
+        close_df, next_td, reason = _build_close_df_for_label(cfg, trade_date)
+        if close_df.empty:
+            # pending 或失败都算 pending_days（训练时一律跳过）
+            stats["pending_days"] += 1
+            if "失败" in reason:
+                stats["market_failed"] += 1
+                stats["notes"].append(f"trade_date={trade_date} market_fail: {reason}")
+            continue
 
         # 打标：RealPremiumRet(2→3)
         labels_df, meta = build_premium_labels(close_df, trade_date=trade_date)
@@ -204,13 +279,14 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
         )
 
     # 训练集特征列：从 X 的列推断（features.py 输出是标准化后的数值列）
-    # 我们用 “rank_score/strength_score/...” + auto__* 这些列
     feature_cols = [c for c in samples.columns if c.startswith("auto__")] + [
-        c for c in ["rank_score", "strength_score", "theme_boost", "probability", "final_score", "regime_weight",
-                    "turnover_rate", "amount", "vol"]
+        c for c in [
+            "rank_score", "strength_score", "theme_boost", "probability", "final_score", "regime_weight",
+            "turnover_rate", "amount", "vol"
+        ]
         if c in samples.columns
     ]
-    # 如果 feature_cols 为空，尝试兜底：所有 float/int 列（排除 label/meta）
+    # 如果 feature_cols 为空，兜底：所有数值列（排除 label/meta）
     if not feature_cols:
         exclude = {
             "trade_date", "next_trade_date", "ts_code", "name", "industry", "theme",
