@@ -8,14 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: "执行命令：predict / train / all"
+        description: "执行命令：predict / train / all（默认 predict，保证主线不断更）"
         required: false
-        default: "all"
+        default: "predict"
         type: choice
         options:
-          - all
           - predict
           - train
+          - all
 
 permissions:
   contents: write
@@ -53,28 +53,33 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}/src"
         run: |
           CMD="${{ inputs.cmd }}"
-          if [ -z "$CMD" ]; then CMD="all"; fi
+          if [ -z "$CMD" ]; then CMD="predict"; fi
           echo "[run_premium] cmd=$CMD"
           python scripts/run_premium.py "$CMD" --verbose
 
       - name: Sanity check outputs
         run: |
           test -f outputs/premium/_last_run.txt
-          test -d outputs/premium/rank
-          ls -la outputs/premium/rank || true
+          test -d outputs/premium
+          ls -la outputs/premium || true
+
+          # 新主线：报告落在 docs/reports
+          test -d docs/reports
+          ls -la docs/reports || true
+          test -f docs/reports/premium_latest.md || true
 
       - name: Commit outputs (if changed)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 只提交 Premium 产物（不提交 data/market 缓存，避免仓库膨胀）
-          git add outputs/premium || true
+          # ✅ 提交 Premium 产物 + 报告（不提交 data/market 缓存，避免仓库膨胀）
+          git add outputs/premium docs/reports || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "premium: update outputs"
+          git commit -m "premium: update reports/outputs"
           git push
