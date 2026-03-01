@@ -9,10 +9,11 @@ Premium 子系统 — Predict（推理与排序落盘）
 - 构建特征
 - 加载 LR + LGBM 模型
 - 输出 Premium 排序表（CSV + MD）
-- 可选：若 close 真值已存在，则附带 real_premium_ret 供验证
+- 可选：若 close 真值已存在（第3日已到），则附带 real_premium_ret 供验证
 
 注意：
 - 本模块不做 P_fill，不考虑买不到，只输出“预测溢价收益排序 + 风险提示”。
+- P1：close 真值来源切换到 Market Truth Layer（data/market/daily_YYYYMMDD.csv），并保持 labels.py 的 pending 语义。
 """
 
 from __future__ import annotations
@@ -28,7 +29,6 @@ from .features import build_features_from_decision_df
 from .io import (
     get_commit_sha,
     get_run_id,
-    load_close_table,
     load_decision_inputs,
     utc_now_iso,
     write_last_run,
@@ -36,6 +36,7 @@ from .io import (
     write_rank_md,
 )
 from .labels import build_premium_labels
+from .market_truth import ensure_daily_cached, load_daily
 from .model_lr import LRModelBundle, load_lr
 from .model_lgbm import LGBMRegBundle, load_lgbm
 from .report_md import render_premium_md
@@ -73,6 +74,67 @@ def _constant_lgbm(feature_cols: list, m: float = 0.0) -> LGBMRegBundle:
     return LGBMRegBundle(model=None, y_mean=float(m), feature_cols=list(feature_cols))
 
 
+def _to_yyyymmdd(s: str) -> str:
+    s = str(s).strip()
+    if len(s) == 10 and s[4] == "-" and s[7] == "-":
+        return s.replace("-", "")
+    return s
+
+
+def _infer_next_trade_date_by_probe(cfg: PremiumConfig, trade_date: str, max_probe_days: int = 10) -> Optional[str]:
+    """
+    用“探测缓存/拉取是否成功”的方式推断 next_trade_date：
+    - 从 trade_date 的次日开始，最多探测 max_probe_days 个自然日
+    - 第一个能成功 ensure_daily_cached 的日期，视为 next_trade_date
+    """
+    import datetime as dt
+
+    trade_date = _to_yyyymmdd(trade_date)
+    try:
+        d0 = dt.datetime.strptime(trade_date, "%Y%m%d").date()
+    except Exception:
+        return None
+
+    for i in range(1, int(max_probe_days) + 1):
+        d = d0 + dt.timedelta(days=i)
+        cand = d.strftime("%Y%m%d")
+        r = ensure_daily_cached(cfg, cand)
+        if r.ok:
+            return cand
+    return None
+
+
+def _build_close_df_for_label(cfg: PremiumConfig, trade_date: str) -> Tuple[pd.DataFrame, str]:
+    """
+    为 labels.build_premium_labels 构造 close_df（仅包含：trade_date/ts_code/close 的多日表）
+    返回：
+    - close_df（可能为空）
+    - reason
+    """
+    trade_date = _to_yyyymmdd(trade_date)
+
+    # 第2日必须可用
+    r2 = ensure_daily_cached(cfg, trade_date)
+    if not r2.ok:
+        return pd.DataFrame(), f"第2日 daily 缓存/拉取失败：{r2.reason}"
+
+    # 推断第3日
+    next_td = _infer_next_trade_date_by_probe(cfg, trade_date, max_probe_days=10)
+    if not next_td:
+        return pd.DataFrame(), "找不到 next_trade_date：第3日真实数据尚未到来（正常 pending）"
+
+    # 读第2日/第3日 daily，并拼成 close_df
+    df2 = load_daily(cfg, trade_date)[["ts_code", "trade_date", "close"]].copy()
+    df3 = load_daily(cfg, next_td)[["ts_code", "trade_date", "close"]].copy()
+    close_df = pd.concat([df2, df3], ignore_index=True)
+
+    close_df["trade_date"] = close_df["trade_date"].astype(str)
+    close_df["ts_code"] = close_df["ts_code"].astype(str).str.strip()
+    close_df["close"] = pd.to_numeric(close_df["close"], errors="coerce")
+
+    return close_df, "ok"
+
+
 def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     cfg = cfg or PremiumConfig.load()
 
@@ -89,7 +151,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         write_last_run(cfg, trade_date="unknown", extra={"ok": False, "reason": f"feature_error:{e}"})
         return PredictResult(False, "unknown", None, None, f"特征构建失败：{e}")
 
-    trade_date = feat.trade_date
+    trade_date = _to_yyyymmdd(feat.trade_date)
     X = feat.X.copy()
     meta = feat.meta.copy()
     risk = feat.risk.copy()
@@ -114,16 +176,19 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     rank_pred_ev = np.empty_like(order, dtype=int)
     rank_pred_ev[order] = np.arange(1, len(order) + 1)
 
-    # 可选：附带真实对照（如果 close 数据有）
-    close_df = load_close_table(cfg)
+    # 可选：附带真实对照（如果第3日 close 已可用）
     real_ret = pd.Series([pd.NA] * len(meta))
     next_trade_date = pd.Series([pd.NA] * len(meta))
 
+    close_df, close_reason = _build_close_df_for_label(cfg, trade_date)
     if close_df is not None and not close_df.empty:
         labels_df, label_meta = build_premium_labels(close_df, trade_date=trade_date)
         if not label_meta.pending and not labels_df.empty:
-            tmp = meta[["ts_code"]].merge(labels_df[["ts_code", "next_trade_date", "real_premium_ret"]],
-                                          on="ts_code", how="left")
+            tmp = meta[["ts_code"]].merge(
+                labels_df[["ts_code", "next_trade_date", "real_premium_ret"]],
+                on="ts_code",
+                how="left",
+            )
             next_trade_date = tmp["next_trade_date"]
             real_ret = tmp["real_premium_ret"]
 
@@ -179,7 +244,14 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     write_last_run(
         cfg,
         trade_date=trade_date,
-        extra={"ok": True, "rows": int(len(out)), "rank_csv": str(p_csv.name), "rank_md": str(p_md.name)},
+        extra={
+            "ok": True,
+            "rows": int(len(out)),
+            "rank_csv": str(p_csv.name),
+            "rank_md": str(p_md.name),
+            # 记录一下真值可用性（不影响契约）
+            "truth_reason": close_reason,
+        },
     )
 
     return PredictResult(True, trade_date, str(p_csv), str(p_md), "ok")
