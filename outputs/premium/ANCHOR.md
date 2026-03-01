@@ -13,14 +13,21 @@
 线路文件：
 
 src/top10decision/premium/*
+
 scripts/run_premium.py
+
 github/workflows/run_premium.yml
+
 outputs/premium/rank/
+
 outputs/premium/learning/premium_eval_history.csv
+
 outputs/premium/_last_run.txt
 
 期望产物：
+
 outputs/premium/rank/premium_rank_YYYYMMDD.csv
+
 outputs/premium/rank/premium_rank_YYYYMMDD.md
 
 --------------------------------------------------------------------------------
