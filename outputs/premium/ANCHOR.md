@@ -1,8 +1,4 @@
-口径：PremiumRet(2→3)=Close[3]/Close[2]-1
-当前已完成：Premium 子系统骨架 + P0 可跑闭环（train/predict/CSV+MD）
-下一步主线：接入 close 真值数据源 → features 升级（两阶段结构特征）→ run_premium.yml 日跑与提交产物
 
---------------------------------------------------------------------------------
 衔接口令：
 
 口径：PremiumRet(2→3)=Close[3]/Close[2]-1
