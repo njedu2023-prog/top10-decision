@@ -138,6 +138,20 @@ def _write_last_run(cfg: PremiumConfig, trade_date: str, extra: Dict[str, object
     _write_text(cfg.out_last_run_path(), "\n".join(lines) + "\n")
 
 
+def _rebuild_rank_front(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    ✅ 修复点（2026-03-02）：
+    - 上游可能已经带 rank 列（pred_source_latest 或 decision merge）
+    - pandas df.insert 会因列已存在而报错：cannot insert rank, already exists
+    - 这里统一：先删除已有 rank（若存在），再重建 rank，并保证 rank 永远在第 1 列
+    """
+    df = df.copy()
+    if "rank" in df.columns:
+        df = df.drop(columns=["rank"], errors="ignore")
+    df.insert(0, "rank", np.arange(1, len(df) + 1))
+    return df
+
+
 # ========= 交易日历推进（按 ensure_daily_cached 探测）=========
 
 def _probe_next_trade_day(cfg: PremiumConfig, start_trade_date: str, max_probe_days: int = 30) -> Optional[str]:
@@ -391,7 +405,9 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     # 5) 排序：score_ev 降序（默认综合）
     df = df.sort_values(by=["score_ev"], ascending=False).reset_index(drop=True)
-    df.insert(0, "rank", np.arange(1, len(df) + 1))
+
+    # ✅ 修复：不管上游是否已有 rank，都统一重建 rank，并保证 rank 在第 1 列
+    df = _rebuild_rank_front(df)
 
     # 6) top30 + full
     topn = int(cfg.top_n)
