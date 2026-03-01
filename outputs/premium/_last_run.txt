@@ -1,1 +1,13 @@
-
+trade_date: 20260227
+run_id: gh_22554364660
+commit_sha: c43fc7acbb44
+created_at_utc: 2026-03-01T22:33:05Z
+ok: True
+target_date: 
+pending: True
+verify_pending: True
+verify_reason: 无法推进到 T+2（可能行情未到/数据源缺失）
+out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260227.csv
+out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260227.csv
+out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260227.csv
+report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260227.md

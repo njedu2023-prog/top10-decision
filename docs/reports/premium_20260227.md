@@ -1,0 +1,128 @@
+# Premium（溢价预测）手工交易版 V1
+
+- trade_date（T）：**20260227**
+- target_date（T+2）：****
+- horizon：**2 个交易日（T→T+2）**
+- 生成时间：2026-03-01T22:33:05Z
+
+> 验证表状态：**PENDING**（原因：无法推进到 T+2（可能行情未到/数据源缺失））
+
+## 预测表（Top30）
+
+<h3 style="margin:10px 0;">20260303 → 20260305　TOP 30 溢价概率研究报告</h3>
+
+<table style="border-collapse:collapse; width:100%; font-size:14px;">
+  <thead>
+    <tr>
+      <th style="border:2px solid #111; padding:8px;">排序</th>
+      <th style="border:2px solid #111; padding:8px;">预测日期</th>
+      <th style="border:2px solid #111; padding:8px;">收盘日期</th>
+      <th style="border:2px solid #111; padding:8px;">代码</th>
+      <th style="border:2px solid #111; padding:8px;">名称</th>
+
+      <!-- Premium 新增字段 -->
+      <th style="border:2px solid #111; padding:8px;">上涨概率</th>
+      <th style="border:2px solid #111; padding:8px;">上涨幅度</th>
+      <th style="border:2px solid #111; padding:8px;">综合分值</th>
+      <th style="border:2px solid #111; padding:8px;">风险提示</th>
+      <th style="border:2px solid #111; padding:8px;">置信度</th>
+      <th style="border:2px solid #111; padding:8px;">数据质量</th>
+
+      <!-- decision 合并字段（可选，但推荐） -->
+      <th style="border:2px solid #111; padding:8px;">决策排名</th>
+      <th style="border:2px solid #111; padding:8px;">决策权重</th>
+      <th style="border:2px solid #111; padding:8px;">可买提示</th>
+      <th style="border:2px solid #111; padding:8px;">决策标签</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr>
+      <td style="border:1px solid #111; padding:8px;">1</td>
+      <td style="border:1px solid #111; padding:8px;">20260303</td>
+      <td style="border:1px solid #111; padding:8px;">20260305</td>
+      <td style="border:1px solid #111; padding:8px;">001209.SZ</td>
+      <td style="border:1px solid #111; padding:8px;">洪兴股份</td>
+
+      <td style="border:1px solid #111; padding:8px;">83.23%</td>
+      <td style="border:1px solid #111; padding:8px; color:#d00; font-weight:700;">↑ +9.11%</td>
+      <td style="border:1px solid #111; padding:8px;">0.934756</td>
+      <td style="border:1px solid #111; padding:8px;">LOW_LIQ;GAP_RISK</td>
+      <td style="border:1px solid #111; padding:8px;">87</td>
+      <td style="border:1px solid #111; padding:8px;">92</td>
+
+      <td style="border:1px solid #111; padding:8px;">3</td>
+      <td style="border:1px solid #111; padding:8px;">0.07</td>
+      <td style="border:1px solid #111; padding:8px;">提示</td>
+      <td style="border:1px solid #111; padding:8px;">THEME_X;HOT</td>
+    </tr>
+
+    <!-- 更多行 ... -->
+  </tbody>
+</table>
+
+<div style="margin-top:8px; font-size:13px;">
+  报告生成日期：2026-03-03 20:50（备注：上涨幅度为 20260305 收盘相对于 20260303 收盘的预测涨跌幅%）
+</div>
+
+
+## 验证表（Top30）
+
+<h3 style="margin:14px 0 10px 0;">20260303 → 20260305　TOP 30 溢价概率为正预测命中率：75.00%</h3>
+
+<table style="border-collapse:collapse; width:100%; font-size:14px;">
+  <thead>
+    <tr>
+      <th style="border:2px solid #111; padding:8px;">排序</th>
+      <th style="border:2px solid #111; padding:8px;">预测日期</th>
+      <th style="border:2px solid #111; padding:8px;">收盘日期</th>
+      <th style="border:2px solid #111; padding:8px;">代码</th>
+      <th style="border:2px solid #111; padding:8px;">名称</th>
+      <th style="border:2px solid #111; padding:8px;">预测值</th>
+      <th style="border:2px solid #111; padding:8px;">实际值</th>
+      <th style="border:2px solid #111; padding:8px;">上涨命中</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr>
+      <td style="border:1px solid #111; padding:8px;">1</td>
+      <td style="border:1px solid #111; padding:8px;">20260303</td>
+      <td style="border:1px solid #111; padding:8px;">20260305</td>
+      <td style="border:1px solid #111; padding:8px;">001209.SZ</td>
+      <td style="border:1px solid #111; padding:8px;">洪兴股份</td>
+
+      <td style="border:1px solid #111; padding:8px; color:#d00; font-weight:700;">↑ +8.21%</td>
+      <td style="border:1px solid #111; padding:8px; color:#d00; font-weight:700;">↑ +9.21%</td>
+      <td style="border:1px solid #111; padding:8px;">是</td>
+    </tr>
+
+    <tr>
+      <td style="border:1px solid #111; padding:8px;">3</td>
+      <td style="border:1px solid #111; padding:8px;">20260303</td>
+      <td style="border:1px solid #111; padding:8px;">20260305</td>
+      <td style="border:1px solid #111; padding:8px;">002378.SZ</td>
+      <td style="border:1px solid #111; padding:8px;">章源钨业</td>
+
+      <td style="border:1px solid #111; padding:8px; color:#d00; font-weight:700;">↑ +5.00%</td>
+      <td style="border:1px solid #111; padding:8px; color:#0a0; font-weight:700;">↓ -5.00%</td>
+      <td style="border:1px solid #111; padding:8px; color:#0a0; font-weight:700;">否</td>
+    </tr>
+
+    <!-- 更多行 ... -->
+  </tbody>
+</table>
+
+<div style="margin-top:8px; font-size:13px;">
+  报告生成日期：2026-03-06 21:56（备注：实际值为 20260305 收盘相对于 20260303 收盘的涨跌幅%）
+</div>
+
+
+## 全量展开（full）
+
+（说明：候选=pred_source_latest 全量，不做过滤；排序同 Top30。）
+
+- full 文件：`outputs/premium/premium_full_20260227.csv`
+- top30 文件：`outputs/premium/premium_top30_20260227.csv`
+- verify 文件：`outputs/premium/premium_verify_20260227.csv`
+
