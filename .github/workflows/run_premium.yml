@@ -1,1 +1,80 @@
+name: Run Premium (Follow Decision)
 
+on:
+  workflow_run:
+    workflows: ["Run Top10 Decision (Auto Daily)"]
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      cmd:
+        description: "执行命令：predict / train / all"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - predict
+          - train
+
+permissions:
+  contents: write
+
+concurrency:
+  group: premium-follow-decision
+  cancel-in-progress: false
+
+jobs:
+  premium:
+    # 自动触发：仅当上游成功才跑；手动触发：直接跑
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Premium
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+        run: |
+          CMD="${{ inputs.cmd }}"
+          if [ -z "$CMD" ]; then CMD="all"; fi
+          echo "[run_premium] cmd=$CMD"
+          python scripts/run_premium.py "$CMD" --verbose
+
+      - name: Sanity check outputs
+        run: |
+          test -f outputs/premium/_last_run.txt
+          test -d outputs/premium/rank
+          ls -la outputs/premium/rank || true
+
+      - name: Commit outputs (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 只提交 Premium 产物（不提交 data/market 缓存，避免仓库膨胀）
+          git add outputs/premium || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "premium: update outputs"
+          git push
