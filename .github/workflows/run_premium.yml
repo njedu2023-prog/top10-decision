@@ -10,11 +10,11 @@ on:
       cmd:
         description: "执行命令：predict / train / all"
         required: false
-        default: "all"
+        default: "predict"
         type: choice
         options:
-          - all
           - predict
+          - all
           - train
 
 permissions:
@@ -42,6 +42,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ✅ 方案 A：先同步远端（工作区干净），避免后续 rebase 被未提交变更阻塞
+      - name: Sync with remote (rebase)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git rebase origin/main || (git rebase --abort && git reset --hard origin/main)
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -58,7 +66,7 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}/src"
         run: |
           CMD="${{ inputs.cmd }}"
-          if [ -z "$CMD" ]; then CMD="all"; fi
+          if [ -z "$CMD" ]; then CMD="predict"; fi
           echo "[run_premium] cmd=$CMD"
           python scripts/run_premium.py "$CMD" --verbose
 
@@ -87,12 +95,12 @@ jobs:
             exit 0
           fi
 
-          # 避免并发/手动提交导致 push 冲突
-          git pull --rebase
-
           # 从 _last_run.txt 里读取 trade_date（若读取不到就用 unknown）
           TRADE_DATE="$(grep -E '^trade_date:' -m 1 outputs/premium/_last_run.txt | awk '{print $2}' || true)"
           if [ -z "$TRADE_DATE" ]; then TRADE_DATE="unknown"; fi
 
           git commit -m "premium: update outputs + market cache (${TRADE_DATE})"
-          git push
+
+          # push 前再做一次 fast sync（仍是干净状态，因为已 commit）
+          git pull --rebase origin main || true
+          git push origin HEAD:main
