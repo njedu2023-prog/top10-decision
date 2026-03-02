@@ -8,14 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: "执行命令：predict / train / all（默认 predict，保证主线不断更）"
+        description: "执行命令：predict / train / all"
         required: false
-        default: "predict"
+        default: "all"
         type: choice
         options:
+          - all
           - predict
           - train
-          - all
 
 permissions:
   contents: write
@@ -29,7 +29,7 @@ jobs:
     # 自动触发：仅当上游成功才跑；手动触发：直接跑
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -53,33 +53,31 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}/src"
         run: |
           CMD="${{ inputs.cmd }}"
-          if [ -z "$CMD" ]; then CMD="predict"; fi
+          if [ -z "$CMD" ]; then CMD="all"; fi
           echo "[run_premium] cmd=$CMD"
           python scripts/run_premium.py "$CMD" --verbose
 
       - name: Sanity check outputs
         run: |
           test -f outputs/premium/_last_run.txt
-          test -d outputs/premium
           ls -la outputs/premium || true
-
-          # 新主线：报告落在 docs/reports
-          test -d docs/reports
           ls -la docs/reports || true
-          test -f docs/reports/premium_latest.md || true
+          ls -la data/market || true
 
-      - name: Commit outputs (if changed)
+      - name: Commit outputs + market cache (if changed)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # ✅ 提交 Premium 产物 + 报告（不提交 data/market 缓存，避免仓库膨胀）
-          git add outputs/premium docs/reports || true
+          # ✅ Premium V2：必须提交真值缓存（data/market）与报告（docs/reports）
+          git add outputs/premium || true
+          git add docs/reports || true
+          git add data/market || true
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "premium: update reports/outputs"
+          git commit -m "premium: update outputs + market cache"
           git push
