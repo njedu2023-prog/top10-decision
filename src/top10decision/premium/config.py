@@ -13,7 +13,6 @@ Premium 子系统 — 配置（Config）
 重要说明（向后兼容 + 新契约落地）：
 - 旧口径（训练/模型/rank）字段：保留不删（避免历史模块引用炸裂）
 - 新口径（Premium V2 主线）字段：补齐分位点/冷启动参数/校准落库路径
-- 对重复且会造成歧义的字段：该删就删（例如 decision_input_glob）
 """
 
 from __future__ import annotations
