@@ -30,12 +30,13 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from top10.premium.config import PremiumConfig
-from top10.premium.predict import predict_latest
+# ✅ 修复：包名为 top10decision，不是 top10
+from top10decision.premium.config import PremiumConfig
+from top10decision.premium.predict import predict_latest
 
 # train 可能在某些阶段不存在/被你暂时移除，这里做防御导入
 try:
-    from top10.premium.train import train_models  # type: ignore
+    from top10decision.premium.train import train_models  # type: ignore
 except Exception:  # pragma: no cover
     train_models = None
 
