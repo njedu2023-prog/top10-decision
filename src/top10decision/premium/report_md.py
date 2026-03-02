@@ -2,12 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Markdown 报告渲染
+Premium 子系统 — Markdown 报告渲染（去模板化版本）
 
-本文件同时支持两套输出（向后兼容 + 新主线）：
-
-A) ✅ 新口径（Premium 手工交易版 V1，锁死）：
-- 报告页面必须包含两张表：预测表 + 验证表（样式来自 PremiumA.html / PremiumB.html）
+A) ✅ 新口径（Premium V2 主线，锁死）：
+- 报告包含两张表：预测表 + 验证表（均为 Markdown 表格）
+- 不依赖 PremiumA.html / PremiumB.html（彻底去模板化）
 - 若 T+2 行情未到：pending（不得报错卡死），验证表显示 PENDING 原因
 - 验证表顺序必须与预测表 Top30 完全一致（由上游保证）
 
@@ -20,8 +19,7 @@ B) ♻️ 旧口径（PredEV/TopK/RankIC）：
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -30,7 +28,7 @@ from .config import PremiumConfig
 
 
 # =========================
-# 新口径（V1 两张表模板渲染）
+# 新口径（V2 报告：纯 Markdown）
 # =========================
 
 def _fmt_prob(x: object, digits: int = 2) -> str:
@@ -43,7 +41,7 @@ def _fmt_prob(x: object, digits: int = 2) -> str:
         return "-"
 
 
-def _fmt_pct_ratio(x: object, digits: int = 2, with_arrow: bool = True) -> str:
+def _fmt_pct_ratio(x: object, digits: int = 2) -> str:
     """
     x 是 ratio（例如 0.0911 表示 +9.11%）
     """
@@ -51,71 +49,143 @@ def _fmt_pct_ratio(x: object, digits: int = 2, with_arrow: bool = True) -> str:
         v = float(x)
         if np.isnan(v):
             return "-"
-        if not with_arrow:
-            return f"{v * 100:.{digits}f}%"
-        sign = "↑" if v >= 0 else "↓"
-        return f"{sign} {v:+.{digits}%}"
+        return f"{v * 100:+.{digits}f}%"
     except Exception:
         return "-"
 
 
-def _row_td(v: str, strong: bool = False, color_red_if_up: bool = False) -> str:
-    style = "border:1px solid #111; padding:8px;"
-    if strong:
-        style += " font-weight:700;"
-    if color_red_if_up and isinstance(v, str) and v.startswith("↑"):
-        style += " color:#d00;"
-    return f'<td style="{style}">{v}</td>'
+def _fmt_float(x: object, digits: int = 4) -> str:
+    try:
+        v = float(x)
+        if np.isnan(v):
+            return "-"
+        return f"{v:.{digits}f}"
+    except Exception:
+        return "-"
 
 
-def _build_rows_pred(df_top30: pd.DataFrame) -> str:
-    rows = []
-    for _, r in df_top30.iterrows():
-        rows.append(
-            "<tr>"
-            + _row_td(str(r.get("rank", "")))
-            + _row_td(str(r.get("trade_date", "")))
-            + _row_td(str(r.get("target_date", "")))
-            + _row_td(str(r.get("ts_code", "")))
-            + _row_td(str(r.get("name", "")))
-            + _row_td(_fmt_prob(r.get("p_premium", np.nan), 2))
-            + _row_td(_fmt_pct_ratio(r.get("e_premium", np.nan), 2, True), strong=True, color_red_if_up=True)
-            + _row_td(str(r.get("score_ev", "")))
-            + _row_td(str(r.get("risk_flags", "")))
-            + _row_td(str(r.get("confidence", "")))
-            + _row_td(str(r.get("data_quality", "")))
-            + _row_td(str(r.get("dec_rank", "")))
-            + _row_td(str(r.get("dec_weight", "")))
-            + _row_td(str(r.get("dec_can_buy", "")))
-            + _row_td(str(r.get("dec_p_fill", "")))
-            + _row_td(str(r.get("dec_reason", "")))
-            + "</tr>"
-        )
-    return "\n".join(rows)
+def _fmt_price(x: object, digits: int = 3) -> str:
+    try:
+        v = float(x)
+        if np.isnan(v):
+            return "-"
+        return f"{v:.{digits}f}"
+    except Exception:
+        return "-"
 
 
-def _build_rows_verify(df_verify: pd.DataFrame) -> str:
-    rows = []
-    for _, r in df_verify.iterrows():
-        pred_v = _fmt_pct_ratio(r.get("e_premium", np.nan), 2, True)
-        act_v = _fmt_pct_ratio(r.get("actual_ret", np.nan), 2, True)
-        rows.append(
-            "<tr>"
-            + _row_td(str(r.get("rank", "")))
-            + _row_td(str(r.get("trade_date", "")))
-            + _row_td(str(r.get("target_date", "")))
-            + _row_td(str(r.get("ts_code", "")))
-            + _row_td(str(r.get("name", "")))
-            + _row_td(pred_v, strong=True, color_red_if_up=True)
-            + _row_td(act_v, strong=True, color_red_if_up=True)
-            + _row_td(str(r.get("hit_up", "")))
-            + "</tr>"
-        )
-    return "\n".join(rows)
+def _fmt_bool(x: object) -> str:
+    if x is True or str(x).lower() == "true":
+        return "✅"
+    if x is False or str(x).lower() == "false":
+        return "❌"
+    return "-"
 
 
-def _read_template(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def _detect_quantile_cols(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
+    r_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("r_p")]
+    p_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("close_T2_p")]
+
+    def _key(c: str) -> int:
+        # 取末两位数字作为排序键：r_p05 -> 5, r_p50 -> 50
+        digits = "".join([ch for ch in c if ch.isdigit()])
+        try:
+            return int(digits[-2:]) if len(digits) >= 2 else int(digits)
+        except Exception:
+            return 999
+
+    return sorted(r_cols, key=_key), sorted(p_cols, key=_key)
+
+
+def _select_cols_exist(df: pd.DataFrame, cols: Sequence[str]) -> List[str]:
+    return [c for c in cols if c in df.columns]
+
+
+def _format_pred_table(df_top30: pd.DataFrame) -> pd.DataFrame:
+    df = df_top30.copy()
+
+    r_cols, p_cols = _detect_quantile_cols(df)
+
+    # V2 优先字段
+    base_cols = [
+        "rank", "trade_date", "target_date", "ts_code", "name",
+        "close_T",
+    ]
+    # 分布字段（存在就展示）
+    cols = base_cols + r_cols + p_cols
+
+    # 排序辅助（若存在）
+    cols += _select_cols_exist(df, ["rank_r_p50"])
+
+    # 过渡期对照（旧口径保留）
+    cols += _select_cols_exist(df, ["p_premium", "e_premium", "score_ev"])
+
+    # decision 标签
+    cols += _select_cols_exist(df, ["dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"])
+
+    cols = _select_cols_exist(df, cols)
+    out = df[cols].copy()
+
+    # 格式化
+    if "p_premium" in out.columns:
+        out["p_premium"] = out["p_premium"].map(lambda x: _fmt_prob(x, 2))
+    if "e_premium" in out.columns:
+        out["e_premium"] = out["e_premium"].map(lambda x: _fmt_pct_ratio(x, 2))
+
+    if "close_T" in out.columns:
+        out["close_T"] = out["close_T"].map(lambda x: _fmt_price(x, 3))
+
+    # r_pXX
+    for c in r_cols:
+        if c in out.columns:
+            out[c] = out[c].map(lambda x: _fmt_float(x, 4))
+
+    # close_T2_pXX
+    for c in p_cols:
+        if c in out.columns:
+            out[c] = out[c].map(lambda x: _fmt_price(x, 3))
+
+    # 其它数值适度格式化
+    if "score_ev" in out.columns:
+        out["score_ev"] = out["score_ev"].map(lambda x: _fmt_float(x, 4))
+
+    return out
+
+
+def _format_verify_table(df_verify: pd.DataFrame) -> pd.DataFrame:
+    df = df_verify.copy()
+
+    # verify 表：V2 校准字段 + 旧字段兼容
+    cols = [
+        "rank", "trade_date", "target_date", "ts_code", "name",
+        "close_T", "close_T2_actual", "r_actual",
+        "in_p10", "in_p50",
+        "err_r_p50", "err_close_p50",
+        "actual_ret", "hit_up",
+    ]
+    cols = _select_cols_exist(df, cols)
+    out = df[cols].copy()
+
+    # 格式化
+    if "close_T" in out.columns:
+        out["close_T"] = out["close_T"].map(lambda x: _fmt_price(x, 3))
+    if "close_T2_actual" in out.columns:
+        out["close_T2_actual"] = out["close_T2_actual"].map(lambda x: _fmt_price(x, 3))
+    if "r_actual" in out.columns:
+        out["r_actual"] = out["r_actual"].map(lambda x: _fmt_float(x, 4))
+    if "in_p10" in out.columns:
+        out["in_p10"] = out["in_p10"].map(_fmt_bool)
+    if "in_p50" in out.columns:
+        out["in_p50"] = out["in_p50"].map(_fmt_bool)
+    if "err_r_p50" in out.columns:
+        out["err_r_p50"] = out["err_r_p50"].map(lambda x: _fmt_float(x, 4))
+    if "err_close_p50" in out.columns:
+        out["err_close_p50"] = out["err_close_p50"].map(lambda x: _fmt_price(x, 3))
+
+    if "actual_ret" in out.columns:
+        out["actual_ret"] = out["actual_ret"].map(lambda x: _fmt_pct_ratio(x, 2))
+
+    return out
 
 
 def render_premium_report_md(
@@ -128,78 +198,77 @@ def render_premium_report_md(
     gen_ts: str,
 ) -> str:
     """
-    ✅ 新口径：生成 Premium V1 报告（Markdown），包含两张表（预测表+验证表）
-    模板来源：仓库根目录 PremiumA.html / PremiumB.html
+    ✅ 新口径：生成 Premium V2 报告（Markdown），包含两张表（预测表+验证表）
+    - 纯 Markdown 表格，不依赖外部 HTML 模板
     """
     cfg = PremiumConfig.load()
-    repo_root = cfg.repo_root()
 
-    tpl_a = (repo_root / "PremiumA.html").resolve()
-    tpl_b = (repo_root / "PremiumB.html").resolve()
-
-    html_a = _read_template(tpl_a)
-    html_b = _read_template(tpl_b)
-
-    # 预测表
-    title_a = f"{trade_date} → {target_date}　TOP 30 溢价概率研究报告"
-    html_a = (
-        html_a.replace("{{TITLE}}", title_a)
-        .replace("{{ROWS}}", _build_rows_pred(df_top30))
-        .replace("{{GEN_TS}}", gen_ts)
-        .replace("{{TRADE_DATE}}", trade_date)
-        .replace("{{TARGET_DATE}}", target_date)
-    )
-
-    # 验证表
-    if verify_pending:
-        title_b = f"{trade_date} → {target_date}　TOP 30 溢价概率为正预测命中率：PENDING"
-        html_b = (
-            html_b.replace("{{TITLE}}", title_b)
-            .replace("{{ROWS}}", "")
-            .replace("{{GEN_TS}}", gen_ts)
-            .replace("{{TRADE_DATE}}", trade_date)
-            .replace("{{TARGET_DATE}}", target_date)
-        )
-        pending_line = f"> 验证表状态：**PENDING**（原因：{verify_reason}）\n\n"
-        hit_line = ""
-    else:
-        hit = (df_verify["hit_up"].astype(str) == "是").sum() if "hit_up" in df_verify.columns else 0
-        total = int(len(df_verify)) if len(df_verify) else 0
-        hit_rate = (hit / total * 100.0) if total > 0 else 0.0
-        title_b = f"{trade_date} → {target_date}　TOP 30 溢价概率为正预测命中率：{hit_rate:.2f}%"
-        html_b = (
-            html_b.replace("{{TITLE}}", title_b)
-            .replace("{{ROWS}}", _build_rows_verify(df_verify))
-            .replace("{{GEN_TS}}", gen_ts)
-            .replace("{{TRADE_DATE}}", trade_date)
-            .replace("{{TARGET_DATE}}", target_date)
-        )
-        pending_line = ""
-        hit_line = f"- 命中：{hit}/{total}（{hit_rate:.2f}%）\n\n"
-
-    # 组装 MD
-    md = []
-    md.append("# Premium（溢价预测）手工交易版 V1\n\n")
+    md: List[str] = []
+    md.append("# Premium（溢价预测）V2（Close[T+2] 分布预测）\n\n")
     md.append(f"- trade_date（T）：**{trade_date}**\n")
     md.append(f"- target_date（T+2）：**{target_date}**\n")
     md.append("- horizon：**2 个交易日（T→T+2）**\n")
-    md.append(f"- 生成时间：{gen_ts}\n\n")
-
-    if pending_line:
-        md.append(pending_line)
-    if hit_line:
-        md.append(hit_line)
+    md.append(f"- 生成时间：{gen_ts}\n")
+    md.append(f"- 模型版本：**{getattr(cfg, 'model_version', '-') }**\n\n")
 
     md.append("## 预测表（Top30）\n\n")
-    md.append(html_a + "\n\n")
-    md.append("## 验证表（Top30）\n\n")
-    md.append(html_b + "\n\n")
+    pred_show = _format_pred_table(df_top30)
+    if pred_show.empty:
+        md.append("> （预测表为空，属于异常；请检查 pred_source_latest 输入）\n\n")
+    else:
+        md.append(pred_show.to_markdown(index=False))
+        md.append("\n\n")
 
-    md.append("## 全量展开（full）\n\n")
+    md.append("## 验证表（Top30）\n\n")
+    if verify_pending:
+        md.append(f"> 验证表状态：**PENDING**（原因：{verify_reason}）\n\n")
+        md.append("> 说明：这属于正常状态（T+2 真值未到）。系统仍会持续输出预测表并落盘缓存。\n\n")
+        # 仍输出一个空表头，便于后续 diff
+        verify_show = _format_verify_table(df_verify) if df_verify is not None else pd.DataFrame()
+        if not verify_show.empty:
+            md.append(verify_show.to_markdown(index=False))
+            md.append("\n\n")
+    else:
+        verify_show = _format_verify_table(df_verify)
+        if verify_show.empty:
+            md.append("> （验证表为空；可能真值列未能 merge 成功）\n\n")
+        else:
+            md.append(verify_show.to_markdown(index=False))
+            md.append("\n\n")
+
+        # 旧口径命中率（兼容）
+        if "hit_up" in df_verify.columns:
+            hit = (df_verify["hit_up"].astype(str) == "是").sum()
+            total = int(len(df_verify)) if len(df_verify) else 0
+            hit_rate = (hit / total * 100.0) if total > 0 else 0.0
+            md.append(f"- 命中（旧口径：actual_ret>0）：{hit}/{total}（{hit_rate:.2f}%）\n\n")
+
+        # V2 覆盖率（如果存在）
+        if "in_p10" in df_verify.columns:
+            cov10 = float(pd.to_numeric(df_verify["in_p10"], errors="coerce").fillna(False).mean())
+            md.append(f"- 覆盖率（V2：in_p10，r_actual ∈ [p05,p95]）：{cov10*100:.2f}%\n")
+        if "in_p50" in df_verify.columns:
+            cov50 = float(pd.to_numeric(df_verify["in_p50"], errors="coerce").fillna(False).mean())
+            md.append(f"- 覆盖率（V2：in_p50，r_actual ∈ [p25,p75]）：{cov50*100:.2f}%\n")
+        if "err_r_p50" in df_verify.columns:
+            mae_r = float(pd.to_numeric(df_verify["err_r_p50"], errors="coerce").abs().mean())
+            md.append(f"- MAE（V2：|err_r_p50|）：{mae_r:.6f}\n")
+        if "err_close_p50" in df_verify.columns:
+            mae_c = float(pd.to_numeric(df_verify["err_close_p50"], errors="coerce").abs().mean())
+            md.append(f"- MAE（V2：|err_close_p50|）：{mae_c:.6f}\n")
+        md.append("\n")
+
+    md.append("## 文件输出\n\n")
     md.append("（说明：候选=pred_source_latest 全量，不做过滤；排序同 Top30。）\n\n")
     md.append(f"- full 文件：`outputs/premium/premium_full_{trade_date}.csv`\n")
     md.append(f"- top30 文件：`outputs/premium/premium_top30_{trade_date}.csv`\n")
     md.append(f"- verify 文件：`outputs/premium/premium_verify_{trade_date}.csv`\n\n")
+
+    md.append("## 字段说明（V2 核心）\n\n")
+    md.append("- r_pXX：log-return 分位点，r = ln(Close[T+2]/Close[T])\n")
+    md.append("- close_T2_pXX：价格分位点 = close_T * exp(r_pXX)\n")
+    md.append("- in_p10：r_actual 是否落在 [p05, p95]\n")
+    md.append("- in_p50：r_actual 是否落在 [p25, p75]\n\n")
 
     return "".join(md)
 
@@ -214,16 +283,6 @@ def _fmt_pct(x: object, digits: int = 2) -> str:
         if np.isnan(v):
             return "-"
         return f"{v*100:.{digits}f}%"
-    except Exception:
-        return "-"
-
-
-def _fmt_float(x: object, digits: int = 4) -> str:
-    try:
-        v = float(x)
-        if np.isnan(v):
-            return "-"
-        return f"{v:.{digits}f}"
     except Exception:
         return "-"
 
@@ -249,6 +308,16 @@ def _spearman_rank_ic(a: np.ndarray, b: np.ndarray) -> float:
     if denom < 1e-12:
         return float("nan")
     return float((ra * rb).sum() / denom)
+
+
+def _fmt_float_old(x: object, digits: int = 4) -> str:
+    try:
+        v = float(x)
+        if np.isnan(v):
+            return "-"
+        return f"{v:.{digits}f}"
+    except Exception:
+        return "-"
 
 
 def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str) -> str:
@@ -309,7 +378,7 @@ def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str
         eval_lines += [
             f"- HitRate@{topk}（Top{topk} 真实收益>0 比例）：{hit*100:.1f}%",
             f"- Top{topk} 真实平均收益：{mean_ret*100:.2f}%",
-            f"- RankIC（pred_ev vs real）：{_fmt_float(ric, 4)}",
+            f"- RankIC（pred_ev vs real）：{_fmt_float_old(ric, 4)}",
         ]
     else:
         eval_lines.append("- 真实对照（real_premium_ret）尚未产生：当前为预测版报告（正常）")
@@ -317,7 +386,7 @@ def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str
     lines = []
     lines.append(f"# Premium 溢价预测排序（{trade_date}）")
     lines.append("")
-    lines.append("- （旧口径报告渲染，保留用于历史链路；新主线已迁移至 PremiumA/B 模板）")
+    lines.append("- （旧口径报告渲染，保留用于历史链路；新主线已迁移至 V2）")
     lines.append(f"- trade_date：**{trade_date}**")
     lines.append(f"- next_trade_date：**{next_td}**")
     lines.append(f"- 模型版本：**{getattr(cfg, 'model_version', '-') }**")
