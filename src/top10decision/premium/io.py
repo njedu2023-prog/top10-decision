@@ -24,7 +24,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
@@ -143,11 +143,19 @@ def _extract_trade_date_from_df(df: pd.DataFrame) -> Optional[str]:
 
 def load_decision_inputs(cfg: PremiumConfig) -> List[DecisionInputFile]:
     """
-    ♻️ 旧口径：读取 decision 输入表（第2日预测表）。
+    ♻️ 旧入口（仍保留）：读取 decision 输入表列表。
+    ✅ 已迁移到新契约字段：cfg.decision_glob
     返回按 trade_date 升序排序的列表（取不到 trade_date 则按文件名排序）。
+
+    注意：本函数只负责“列举/读取 decision CSV”，不负责业务过滤。
     """
     repo_root = cfg.repo_root()
-    pattern = str((repo_root / cfg.decision_input_glob).resolve())
+
+    # 关键修复点：
+    # - 旧字段 decision_input_glob 已从 config 契约删除
+    # - 统一使用新契约字段 decision_glob
+    pattern = str((repo_root / cfg.decision_glob).resolve())
+
     paths = [Path(p).resolve() for p in glob.glob(pattern)]
     files: List[DecisionInputFile] = []
 
@@ -249,7 +257,7 @@ def load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
             df = _read_csv(p)
             if df is None or df.empty:
                 continue
-            # 尝试统一字段
+
             cols_map = {str(c).strip().lower(): c for c in df.columns}
 
             def pick(*names: str) -> Optional[str]:
