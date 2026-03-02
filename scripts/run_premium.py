@@ -30,12 +30,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from top10decision.premium.config import PremiumConfig
-from top10decision.premium.predict import predict_latest
+from top10.premium.config import PremiumConfig
+from top10.premium.predict import predict_latest
 
 # train 可能在某些阶段不存在/被你暂时移除，这里做防御导入
 try:
-    from top10decision.premium.train import train_models  # type: ignore
+    from top10.premium.train import train_models  # type: ignore
 except Exception:  # pragma: no cover
     train_models = None
 
@@ -61,7 +61,7 @@ def main() -> int:
         print("[premium] out_dir:", cfg.out_root())
         print("[premium] reports_dir:", cfg.reports_root())
 
-        # ✅ 契约锁死：只打印新字段（不再兼容旧 decision_input_glob）
+        # ✅ 契约锁死：只打印新字段
         print("[premium] pred_source_latest:", cfg.pred_source_latest)
         print("[premium] decision_glob:", cfg.decision_glob)
         print("[premium] market_cache_dir:", cfg.market_cache_dir)
