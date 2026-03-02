@@ -1,42 +1,35 @@
-<style>
-.premium-report { font-size: 12px; line-height: 1.45; }
-.premium-report h1, .premium-report h2, .premium-report h3 { font-size: 14px; margin: 10px 0 6px; }
-.premium-report p, .premium-report li { font-size: 12px; margin: 4px 0; }
-.premium-report .tbl-wrap { overflow-x: auto; padding: 4px 0; }
-.premium-report table { border-collapse: collapse; font-size: 12px; }
-.premium-report th, .premium-report td { border: 1px solid #e5e7eb; padding: 4px 6px; white-space: nowrap; vertical-align: middle; }
-.premium-report th { font-weight: 600; }
-</style>
-<div class="premium-report">
-<h1>Premium（溢价预测）V2（Close[T+2] 分布预测）</h1>
-<ul>
-<li>交易日（T）：<b>20260302</b></li>
-<li>目标交易日（T+2）：<b>20260302</b></li>
-<li>周期：<b>2 个交易日（T→T+2）</b></li>
-<li>生成时间：2026-03-02T22:24:31Z</li>
-<li>模型版本：<b>premium_v2</b></li>
-</ul>
-<h2>预测表（Top30）</h2>
-<div class="tbl-wrap"><table class="dataframe">
+# Premium（溢价预测）V2（Close[T+2] 分布预测）
+
+> 注：T 为本次预测的**基准交易日**（使用 Close[T]）；T+2 为**预测到期交易日**（预测 Close[T+2] 的分布）。
+
+- 预测日（T）：**20260302**
+- 预测到期日（T+2）：**20260304**
+- 周期：**2 个交易日（T→T+2）**
+- 生成时间：2026-03-02T23:17:12Z
+- 模型版本：**premium_v2**
+
+## 预测表（Top30）
+
+<div><table class="dataframe">
   <thead>
     <tr style="text-align: right;">
       <th>排名</th>
-      <th>交易日(T)</th>
-      <th>目标交易日(T+2)</th>
+      <th>预测日(T)</th>
+      <th>预测到期日(T+2)</th>
       <th>代码</th>
       <th>名称</th>
       <th>收盘价(T)</th>
-      <th>ln收益分位05</th>
-      <th>ln收益分位25</th>
-      <th>ln收益分位50</th>
-      <th>ln收益分位75</th>
-      <th>ln收益分位95</th>
-      <th>T+2价格分位05</th>
-      <th>T+2价格分位25</th>
-      <th>T+2价格分位50</th>
-      <th>T+2价格分位75</th>
-      <th>T+2价格分位95</th>
-      <th>中位ln收益排名</th>
+      <th>ln分位05</th>
+      <th>ln分位25</th>
+      <th>ln分位50</th>
+      <th>ln分位75</th>
+      <th>ln分位95</th>
+      <th>T+2价分位05</th>
+      <th>T+2价分位25</th>
+      <th>T+2价分位50</th>
+      <th>T+2价分位75</th>
+      <th>T+2价分位95</th>
+      <th>ln中位排名</th>
       <th>上涨概率</th>
       <th>预期溢价</th>
       <th>综合评分</th>
@@ -51,7 +44,7 @@
     <tr>
       <td>1</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600722.SH</td>
       <td>金牛化工</td>
       <td>10.32</td>
@@ -69,16 +62,16 @@
       <td>80.45%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>2</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002155.SZ</td>
       <td>湖南黄金</td>
       <td>41.47</td>
@@ -96,16 +89,16 @@
       <td>73.44%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>3</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>001337.SZ</td>
       <td>四川黄金</td>
       <td>55.74</td>
@@ -123,16 +116,16 @@
       <td>58.21%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>4</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600688.SH</td>
       <td>上海石化</td>
       <td>3.49</td>
@@ -150,16 +143,16 @@
       <td>52.23%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>5</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600714.SH</td>
       <td>金瑞矿业</td>
       <td>19.76</td>
@@ -177,16 +170,16 @@
       <td>50.89%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>6</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>301302.SZ</td>
       <td>华如科技</td>
       <td>29.72</td>
@@ -204,16 +197,16 @@
       <td>50.61%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>7</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>601975.SH</td>
       <td>招商南油</td>
       <td>4.52</td>
@@ -231,16 +224,16 @@
       <td>49.71%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>8</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600498.SH</td>
       <td>烽火通信</td>
       <td>56.71</td>
@@ -258,16 +251,16 @@
       <td>48.82%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>9</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>603619.SH</td>
       <td>中曼石油</td>
       <td>39.99</td>
@@ -285,16 +278,16 @@
       <td>48.62%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>10</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>601872.SH</td>
       <td>招商轮船</td>
       <td>17.86</td>
@@ -312,16 +305,16 @@
       <td>48.59%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>11</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600871.SH</td>
       <td>石化油服</td>
       <td>3.53</td>
@@ -339,16 +332,16 @@
       <td>45.80%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>12</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002843.SZ</td>
       <td>泰嘉股份</td>
       <td>27.80</td>
@@ -366,16 +359,16 @@
       <td>45.36%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>13</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002413.SZ</td>
       <td>雷科防务</td>
       <td>16.36</td>
@@ -393,16 +386,16 @@
       <td>43.66%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>14</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600108.SH</td>
       <td>亚盛集团</td>
       <td>4.37</td>
@@ -420,16 +413,16 @@
       <td>43.41%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>15</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>000960.SZ</td>
       <td>锡业股份</td>
       <td>48.80</td>
@@ -447,16 +440,16 @@
       <td>42.91%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>16</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>300139.SZ</td>
       <td>晓程科技</td>
       <td>79.78</td>
@@ -474,16 +467,16 @@
       <td>42.50%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>17</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600259.SH</td>
       <td>中稀有色</td>
       <td>112.29</td>
@@ -501,16 +494,16 @@
       <td>42.45%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>18</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>300164.SZ</td>
       <td>通源石油</td>
       <td>18.08</td>
@@ -528,16 +521,16 @@
       <td>41.17%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>19</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600938.SH</td>
       <td>中国海油</td>
       <td>39.46</td>
@@ -555,16 +548,16 @@
       <td>38.80%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>20</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002980.SZ</td>
       <td>华盛昌</td>
       <td>31.87</td>
@@ -582,16 +575,16 @@
       <td>36.08%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>21</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>301158.SZ</td>
       <td>德石股份</td>
       <td>31.20</td>
@@ -609,16 +602,16 @@
       <td>33.61%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>22</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002842.SZ</td>
       <td>翔鹭钨业</td>
       <td>45.72</td>
@@ -636,16 +629,16 @@
       <td>33.02%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>23</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600367.SH</td>
       <td>红星发展</td>
       <td>23.55</td>
@@ -663,16 +656,16 @@
       <td>32.44%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>24</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002490.SZ</td>
       <td>山东墨龙</td>
       <td>9.68</td>
@@ -690,16 +683,16 @@
       <td>28.37%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>25</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>000554.SZ</td>
       <td>泰山石油</td>
       <td>9.86</td>
@@ -717,16 +710,16 @@
       <td>28.33%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>26</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>000096.SZ</td>
       <td>广聚能源</td>
       <td>12.06</td>
@@ -744,16 +737,16 @@
       <td>25.22%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>27</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600988.SH</td>
       <td>赤峰黄金</td>
       <td>43.91</td>
@@ -771,16 +764,16 @@
       <td>24.98%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>28</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>603011.SH</td>
       <td>合锻智能</td>
       <td>28.28</td>
@@ -798,16 +791,16 @@
       <td>24.14%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>29</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002629.SZ</td>
       <td>仁智股份</td>
       <td>7.37</td>
@@ -825,16 +818,16 @@
       <td>23.32%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>30</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>300157.SZ</td>
       <td>新锦动力</td>
       <td>8.39</td>
@@ -852,30 +845,36 @@
       <td>22.89%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
-      <td><NA></td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
     </tr>
   </tbody>
 </table></div>
-<h2>验证表（Top30）</h2>
-<div class="tbl-wrap"><table class="dataframe">
+
+## 验证表（Top30）
+
+**状态：PENDING**（原因：truth_not_ready: T_ok=True T2_ok=False (missing_TUSHARE_TOKEN|fallback_business_day)）
+
+说明：这属于正常状态（T+2 真值未到）。系统仍会持续输出预测表并落盘缓存。
+
+<div><table class="dataframe">
   <thead>
     <tr style="text-align: right;">
       <th>排名</th>
-      <th>交易日(T)</th>
-      <th>目标交易日(T+2)</th>
+      <th>预测日(T)</th>
+      <th>预测到期日(T+2)</th>
       <th>代码</th>
       <th>名称</th>
       <th>收盘价(T)</th>
       <th>收盘价(T+2)</th>
       <th>实际ln收益</th>
-      <th>命中P10区间</th>
-      <th>命中P50区间</th>
-      <th>ln收益误差(中位)</th>
-      <th>价格误差(中位)</th>
+      <th>命中P10</th>
+      <th>命中P50</th>
+      <th>ln误差(中位)</th>
+      <th>价误差(中位)</th>
       <th>实际收益</th>
       <th>是否上涨</th>
     </tr>
@@ -884,502 +883,490 @@
     <tr>
       <td>1</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600722.SH</td>
       <td>金牛化工</td>
-      <td>10.32</td>
-      <td>10.32</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>2</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002155.SZ</td>
       <td>湖南黄金</td>
-      <td>41.47</td>
-      <td>41.47</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>3</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>001337.SZ</td>
       <td>四川黄金</td>
-      <td>55.74</td>
-      <td>55.74</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>4</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600688.SH</td>
       <td>上海石化</td>
-      <td>3.49</td>
-      <td>3.49</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>5</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600714.SH</td>
       <td>金瑞矿业</td>
-      <td>19.76</td>
-      <td>19.76</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>6</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>301302.SZ</td>
       <td>华如科技</td>
-      <td>29.72</td>
-      <td>29.72</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>7</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>601975.SH</td>
       <td>招商南油</td>
-      <td>4.52</td>
-      <td>4.52</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>8</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600498.SH</td>
       <td>烽火通信</td>
-      <td>56.71</td>
-      <td>56.71</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>9</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>603619.SH</td>
       <td>中曼石油</td>
-      <td>39.99</td>
-      <td>39.99</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>10</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>601872.SH</td>
       <td>招商轮船</td>
-      <td>17.86</td>
-      <td>17.86</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>11</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600871.SH</td>
       <td>石化油服</td>
-      <td>3.53</td>
-      <td>3.53</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>12</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002843.SZ</td>
       <td>泰嘉股份</td>
-      <td>27.80</td>
-      <td>27.80</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>13</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002413.SZ</td>
       <td>雷科防务</td>
-      <td>16.36</td>
-      <td>16.36</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>14</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600108.SH</td>
       <td>亚盛集团</td>
-      <td>4.37</td>
-      <td>4.37</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>15</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>000960.SZ</td>
       <td>锡业股份</td>
-      <td>48.80</td>
-      <td>48.80</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>16</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>300139.SZ</td>
       <td>晓程科技</td>
-      <td>79.78</td>
-      <td>79.78</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>17</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600259.SH</td>
       <td>中稀有色</td>
-      <td>112.29</td>
-      <td>112.29</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>18</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>300164.SZ</td>
       <td>通源石油</td>
-      <td>18.08</td>
-      <td>18.08</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>19</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600938.SH</td>
       <td>中国海油</td>
-      <td>39.46</td>
-      <td>39.46</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>20</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002980.SZ</td>
       <td>华盛昌</td>
-      <td>31.87</td>
-      <td>31.87</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>21</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>301158.SZ</td>
       <td>德石股份</td>
-      <td>31.20</td>
-      <td>31.20</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>22</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002842.SZ</td>
       <td>翔鹭钨业</td>
-      <td>45.72</td>
-      <td>45.72</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>23</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600367.SH</td>
       <td>红星发展</td>
-      <td>23.55</td>
-      <td>23.55</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>24</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002490.SZ</td>
       <td>山东墨龙</td>
-      <td>9.68</td>
-      <td>9.68</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>25</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>000554.SZ</td>
       <td>泰山石油</td>
-      <td>9.86</td>
-      <td>9.86</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>26</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>000096.SZ</td>
       <td>广聚能源</td>
-      <td>12.06</td>
-      <td>12.06</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>27</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>600988.SH</td>
       <td>赤峰黄金</td>
-      <td>43.91</td>
-      <td>43.91</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>28</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>603011.SH</td>
       <td>合锻智能</td>
-      <td>28.28</td>
-      <td>28.28</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>29</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>002629.SZ</td>
       <td>仁智股份</td>
-      <td>7.37</td>
-      <td>7.37</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
     <tr>
       <td>30</td>
       <td>20260302</td>
-      <td>20260302</td>
+      <td>20260304</td>
       <td>300157.SZ</td>
       <td>新锦动力</td>
-      <td>8.39</td>
-      <td>8.39</td>
-      <td>0.0000</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0000</td>
-      <td>0.000</td>
-      <td>+0.00%</td>
-      <td>否</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
     </tr>
   </tbody>
 </table></div>
-<p>命中（旧口径：actual_ret>0）：0/30（0.00%）</p>
-<p>覆盖率（V2：in_p10，r_actual ∈ [p05,p95]）：100.00%</p>
-<p>覆盖率（V2：in_p50，r_actual ∈ [p25,p75]）：100.00%</p>
-<p>MAE（V2：|err_r_p50|）：0.000000</p>
-<p>MAE（V2：|err_close_p50|）：0.000000</p>
-<h2>文件输出</h2>
-<p>（说明：候选=pred_source_latest 全量，不做过滤；排序同 Top30。）</p>
-<ul>
-<li>full 文件：<code>outputs/premium/premium_full_20260302.csv</code></li>
-<li>top30 文件：<code>outputs/premium/premium_top30_20260302.csv</code></li>
-<li>verify 文件：<code>outputs/premium/premium_verify_20260302.csv</code></li>
-</ul>
-<h2>字段说明（V2 核心）</h2>
-<ul>
-<li>r_pXX：log-return 分位点，r = ln(Close[T+2]/Close[T])</li>
-<li>close_T2_pXX：价格分位点 = close_T * exp(r_pXX)</li>
-<li>in_p10：r_actual 是否落在 [p05, p95]</li>
-<li>in_p50：r_actual 是否落在 [p25, p75]</li>
-</ul>
-</div>
+
+
+## 字段说明（V2 核心）
+
+- r_pXX：log-return 分位点，r = ln(Close[T+2]/Close[T])
+- close_T2_pXX：价格分位点 = close_T * exp(r_pXX)
+- in_p10：r_actual 是否落在 [p05, p95]
+- in_p50：r_actual 是否落在 [p25, p75]
