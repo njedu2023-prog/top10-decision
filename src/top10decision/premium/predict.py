@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Predict（V1：手工交易版，端到端落盘）
+Premium 子系统 — Predict（V2：Close[T+2] 分布预测，端到端落盘）
 
-锁死契约（来自 Premium.md）：
+锁死契约（来自 Premium.md / ANCHOR.md）：
 - 主输入：data/pred/pred_source_latest.csv（a-top10 全量源表，候选=全量，不过滤）
 - decision 产物：仅用于字段合并/标签（不得过滤），输出字段需带 dec_ 前缀
-- horizon = 2 个交易日（T -> T+2），非交易日顺延
-- 行情真值：data/market/daily_YYYYMMDD.csv（由 Market Truth Layer 负责生成/缓存）
+- horizon = 2 个交易日（T -> T+2），非交易日顺延（用 ensure_daily_cached 探测）
+- 行情真值：data/market/daily_YYYYMMDD.csv（由 Market Truth Layer 拉取并缓存）
 - 行情未到：pending（不得报错卡死）
 - 验证表顺序必须与预测表 Top30 完全一致（不可重新排序）
 - 输出：
@@ -19,9 +19,10 @@ Premium 子系统 — Predict（V1：手工交易版，端到端落盘）
   docs/reports/premium_latest.md
   outputs/premium/_last_run.txt（每次覆盖）
 
-说明（工程分层）：
-- 主线目标：每日稳定产出 Top30/full/verify/md（不因训练链路状态而断更）
-- 学习模块（LR/LGBM/train/features/labels）能力不损失：后续在“可用即增强”原则下接管 p/e/score 来源
+V2 核心：
+- 预测 r = ln(Close[T+2]/Close[T]) 的分位数：r_p05/r_p25/r_p50/r_p75/r_p95
+- 还原价格分位数：close_T2_pXX = close_T * exp(r_pXX)
+- 默认排序：r_p50 降序；若缺则退化到 p_premium；再缺则保持源顺序（不得随机）
 """
 
 from __future__ import annotations
@@ -111,6 +112,11 @@ def _read_csv_smart(path: Path) -> pd.DataFrame:
 def _ensure_dirs(cfg: PremiumConfig) -> None:
     cfg.out_root().mkdir(parents=True, exist_ok=True)
     cfg.reports_root().mkdir(parents=True, exist_ok=True)
+    # learning 目录（若 config 暴露则创建）
+    try:
+        cfg.out_learning_dir().mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
 
 
 def _write_csv(path: Path, df: pd.DataFrame) -> Path:
@@ -131,6 +137,7 @@ def _write_last_run(cfg: PremiumConfig, trade_date: str, extra: Dict[str, object
         f"trade_date: {trade_date}",
         f"run_id: {_get_run_id()}",
         f"commit_sha: {_get_commit_sha(cfg.repo_root())}",
+        f"model_version: {getattr(cfg, 'model_version', 'unknown')}",
         f"created_at_utc: {_utc_now_iso()}",
     ]
     for k, v in extra.items():
@@ -150,6 +157,81 @@ def _rebuild_rank_front(df: pd.DataFrame) -> pd.DataFrame:
         df = df.drop(columns=["rank"], errors="ignore")
     df.insert(0, "rank", np.arange(1, len(df) + 1))
     return df
+
+
+def _zscore(s: pd.Series) -> pd.Series:
+    x = pd.to_numeric(s, errors="coerce")
+    mu = np.nanmean(x.values)
+    sd = np.nanstd(x.values)
+    if not np.isfinite(sd) or sd == 0:
+        return pd.Series(np.zeros(len(x)), index=x.index)
+    return (x - mu) / sd
+
+
+def _norm_ppf(q: float) -> float:
+    """
+    标准正态分位点近似（避免引入 scipy 依赖）
+    """
+    import math
+
+    a = [-3.969683028665376e01, 2.209460984245205e02, -2.759285104469687e02,
+         1.383577518672690e02, -3.066479806614716e01, 2.506628277459239e00]
+    b = [-5.447609879822406e01, 1.615858368580409e02, -1.556989798598866e02,
+         6.680131188771972e01, -1.328068155288572e01]
+    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e00,
+         -2.549732539343734e00, 4.374664141464968e00, 2.938163982698783e00]
+    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e00,
+         3.754408661907416e00]
+
+    plow = 0.02425
+    phigh = 1 - plow
+
+    if q <= 0.0 or q >= 1.0:
+        return float("nan")
+
+    if q < plow:
+        r = math.sqrt(-2 * math.log(q))
+        x = (((((c[0] * r + c[1]) * r + c[2]) * r + c[3]) * r + c[4]) * r + c[5]) / \
+            ((((d[0] * r + d[1]) * r + d[2]) * r + d[3]) * r + 1)
+    elif q > phigh:
+        r = math.sqrt(-2 * math.log(1 - q))
+        x = -(((((c[0] * r + c[1]) * r + c[2]) * r + c[3]) * r + c[4]) * r + c[5]) / \
+            ((((d[0] * r + d[1]) * r + d[2]) * r + d[3]) * r + 1)
+    else:
+        r = q - 0.5
+        s = r * r
+        x = (((((a[0] * s + a[1]) * s + a[2]) * s + a[3]) * s + a[4]) * s + a[5]) * r / \
+            (((((b[0] * s + b[1]) * s + b[2]) * s + b[3]) * s + b[4]) * s + 1)
+
+    return x
+
+
+def _append_calibration_history(cfg: PremiumConfig, row: Dict[str, object]) -> Optional[Path]:
+    """
+    V2：校准历史落库（为 30/60/90/150 阶梯学习做准备）
+    """
+    try:
+        if hasattr(cfg, "calibration_history_path"):
+            p = Path(cfg.calibration_history_path()).resolve()
+        else:
+            p = (cfg.out_learning_dir() / "premium_calibration_history.csv").resolve()
+    except Exception:
+        return None
+
+    p.parent.mkdir(parents=True, exist_ok=True)
+    df_row = pd.DataFrame([row])
+
+    if p.exists():
+        try:
+            df_old = _read_csv_smart(p)
+            df_new = pd.concat([df_old, df_row], ignore_index=True)
+        except Exception:
+            df_new = df_row
+    else:
+        df_new = df_row
+
+    df_new.to_csv(p, index=False, encoding="utf-8-sig")
+    return p
 
 
 # ========= 交易日历推进（按 ensure_daily_cached 探测）=========
@@ -231,10 +313,10 @@ def _infer_trade_date(df: pd.DataFrame) -> str:
 
 def _pick_pred_fields(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
     """
-    从 pred_source_latest “就地取材”生成 Premium 必需字段：
+    从 pred_source_latest “就地取材”生成 Premium 旧口径字段（保留）：
     - p_premium：上涨概率（0~1）
     - e_premium：上涨幅度预测（ratio，例如 0.0911 表示 +9.11%）
-    - score_ev：综合分值
+    - score_ev：综合分值（旧口径）
     - risk_flags/confidence/data_quality：风险/质量提示（可缺省）
     """
     cols = {str(c).strip().lower(): c for c in df.columns}
@@ -319,7 +401,7 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     m_rank = pick("dec_rank", "decision_rank", "rank", "决策排名")
     m_w = pick("dec_weight", "weight", "target_weight", "决策权重")
     m_can = pick("dec_can_buy", "can_buy", "可买提示")
-    m_pf = pick("dec_p_fill", "p_fill", "P_fill")
+    m_pf = pick("dec_p_fill", "p_fill", "p_fill")
     m_reason = pick("dec_reason", "reason", "label", "决策原因", "决策标签")
 
     out["dec_rank"] = dec[m_rank] if m_rank else pd.NA
@@ -329,6 +411,63 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     out["dec_reason"] = dec[m_reason] if m_reason else pd.NA
 
     out = out.drop_duplicates(subset=["trade_date", "ts_code"], keep="last").reset_index(drop=True)
+    return out
+
+
+# ========= V2 分布预测（冷启动版本：无模型也可跑）=========
+
+def _build_mu_sigma(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+    """
+    冷启动：给每只票构造 r 的均值(mu) 与波动(sigma)
+    - 若 e_premium 可用：mu = ln(1+e_premium)
+    - 否则：mu = score_scale * (z(probability)+z(strength)+z(theme)+z(final_score)) 的可用部分
+    - sigma = base_sigma（可后续用模型替换）
+    """
+    base_sigma = float(getattr(cfg, "base_sigma", 0.05))
+    score_scale = float(getattr(cfg, "score_scale", 0.01))
+
+    # 1) mu 优先用 e_premium
+    e = pd.to_numeric(df.get("e_premium", pd.Series([np.nan] * len(df))), errors="coerce")
+    mu_from_e = np.log1p(e.clip(lower=-0.99))  # 防爆
+
+    mu = mu_from_e.copy()
+
+    # 2) 若 e_premium 缺，退化为 zscore 组合
+    need = ~np.isfinite(mu.values)
+    if need.any():
+        parts = []
+        for k in ("probability", "p", "p_premium", "strength_score", "theme_boost", "final_score"):
+            if k in df.columns:
+                parts.append(_zscore(df[k]))
+        if parts:
+            combo = sum(parts) / float(len(parts))
+            mu = mu.where(~need, score_scale * combo)
+        else:
+            mu = mu.where(~need, 0.0)
+
+    sigma = pd.Series([base_sigma] * len(df), index=df.index)
+    sigma = sigma.clip(lower=1e-6, upper=0.5)
+    return mu.astype(float), sigma.astype(float)
+
+
+def _compute_quantile_returns(cfg: PremiumConfig, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    输出 r_pXX（log-return 分位点）与 close_T2_pXX（价格分位点）
+    """
+    qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
+    mu, sigma = _build_mu_sigma(cfg, df)
+
+    out = df.copy()
+    for q in qs:
+        z = _norm_ppf(float(q))
+        out[f"r_p{int(round(q * 100)):02d}"] = mu + sigma * z
+
+    # 还原价格：需要 close_T
+    close_T = pd.to_numeric(out.get("close_T", pd.Series([np.nan] * len(out))), errors="coerce")
+    for q in qs:
+        key = f"r_p{int(round(q * 100)):02d}"
+        out[f"close_T2_p{int(round(q * 100)):02d}"] = close_T * np.exp(pd.to_numeric(out[key], errors="coerce"))
+
     return out
 
 
@@ -369,8 +508,20 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     if "name" not in df0.columns:
         df0["name"] = pd.NA
 
-    # 2) 交易日历推进到 T+2
-    target_date = _advance_trade_days(cfg, trade_date, cfg.horizon_trade_days)
+    # 2) ✅ 先确保 T 日真值缓存落盘（哪怕 T+2 未到，也要把 daily_T 写进 data/market）
+    r_t = ensure_daily_cached(cfg, trade_date)
+    if not r_t.ok:
+        # 不报错卡死：继续产物，但标记 pending
+        pending_truth_T = True
+        pending_truth_reason_T = f"truth_T_not_ready: {r_t.reason}"
+        d0 = pd.DataFrame(columns=["ts_code", "close_T"])
+    else:
+        pending_truth_T = False
+        pending_truth_reason_T = "ok"
+        d0 = load_daily(cfg, trade_date)[["ts_code", "close"]].rename(columns={"close": "close_T"})
+
+    # 3) 交易日历推进到 T+2
+    target_date = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
     pending = False
     if not target_date:
         pending = True
@@ -379,7 +530,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     else:
         pending_reason = "ok"
 
-    # 3) decision merge（仅标签，不过滤）
+    # 4) decision merge（仅标签，不过滤）
     dec = _load_decision_merge(cfg, trade_date)
     df = df0.copy()
     if not dec.empty:
@@ -392,7 +543,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         for c in ("dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"):
             df[c] = pd.NA
 
-    # 4) Premium 字段（就地取材 + 兜底）
+    # 5) 旧口径字段保留（就地取材 + 兜底）
     p, e, s, conf, dq, risk = _pick_pred_fields(df)
     df["p_premium"] = p
     df["e_premium"] = e
@@ -401,57 +552,188 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df["data_quality"] = dq
     df["risk_flags"] = risk
 
+    # 6) merge close_T（用于价格分位数还原）
+    df = df.merge(d0, on="ts_code", how="left")
     df["target_date"] = target_date if target_date else pd.NA
 
-    # 5) 排序：score_ev 降序（默认综合）
-    df = df.sort_values(by=["score_ev"], ascending=False).reset_index(drop=True)
+    # 7) V2 分布预测字段（r_pXX / close_T2_pXX）
+    df = _compute_quantile_returns(cfg, df)
 
-    # ✅ 修复：不管上游是否已有 rank，都统一重建 rank，并保证 rank 在第 1 列
+    # 8) 排序（锁死）：r_p50 降序；缺则 p_premium；再缺保持源顺序
+    # r_p50 列名取决于 quantiles，默认 50 -> r_p50
+    # 为稳健：找最接近 0.50 的那个分位点列
+    qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
+    q_mid = min(qs, key=lambda x: abs(float(x) - 0.50))
+    mid_key = f"r_p{int(round(float(q_mid) * 100)):02d}"
+    df["rank_r_p50"] = pd.NA
+
+    if mid_key in df.columns and pd.to_numeric(df[mid_key], errors="coerce").notna().any():
+        df = df.sort_values(by=[mid_key], ascending=False, na_position="last").reset_index(drop=True)
+        df["rank_r_p50"] = np.arange(1, len(df) + 1)
+    elif "p_premium" in df.columns and pd.to_numeric(df["p_premium"], errors="coerce").notna().any():
+        df = df.sort_values(by=["p_premium"], ascending=False, na_position="last").reset_index(drop=True)
+    else:
+        # 保持源顺序：不做任何排序
+        df = df.reset_index(drop=True)
+
+    # ✅ rank 列重建（防止重复列导致 insert 报错）
     df = _rebuild_rank_front(df)
 
-    # 6) top30 + full
+    # 9) top30 + full
     topn = int(cfg.top_n)
     df_top = df.head(topn).copy()
     df_full = df.copy()
 
+    # 输出列：V2 核心字段 + 旧字段保留 + decision 标签
+    v2_cols = []
+    for q in qs:
+        v2_cols.append(f"r_p{int(round(float(q) * 100)):02d}")
+    for q in qs:
+        v2_cols.append(f"close_T2_p{int(round(float(q) * 100)):02d}")
+
     out_cols = [
         "rank", "trade_date", "target_date", "ts_code", "name",
+        "close_T",
+        *v2_cols,
+        "rank_r_p50",
+        # 旧口径保留（便于解释/过渡期对比）
         "p_premium", "e_premium", "score_ev", "risk_flags", "confidence", "data_quality",
+        # decision 标签
         "dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason",
     ]
+    # 缺列补空
+    for c in out_cols:
+        if c not in df_top.columns:
+            df_top[c] = pd.NA
+        if c not in df_full.columns:
+            df_full[c] = pd.NA
+
     out_top = df_top[out_cols].copy()
     out_full = df_full[out_cols].copy()
 
     p_top = _write_csv(cfg.out_top30_csv(trade_date), out_top)
     p_full = _write_csv(cfg.out_full_csv(trade_date), out_full)
 
-    # 7) 验证表（依赖 close(T) 与 close(T+2)）
+    # 10) verify（依赖 close(T) 与 close(T+2)）
     verify_pending = True
     verify_reason = "pending"
-    df_verify = pd.DataFrame(columns=["rank", "trade_date", "target_date", "ts_code", "name", "e_premium", "actual_ret", "hit_up"])
 
+    # 默认 verify 空壳（但列齐全）
+    verify_cols = [
+        "rank", "trade_date", "target_date", "ts_code", "name",
+        "close_T", "close_T2_actual",
+        "r_actual",
+        mid_key,
+        "in_p10", "in_p50",
+        "err_r_p50", "err_close_p50",
+        # 旧字段保留（兼容旧报告渲染）
+        "e_premium", "actual_ret", "hit_up",
+    ]
+    df_verify = out_top[["rank", "trade_date", "target_date", "ts_code", "name"]].copy()
+    for c in verify_cols:
+        if c not in df_verify.columns:
+            df_verify[c] = pd.NA
+
+    # 只有在有 target_date 时才尝试 T+2
     if target_date:
-        r_t = ensure_daily_cached(cfg, trade_date)
         r_t2 = ensure_daily_cached(cfg, target_date)
-        if r_t.ok and r_t2.ok:
-            d0 = load_daily(cfg, trade_date)[["ts_code", "close"]].rename(columns={"close": "close_T"})
-            d2 = load_daily(cfg, target_date)[["ts_code", "close"]].rename(columns={"close": "close_T2"})
-            tmp = out_top.merge(d0, on="ts_code", how="left").merge(d2, on="ts_code", how="left")
-            tmp["actual_ret"] = tmp["close_T2"] / tmp["close_T"] - 1
+        if (not pending_truth_T) and r_t2.ok:
+            d2 = load_daily(cfg, target_date)[["ts_code", "close"]].rename(columns={"close": "close_T2_actual"})
+
+            tmp = out_top.merge(d2, on="ts_code", how="left")
+            tmp["close_T2_actual"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce")
+            tmp["close_T"] = pd.to_numeric(tmp["close_T"], errors="coerce")
+
+            # r_actual
+            tmp["r_actual"] = np.log(tmp["close_T2_actual"] / tmp["close_T"])
+
+            # 区间命中：p10=[p05,p95], p50=[p25,p75]
+            lo10 = f"r_p{int(round(float(min(qs)) * 100)):02d}"
+            hi10 = f"r_p{int(round(float(max(qs)) * 100)):02d}"
+
+            # 为稳健：取离 0.25/0.75 最近的
+            q25 = min(qs, key=lambda x: abs(float(x) - 0.25))
+            q75 = min(qs, key=lambda x: abs(float(x) - 0.75))
+            lo50 = f"r_p{int(round(float(q25) * 100)):02d}"
+            hi50 = f"r_p{int(round(float(q75) * 100)):02d}"
+
+            tmp["in_p10"] = (
+                (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo10), errors="coerce"))
+                & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi10), errors="coerce"))
+            )
+            tmp["in_p50"] = (
+                (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo50), errors="coerce"))
+                & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi50), errors="coerce"))
+            )
+
+            # 误差
+            tmp["err_r_p50"] = pd.to_numeric(tmp["r_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_key), errors="coerce")
+            # 价格 p50（若存在）
+            mid_price_key = f"close_T2_p{int(round(float(q_mid) * 100)):02d}"
+            tmp["err_close_p50"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_price_key), errors="coerce")
+
+            # 旧口径 actual_ret/hit_up 保留
+            tmp["actual_ret"] = tmp["close_T2_actual"] / tmp["close_T"] - 1
             tmp["hit_up"] = tmp["actual_ret"].apply(lambda x: "是" if pd.notna(x) and float(x) > 0 else ("否" if pd.notna(x) else ""))
-            df_verify = tmp[["rank", "trade_date", "target_date", "ts_code", "name", "e_premium", "actual_ret", "hit_up"]].copy()
+
+            # 组装 verify：顺序必须与 out_top 完全一致（merge 保持左表顺序）
+            keep = [c for c in verify_cols if c in tmp.columns]
+            df_verify = tmp[keep].copy()
             verify_pending = False
             verify_reason = "ok"
+
+            # 校准落库（只在真值到达时写）
+            try:
+                n = int(df_verify["r_actual"].notna().sum())
+                if n > 0:
+                    coverage_p10 = float(pd.to_numeric(df_verify["in_p10"], errors="coerce").fillna(False).mean())
+                    coverage_p50 = float(pd.to_numeric(df_verify["in_p50"], errors="coerce").fillna(False).mean())
+                    mae_r = float(pd.to_numeric(df_verify["err_r_p50"], errors="coerce").abs().mean())
+                    mae_close = float(pd.to_numeric(df_verify["err_close_p50"], errors="coerce").abs().mean())
+
+                    # stage：用历史行数粗略推断（后续 learn.py 接管时再精确）
+                    hist_n = 0
+                    try:
+                        if hasattr(cfg, "calibration_history_path"):
+                            hist_path = Path(cfg.calibration_history_path()).resolve()
+                        else:
+                            hist_path = (cfg.out_learning_dir() / "premium_calibration_history.csv").resolve()
+                        if hist_path.exists():
+                            hist_n = len(_read_csv_smart(hist_path))
+                    except Exception:
+                        hist_n = 0
+
+                    stage = 0
+                    for s in (150, 90, 60, 30):
+                        if hist_n >= s:
+                            stage = s
+                            break
+
+                    _append_calibration_history(cfg, {
+                        "trade_date": trade_date,
+                        "target_date": target_date,
+                        "n": n,
+                        "coverage_p10": coverage_p10,
+                        "coverage_p50": coverage_p50,
+                        "mae_r_p50": mae_r,
+                        "mae_close_p50": mae_close,
+                        "stage": stage,
+                        "model_version": getattr(cfg, "model_version", "unknown"),
+                        "created_at_utc": _utc_now_iso(),
+                    })
+            except Exception:
+                pass
+
         else:
             verify_pending = True
-            verify_reason = f"truth_not_ready: T_ok={r_t.ok} T2_ok={r_t2.ok}"
+            verify_reason = f"truth_not_ready: T_ok={not pending_truth_T} T2_ok={r_t2.ok}"
     else:
         verify_pending = True
         verify_reason = pending_reason
 
     p_verify = _write_csv(cfg.out_verify_csv(trade_date), df_verify)
 
-    # 8) 渲染报告 md（统一交给 report_md.py）
+    # 11) 渲染报告 md（先保持兼容 report_md 的旧渲染输入：df_top30/df_verify）
     gen_ts = _utc_now_iso()
     md = render_premium_report_md(
         trade_date=trade_date,
@@ -459,17 +741,20 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         df_top30=out_top,
         df_verify=df_verify,
         verify_pending=verify_pending,
-        verify_reason=verify_reason,
+        verify_reason=verify_reason if verify_reason else pending_truth_reason_T,
         gen_ts=gen_ts,
     )
     p_md = _write_text(cfg.report_md_path(trade_date), md)
     _write_text(cfg.report_latest_md_path(), md)
 
-    # 9) last_run
+    # 12) last_run
     _write_last_run(cfg, trade_date, {
         "ok": True,
         "target_date": target_date,
-        "pending": bool(pending or verify_pending),
+        "pending": bool(pending or pending_truth_T or verify_pending),
+        "pending_reason": pending_reason,
+        "truth_T_ok": (not pending_truth_T),
+        "truth_T_reason": pending_truth_reason_T,
         "verify_pending": bool(verify_pending),
         "verify_reason": verify_reason,
         "out_top30": str(p_top),
@@ -482,8 +767,8 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         ok=True,
         trade_date=trade_date,
         target_date=(target_date if target_date else None),
-        pending=bool(pending or verify_pending),
-        reason="pending" if (pending or verify_pending) else "ok",
+        pending=bool(pending or pending_truth_T or verify_pending),
+        reason="pending" if (pending or pending_truth_T or verify_pending) else "ok",
         out_top30=str(p_top),
         out_full=str(p_full),
         out_verify=str(p_verify),
