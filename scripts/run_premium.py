@@ -58,19 +58,18 @@ def main() -> int:
 
     if args.verbose:
         print("[premium] repo_root:", cfg.repo_root())
-        # out_root/reports_root 可能存在于新 config；没有也不致命
-        if hasattr(cfg, "out_root"):
-            print("[premium] out_dir:", cfg.out_root())
-        if hasattr(cfg, "reports_root"):
-            print("[premium] reports_dir:", cfg.reports_root())
+        print("[premium] out_dir:", cfg.out_root())
+        print("[premium] reports_dir:", cfg.reports_root())
 
-        # 兼容旧/新字段名
-        print("[premium] pred_source_latest:", _safe_get(cfg, "pred_source_latest", ""))
-        print("[premium] decision_glob:", _safe_get(cfg, "decision_glob", _safe_get(cfg, "decision_input_glob", "")))
-        print("[premium] market_cache_dir:", _safe_get(cfg, "market_cache_dir", "data/market"))
-        print("[premium] market_fetch_mode:", _safe_get(cfg, "market_fetch_mode", "cache_first"))
-        print("[premium] top_n:", _safe_get(cfg, "top_n", _safe_get(cfg, "topk", "")))
-        print("[premium] horizon:", _safe_get(cfg, "horizon_trade_days", _safe_get(cfg, "horizon", "")))
+        # ✅ 契约锁死：只打印新字段（不再兼容旧 decision_input_glob）
+        print("[premium] pred_source_latest:", cfg.pred_source_latest)
+        print("[premium] decision_glob:", cfg.decision_glob)
+        print("[premium] market_cache_dir:", cfg.market_cache_dir)
+        print("[premium] market_fetch_mode:", cfg.market_fetch_mode)
+        print("[premium] top_n:", cfg.top_n)
+        print("[premium] horizon_trade_days:", cfg.horizon_trade_days)
+        print("[premium] quantiles:", cfg.quantiles)
+        print("[premium] model_version:", cfg.model_version)
 
     # P0：trade_date 先作为预留，不强制使用（避免误导）
     if args.trade_date and args.verbose:
@@ -84,7 +83,6 @@ def main() -> int:
                 return 0
         else:
             r = train_models(cfg)
-            # 兼容不同 TrainResult 结构
             trained = _safe_get(r, "trained", False)
             n_days = _safe_get(r, "n_days", "")
             n_samples = _safe_get(r, "n_samples", "")
@@ -107,13 +105,12 @@ def main() -> int:
         reason = _safe_get(pr, "reason", "")
         print(f"[premium][predict] ok={ok} trade_date={trade_date} reason={reason}")
 
-        # 兼容不同返回结构：有就打印
         for k in ("target_date", "pending", "verify_pending", "out_top30", "out_full", "out_verify", "report_md"):
             v = _safe_get(pr, k, None)
             if v not in (None, "", False):
                 print(f"[premium][predict] {k}: {v}")
 
-        # 旧字段兼容（你之前的 rank_csv/rank_md）
+        # 旧字段兼容（predict 返回里可能仍有）
         rank_csv = _safe_get(pr, "rank_csv", "")
         rank_md = _safe_get(pr, "rank_md", "")
         if rank_csv:
