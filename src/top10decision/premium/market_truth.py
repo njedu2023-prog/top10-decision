@@ -17,7 +17,9 @@ Market Truth Layer（行情事实层）
 
 from __future__ import annotations
 
+import os
 import re
+import time
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
@@ -81,9 +83,7 @@ def _normalize_daily_df(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     df = df[REQUIRED_COLS].copy()
 
     # trade_date 强制为 YYYYMMDD 字符串
-    df["trade_date"] = (
-        df["trade_date"].astype(str).str.replace("-", "", regex=False).str.slice(0, 8)
-    )
+    df["trade_date"] = df["trade_date"].astype(str).str.replace("-", "", regex=False).str.slice(0, 8)
     df = df[df["trade_date"] == trade_date]
 
     # ts_code 强制字符串
@@ -103,6 +103,48 @@ def _normalize_daily_df(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
 
 def _cfg_get(cfg: PremiumConfig, name: str, default):
     return getattr(cfg, name, default)
+
+
+def _write_csv_atomic(df: pd.DataFrame, path: Path, encoding: str = "utf-8-sig") -> None:
+    """
+    原子写入：避免中断导致半截 CSV，造成“坏缓存”。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    df.to_csv(tmp, index=False, encoding=encoding)
+    try:
+        with open(tmp, "rb") as f:
+            os.fsync(f.fileno())
+    except Exception:
+        # 有些 FS/环境不支持 fsync，忽略即可
+        pass
+    tmp.replace(path)
+
+
+def _http_get_text_with_retry(url: str, timeout: int = 30, retries: int = 3) -> str:
+    """
+    轻量重试：应对 GitHub raw 偶发 429/5xx。
+    """
+    headers = {"User-Agent": "top10-decision-premium/1.0"}
+    last_err: Optional[str] = None
+
+    for i in range(1, retries + 1):
+        try:
+            r = requests.get(url, timeout=timeout, headers=headers)
+            if r.status_code == 200:
+                if not r.text.strip():
+                    raise RuntimeError("empty response body")
+                return r.text
+            else:
+                snippet = (r.text or "")[:200].replace("\n", " ")
+                last_err = f"status={r.status_code} url={url} body_snippet={snippet}"
+        except Exception as e:
+            last_err = f"exception={e} url={url}"
+
+        # 退避：1s / 2s / 3s
+        time.sleep(min(i, 3))
+
+    raise RuntimeError(f"http_get_failed: {last_err}")
 
 
 def _try_read_local_top3(cfg: PremiumConfig, trade_date: str) -> Optional[pd.DataFrame]:
@@ -148,17 +190,18 @@ def _try_fetch_remote_top3(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     )
     url = f"{top3_raw_base_url}/data/raw/{year}/{trade_date}/daily.csv"
 
-    headers = {"User-Agent": "top10-decision-premium/1.0"}
-    r = requests.get(url, timeout=30, headers=headers)
-    if r.status_code != 200:
-        raise RuntimeError(f"fetch remote daily.csv failed: {r.status_code} url={url}")
-
-    return pd.read_csv(StringIO(r.text))
+    text = _http_get_text_with_retry(url, timeout=30, retries=3)
+    return pd.read_csv(StringIO(text))
 
 
 def ensure_daily_cached(cfg: PremiumConfig, trade_date: str) -> MarketFetchResult:
     """
     确保 data/market/daily_{trade_date}.csv 存在且字段合法。
+
+    fetch_mode:
+    - cache_only：只用缓存
+    - cache_first：优先缓存，缺则拉取并写入
+    - force_refresh：无视缓存，强制重拉并覆盖
     """
     trade_date = _ensure_trade_date(trade_date)
 
@@ -186,15 +229,17 @@ def ensure_daily_cached(cfg: PremiumConfig, trade_date: str) -> MarketFetchResul
         except Exception as e:
             return MarketFetchResult(False, trade_date, str(cache_path), f"cache invalid: {e}")
 
-    # cache_first：优先缓存，缺则拉取并写入
-    if cache_path.exists():
-        try:
-            df = _read_csv_smart(cache_path)
-            _ = _normalize_daily_df(df, trade_date)
-            return MarketFetchResult(True, trade_date, str(cache_path), "ok(cache_hit)")
-        except Exception:
-            # 缓存坏了就重建
-            pass
+    # force_refresh：忽略缓存，直接重拉
+    if fetch_mode != "force_refresh":
+        # cache_first：优先缓存，缺则拉取并写入
+        if cache_path.exists():
+            try:
+                df = _read_csv_smart(cache_path)
+                _ = _normalize_daily_df(df, trade_date)
+                return MarketFetchResult(True, trade_date, str(cache_path), "ok(cache_hit)")
+            except Exception:
+                # 缓存坏了就重建
+                pass
 
     # 先尝试本地 top3
     local_err = ""
@@ -202,7 +247,7 @@ def ensure_daily_cached(cfg: PremiumConfig, trade_date: str) -> MarketFetchResul
         local_df = _try_read_local_top3(cfg, trade_date)
         if local_df is not None:
             df_norm = _normalize_daily_df(local_df, trade_date)
-            df_norm.to_csv(cache_path, index=False, encoding="utf-8-sig")
+            _write_csv_atomic(df_norm, cache_path, encoding="utf-8-sig")
             return MarketFetchResult(True, trade_date, str(cache_path), "ok(fetched_local_top3)")
     except Exception as e:
         local_err = str(e)
@@ -211,7 +256,7 @@ def ensure_daily_cached(cfg: PremiumConfig, trade_date: str) -> MarketFetchResul
     try:
         remote_df = _try_fetch_remote_top3(cfg, trade_date)
         df_norm = _normalize_daily_df(remote_df, trade_date)
-        df_norm.to_csv(cache_path, index=False, encoding="utf-8-sig")
+        _write_csv_atomic(df_norm, cache_path, encoding="utf-8-sig")
         return MarketFetchResult(True, trade_date, str(cache_path), "ok(fetched_remote_top3)")
     except Exception as e:
         msg = f"fetch_remote_failed: {e}"
