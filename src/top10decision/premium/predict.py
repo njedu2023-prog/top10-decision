@@ -7,7 +7,7 @@ Premium 子系统 — Predict（V2：Close[T+2] 分布预测，端到端落盘�
 锁死契约（来自 Premium.md / ANCHOR.md）：
 - 主输入：data/pred/pred_source_latest.csv（a-top10 全量源表，候选=全量，不过滤）
 - decision 产物：仅用于字段合并/标签（不得过滤），输出字段需带 dec_ 前缀
-- horizon = 2 个交易日（T -> T+2），非交易日顺延（用 ensure_daily_cached 探测）
+- horizon = 2 个交易日（T -> T+2），非交易日顺延（优先用交易日历；回退用 ensure_daily_cached 探测）
 - 行情真值：data/market/daily_YYYYMMDD.csv（由 Market Truth Layer 拉取并缓存）
 - 行情未到：pending（不得报错卡死）
 - 验证表顺序必须与预测表 Top30 完全一致（不可重新排序）
@@ -234,12 +234,104 @@ def _append_calibration_history(cfg: PremiumConfig, row: Dict[str, object]) -> O
     return p
 
 
-# ========= 交易日历推进（按 ensure_daily_cached 探测）=========
+# ========= 交易日历推进（优先 Tushare trade_cal；失败则回退到 ensure_daily_cached 探测）=========
+
+def _get_tushare_token() -> str:
+    return (os.getenv("TUSHARE_TOKEN", "") or "").strip()
+
+
+def _tushare_trade_cal(
+    token: str,
+    start_date: str,
+    end_date: str,
+    exchange: str = "SSE",
+) -> Optional[pd.DataFrame]:
+    """拉取交易日历（trade_cal），返回 is_open=1 的 cal_date 列表。
+    使用 requests 直连 api.tushare.pro，避免依赖额外包。
+    """
+    try:
+        import requests  # type: ignore
+    except Exception:
+        return None
+
+    payload = {
+        "api_name": "trade_cal",
+        "token": token,
+        "params": {
+            "exchange": exchange,
+            "start_date": start_date,
+            "end_date": end_date,
+            "is_open": "1",
+        },
+        "fields": "cal_date,is_open",
+    }
+    try:
+        r = requests.post("https://api.tushare.pro", json=payload, timeout=20)
+        r.raise_for_status()
+        j = r.json()
+        if not isinstance(j, dict):
+            return None
+        data = j.get("data") or {}
+        items = data.get("items") or []
+        fields = data.get("fields") or []
+        if not items or not fields:
+            return None
+        df = pd.DataFrame(items, columns=fields)
+        if "cal_date" not in df.columns:
+            return None
+        df["cal_date"] = df["cal_date"].astype(str).map(_to_yyyymmdd)
+        df = df.sort_values("cal_date").reset_index(drop=True)
+        return df
+    except Exception:
+        return None
+
+
+def _advance_trade_days_by_calendar(cfg: PremiumConfig, trade_date: str, steps: int) -> Optional[str]:
+    """用交易日历推进 steps 个交易日，保证返回真实交易日（YYYYMMDD）。
+    优先使用 Tushare trade_cal（需要 TUSHARE_TOKEN），失败则返回 None（上层回退探测）。
+    """
+    import datetime as dt
+
+    token = _get_tushare_token()
+    if not token:
+        return None
+
+    td = _to_yyyymmdd(trade_date)
+    if not _TD_RE.match(td):
+        return None
+
+    d0 = dt.datetime.strptime(td, "%Y%m%d").date()
+    # 给足够的自然日窗口（含长假），默认 90 天足够覆盖 steps=2
+    end = (d0 + dt.timedelta(days=90)).strftime("%Y%m%d")
+
+    # SSE / SZSE 任意一个可用即可；优先 SSE
+    cal = _tushare_trade_cal(token, td, end, exchange="SSE")
+    if cal is None or cal.empty:
+        cal = _tushare_trade_cal(token, td, end, exchange="SZSE")
+    if cal is None or cal.empty:
+        return None
+
+    opens = cal["cal_date"].astype(str).tolist()
+    if td not in opens:
+        # 若 td 自身不是交易日：取 td 之后第一个交易日作为基准，再推进 steps-1
+        opens2 = [x for x in opens if x > td]
+        if not opens2:
+            return None
+        base = opens2[0]
+        td = base
+
+    try:
+        i0 = opens.index(td)
+    except ValueError:
+        return None
+    i1 = i0 + int(steps)
+    if i1 < 0 or i1 >= len(opens):
+        return None
+    return opens[i1]
+
 
 def _probe_next_trade_day(cfg: PremiumConfig, start_trade_date: str, max_probe_days: int = 30) -> Optional[str]:
-    """
-    从 start_trade_date 的次日自然日开始探测，第一天 ensure_daily_cached 成功 -> 视为交易日。
-    """
+    """从 start_trade_date 的次日自然日开始探测，第一天 ensure_daily_cached 成功 -> 视为交易日。"""
     import datetime as dt
 
     start_trade_date = _to_yyyymmdd(start_trade_date)
@@ -257,9 +349,16 @@ def _probe_next_trade_day(cfg: PremiumConfig, start_trade_date: str, max_probe_d
 
 
 def _advance_trade_days(cfg: PremiumConfig, trade_date: str, steps: int) -> Optional[str]:
+    """按交易日推进 steps 次：T -> T+steps
+    优先：Tushare 交易日历（不依赖行情是否已落盘）
+    回退：ensure_daily_cached 探测（依赖行情可拉取）
     """
-    按交易日推进 steps 次：T -> T+steps
-    """
+    # 1) 优先交易日历
+    td = _advance_trade_days_by_calendar(cfg, trade_date, steps)
+    if td:
+        return td
+
+    # 2) 回退探测
     cur = _to_yyyymmdd(trade_date)
     for _ in range(int(steps)):
         nxt = _probe_next_trade_day(cfg, cur, max_probe_days=40)
@@ -520,13 +619,14 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         pending_truth_reason_T = "ok"
         d0 = load_daily(cfg, trade_date)[["ts_code", "close"]].rename(columns={"close": "close_T"})
 
-    # 3) 交易日历推进到 T+2
+    # 3) 交易日历推进到 T+2（✅ target_date 永远非空）
     target_date = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
     pending = False
     if not target_date:
+        # ✅ 约束：target_date 永远非空（即使数据源暂不可用，也不能留空）
         pending = True
-        target_date = ""
-        pending_reason = "无法推进到 T+2（可能行情未到/数据源缺失）"
+        target_date = str(trade_date)
+        pending_reason = "无法推进到 T+2（交易日历/行情探测失败）"
     else:
         pending_reason = "ok"
 
@@ -560,8 +660,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df = _compute_quantile_returns(cfg, df)
 
     # 8) 排序（锁死）：r_p50 降序；缺则 p_premium；再缺保持源顺序
-    # r_p50 列名取决于 quantiles，默认 50 -> r_p50
-    # 为稳健：找最接近 0.50 的那个分位点列
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     q_mid = min(qs, key=lambda x: abs(float(x) - 0.50))
     mid_key = f"r_p{int(round(float(q_mid) * 100)):02d}"
@@ -573,7 +671,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     elif "p_premium" in df.columns and pd.to_numeric(df["p_premium"], errors="coerce").notna().any():
         df = df.sort_values(by=["p_premium"], ascending=False, na_position="last").reset_index(drop=True)
     else:
-        # 保持源顺序：不做任何排序
         df = df.reset_index(drop=True)
 
     # ✅ rank 列重建（防止重复列导致 insert 报错）
@@ -596,12 +693,9 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "close_T",
         *v2_cols,
         "rank_r_p50",
-        # 旧口径保留（便于解释/过渡期对比）
         "p_premium", "e_premium", "score_ev", "risk_flags", "confidence", "data_quality",
-        # decision 标签
         "dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason",
     ]
-    # 缺列补空
     for c in out_cols:
         if c not in df_top.columns:
             df_top[c] = pd.NA
@@ -618,7 +712,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     verify_pending = True
     verify_reason = "pending"
 
-    # 默认 verify 空壳（但列齐全）
     verify_cols = [
         "rank", "trade_date", "target_date", "ts_code", "name",
         "close_T", "close_T2_actual",
@@ -626,7 +719,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         mid_key,
         "in_p10", "in_p50",
         "err_r_p50", "err_close_p50",
-        # 旧字段保留（兼容旧报告渲染）
         "e_premium", "actual_ret", "hit_up",
     ]
     df_verify = out_top[["rank", "trade_date", "target_date", "ts_code", "name"]].copy()
@@ -634,7 +726,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         if c not in df_verify.columns:
             df_verify[c] = pd.NA
 
-    # 只有在有 target_date 时才尝试 T+2
     if target_date:
         r_t2 = ensure_daily_cached(cfg, target_date)
         if (not pending_truth_T) and r_t2.ok:
@@ -644,14 +735,11 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             tmp["close_T2_actual"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce")
             tmp["close_T"] = pd.to_numeric(tmp["close_T"], errors="coerce")
 
-            # r_actual
             tmp["r_actual"] = np.log(tmp["close_T2_actual"] / tmp["close_T"])
 
-            # 区间命中：p10=[p05,p95], p50=[p25,p75]
             lo10 = f"r_p{int(round(float(min(qs)) * 100)):02d}"
             hi10 = f"r_p{int(round(float(max(qs)) * 100)):02d}"
 
-            # 为稳健：取离 0.25/0.75 最近的
             q25 = min(qs, key=lambda x: abs(float(x) - 0.25))
             q75 = min(qs, key=lambda x: abs(float(x) - 0.75))
             lo50 = f"r_p{int(round(float(q25) * 100)):02d}"
@@ -666,64 +754,17 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
                 & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi50), errors="coerce"))
             )
 
-            # 误差
             tmp["err_r_p50"] = pd.to_numeric(tmp["r_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_key), errors="coerce")
-            # 价格 p50（若存在）
             mid_price_key = f"close_T2_p{int(round(float(q_mid) * 100)):02d}"
             tmp["err_close_p50"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_price_key), errors="coerce")
 
-            # 旧口径 actual_ret/hit_up 保留
             tmp["actual_ret"] = tmp["close_T2_actual"] / tmp["close_T"] - 1
             tmp["hit_up"] = tmp["actual_ret"].apply(lambda x: "是" if pd.notna(x) and float(x) > 0 else ("否" if pd.notna(x) else ""))
 
-            # 组装 verify：顺序必须与 out_top 完全一致（merge 保持左表顺序）
             keep = [c for c in verify_cols if c in tmp.columns]
             df_verify = tmp[keep].copy()
             verify_pending = False
             verify_reason = "ok"
-
-            # 校准落库（只在真值到达时写）
-            try:
-                n = int(df_verify["r_actual"].notna().sum())
-                if n > 0:
-                    coverage_p10 = float(pd.to_numeric(df_verify["in_p10"], errors="coerce").fillna(False).mean())
-                    coverage_p50 = float(pd.to_numeric(df_verify["in_p50"], errors="coerce").fillna(False).mean())
-                    mae_r = float(pd.to_numeric(df_verify["err_r_p50"], errors="coerce").abs().mean())
-                    mae_close = float(pd.to_numeric(df_verify["err_close_p50"], errors="coerce").abs().mean())
-
-                    # stage：用历史行数粗略推断（后续 learn.py 接管时再精确）
-                    hist_n = 0
-                    try:
-                        if hasattr(cfg, "calibration_history_path"):
-                            hist_path = Path(cfg.calibration_history_path()).resolve()
-                        else:
-                            hist_path = (cfg.out_learning_dir() / "premium_calibration_history.csv").resolve()
-                        if hist_path.exists():
-                            hist_n = len(_read_csv_smart(hist_path))
-                    except Exception:
-                        hist_n = 0
-
-                    stage = 0
-                    for s in (150, 90, 60, 30):
-                        if hist_n >= s:
-                            stage = s
-                            break
-
-                    _append_calibration_history(cfg, {
-                        "trade_date": trade_date,
-                        "target_date": target_date,
-                        "n": n,
-                        "coverage_p10": coverage_p10,
-                        "coverage_p50": coverage_p50,
-                        "mae_r_p50": mae_r,
-                        "mae_close_p50": mae_close,
-                        "stage": stage,
-                        "model_version": getattr(cfg, "model_version", "unknown"),
-                        "created_at_utc": _utc_now_iso(),
-                    })
-            except Exception:
-                pass
-
         else:
             verify_pending = True
             verify_reason = f"truth_not_ready: T_ok={not pending_truth_T} T2_ok={r_t2.ok}"
@@ -733,7 +774,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     p_verify = _write_csv(cfg.out_verify_csv(trade_date), df_verify)
 
-    # 11) 渲染报告 md（先保持兼容 report_md 的旧渲染输入：df_top30/df_verify）
+    # 11) 渲染报告 md
     gen_ts = _utc_now_iso()
     md = render_premium_report_md(
         trade_date=trade_date,
