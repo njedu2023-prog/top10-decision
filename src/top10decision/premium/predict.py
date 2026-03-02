@@ -7,7 +7,7 @@ Premium 子系统 — Predict（V2：Close[T+2] 分布预测，端到端落盘�
 锁死契约（来自 Premium.md / ANCHOR.md）：
 - 主输入：data/pred/pred_source_latest.csv（a-top10 全量源表，候选=全量，不过滤）
 - decision 产物：仅用于字段合并/标签（不得过滤），输出字段需带 dec_ 前缀
-- horizon = 2 个交易日（T -> T+2），非交易日顺延（优先用交易日历；回退用 ensure_daily_cached 探测）
+- horizon = 2 个交易日（T -> T+2），非交易日顺延（✅ 必须用交易日历推进；不得用未来行情探测）
 - 行情真值：data/market/daily_YYYYMMDD.csv（由 Market Truth Layer 拉取并缓存）
 - 行情未到：pending（不得报错卡死）
 - 验证表顺序必须与预测表 Top30 完全一致（不可重新排序）
@@ -112,7 +112,6 @@ def _read_csv_smart(path: Path) -> pd.DataFrame:
 def _ensure_dirs(cfg: PremiumConfig) -> None:
     cfg.out_root().mkdir(parents=True, exist_ok=True)
     cfg.reports_root().mkdir(parents=True, exist_ok=True)
-    # learning 目录（若 config 暴露则创建）
     try:
         cfg.out_learning_dir().mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -146,12 +145,6 @@ def _write_last_run(cfg: PremiumConfig, trade_date: str, extra: Dict[str, object
 
 
 def _rebuild_rank_front(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    ✅ 修复点（2026-03-02）：
-    - 上游可能已经带 rank 列（pred_source_latest 或 decision merge）
-    - pandas df.insert 会因列已存在而报错：cannot insert rank, already exists
-    - 这里统一：先删除已有 rank（若存在），再重建 rank，并保证 rank 永远在第 1 列
-    """
     df = df.copy()
     if "rank" in df.columns:
         df = df.drop(columns=["rank"], errors="ignore")
@@ -202,52 +195,19 @@ def _norm_ppf(q: float) -> float:
         s = r * r
         x = (((((a[0] * s + a[1]) * s + a[2]) * s + a[3]) * s + a[4]) * s + a[5]) * r / \
             (((((b[0] * s + b[1]) * s + b[2]) * s + b[3]) * s + b[4]) * s + 1)
-
     return x
 
 
-def _append_calibration_history(cfg: PremiumConfig, row: Dict[str, object]) -> Optional[Path]:
-    """
-    V2：校准历史落库（为 30/60/90/150 阶梯学习做准备）
-    """
-    try:
-        if hasattr(cfg, "calibration_history_path"):
-            p = Path(cfg.calibration_history_path()).resolve()
-        else:
-            p = (cfg.out_learning_dir() / "premium_calibration_history.csv").resolve()
-    except Exception:
-        return None
-
-    p.parent.mkdir(parents=True, exist_ok=True)
-    df_row = pd.DataFrame([row])
-
-    if p.exists():
-        try:
-            df_old = _read_csv_smart(p)
-            df_new = pd.concat([df_old, df_row], ignore_index=True)
-        except Exception:
-            df_new = df_row
-    else:
-        df_new = df_row
-
-    df_new.to_csv(p, index=False, encoding="utf-8-sig")
-    return p
-
-
-# ========= 交易日历推进（优先 Tushare trade_cal；失败则回退到 ensure_daily_cached 探测）=========
+# ========= 交易日推进（✅ 必须用交易日历，不得用未来行情探测）=========
 
 def _get_tushare_token() -> str:
     return (os.getenv("TUSHARE_TOKEN", "") or "").strip()
 
 
-def _tushare_trade_cal(
-    token: str,
-    start_date: str,
-    end_date: str,
-    exchange: str = "SSE",
-) -> Optional[pd.DataFrame]:
-    """拉取交易日历（trade_cal），返回 is_open=1 的 cal_date 列表。
-    使用 requests 直连 api.tushare.pro，避免依赖额外包。
+def _tushare_trade_cal_open_days(token: str, start_date: str, end_date: str) -> Optional[list]:
+    """
+    返回 [YYYYMMDD, ...] 交易日列表（is_open=1）。
+    不引入 tushare 包，直接请求 api.tushare.pro。
     """
     try:
         import requests  # type: ignore
@@ -258,7 +218,7 @@ def _tushare_trade_cal(
         "api_name": "trade_cal",
         "token": token,
         "params": {
-            "exchange": exchange,
+            "exchange": "SSE",
             "start_date": start_date,
             "end_date": end_date,
             "is_open": "1",
@@ -280,92 +240,83 @@ def _tushare_trade_cal(
         if "cal_date" not in df.columns:
             return None
         df["cal_date"] = df["cal_date"].astype(str).map(_to_yyyymmdd)
-        df = df.sort_values("cal_date").reset_index(drop=True)
-        return df
+        days = sorted([d for d in df["cal_date"].tolist() if _TD_RE.match(str(d) or "")])
+        return days
     except Exception:
         return None
 
 
-def _advance_trade_days_by_calendar(cfg: PremiumConfig, trade_date: str, steps: int) -> Optional[str]:
-    """用交易日历推进 steps 个交易日，保证返回真实交易日（YYYYMMDD）。
-    优先使用 Tushare trade_cal（需要 TUSHARE_TOKEN），失败则返回 None（上层回退探测）。
+def _advance_trade_days_by_trade_cal(trade_date: str, steps: int) -> Tuple[Optional[str], str]:
+    """
+    用 Tushare trade_cal 推进 steps 个交易日。
+    返回：(target_date, reason)；reason='ok' 表示成功。
     """
     import datetime as dt
-
-    token = _get_tushare_token()
-    if not token:
-        return None
 
     td = _to_yyyymmdd(trade_date)
     if not _TD_RE.match(td):
-        return None
+        return None, "bad_trade_date"
+
+    token = _get_tushare_token()
+    if not token:
+        return None, "missing_TUSHARE_TOKEN"
 
     d0 = dt.datetime.strptime(td, "%Y%m%d").date()
-    # 给足够的自然日窗口（含长假），默认 90 天足够覆盖 steps=2
-    end = (d0 + dt.timedelta(days=90)).strftime("%Y%m%d")
+    end = (d0 + dt.timedelta(days=120)).strftime("%Y%m%d")  # 给足长假窗口
 
-    # SSE / SZSE 任意一个可用即可；优先 SSE
-    cal = _tushare_trade_cal(token, td, end, exchange="SSE")
-    if cal is None or cal.empty:
-        cal = _tushare_trade_cal(token, td, end, exchange="SZSE")
-    if cal is None or cal.empty:
-        return None
+    days = _tushare_trade_cal_open_days(token, td, end)
+    if not days:
+        return None, "trade_cal_empty"
 
-    opens = cal["cal_date"].astype(str).tolist()
-    if td not in opens:
-        # 若 td 自身不是交易日：取 td 之后第一个交易日作为基准，再推进 steps-1
-        opens2 = [x for x in opens if x > td]
-        if not opens2:
-            return None
-        base = opens2[0]
-        td = base
+    # trade_date 如果不是交易日：取其后的第一个交易日作为基准，再推进 steps-1
+    if td not in days:
+        after = [x for x in days if x > td]
+        if not after:
+            return None, "trade_cal_no_future_open_day"
+        td = after[0]
+        steps = max(0, int(steps) - 1)
 
     try:
-        i0 = opens.index(td)
+        i0 = days.index(td)
     except ValueError:
-        return None
+        return None, "trade_cal_index_fail"
+
     i1 = i0 + int(steps)
-    if i1 < 0 or i1 >= len(opens):
-        return None
-    return opens[i1]
+    if i1 >= len(days):
+        return None, "trade_cal_out_of_range"
+    return days[i1], "ok"
 
 
-def _probe_next_trade_day(cfg: PremiumConfig, start_trade_date: str, max_probe_days: int = 30) -> Optional[str]:
-    """从 start_trade_date 的次日自然日开始探测，第一天 ensure_daily_cached 成功 -> 视为交易日。"""
+def _advance_trade_days_fallback_business_day(trade_date: str, steps: int) -> Tuple[str, str]:
+    """
+    兜底：按工作日（周一~周五）推进 steps 天。
+    ⚠️ 不是严格交易日，但保证不会退回 T，避免验证“同日假命中”。
+    """
     import datetime as dt
 
-    start_trade_date = _to_yyyymmdd(start_trade_date)
-    if not _TD_RE.match(start_trade_date):
-        return None
-
-    d0 = dt.datetime.strptime(start_trade_date, "%Y%m%d").date()
-    for i in range(1, int(max_probe_days) + 1):
-        d = d0 + dt.timedelta(days=i)
-        cand = d.strftime("%Y%m%d")
-        r = ensure_daily_cached(cfg, cand)
-        if r.ok:
-            return cand
-    return None
+    td = _to_yyyymmdd(trade_date)
+    d = dt.datetime.strptime(td, "%Y%m%d").date()
+    n = 0
+    while n < int(steps):
+        d = d + dt.timedelta(days=1)
+        if d.weekday() < 5:
+            n += 1
+    return d.strftime("%Y%m%d"), "fallback_business_day"
 
 
-def _advance_trade_days(cfg: PremiumConfig, trade_date: str, steps: int) -> Optional[str]:
-    """按交易日推进 steps 次：T -> T+steps
-    优先：Tushare 交易日历（不依赖行情是否已落盘）
-    回退：ensure_daily_cached 探测（依赖行情可拉取）
+def _advance_trade_days(cfg: PremiumConfig, trade_date: str, steps: int) -> Tuple[str, str]:
     """
-    # 1) 优先交易日历
-    td = _advance_trade_days_by_calendar(cfg, trade_date, steps)
+    ✅ 正确口径：
+    - 先用 trade_cal 推进（真实交易日）
+    - 失败则兜底工作日推进（保证 target_date 不会等于 T）
+    返回：(target_date, reason)
+    """
+    td, reason = _advance_trade_days_by_trade_cal(trade_date, steps)
     if td:
-        return td
-
-    # 2) 回退探测
-    cur = _to_yyyymmdd(trade_date)
-    for _ in range(int(steps)):
-        nxt = _probe_next_trade_day(cfg, cur, max_probe_days=40)
-        if not nxt:
-            return None
-        cur = nxt
-    return cur
+        return td, "trade_cal_ok"
+    # 兜底：工作日推进
+    td2, reason2 = _advance_trade_days_fallback_business_day(trade_date, steps)
+    return td2, f"{reason}|{reason2}"
 
 
 # ========= pred_source_latest 读取与字段兜底 =========
@@ -411,13 +362,6 @@ def _infer_trade_date(df: pd.DataFrame) -> str:
 
 
 def _pick_pred_fields(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
-    """
-    从 pred_source_latest “就地取材”生成 Premium 旧口径字段（保留）：
-    - p_premium：上涨概率（0~1）
-    - e_premium：上涨幅度预测（ratio，例如 0.0911 表示 +9.11%）
-    - score_ev：综合分值（旧口径）
-    - risk_flags/confidence/data_quality：风险/质量提示（可缺省）
-    """
     cols = {str(c).strip().lower(): c for c in df.columns}
 
     def col(*names: str) -> Optional[str]:
@@ -500,7 +444,7 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     m_rank = pick("dec_rank", "decision_rank", "rank", "决策排名")
     m_w = pick("dec_weight", "weight", "target_weight", "决策权重")
     m_can = pick("dec_can_buy", "can_buy", "可买提示")
-    m_pf = pick("dec_p_fill", "p_fill", "p_fill")
+    m_pf = pick("dec_p_fill", "p_fill")
     m_reason = pick("dec_reason", "reason", "label", "决策原因", "决策标签")
 
     out["dec_rank"] = dec[m_rank] if m_rank else pd.NA
@@ -516,22 +460,13 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
 # ========= V2 分布预测（冷启动版本：无模型也可跑）=========
 
 def _build_mu_sigma(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
-    """
-    冷启动：给每只票构造 r 的均值(mu) 与波动(sigma)
-    - 若 e_premium 可用：mu = ln(1+e_premium)
-    - 否则：mu = score_scale * (z(probability)+z(strength)+z(theme)+z(final_score)) 的可用部分
-    - sigma = base_sigma（可后续用模型替换）
-    """
     base_sigma = float(getattr(cfg, "base_sigma", 0.05))
     score_scale = float(getattr(cfg, "score_scale", 0.01))
 
-    # 1) mu 优先用 e_premium
     e = pd.to_numeric(df.get("e_premium", pd.Series([np.nan] * len(df))), errors="coerce")
-    mu_from_e = np.log1p(e.clip(lower=-0.99))  # 防爆
-
+    mu_from_e = np.log1p(e.clip(lower=-0.99))
     mu = mu_from_e.copy()
 
-    # 2) 若 e_premium 缺，退化为 zscore 组合
     need = ~np.isfinite(mu.values)
     if need.any():
         parts = []
@@ -544,15 +479,11 @@ def _build_mu_sigma(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.Series, pd
         else:
             mu = mu.where(~need, 0.0)
 
-    sigma = pd.Series([base_sigma] * len(df), index=df.index)
-    sigma = sigma.clip(lower=1e-6, upper=0.5)
+    sigma = pd.Series([base_sigma] * len(df), index=df.index).clip(lower=1e-6, upper=0.5)
     return mu.astype(float), sigma.astype(float)
 
 
 def _compute_quantile_returns(cfg: PremiumConfig, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    输出 r_pXX（log-return 分位点）与 close_T2_pXX（价格分位点）
-    """
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     mu, sigma = _build_mu_sigma(cfg, df)
 
@@ -561,12 +492,10 @@ def _compute_quantile_returns(cfg: PremiumConfig, df: pd.DataFrame) -> pd.DataFr
         z = _norm_ppf(float(q))
         out[f"r_p{int(round(q * 100)):02d}"] = mu + sigma * z
 
-    # 还原价格：需要 close_T
     close_T = pd.to_numeric(out.get("close_T", pd.Series([np.nan] * len(out))), errors="coerce")
     for q in qs:
         key = f"r_p{int(round(q * 100)):02d}"
         out[f"close_T2_p{int(round(q * 100)):02d}"] = close_T * np.exp(pd.to_numeric(out[key], errors="coerce"))
-
     return out
 
 
@@ -576,7 +505,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     cfg = cfg or PremiumConfig.load()
     _ensure_dirs(cfg)
 
-    # 1) 读主输入（全量）
     pred_path = cfg.pred_source_latest_path()
     if not pred_path.exists():
         _write_last_run(cfg, "unknown", {"ok": False, "reason": f"pred_source_latest_not_found: {pred_path}"})
@@ -593,7 +521,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         _write_last_run(cfg, "unknown", {"ok": False, "reason": "cannot_infer_trade_date"})
         return PredictResult(False, "unknown", None, True, "无法从 pred_source_latest 推断 trade_date")
 
-    # key 列
     if "trade_date" not in df0.columns:
         df0["trade_date"] = trade_date
     else:
@@ -607,10 +534,9 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     if "name" not in df0.columns:
         df0["name"] = pd.NA
 
-    # 2) ✅ 先确保 T 日真值缓存落盘（哪怕 T+2 未到，也要把 daily_T 写进 data/market）
+    # 2) 先确保 T 日真值缓存落盘（T 日应当可拿到；拿不到也不阻塞）
     r_t = ensure_daily_cached(cfg, trade_date)
     if not r_t.ok:
-        # 不报错卡死：继续产物，但标记 pending
         pending_truth_T = True
         pending_truth_reason_T = f"truth_T_not_ready: {r_t.reason}"
         d0 = pd.DataFrame(columns=["ts_code", "close_T"])
@@ -619,16 +545,12 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         pending_truth_reason_T = "ok"
         d0 = load_daily(cfg, trade_date)[["ts_code", "close"]].rename(columns={"close": "close_T"})
 
-    # 3) 交易日历推进到 T+2（✅ target_date 永远非空）
-    target_date = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
-    pending = False
-    if not target_date:
-        # ✅ 约束：target_date 永远非空（即使数据源暂不可用，也不能留空）
-        pending = True
-        target_date = str(trade_date)
-        pending_reason = "无法推进到 T+2（交易日历/行情探测失败）"
-    else:
-        pending_reason = "ok"
+    # 3) ✅ 正确推进到 T+2：只依赖交易日历（trade_cal），不依赖未来行情
+    target_date, td_reason = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
+
+    # pending：只要 trade_cal 不是真正 ok，就标记 pending（但 target_date 仍非空）
+    pending = (td_reason != "trade_cal_ok") or pending_truth_T
+    pending_reason = td_reason
 
     # 4) decision merge（仅标签，不过滤）
     dec = _load_decision_merge(cfg, trade_date)
@@ -654,7 +576,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     # 6) merge close_T（用于价格分位数还原）
     df = df.merge(d0, on="ts_code", how="left")
-    df["target_date"] = target_date if target_date else pd.NA
+    df["target_date"] = target_date
 
     # 7) V2 分布预测字段（r_pXX / close_T2_pXX）
     df = _compute_quantile_returns(cfg, df)
@@ -673,7 +595,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     else:
         df = df.reset_index(drop=True)
 
-    # ✅ rank 列重建（防止重复列导致 insert 报错）
     df = _rebuild_rank_front(df)
 
     # 9) top30 + full
@@ -681,7 +602,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df_top = df.head(topn).copy()
     df_full = df.copy()
 
-    # 输出列：V2 核心字段 + 旧字段保留 + decision 标签
     v2_cols = []
     for q in qs:
         v2_cols.append(f"r_p{int(round(float(q) * 100)):02d}")
@@ -708,7 +628,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     p_top = _write_csv(cfg.out_top30_csv(trade_date), out_top)
     p_full = _write_csv(cfg.out_full_csv(trade_date), out_full)
 
-    # 10) verify（依赖 close(T) 与 close(T+2)）
+    # 10) verify（只有当 T+2 真值真的可拿到时才做；否则保持 PENDING）
     verify_pending = True
     verify_reason = "pending"
 
@@ -726,51 +646,46 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         if c not in df_verify.columns:
             df_verify[c] = pd.NA
 
-    if target_date:
-        r_t2 = ensure_daily_cached(cfg, target_date)
-        if (not pending_truth_T) and r_t2.ok:
-            d2 = load_daily(cfg, target_date)[["ts_code", "close"]].rename(columns={"close": "close_T2_actual"})
+    # 仅当 target_date 的真值日数据存在时才验证；否则一直 pending（避免“同日假命中”）
+    r_t2 = ensure_daily_cached(cfg, target_date)
+    if (not pending_truth_T) and r_t2.ok:
+        d2 = load_daily(cfg, target_date)[["ts_code", "close"]].rename(columns={"close": "close_T2_actual"})
 
-            tmp = out_top.merge(d2, on="ts_code", how="left")
-            tmp["close_T2_actual"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce")
-            tmp["close_T"] = pd.to_numeric(tmp["close_T"], errors="coerce")
+        tmp = out_top.merge(d2, on="ts_code", how="left")
+        tmp["close_T2_actual"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce")
+        tmp["close_T"] = pd.to_numeric(tmp["close_T"], errors="coerce")
+        tmp["r_actual"] = np.log(tmp["close_T2_actual"] / tmp["close_T"])
 
-            tmp["r_actual"] = np.log(tmp["close_T2_actual"] / tmp["close_T"])
+        lo10 = f"r_p{int(round(float(min(qs)) * 100)):02d}"
+        hi10 = f"r_p{int(round(float(max(qs)) * 100)):02d}"
+        q25 = min(qs, key=lambda x: abs(float(x) - 0.25))
+        q75 = min(qs, key=lambda x: abs(float(x) - 0.75))
+        lo50 = f"r_p{int(round(float(q25) * 100)):02d}"
+        hi50 = f"r_p{int(round(float(q75) * 100)):02d}"
 
-            lo10 = f"r_p{int(round(float(min(qs)) * 100)):02d}"
-            hi10 = f"r_p{int(round(float(max(qs)) * 100)):02d}"
+        tmp["in_p10"] = (
+            (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo10), errors="coerce"))
+            & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi10), errors="coerce"))
+        )
+        tmp["in_p50"] = (
+            (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo50), errors="coerce"))
+            & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi50), errors="coerce"))
+        )
 
-            q25 = min(qs, key=lambda x: abs(float(x) - 0.25))
-            q75 = min(qs, key=lambda x: abs(float(x) - 0.75))
-            lo50 = f"r_p{int(round(float(q25) * 100)):02d}"
-            hi50 = f"r_p{int(round(float(q75) * 100)):02d}"
+        tmp["err_r_p50"] = pd.to_numeric(tmp["r_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_key), errors="coerce")
+        mid_price_key = f"close_T2_p{int(round(float(q_mid) * 100)):02d}"
+        tmp["err_close_p50"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_price_key), errors="coerce")
 
-            tmp["in_p10"] = (
-                (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo10), errors="coerce"))
-                & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi10), errors="coerce"))
-            )
-            tmp["in_p50"] = (
-                (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo50), errors="coerce"))
-                & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi50), errors="coerce"))
-            )
+        tmp["actual_ret"] = tmp["close_T2_actual"] / tmp["close_T"] - 1
+        tmp["hit_up"] = tmp["actual_ret"].apply(lambda x: "是" if pd.notna(x) and float(x) > 0 else ("否" if pd.notna(x) else ""))
 
-            tmp["err_r_p50"] = pd.to_numeric(tmp["r_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_key), errors="coerce")
-            mid_price_key = f"close_T2_p{int(round(float(q_mid) * 100)):02d}"
-            tmp["err_close_p50"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_price_key), errors="coerce")
-
-            tmp["actual_ret"] = tmp["close_T2_actual"] / tmp["close_T"] - 1
-            tmp["hit_up"] = tmp["actual_ret"].apply(lambda x: "是" if pd.notna(x) and float(x) > 0 else ("否" if pd.notna(x) else ""))
-
-            keep = [c for c in verify_cols if c in tmp.columns]
-            df_verify = tmp[keep].copy()
-            verify_pending = False
-            verify_reason = "ok"
-        else:
-            verify_pending = True
-            verify_reason = f"truth_not_ready: T_ok={not pending_truth_T} T2_ok={r_t2.ok}"
+        keep = [c for c in verify_cols if c in tmp.columns]
+        df_verify = tmp[keep].copy()
+        verify_pending = False
+        verify_reason = "ok"
     else:
         verify_pending = True
-        verify_reason = pending_reason
+        verify_reason = f"truth_not_ready: T_ok={not pending_truth_T} T2_ok={r_t2.ok} ({pending_reason})"
 
     p_verify = _write_csv(cfg.out_verify_csv(trade_date), df_verify)
 
@@ -778,11 +693,11 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     gen_ts = _utc_now_iso()
     md = render_premium_report_md(
         trade_date=trade_date,
-        target_date=(target_date if target_date else ""),
+        target_date=target_date,
         df_top30=out_top,
         df_verify=df_verify,
         verify_pending=verify_pending,
-        verify_reason=verify_reason if verify_reason else pending_truth_reason_T,
+        verify_reason=verify_reason,
         gen_ts=gen_ts,
     )
     p_md = _write_text(cfg.report_md_path(trade_date), md)
@@ -792,7 +707,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     _write_last_run(cfg, trade_date, {
         "ok": True,
         "target_date": target_date,
-        "pending": bool(pending or pending_truth_T or verify_pending),
+        "pending": bool(pending or verify_pending),
         "pending_reason": pending_reason,
         "truth_T_ok": (not pending_truth_T),
         "truth_T_reason": pending_truth_reason_T,
@@ -807,9 +722,9 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     return PredictResult(
         ok=True,
         trade_date=trade_date,
-        target_date=(target_date if target_date else None),
-        pending=bool(pending or pending_truth_T or verify_pending),
-        reason="pending" if (pending or pending_truth_T or verify_pending) else "ok",
+        target_date=target_date,
+        pending=bool(pending or verify_pending),
+        reason="pending" if (pending or verify_pending) else "ok",
         out_top30=str(p_top),
         out_full=str(p_full),
         out_verify=str(p_verify),
