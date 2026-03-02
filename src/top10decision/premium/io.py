@@ -144,7 +144,6 @@ def _extract_trade_date_from_df(df: pd.DataFrame) -> Optional[str]:
 def load_decision_inputs(cfg: PremiumConfig) -> List[DecisionInputFile]:
     """
     ♻️ 旧入口（仍保留）：读取 decision 输入表列表。
-    ✅ 已迁移到新契约字段：cfg.decision_glob
     返回按 trade_date 升序排序的列表（取不到 trade_date 则按文件名排序）。
 
     注意：本函数只负责“列举/读取 decision CSV”，不负责业务过滤。
