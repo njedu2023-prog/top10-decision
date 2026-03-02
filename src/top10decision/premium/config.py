@@ -12,7 +12,8 @@ Premium 子系统 — 配置（Config）
 
 重要说明（向后兼容 + 新契约落地）：
 - 旧口径（训练/模型/rank）字段：保留不删（避免历史模块引用炸裂）
-- 新口径（手工交易版 V1）字段：新增补齐（按 Premium.md 锁死规范）
+- 新口径（Premium V2 主线）字段：补齐分位点/冷启动参数/校准落库路径
+- 对重复且会造成歧义的字段：该删就删（例如 decision_input_glob）
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 
 def _find_repo_root(start: Optional[Path] = None) -> Path:
@@ -62,20 +63,40 @@ def _env_str(name: str, default: str) -> str:
     return v if v else default
 
 
+def _env_quantiles(name: str, default: Tuple[float, ...]) -> Tuple[float, ...]:
+    """
+    读取形如 "0.05,0.25,0.5,0.75,0.95" 的分位点配置。
+    """
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+        qs = tuple(float(p) for p in parts)
+        # 基本校验：0<q<1 且递增
+        if any((q <= 0.0 or q >= 1.0) for q in qs):
+            return default
+        if any(qs[i] >= qs[i + 1] for i in range(len(qs) - 1)):
+            return default
+        return qs
+    except Exception:
+        return default
+
+
 @dataclass(frozen=True)
 class PremiumConfig:
     """
     Premium 子系统统一配置。
 
     =========================
-    ✅ 新口径（手工交易版 V1）
+    ✅ 新口径（Premium V2 主线）
     =========================
     - 主输入（候选=全量）：data/pred/pred_source_latest.csv
     - horizon = 2 个交易日（T -> T+2）
     - 默认 N=30（Top30 展示），同时输出 full
-    - decision 仅 merge 标签：outputs/decision/*.csv（不得过滤）
     - 行情真值缓存：data/market/daily_{YYYYMMDD}.csv（Market Truth Layer 负责）
     - 报告：docs/reports/premium_{T}.md + premium_latest.md
+    - 分布预测：Close[T+2] 分位数（P05/P25/P50/P75/P95）
 
     =========================
     ♻️ 旧口径（训练/模型/rank）
@@ -84,12 +105,19 @@ class PremiumConfig:
     - rank_csv_tpl/rank_md_tpl/models/learning：保留
     """
 
-    # ===== 新口径（V1 锁死）=====
+    # ===== 新口径（V2 锁死）=====
     top_n: int = 30
     horizon_trade_days: int = 2
     pred_source_latest: str = "data/pred/pred_source_latest.csv"
-    decision_glob: str = "outputs/decision/*.csv"  # 仅 merge 标签
+    decision_glob: str = "outputs/decision/*.csv"  # 仅 merge 标签（不得过滤）
     reports_dir: str = "docs/reports"
+
+    # V2 分布输出：分位点（锁死默认，可 env 覆盖）
+    quantiles: Tuple[float, ...] = (0.05, 0.25, 0.50, 0.75, 0.95)
+
+    # V2 冷启动参数（保证“无模型也能跑”）
+    base_sigma: float = 0.05
+    score_scale: float = 0.01
 
     # ===== 旧口径（保留）=====
     topk: int = 10
@@ -97,7 +125,7 @@ class PremiumConfig:
     min_train_days: int = 20
     up_threshold: float = 0.0
 
-    decision_input_glob: str = "outputs/decision/*.csv"
+    # 旧口径残留（不确定引用方，先保留）
     close_input_glob: str = "data/market/daily_*.csv"
 
     # ===== Market Truth Layer（行情事实层）=====
@@ -110,8 +138,8 @@ class PremiumConfig:
     # ===== 输出根目录（新旧共用）=====
     out_dir: str = "outputs/premium"
 
-    # ===== 模型版本（旧口径保留；新口径可继续用作追溯字段）=====
-    model_version: str = "premium_v0"
+    # ===== 模型版本（追溯字段）=====
+    model_version: str = "premium_v2"
 
     # ===== 旧 rank/learning/models 命名（保留）=====
     rank_csv_tpl: str = "premium_rank_{trade_date}.csv"
@@ -127,12 +155,16 @@ class PremiumConfig:
         从默认值加载，并允许环境变量覆盖（便于 Actions/手动运行）。
         """
         cfg = PremiumConfig(
-            # ===== 新口径（V1）=====
+            # ===== 新口径（V2）=====
             top_n=_env_int("PREMIUM_TOP_N", 30),
             horizon_trade_days=_env_int("PREMIUM_HORIZON", 2),
             pred_source_latest=_env_str("PREMIUM_PRED_SOURCE_LATEST", "data/pred/pred_source_latest.csv"),
             decision_glob=_env_str("PREMIUM_DECISION_GLOB", "outputs/decision/*.csv"),
             reports_dir=_env_str("PREMIUM_REPORTS_DIR", "docs/reports"),
+
+            quantiles=_env_quantiles("PREMIUM_QUANTILES", (0.05, 0.25, 0.50, 0.75, 0.95)),
+            base_sigma=_env_float("PREMIUM_BASE_SIGMA", 0.05),
+            score_scale=_env_float("PREMIUM_SCORE_SCALE", 0.01),
 
             # ===== 旧口径（保留）=====
             topk=_env_int("PREMIUM_TOPK", 10),
@@ -140,7 +172,6 @@ class PremiumConfig:
             min_train_days=_env_int("PREMIUM_MIN_TRAIN_DAYS", 20),
             up_threshold=_env_float("PREMIUM_UP_THRESHOLD", 0.0),
 
-            decision_input_glob=_env_str("PREMIUM_DECISION_INPUT_GLOB", "outputs/decision/*.csv"),
             close_input_glob=_env_str("PREMIUM_CLOSE_INPUT_GLOB", "data/market/daily_*.csv"),
 
             # Market Truth Layer
@@ -154,7 +185,7 @@ class PremiumConfig:
             market_fetch_mode=_env_str("PREMIUM_MARKET_FETCH_MODE", "cache_first"),
 
             out_dir=_env_str("PREMIUM_OUT_DIR", "outputs/premium"),
-            model_version=_env_str("PREMIUM_MODEL_VERSION", "premium_v0"),
+            model_version=_env_str("PREMIUM_MODEL_VERSION", "premium_v2"),
         )
         return cfg
 
@@ -179,7 +210,7 @@ class PremiumConfig:
     def out_last_run_path(self) -> Path:
         return (self.out_root() / self.last_run_file).resolve()
 
-    # ===== 新口径输出（V1）=====
+    # ===== 新口径输出（V2）=====
     def out_top30_csv(self, trade_date: str) -> Path:
         return (self.out_root() / f"premium_top30_{trade_date}.csv").resolve()
 
@@ -197,6 +228,10 @@ class PremiumConfig:
 
     def report_latest_md_path(self) -> Path:
         return (self.reports_root() / "premium_latest.md").resolve()
+
+    # V2 校准历史落库（新增）
+    def calibration_history_path(self) -> Path:
+        return (self.out_learning_dir() / "premium_calibration_history.csv").resolve()
 
     # ===== 旧 rank 文件（保留）=====
     def rank_csv_path(self, trade_date: str) -> Path:
