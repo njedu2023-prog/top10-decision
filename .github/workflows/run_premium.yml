@@ -27,7 +27,12 @@ concurrency:
 jobs:
   premium:
     # 自动触发：仅当上游成功才跑；手动触发：直接跑
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # 另外：只跑 main 分支（避免未来 PR/分支触发混乱）
+    if: >-
+      ${{
+        (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+        && github.ref == 'refs/heads/main'
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -60,8 +65,11 @@ jobs:
       - name: Sanity check outputs
         run: |
           test -f outputs/premium/_last_run.txt
+          echo "=== outputs/premium ==="
           ls -la outputs/premium || true
+          echo "=== docs/reports ==="
           ls -la docs/reports || true
+          echo "=== data/market ==="
           ls -la data/market || true
 
       - name: Commit outputs + market cache (if changed)
@@ -79,5 +87,12 @@ jobs:
             exit 0
           fi
 
-          git commit -m "premium: update outputs + market cache"
+          # 避免并发/手动提交导致 push 冲突
+          git pull --rebase
+
+          # 从 _last_run.txt 里读取 trade_date（若读取不到就用 unknown）
+          TRADE_DATE="$(grep -E '^trade_date:' -m 1 outputs/premium/_last_run.txt | awk '{print $2}' || true)"
+          if [ -z "$TRADE_DATE" ]; then TRADE_DATE="unknown"; fi
+
+          git commit -m "premium: update outputs + market cache (${TRADE_DATE})"
           git push
