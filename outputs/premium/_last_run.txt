@@ -1,16 +1,16 @@
 trade_date: 20260302
-run_id: gh_22593448365
-commit_sha: 6e7ff0b9c4b7
+run_id: gh_22598357452
+commit_sha: da90348843a8
 model_version: premium_v2
-created_at_utc: 2026-03-02T20:07:54Z
+created_at_utc: 2026-03-02T22:24:31Z
 ok: True
-target_date: 
+target_date: 20260302
 pending: True
-pending_reason: 无法推进到 T+2（可能行情未到/数据源缺失）
+pending_reason: 无法推进到 T+2（交易日历/行情探测失败）
 truth_T_ok: True
 truth_T_reason: ok
-verify_pending: True
-verify_reason: 无法推进到 T+2（可能行情未到/数据源缺失）
+verify_pending: False
+verify_reason: ok
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260302.csv
 out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260302.csv
 out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260302.csv
