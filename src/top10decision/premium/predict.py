@@ -23,6 +23,9 @@ V2 核心：
 - 预测 r = ln(Close[T+2]/Close[T]) 的分位数：r_p05/r_p25/r_p50/r_p75/r_p95
 - 还原价格分位数：close_T2_pXX = close_T * exp(r_pXX)
 - 默认排序：r_p50 降序；若缺则退化到 p_premium；再缺则保持源顺序（不得随机）
+
+新增（核心开发阶段）：
+- Factor Packs 机制一次性写死：Pack0/1/2 自动启用/自动降级 + 审计落盘
 """
 
 from __future__ import annotations
@@ -42,6 +45,10 @@ import pandas as pd
 from .config import PremiumConfig
 from .market_truth import ensure_daily_cached, load_daily
 from .report_md import render_premium_report_md
+
+from .factor_registry import detect_factor_packs
+from .factor_builders import build_features_by_packs
+from .audit import make_audit_block_md, make_audit_kv
 
 
 _TD_RE = re.compile(r"^\d{8}$")
@@ -314,7 +321,6 @@ def _advance_trade_days(cfg: PremiumConfig, trade_date: str, steps: int) -> Tupl
     td, reason = _advance_trade_days_by_trade_cal(trade_date, steps)
     if td:
         return td, "trade_cal_ok"
-    # 兜底：工作日推进
     td2, reason2 = _advance_trade_days_fallback_business_day(trade_date, steps)
     return td2, f"{reason}|{reason2}"
 
@@ -460,26 +466,52 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
 # ========= V2 分布预测（冷启动版本：无模型也可跑）=========
 
 def _build_mu_sigma(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+    """
+    新口径（Factor Packs 驱动）：
+    - mu（中心）优先用 Pack0 的先验 + 动量构造
+    - sigma（宽度）优先用 Pack0 的波动/振幅/量能构造
+    - 仍保留兜底：如果特征缺失，则退回旧逻辑（保证永远可跑）
+    """
     base_sigma = float(getattr(cfg, "base_sigma", 0.05))
-    score_scale = float(getattr(cfg, "score_scale", 0.01))
+    score_scale = float(getattr(cfg, "score_scale", 0.012))
 
+    # 旧口径 e_premium 作为辅助
     e = pd.to_numeric(df.get("e_premium", pd.Series([np.nan] * len(df))), errors="coerce")
     mu_from_e = np.log1p(e.clip(lower=-0.99))
+
+    # Pack0 先验
+    z_prob = _zscore(df.get("f_prob", df.get("p_premium", pd.Series([np.nan] * len(df)))))
+    z_strength = _zscore(df.get("f_strength", pd.Series([np.nan] * len(df))))
+    z_theme = _zscore(df.get("f_theme", pd.Series([np.nan] * len(df))))
+    z_mom = _zscore(df.get("ret_5d", pd.Series([np.nan] * len(df))))
+
+    # 组合中心：主要由先验 + 动量决定
+    mu_pack = score_scale * (0.55 * z_prob + 0.30 * z_strength + 0.15 * z_theme + 0.20 * z_mom)
+
     mu = mu_from_e.copy()
-
     need = ~np.isfinite(mu.values)
-    if need.any():
-        parts = []
-        for k in ("probability", "p", "p_premium", "strength_score", "theme_boost", "final_score"):
-            if k in df.columns:
-                parts.append(_zscore(df[k]))
-        if parts:
-            combo = sum(parts) / float(len(parts))
-            mu = mu.where(~need, score_scale * combo)
-        else:
-            mu = mu.where(~need, 0.0)
+    mu = mu.where(~need, mu_pack)
 
-    sigma = pd.Series([base_sigma] * len(df), index=df.index).clip(lower=1e-6, upper=0.5)
+    # 如果 mu 仍有大量缺失，最终兜底为 0
+    mu = pd.to_numeric(mu, errors="coerce").fillna(0.0)
+
+    # 宽度：波动 + 振幅 + 量能异常
+    vol10 = pd.to_numeric(df.get("vol_10d", pd.Series([np.nan] * len(df))), errors="coerce")
+    range1 = pd.to_numeric(df.get("range_1d", pd.Series([np.nan] * len(df))), errors="coerce")
+    az5 = pd.to_numeric(df.get("amount_z_5d", pd.Series([np.nan] * len(df))), errors="coerce")
+
+    # 量能异常：偏离 1 越大越不确定
+    az_dev = (az5 - 1.0).abs()
+
+    # sigma 组合，全部缺失则回到 base_sigma
+    sigma = base_sigma * (
+        1.0
+        + 2.0 * vol10.fillna(0.0).clip(lower=0.0, upper=0.25)
+        + 1.2 * range1.fillna(0.0).clip(lower=0.0, upper=0.20)
+        + 0.6 * az_dev.fillna(0.0).clip(lower=0.0, upper=3.0)
+    )
+    sigma = sigma.clip(lower=1e-6, upper=0.5)
+
     return mu.astype(float), sigma.astype(float)
 
 
@@ -534,6 +566,9 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     if "name" not in df0.columns:
         df0["name"] = pd.NA
 
+    # === Factor Packs：自动启用/降级（一次性写死机制）===
+    pack_status = detect_factor_packs(cfg, trade_date)
+
     # 2) 先确保 T 日真值缓存落盘（T 日应当可拿到；拿不到也不阻塞）
     r_t = ensure_daily_cached(cfg, trade_date)
     if not r_t.ok:
@@ -577,6 +612,11 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     # 6) merge close_T（用于价格分位数还原）
     df = df.merge(d0, on="ts_code", how="left")
     df["target_date"] = target_date
+
+    # 6.1) 计算并合并 Factor Packs 特征（至少 Pack0）
+    feats = build_features_by_packs(cfg, trade_date, df0, pack_status.packs_used)
+    if feats is not None and not feats.empty:
+        df = df.merge(feats, on="ts_code", how="left")
 
     # 7) V2 分布预测字段（r_pXX / close_T2_pXX）
     df = _compute_quantile_returns(cfg, df)
@@ -689,7 +729,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     p_verify = _write_csv(cfg.out_verify_csv(trade_date), df_verify)
 
-    # 11) 渲染报告 md
+    # 11) 渲染报告 md（附加 Factor Packs 审计块）
     gen_ts = _utc_now_iso()
     md = render_premium_report_md(
         trade_date=trade_date,
@@ -700,10 +740,27 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         verify_reason=verify_reason,
         gen_ts=gen_ts,
     )
+    md += make_audit_block_md(
+        packs_used=pack_status.packs_used,
+        packs_missing=pack_status.packs_missing,
+        degrade_mode=pack_status.degrade_mode,
+        missing_fields=pack_status.missing_fields,
+        notes=pack_status.notes,
+    )
+
     p_md = _write_text(cfg.report_md_path(trade_date), md)
     _write_text(cfg.report_latest_md_path(), md)
 
-    # 12) last_run
+    # 12) last_run（把审计写进去）
+    audit_kv = make_audit_kv(
+        extra_prefix="factor",
+        packs_used=pack_status.packs_used,
+        packs_missing=pack_status.packs_missing,
+        degrade_mode=pack_status.degrade_mode,
+        missing_fields=pack_status.missing_fields,
+        notes=pack_status.notes,
+    )
+
     _write_last_run(cfg, trade_date, {
         "ok": True,
         "target_date": target_date,
@@ -717,6 +774,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "out_full": str(p_full),
         "out_verify": str(p_verify),
         "report_md": str(p_md),
+        **audit_kv,
     })
 
     return PredictResult(
