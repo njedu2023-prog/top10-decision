@@ -84,7 +84,11 @@ def _fmt_bool(x: object) -> str:
 
 
 def _detect_quantile_cols(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
-    r_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("r_p")]
+    """
+    ✅ 按需求：预测表/Top all 不再展示 T 的 ln 分位（r_pXX）。
+    这里只返回价格分位 close_T2_pXX。
+    """
+    r_cols: List[str] = []  # 不展示 r_pXX
     p_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("close_T2_p")]
 
     def _key(c: str) -> int:
@@ -94,7 +98,7 @@ def _detect_quantile_cols(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
         except Exception:
             return 999
 
-    return sorted(r_cols, key=_key), sorted(p_cols, key=_key)
+    return r_cols, sorted(p_cols, key=_key)
 
 
 def _select_cols_exist(df: pd.DataFrame, cols: Sequence[str]) -> List[str]:
@@ -139,12 +143,16 @@ def _cn_col(col: str) -> str:
     c = str(col)
     if c in _CN_FIXED:
         return _CN_FIXED[c]
+
+    # r_pXX 已不再展示，但这里保留映射以避免未来误入时表头变脏
     m = re.match(r"^r_p(\d{2})$", c)
     if m:
         return f"ln分位{m.group(1)}"
+
     m = re.match(r"^close_T2_p(\d{2})$", c)
     if m:
         return f"T+2价分位{m.group(1)}"
+
     return c
 
 
@@ -165,7 +173,7 @@ def _df_to_html_table(df: pd.DataFrame) -> str:
 
 def _format_pred_table(df_top30: pd.DataFrame) -> pd.DataFrame:
     df = df_top30.copy()
-    r_cols, p_cols = _detect_quantile_cols(df)
+    r_cols, p_cols = _detect_quantile_cols(df)  # r_cols 将始终为空（不展示 ln 分位）
 
     base_cols = [
         "rank", "trade_date", "target_date", "ts_code", "name", "close_T",
@@ -186,6 +194,7 @@ def _format_pred_table(df_top30: pd.DataFrame) -> pd.DataFrame:
     if "close_T" in out.columns:
         out["close_T"] = out["close_T"].map(lambda x: _fmt_price(x, 2))
 
+    # r_cols 为空，不会执行
     for c in r_cols:
         if c in out.columns:
             out[c] = out[c].map(lambda x: _fmt_float(x, 4))
@@ -315,10 +324,11 @@ def render_premium_report_md(
     parts.append("")
     parts.append("## 字段说明（V2 核心）")
     parts.append("")
-    parts.append("- r_pXX：log-return 分位点，r = ln(Close[T+2]/Close[T])")
-    parts.append("- close_T2_pXX：价格分位点 = close_T * exp(r_pXX)")
+    parts.append("- close_T2_pXX：预测到期日（T+2）收盘价的价格分位点（展示字段）")
     parts.append("- in_p10：r_actual 是否落在 [p05, p95]")
     parts.append("- in_p50：r_actual 是否落在 [p25, p75]")
+    parts.append("")
+    parts.append("> 注：r_pXX（log-return 分位点，r = ln(Close[T+2]/Close[T])）为内部计算字段，当前报告不再展示。")
     parts.append("")
 
     return "\n".join(parts)
