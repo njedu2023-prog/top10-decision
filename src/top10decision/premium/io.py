@@ -13,6 +13,10 @@ Premium 子系统 — IO 层（读写/落盘/追溯）
 注意：
 - 本模块只处理文件层，不做业务计算。
 - 学习模块能力不损失：旧接口全部保留（train/rank/learning 相关）。
+
+✅ 2026-03-03 变更（按你的需求）：
+- premium_top30/premium_full 的 CSV 落盘前，移除 r_pXX（ln 分位）列
+  （报告侧已不展示；这里保证 CSV 与报告一致）
 """
 
 from __future__ import annotations
@@ -114,6 +118,23 @@ def _to_yyyymmdd(x: object) -> str:
     if len(s) == 10 and s[4] == "-" and s[7] == "-":
         s = s.replace("-", "")
     return s[:8]
+
+
+# =========================
+# 3.1) 输出字段清理（仅影响 CSV 落盘，不影响计算/报告）
+# =========================
+
+def _drop_ln_quantile_cols(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    ✅ 按需求：移除 ln 分位 r_pXX（例如 r_p05/r_p25/r_p50/r_p75/r_p95）
+    只在“落盘前”执行，避免影响上游任何计算逻辑。
+    """
+    if df is None or df.empty:
+        return df
+    drop_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("r_p")]
+    if not drop_cols:
+        return df
+    return df.drop(columns=drop_cols, errors="ignore")
 
 
 # =========================
@@ -326,16 +347,26 @@ def load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
 # =========================
 
 def write_premium_top30(cfg: PremiumConfig, trade_date: str, df_top30: pd.DataFrame) -> Path:
+    """
+    ✅ 新口径：写 outputs/premium/premium_top30_{trade_date}.csv
+    约束：落盘前移除 r_pXX（ln 分位）列，保证与报告展示一致。
+    """
     ensure_output_dirs(cfg)
     p = cfg.out_top30_csv(trade_date)
-    df_top30.to_csv(p, index=False, encoding="utf-8-sig")
+    df_out = _drop_ln_quantile_cols(df_top30.copy())
+    df_out.to_csv(p, index=False, encoding="utf-8-sig")
     return p
 
 
 def write_premium_full(cfg: PremiumConfig, trade_date: str, df_full: pd.DataFrame) -> Path:
+    """
+    ✅ 新口径：写 outputs/premium/premium_full_{trade_date}.csv
+    约束：落盘前移除 r_pXX（ln 分位）列，保证与报告展示一致。
+    """
     ensure_output_dirs(cfg)
     p = cfg.out_full_csv(trade_date)
-    df_full.to_csv(p, index=False, encoding="utf-8-sig")
+    df_out = _drop_ln_quantile_cols(df_full.copy())
+    df_out.to_csv(p, index=False, encoding="utf-8-sig")
     return p
 
 
