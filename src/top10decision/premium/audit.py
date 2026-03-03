@@ -4,10 +4,10 @@
 """
 Premium — Audit (Factor Packs / Degrade)
 
-锁死要点：
-- audit 只负责“记录/渲染”，不允许把主流程跑挂
+工程目标（锁死）：
+- audit 只负责记录/渲染，不允许因接口不匹配把主流程跑挂
 - notes 兼容 dict / list / str / None
-- 提供 make_audit_kv() 供 predict.py 结构化写入（向后兼容）
+- make_audit_kv() 必须向后兼容（允许额外 kwargs，例如 extra_prefix）
 """
 
 from __future__ import annotations
@@ -16,31 +16,13 @@ from typing import Any, Dict, List, Optional
 
 
 def _to_lines(notes: Any) -> List[str]:
-    """
-    将 notes 统一转成 Markdown bullet lines。
-    支持：
-    - dict: {k: v}
-    - list/tuple/set: ["a", "b"] 或 [{"k":1}, ...]
-    - str: "..."
-    - None: []
-    """
     if notes is None:
         return []
-
     if isinstance(notes, dict):
-        lines: List[str] = []
-        for k in sorted(notes.keys()):
-            v = notes.get(k)
-            lines.append(f"- **{k}**: {v}")
-        return lines
-
+        return [f"- **{k}**: {notes.get(k)}" for k in sorted(notes.keys())]
     if isinstance(notes, (list, tuple, set)):
-        lines: List[str] = []
         xs = list(notes)
-        for i, x in enumerate(xs, start=1):
-            lines.append(f"- {i:02d}. {x}")
-        return lines
-
+        return [f"- {i:02d}. {x}" for i, x in enumerate(xs, start=1)]
     return [f"- {str(notes)}"]
 
 
@@ -51,9 +33,15 @@ def make_audit_kv(
     missing_fields: Optional[List[str]] = None,
     missing_files: Optional[List[str]] = None,
     notes: Any = None,
+    extra_prefix: Optional[str] = None,
+    **kwargs,
 ) -> Dict[str, Any]:
     """
-    输出结构化审计 KV，给上游写入 json/csv/last_run 等（predict.py 依赖）。
+    输出结构化审计 KV（predict.py 依赖）。
+
+    ✅ 向后兼容策略：
+    - 接受 extra_prefix（predict.py 可能会传）
+    - 接受任何未知 kwargs（未来扩展不再炸）
     """
     packs_used = packs_used or []
     packs_missing = packs_missing or []
@@ -61,7 +49,7 @@ def make_audit_kv(
     missing_fields = missing_fields or []
     missing_files = missing_files or []
 
-    # notes 统一为 list[str]，方便落盘与审计
+    # notes 统一成 list[str]
     if notes is None:
         notes_norm: List[str] = []
     elif isinstance(notes, dict):
@@ -71,7 +59,7 @@ def make_audit_kv(
     else:
         notes_norm = [str(notes)]
 
-    return {
+    kv = {
         "degrade_mode": degrade_mode,
         "packs_used": list(packs_used),
         "packs_missing": list(packs_missing),
@@ -79,6 +67,17 @@ def make_audit_kv(
         "missing_files": list(missing_files),
         "notes": notes_norm,
     }
+
+    # 可选：把 extra_prefix 记下来（不影响逻辑）
+    if extra_prefix:
+        kv["extra_prefix"] = str(extra_prefix)
+
+    # 把未知 kwargs 也落进去（可追溯，但不必强依赖）
+    for k, v in (kwargs or {}).items():
+        if k not in kv:
+            kv[k] = v
+
+    return kv
 
 
 def make_audit_block_md(
@@ -88,9 +87,11 @@ def make_audit_block_md(
     missing_fields: Optional[List[str]] = None,
     missing_files: Optional[List[str]] = None,
     notes: Any = None,
+    **kwargs,
 ) -> str:
     """
-    输出一段 Markdown 审计块，供 premium_latest.md / report_md 拼接用。
+    输出 Markdown 审计块。
+    ✅ 同样接受 **kwargs，避免上游未来加参导致崩溃。
     """
     packs_used = packs_used or []
     packs_missing = packs_missing or []
@@ -101,7 +102,6 @@ def make_audit_block_md(
     md: List[str] = []
     md.append("\n---\n")
     md.append("## 审计（Factor Packs / Degrade）\n")
-
     md.append(f"- degrade_mode: **{degrade_mode}**\n")
     md.append(f"- packs_used: `{', '.join(packs_used) if packs_used else '-'}`\n")
     md.append(f"- packs_missing: `{', '.join(packs_missing) if packs_missing else '-'}`\n")
