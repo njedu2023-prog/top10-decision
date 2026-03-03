@@ -5,7 +5,7 @@
 - 预测日（T）：**20260303**
 - 预测到期日（T+2）：**20260305**
 - 周期：**2 个交易日（T→T+2）**
-- 生成时间：2026-03-03T18:32:41Z
+- 生成时间：2026-03-03T19:07:40Z
 - 模型版本：**premium_v2**
 
 ## 预测表（Top30）
@@ -1226,5 +1226,5 @@
 ### notes
 - 01. Pack0 baseline always on
 - 02. Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260303.csv
-- 03. Pack2 enabled (soft mode)
+- 03. Pack2 enabled (soft mode, fixed)
 
