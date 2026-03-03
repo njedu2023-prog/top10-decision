@@ -1,52 +1,90 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Premium — Audit helpers
 
-职责：
-- 统一生成 audit dict（可写入 _last_run.txt）
-- 统一把 audit 信息插入到报告 Markdown（不改 report_md.py 也能落地）
+"""
+Premium — Audit (Factor Packs / Degrade)
+
+目标（锁死）：
+- 不管 notes 是 dict 还是 list，都能安全渲染成 Markdown
+- 不允许 audit 渲染阶段把主流程跑挂
 """
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Any, Dict, Iterable, List, Optional, Union
+
+
+def _to_lines(notes: Any) -> List[str]:
+    """
+    将 notes 统一转成 Markdown 的 bullet lines。
+    支持：
+    - dict: {k: v}
+    - list/tuple/set: ["a", "b"] 或 [{"k":1}, ...]
+    - str: "..."
+    - None: []
+    """
+    if notes is None:
+        return []
+
+    # dict
+    if isinstance(notes, dict):
+        lines: List[str] = []
+        for k in sorted(notes.keys()):
+            v = notes.get(k)
+            lines.append(f"- **{k}**: {v}")
+        return lines
+
+    # list/tuple/set
+    if isinstance(notes, (list, tuple, set)):
+        lines = []
+        for i, x in enumerate(list(notes), start=1):
+            # 每条都转字符串，避免复杂对象报错
+            lines.append(f"- {i:02d}. {x}")
+        return lines
+
+    # str / other
+    return [f"- {str(notes)}"]
 
 
 def make_audit_block_md(
-    packs_used: List[str],
-    packs_missing: List[str],
-    degrade_mode: bool,
-    missing_fields: List[str],
-    notes: Dict[str, str] | None = None,
+    packs_used: Optional[List[str]] = None,
+    packs_missing: Optional[List[str]] = None,
+    degrade_mode: Optional[str] = None,
+    missing_fields: Optional[List[str]] = None,
+    missing_files: Optional[List[str]] = None,
+    notes: Any = None,
 ) -> str:
-    notes = notes or {}
-    lines = []
-    lines.append("\n---\n")
-    lines.append("## Factor Packs（本次因子包审计）\n")
-    lines.append(f"- packs_used: {packs_used}\n")
-    lines.append(f"- packs_missing: {packs_missing}\n")
-    lines.append(f"- degrade_mode: {bool(degrade_mode)}\n")
+    """
+    输出一段 Markdown 审计块，给 premium_latest.md / report_md 拼接用。
+    """
+    packs_used = packs_used or []
+    packs_missing = packs_missing or []
+    degrade_mode = degrade_mode or ("degraded" if packs_missing else "full")
+    missing_fields = missing_fields or []
+    missing_files = missing_files or []
+
+    md = []
+    md.append("\n---\n")
+    md.append("## 审计（Factor Packs / Degrade）\n")
+
+    md.append(f"- degrade_mode: **{degrade_mode}**\n")
+    md.append(f"- packs_used: `{', '.join(packs_used) if packs_used else '-'}`\n")
+    md.append(f"- packs_missing: `{', '.join(packs_missing) if packs_missing else '-'}`\n")
+
     if missing_fields:
-        lines.append(f"- missing_fields: {missing_fields}\n")
-    if notes:
-        lines.append("- pack_notes:\n")
-        for k in sorted(notes.keys()):
-            lines.append(f"  - {k}: {notes[k]}\n")
-    return "".join(lines)
+        md.append("\n### missing_fields\n")
+        for x in missing_fields:
+            md.append(f"- {x}\n")
 
+    if missing_files:
+        md.append("\n### missing_files\n")
+        for x in missing_files:
+            md.append(f"- {x}\n")
 
-def make_audit_kv(extra_prefix: str, packs_used, packs_missing, degrade_mode, missing_fields, notes) -> Dict[str, object]:
-    """
-    给 _last_run.txt 用：key-value 平铺（避免嵌套 JSON 解析麻烦）
-    """
-    extra = {
-        f"{extra_prefix}_packs_used": ",".join(packs_used or []),
-        f"{extra_prefix}_packs_missing": ",".join(packs_missing or []),
-        f"{extra_prefix}_degrade_mode": bool(degrade_mode),
-        f"{extra_prefix}_missing_fields": ",".join(missing_fields or []),
-    }
-    if notes:
-        for k, v in notes.items():
-            extra[f"{extra_prefix}_note_{k}"] = str(v)
-    return extra
+    lines = _to_lines(notes)
+    if lines:
+        md.append("\n### notes\n")
+        md.extend([l + "\n" for l in lines])
+
+    md.append("\n")
+    return "".join(md)
