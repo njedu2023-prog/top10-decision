@@ -11,19 +11,23 @@ build_market_fs.py
   3) data/market/truth_close_{trade_date}.csv
   4) data/market/_meta_{trade_date}.json
 
-当前输入主结构：
-- data/market/raw/daily_{trade_date}.csv
-- data/market/raw/daily_basic_{trade_date}.csv
-- data/market/raw/stock_basic_{trade_date}.csv
-- data/market/raw/stk_limit_{trade_date}.csv
-- data/market/raw/limit_list_d_{trade_date}.csv
-- data/market/raw/limit_break_d_{trade_date}.csv
-- data/market/raw/limit_up_tags_{trade_date}.csv
-- data/market/raw/hot_boards_{trade_date}.csv
-- data/market/raw/top_list_{trade_date}.csv
-- data/market/raw/moneyflow_hsgt_{trade_date}.csv
-- data/market/raw/namechange_{trade_date}.csv
-- data/market/raw/_sync_meta_{trade_date}.json
+当前输入主结构（新规范）：
+- data/market/raw/{YYYY}/{YYYYMMDD}/daily.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/daily_basic.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/stock_basic.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/stk_limit.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/limit_list_d.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/limit_break_d.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/limit_up_tags.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/hot_boards.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/top_list.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/moneyflow_hsgt.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/namechange.csv
+- data/market/raw/{YYYY}/{YYYYMMDD}/_sync_meta.json
+
+兼容过渡：
+- 仍兼容旧扁平结构 data/market/raw/{stem}_{trade_date}.csv
+- 仍兼容旧扁平结构 data/market/raw/_sync_meta_{trade_date}.json
 
 设计原则：
 - FS 是标准化特征层，不是原始快照层
@@ -48,6 +52,20 @@ import pandas as pd
 MARKET_DIR = Path("data/market")
 RAW_DIR = MARKET_DIR / "raw"
 KEY_COLS = ["trade_date", "ts_code"]
+
+SOURCE_FILE_MAP: dict[str, str] = {
+    "daily": "daily.csv",
+    "daily_basic": "daily_basic.csv",
+    "stock_basic": "stock_basic.csv",
+    "stk_limit": "stk_limit.csv",
+    "limit_list_d": "limit_list_d.csv",
+    "limit_break_d": "limit_break_d.csv",
+    "limit_up_tags": "limit_up_tags.csv",
+    "hot_boards": "hot_boards.csv",
+    "top_list": "top_list.csv",
+    "moneyflow_hsgt": "moneyflow_hsgt.csv",
+    "namechange": "namechange.csv",
+}
 
 
 # -----------------------------
@@ -116,14 +134,48 @@ def _extract_trade_date_from_name(path: Path, stem_prefix: str) -> str | None:
     return m.group(1)
 
 
+def _trade_year(trade_date: str) -> str:
+    return trade_date[:4]
+
+
+def _raw_dated_dir(trade_date: str) -> Path:
+    return RAW_DIR / _trade_year(trade_date) / trade_date
+
+
+def _raw_latest_dir() -> Path:
+    return RAW_DIR / "latest"
+
+
+def _legacy_raw_path(stem: str, trade_date: str) -> Path:
+    return RAW_DIR / f"{stem}_{trade_date}.csv"
+
+
+def _legacy_sync_meta_path(trade_date: str) -> Path:
+    return RAW_DIR / f"_sync_meta_{trade_date}.json"
+
+
 def _find_latest_raw_trade_date() -> str | None:
     if not RAW_DIR.exists():
         return None
+
     vals: list[str] = []
+
+    # 新结构：data/market/raw/{YYYY}/{YYYYMMDD}/daily.csv
+    for year_dir in RAW_DIR.iterdir():
+        if not year_dir.is_dir() or year_dir.name == "latest":
+            continue
+        for day_dir in year_dir.iterdir():
+            if not day_dir.is_dir():
+                continue
+            if re.fullmatch(r"\d{8}", day_dir.name) and (day_dir / "daily.csv").exists():
+                vals.append(day_dir.name)
+
+    # 旧结构兼容：data/market/raw/daily_{trade_date}.csv
     for p in RAW_DIR.glob("daily_*.csv"):
         td = _extract_trade_date_from_name(p, "daily")
         if td:
             vals.append(td)
+
     if not vals:
         return None
     return sorted(set(vals))[-1]
@@ -137,11 +189,29 @@ def _resolve_trade_date(trade_date: str | None = None) -> str | None:
 
 
 def _raw_path(stem: str, trade_date: str) -> Path:
-    return RAW_DIR / f"{stem}_{trade_date}.csv"
+    filename = SOURCE_FILE_MAP.get(stem, f"{stem}.csv")
+    new_path = _raw_dated_dir(trade_date) / filename
+    if new_path.exists():
+        return new_path
+
+    legacy_path = _legacy_raw_path(stem, trade_date)
+    if legacy_path.exists():
+        return legacy_path
+
+    # 默认返回新路径，便于 meta 记录新规范
+    return new_path
 
 
 def _sync_meta_path(trade_date: str) -> Path:
-    return RAW_DIR / f"_sync_meta_{trade_date}.json"
+    new_path = _raw_dated_dir(trade_date) / "_sync_meta.json"
+    if new_path.exists():
+        return new_path
+
+    legacy_path = _legacy_sync_meta_path(trade_date)
+    if legacy_path.exists():
+        return legacy_path
+
+    return new_path
 
 
 def _load_raw_table(stem: str, trade_date: str) -> pd.DataFrame:
@@ -868,14 +938,14 @@ def main() -> int:
     trade_date = _resolve_trade_date(args.trade_date)
 
     if not trade_date:
-        print("[build_market_fs] ERROR: 无法解析 trade_date，且 raw 目录中无可用 daily_*.csv")
+        print("[build_market_fs] ERROR: 无法解析 trade_date，且 raw 目录中无可用 dated daily 文件")
         return 2
 
     bundle = load_raw_bundle(trade_date)
     daily_df = bundle.get("daily", pd.DataFrame())
 
     if daily_df.empty:
-        print(f"[build_market_fs] ERROR: 缺少核心输入 daily_{trade_date}.csv")
+        print(f"[build_market_fs] ERROR: 缺少核心输入 daily.csv（按 trade_date={trade_date} 解析）")
         return 2
 
     master_df = build_master_table(bundle, trade_date)
