@@ -110,8 +110,11 @@ jobs:
             python scripts/sync_market_raw.py
           fi
 
+          echo "[sync-market-raw] tree:"
+          find data/market/raw -maxdepth 3 -type d | sort || true
+
           echo "[sync-market-raw] files:"
-          ls -lah data/market/raw || true
+          find data/market/raw -maxdepth 3 -type f | sort || true
 
       # 3) 从 raw 层构建 FS 四件套
       - name: Build market FS
@@ -119,6 +122,9 @@ jobs:
           TRADE_DATE: ${{ inputs.trade_date }}
         run: |
           set -e
+
+          echo "[fs] precheck raw tree:"
+          find data/market/raw -maxdepth 3 -type f | sort || true
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
             echo "[fs] build with manual trade_date=${TRADE_DATE}"
@@ -164,9 +170,8 @@ jobs:
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
 
-          # market raw 层（新增）
-          git add data/market/raw/*.csv || true
-          git add data/market/raw/*.json || true
+          # market raw 层（递归提交整棵目录树）
+          git add -A data/market/raw || true
 
           # market FS 四件套
           git add data/market/features_base_*.csv || true
