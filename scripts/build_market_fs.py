@@ -102,8 +102,8 @@ def _normalize_ts_code(v: Any) -> str | None:
     return s or None
 
 
-def _to_numeric(series: pd.Series) -> pd.Series:
-    return pd.to_numeric(series, errors="coerce")
+def _to_numeric(v: Any) -> pd.Series:
+    return pd.to_numeric(v, errors="coerce")
 
 
 def _pick_first_existing(df: pd.DataFrame, candidates: list[str], default=None):
@@ -173,62 +173,59 @@ def _ensure_keys(df: pd.DataFrame, trade_date_fallback: str) -> pd.DataFrame:
     return out
 
 
+def _merge_left(base: pd.DataFrame, extra: pd.DataFrame, on: list[str]) -> pd.DataFrame:
+    if base is None or base.empty:
+        return extra.copy() if extra is not None else pd.DataFrame()
+    if extra is None or extra.empty:
+        return base.copy()
+    return base.merge(extra, on=on, how="left")
+
+
 # -----------------------------
 # 各 raw 表标准化
 # -----------------------------
 def _std_daily(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
-    if df is None or df.empty:
-        return pd.DataFrame(columns=KEY_COLS)
-
-    out = df.copy()
-    out = _ensure_keys(out, trade_date)
-
-    alias_map = {
-        "name": ["name", "stock_name"],
-        "open": ["open"],
-        "high": ["high"],
-        "low": ["low"],
-        "close": ["close"],
-        "pre_close": ["pre_close", "prev_close"],
-        "pct_chg": ["pct_chg", "change_pct"],
-        "vol": ["vol", "volume"],
-        "amount": ["amount", "turnover"],
-    }
-
-    std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
-
-    for c in ["open", "high", "low", "close", "pre_close", "pct_chg", "vol", "amount"]:
-        if c in std.columns:
-            std[c] = _to_numeric(std[c])
-
-    return std
-
-
-def _std_daily_basic(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    已确认表头：
+    ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
+    """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
     out = _ensure_keys(df.copy(), trade_date)
-    alias_map = {
-        "turnover_rate": ["turnover_rate", "turnover_rate_f"],
-        "volume_ratio": ["volume_ratio"],
-        "total_mv": ["total_mv"],
-        "circ_mv": ["circ_mv"],
-        "pe_ttm": ["pe_ttm", "pe"],
-        "pb": ["pb"],
-    }
 
     std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
+    std["open"] = _to_numeric(out["open"]) if "open" in out.columns else None
+    std["high"] = _to_numeric(out["high"]) if "high" in out.columns else None
+    std["low"] = _to_numeric(out["low"]) if "low" in out.columns else None
+    std["close"] = _to_numeric(out["close"]) if "close" in out.columns else None
+    std["vol"] = _to_numeric(out["vol"]) if "vol" in out.columns else None
+    std["amount"] = _to_numeric(out["amount"]) if "amount" in out.columns else None
+    std["pct_chg"] = _to_numeric(out["pct_chg"]) if "pct_chg" in out.columns else None
 
-    for c in ["turnover_rate", "volume_ratio", "total_mv", "circ_mv", "pe_ttm", "pb"]:
-        if c in std.columns:
-            std[c] = _to_numeric(std[c])
+    # daily.csv 当前没有 pre_close，使用 close 和 pct_chg 反推
+    close = std["close"]
+    pct = std["pct_chg"]
+    std["pre_close_est"] = close / (1.0 + pct)
+    return std
+
+
+def _std_daily_basic(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    已确认表头：
+    ts_code, trade_date, turnover_rate, turnover_rate_f, volume_ratio, total_mv, float_mv
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+    std = out[KEY_COLS].copy()
+
+    std["turnover_rate"] = _to_numeric(out["turnover_rate"]) if "turnover_rate" in out.columns else None
+    std["turnover_rate_f"] = _to_numeric(out["turnover_rate_f"]) if "turnover_rate_f" in out.columns else None
+    std["volume_ratio"] = _to_numeric(out["volume_ratio"]) if "volume_ratio" in out.columns else None
+    std["total_mv"] = _to_numeric(out["total_mv"]) if "total_mv" in out.columns else None
+    std["float_mv"] = _to_numeric(out["float_mv"]) if "float_mv" in out.columns else None
 
     return std
 
@@ -249,92 +246,71 @@ def _std_stock_basic(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     out = out.dropna(subset=["ts_code"]).copy()
     out = out.drop_duplicates(subset=["ts_code"], keep="last").reset_index(drop=True)
 
-    alias_map = {
-        "name": ["name"],
-        "industry": ["industry"],
-        "market": ["market"],
-        "list_date": ["list_date"],
-    }
-
     std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
-
+    std["name"] = out["name"] if "name" in out.columns else None
+    std["industry"] = out["industry"] if "industry" in out.columns else None
+    std["market"] = out["market"] if "market" in out.columns else None
+    std["list_date"] = out["list_date"] if "list_date" in out.columns else None
     return std
 
 
 def _std_stk_limit(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    已确认表头：
+    ts_code, trade_date, up_limit, down_limit
+    """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
     out = _ensure_keys(df.copy(), trade_date)
-    alias_map = {
-        "up_limit": ["up_limit"],
-        "down_limit": ["down_limit"],
-    }
-
     std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
-
-    for c in ["up_limit", "down_limit"]:
-        if c in std.columns:
-            std[c] = _to_numeric(std[c])
-
+    std["up_limit"] = _to_numeric(out["up_limit"]) if "up_limit" in out.columns else None
+    std["down_limit"] = _to_numeric(out["down_limit"]) if "down_limit" in out.columns else None
     return std
 
 
 def _std_limit_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    已确认表头：
+    trade_date, ts_code, name, limit_type, close, up_limit, down_limit,
+    open_times, fd_amount, first_time, last_time, seal_amount
+    """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
     out = _ensure_keys(df.copy(), trade_date)
 
-    alias_map = {
-        "name": ["name"],
-        "limit_type": ["limit_type"],
-        "close": ["close"],
-        "up_limit": ["up_limit"],
-        "down_limit": ["down_limit"],
-        "first_seal_time": ["first_seal_time", "first_time"],
-        "last_seal_time": ["last_seal_time", "last_time"],
-        "open_times": ["open_times"],
-        "seal_amount": ["seal_amount", "fd_amount", "封单额"],
-    }
-
     std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
-
-    for c in ["close", "up_limit", "down_limit", "open_times", "seal_amount"]:
-        if c in std.columns:
-            std[c] = _to_numeric(std[c])
-
+    std["name"] = out["name"] if "name" in out.columns else None
+    std["limit_type"] = out["limit_type"] if "limit_type" in out.columns else None
+    std["close_limit"] = _to_numeric(out["close"]) if "close" in out.columns else None
+    std["up_limit_list"] = _to_numeric(out["up_limit"]) if "up_limit" in out.columns else None
+    std["down_limit_list"] = _to_numeric(out["down_limit"]) if "down_limit" in out.columns else None
+    std["open_times_limit"] = _to_numeric(out["open_times"]) if "open_times" in out.columns else None
+    std["fd_amount_limit"] = _to_numeric(out["fd_amount"]) if "fd_amount" in out.columns else None
+    std["first_time_limit"] = out["first_time"] if "first_time" in out.columns else None
+    std["last_time_limit"] = out["last_time"] if "last_time" in out.columns else None
+    std["seal_amount_limit"] = _to_numeric(out["seal_amount"]) if "seal_amount" in out.columns else None
     return std
 
 
 def _std_limit_break(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    已确认表头：
+    trade_date, ts_code, name, open_times, first_time, last_time, fd_amount, seal_amount
+    """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
     out = _ensure_keys(df.copy(), trade_date)
 
-    alias_map = {
-        "name": ["name"],
-        "break_count": ["break_count", "炸板次数", "open_times"],
-    }
-
     std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
-
-    if "break_count" in std.columns:
-        std["break_count"] = _to_numeric(std["break_count"])
-
+    std["name_break"] = out["name"] if "name" in out.columns else None
+    std["open_times_break"] = _to_numeric(out["open_times"]) if "open_times" in out.columns else None
+    std["first_time_break"] = out["first_time"] if "first_time" in out.columns else None
+    std["last_time_break"] = out["last_time"] if "last_time" in out.columns else None
+    std["fd_amount_break"] = _to_numeric(out["fd_amount"]) if "fd_amount" in out.columns else None
+    std["seal_amount_break"] = _to_numeric(out["seal_amount"]) if "seal_amount" in out.columns else None
     return std
 
 
@@ -343,8 +319,6 @@ def _std_limit_up_tags(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
         return pd.DataFrame(columns=KEY_COLS)
 
     out = _ensure_keys(df.copy(), trade_date)
-
-    # 兼容 tag / concept / reason 等可能列
     tag_col = _pick_first_existing(out, ["tag", "tags", "concept", "reason"])
     std = out[KEY_COLS].copy()
     std["limit_up_tags"] = out[tag_col].astype(str) if tag_col else None
@@ -353,22 +327,22 @@ def _std_limit_up_tags(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
 
 def _std_hot_boards(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     """
-    hot_boards 往往不是 ts_code 级，而是板块级。
-    这里先做 board -> hot_boards_score 的映射表。
+    已确认表头：
+    trade_date, industry, limit_up_count, rank
+
+    这里做行业热度映射：
+    industry -> board
+    limit_up_count -> hot_boards_score
+    rank -> board_crowding_rank
     """
     if df is None or df.empty:
-        return pd.DataFrame(columns=["board", "hot_boards_score", "board_crowding"])
+        return pd.DataFrame(columns=["board", "hot_boards_score", "board_crowding_rank"])
 
     out = df.copy()
-
-    board_col = _pick_first_existing(out, ["board", "name", "concept", "industry"])
-    score_col = _pick_first_existing(out, ["score", "hot_boards_score", "hot", "heat"])
-    crowd_col = _pick_first_existing(out, ["board_crowding", "crowding", "count", "num"])
-
     std = pd.DataFrame()
-    std["board"] = out[board_col].astype(str).str.strip() if board_col else None
-    std["hot_boards_score"] = _to_numeric(out[score_col]) if score_col else None
-    std["board_crowding"] = _to_numeric(out[crowd_col]) if crowd_col else None
+    std["board"] = out["industry"].astype(str).str.strip() if "industry" in out.columns else None
+    std["hot_boards_score"] = _to_numeric(out["limit_up_count"]) if "limit_up_count" in out.columns else None
+    std["board_crowding_rank"] = _to_numeric(out["rank"]) if "rank" in out.columns else None
 
     std = std.dropna(subset=["board"]).copy()
     std = std.drop_duplicates(subset=["board"], keep="last").reset_index(drop=True)
@@ -376,51 +350,59 @@ def _std_hot_boards(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
 
 
 def _std_top_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    已确认表头：
+    ts_code, trade_date, name, close, pct_change, turnover_rate, amount,
+    l_sell, l_buy, l_amount, net_amount, net_rate, amount_rate, float_values, reason
+    """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
     out = _ensure_keys(df.copy(), trade_date)
 
-    alias_map = {
-        "top_list_net_buy": ["net_buy", "net_buy_amount", "buy", "净买额"],
-    }
-
     std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
-
-    if "top_list_net_buy" in std.columns:
-        std["top_list_net_buy"] = _to_numeric(std["top_list_net_buy"])
-
+    std["name_top"] = out["name"] if "name" in out.columns else None
+    std["top_close"] = _to_numeric(out["close"]) if "close" in out.columns else None
+    std["top_pct_change"] = _to_numeric(out["pct_change"]) if "pct_change" in out.columns else None
+    std["top_turnover_rate"] = _to_numeric(out["turnover_rate"]) if "turnover_rate" in out.columns else None
+    std["top_amount"] = _to_numeric(out["amount"]) if "amount" in out.columns else None
+    std["l_sell"] = _to_numeric(out["l_sell"]) if "l_sell" in out.columns else None
+    std["l_buy"] = _to_numeric(out["l_buy"]) if "l_buy" in out.columns else None
+    std["l_amount"] = _to_numeric(out["l_amount"]) if "l_amount" in out.columns else None
+    std["top_list_net_buy"] = _to_numeric(out["net_amount"]) if "net_amount" in out.columns else None
+    std["top_net_rate"] = _to_numeric(out["net_rate"]) if "net_rate" in out.columns else None
+    std["amount_rate"] = _to_numeric(out["amount_rate"]) if "amount_rate" in out.columns else None
+    std["float_values"] = _to_numeric(out["float_values"]) if "float_values" in out.columns else None
+    std["top_reason"] = out["reason"] if "reason" in out.columns else None
     return std
 
 
-def _std_moneyflow_hsgt(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+def _std_moneyflow_hsgt_market(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     """
-    这张表不一定是个股级。
-    当前版本先尝试个股级映射；若无 ts_code，则返回空表。
+    已确认表头：
+    ts_code, trade_date, ggt_ss, ggt_sz, hgt, sgt, north_money, south_money
+
+    从你给的样例看，ts_code 可能为空，因此这张表按“市场级”处理：
+    trade_date -> north_money_market / south_money_market / hgt / sgt
     """
     if df is None or df.empty:
-        return pd.DataFrame(columns=KEY_COLS)
+        return pd.DataFrame(columns=["trade_date", "north_money_market", "south_money_market", "hgt_market", "sgt_market"])
 
-    ts_col = _pick_first_existing(df, ["ts_code", "code"])
-    if not ts_col:
-        return pd.DataFrame(columns=KEY_COLS)
+    out = df.copy()
+    if "trade_date" not in out.columns:
+        return pd.DataFrame(columns=["trade_date", "north_money_market", "south_money_market", "hgt_market", "sgt_market"])
 
-    out = _ensure_keys(df.copy(), trade_date)
-    alias_map = {
-        "northbound_net": ["northbound_net", "hsgt", "net_amount", "amount"],
-    }
+    out["trade_date"] = out["trade_date"].apply(lambda x: _normalize_trade_date(x, fallback=trade_date))
+    out = out.dropna(subset=["trade_date"]).copy()
 
-    std = out[KEY_COLS].copy()
-    for std_col, aliases in alias_map.items():
-        src = _pick_first_existing(out, aliases)
-        std[std_col] = out[src] if src else None
+    std = pd.DataFrame()
+    std["trade_date"] = out["trade_date"]
+    std["north_money_market"] = _to_numeric(out["north_money"]) if "north_money" in out.columns else None
+    std["south_money_market"] = _to_numeric(out["south_money"]) if "south_money" in out.columns else None
+    std["hgt_market"] = _to_numeric(out["hgt"]) if "hgt" in out.columns else None
+    std["sgt_market"] = _to_numeric(out["sgt"]) if "sgt" in out.columns else None
 
-    if "northbound_net" in std.columns:
-        std["northbound_net"] = _to_numeric(std["northbound_net"])
-
+    std = std.drop_duplicates(subset=["trade_date"], keep="last").reset_index(drop=True)
     return std
 
 
@@ -438,17 +420,9 @@ def load_raw_bundle(trade_date: str) -> dict[str, pd.DataFrame]:
         "limit_up_tags": _std_limit_up_tags(_load_raw_table("limit_up_tags", trade_date), trade_date),
         "hot_boards": _std_hot_boards(_load_raw_table("hot_boards", trade_date), trade_date),
         "top_list": _std_top_list(_load_raw_table("top_list", trade_date), trade_date),
-        "moneyflow_hsgt": _std_moneyflow_hsgt(_load_raw_table("moneyflow_hsgt", trade_date), trade_date),
-        "namechange": _load_raw_table("namechange", trade_date),  # 暂存原始，当前版本不直接入模
+        "moneyflow_hsgt_market": _std_moneyflow_hsgt_market(_load_raw_table("moneyflow_hsgt", trade_date), trade_date),
+        "namechange": _load_raw_table("namechange", trade_date),
     }
-
-
-def _outer_merge(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-    if left is None or left.empty:
-        return right.copy() if right is not None else pd.DataFrame()
-    if right is None or right.empty:
-        return left.copy()
-    return left.merge(right, on=KEY_COLS, how="outer")
 
 
 def build_master_table(bundle: dict[str, pd.DataFrame], trade_date: str) -> pd.DataFrame:
@@ -460,26 +434,30 @@ def build_master_table(bundle: dict[str, pd.DataFrame], trade_date: str) -> pd.D
     limit_break_d = bundle.get("limit_break_d", pd.DataFrame())
     limit_up_tags = bundle.get("limit_up_tags", pd.DataFrame())
     top_list = bundle.get("top_list", pd.DataFrame())
-    moneyflow_hsgt = bundle.get("moneyflow_hsgt", pd.DataFrame())
 
-    master = pd.DataFrame(columns=KEY_COLS)
-    for tbl in [daily, daily_basic, stock_basic, stk_limit, limit_list_d, limit_break_d, limit_up_tags, top_list, moneyflow_hsgt]:
-        master = _outer_merge(master, tbl)
-
-    if master.empty:
+    if daily is None or daily.empty:
         return pd.DataFrame(columns=KEY_COLS)
+
+    master = daily.copy()
+    for tbl in [daily_basic, stock_basic, stk_limit, limit_list_d, limit_break_d, limit_up_tags, top_list]:
+        master = _merge_left(master, tbl, on=KEY_COLS)
 
     # 补 board / industry
     if "industry" in master.columns and "board" not in master.columns:
         master["board"] = master["industry"]
 
-    # hot_boards 是板块级映射，单独 merge
+    # 板块热度映射
     hot_boards = bundle.get("hot_boards", pd.DataFrame())
     if hot_boards is not None and not hot_boards.empty and "board" in master.columns:
         master["board"] = master["board"].astype(str).str.strip()
         master = master.merge(hot_boards, on="board", how="left")
 
-    # 补 trade_date / ts_code 清洗
+    # 市场级资金流按 trade_date 广播
+    money_market = bundle.get("moneyflow_hsgt_market", pd.DataFrame())
+    if money_market is not None and not money_market.empty:
+        master = master.merge(money_market, on="trade_date", how="left")
+
+    # 统一关键字段
     master["trade_date"] = master["trade_date"].apply(lambda x: _normalize_trade_date(x, fallback=trade_date))
     master["ts_code"] = master["ts_code"].apply(_normalize_ts_code)
     master = master.dropna(subset=["trade_date", "ts_code"]).copy()
@@ -499,24 +477,30 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     out["name"] = df.get("name")
     out["board"] = df.get("board")
 
-    for c in ["open", "high", "low", "close", "pre_close", "pct_chg"]:
-        out[c] = df.get(c)
+    # 基础行情
+    out["open"] = _to_numeric(df.get("open"))
+    out["high"] = _to_numeric(df.get("high"))
+    out["low"] = _to_numeric(df.get("low"))
+    out["close"] = _to_numeric(df.get("close"))
+    out["pct_chg"] = _to_numeric(df.get("pct_chg"))
+
+    # daily.csv 没有 pre_close，反推
+    out["pre_close_est"] = _to_numeric(df.get("pre_close_est"))
 
     # 收益与价格行为
-    out["returns_1d"] = df.get("pct_chg")
-    if "returns_1d" in out.columns:
-        out["returns_1d"] = _to_numeric(out["returns_1d"]) / 100.0
-
-    out["high_low_range"] = (_to_numeric(df.get("high")) - _to_numeric(df.get("low"))) / _to_numeric(df.get("pre_close"))
-    out["candle_body"] = (_to_numeric(df.get("close")) - _to_numeric(df.get("open"))) / _to_numeric(df.get("pre_close"))
-    out["gap_open"] = (_to_numeric(df.get("open")) - _to_numeric(df.get("pre_close"))) / _to_numeric(df.get("pre_close"))
+    out["returns_1d"] = out["pct_chg"]
+    pre = out["pre_close_est"]
+    out["high_low_range"] = (out["high"] - out["low"]) / pre
+    out["candle_body"] = (out["close"] - out["open"]) / pre
+    out["gap_open"] = (out["open"] - pre) / pre
 
     # 流动性
     out["vol"] = _to_numeric(df.get("vol"))
     out["amount"] = _to_numeric(df.get("amount"))
     out["turnover_rate"] = _to_numeric(df.get("turnover_rate"))
+    out["turnover_rate_f"] = _to_numeric(df.get("turnover_rate_f"))
     out["volume_ratio"] = _to_numeric(df.get("volume_ratio"))
-    out["amihud_illiquidity"] = ((_to_numeric(df.get("pct_chg")).abs() / 100.0) / _to_numeric(df.get("amount")))
+    out["amihud_illiquidity"] = out["pct_chg"].abs() / out["amount"]
 
     # 波动骨架：当前仍无历史窗口，先保留占位
     out["volatility_5d"] = None
@@ -529,22 +513,27 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
 
     # 估值市值
     out["total_mv"] = _to_numeric(df.get("total_mv"))
-    out["circ_mv"] = _to_numeric(df.get("circ_mv"))
+    out["float_mv"] = _to_numeric(df.get("float_mv"))
     out["pe_ttm"] = _to_numeric(df.get("pe_ttm"))
     out["pb"] = _to_numeric(df.get("pb"))
 
     # 资金流/情绪
-    out["moneyflow"] = _to_numeric(df.get("moneyflow"))
-    out["northbound_net"] = _to_numeric(df.get("northbound_net"))
-    out["market_regime"] = df.get("market_regime")
+    out["north_money_market"] = _to_numeric(df.get("north_money_market"))
+    out["south_money_market"] = _to_numeric(df.get("south_money_market"))
+    out["hgt_market"] = _to_numeric(df.get("hgt_market"))
+    out["sgt_market"] = _to_numeric(df.get("sgt_market"))
+    out["market_regime"] = None
 
     # 题材热度
     out["hot_boards_score"] = _to_numeric(df.get("hot_boards_score"))
-    out["board_crowding"] = _to_numeric(df.get("board_crowding"))
+    out["board_crowding_rank"] = _to_numeric(df.get("board_crowding_rank"))
 
     # 龙虎榜/异动
     out["top_list_net_buy"] = _to_numeric(df.get("top_list_net_buy"))
-    out["abnormal_volume"] = _to_numeric(df.get("abnormal_volume"))
+    out["top_net_rate"] = _to_numeric(df.get("top_net_rate"))
+    out["amount_rate"] = _to_numeric(df.get("amount_rate"))
+    out["float_values"] = _to_numeric(df.get("float_values"))
+    out["abnormal_volume"] = _to_numeric(df.get("amount_rate"))
 
     # 多周期占位
     out["ret_2d"] = None
@@ -563,12 +552,22 @@ def build_features_limit(df: pd.DataFrame) -> pd.DataFrame:
     out = df[KEY_COLS].copy()
     out["name"] = df.get("name")
 
+    # limit_list_d 为主
     out["limit_type"] = df.get("limit_type")
-    out["open_times"] = _to_numeric(df.get("open_times"))
-    out["seal_amount"] = _to_numeric(df.get("seal_amount"))
-    out["first_seal_time"] = df.get("first_seal_time")
-    out["last_seal_time"] = df.get("last_seal_time")
-    out["break_count"] = _to_numeric(df.get("break_count"))
+    out["open_times"] = _to_numeric(df.get("open_times_limit"))
+    out["fd_amount"] = _to_numeric(df.get("fd_amount_limit"))
+    out["seal_amount"] = _to_numeric(df.get("seal_amount_limit"))
+    out["first_seal_time"] = df.get("first_time_limit")
+    out["last_seal_time"] = df.get("last_time_limit")
+
+    # limit_break_d 补充
+    out["open_times_break"] = _to_numeric(df.get("open_times_break"))
+    out["fd_amount_break"] = _to_numeric(df.get("fd_amount_break"))
+    out["seal_amount_break"] = _to_numeric(df.get("seal_amount_break"))
+    out["first_time_break"] = df.get("first_time_break")
+    out["last_time_break"] = df.get("last_time_break")
+
+    # 涨跌停
     out["up_limit"] = _to_numeric(df.get("up_limit"))
     out["down_limit"] = _to_numeric(df.get("down_limit"))
     out["limit_up_tags"] = df.get("limit_up_tags")
@@ -577,16 +576,22 @@ def build_features_limit(df: pd.DataFrame) -> pd.DataFrame:
     up_limit = _to_numeric(df.get("up_limit"))
     out["is_limit_up"] = (close >= up_limit).astype("float")
 
+    # break_count 当前原始表没有直接字段，先做保守代理：
+    # 有 limit_break_d 记录则视作 break_count>=1；否则为0
+    break_exists = _to_numeric(df.get("open_times_break")).fillna(0.0)
+    out["break_count_proxy"] = (break_exists > 0).astype(float)
+
     score = pd.Series(0.0, index=df.index)
-    ot = _to_numeric(df.get("open_times")).fillna(0.0)
+
+    ot = out["open_times"].fillna(0.0)
     score += 1.0 / (1.0 + ot)
 
-    sa = _to_numeric(df.get("seal_amount")).fillna(0.0)
+    sa = out["seal_amount"].fillna(0.0)
     max_sa = sa.max()
     if pd.notna(max_sa) and max_sa > 0:
         score += sa / max_sa
 
-    bc = _to_numeric(df.get("break_count")).fillna(0.0)
+    bc = out["break_count_proxy"].fillna(0.0)
     score += 1.0 / (1.0 + bc)
 
     out["limit_up_strength"] = score.replace([float("inf"), -float("inf")], pd.NA)
@@ -601,7 +606,7 @@ def build_truth_close(df: pd.DataFrame) -> pd.DataFrame:
     out = df[KEY_COLS].copy()
     out["name"] = df.get("name")
     out["close"] = _to_numeric(df.get("close"))
-    out["pre_close"] = _to_numeric(df.get("pre_close"))
+    out["pre_close_est"] = _to_numeric(df.get("pre_close_est"))
     out["pct_chg"] = _to_numeric(df.get("pct_chg"))
     out["up_limit"] = _to_numeric(df.get("up_limit"))
     out["down_limit"] = _to_numeric(df.get("down_limit"))
@@ -645,17 +650,25 @@ def _coverage_stats(df: pd.DataFrame, required_cols: list[str]) -> dict[str, Any
 def _raw_input_stats(bundle: dict[str, pd.DataFrame], trade_date: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for stem, df in bundle.items():
-        path = _raw_path(stem, trade_date)
+        if stem == "moneyflow_hsgt_market":
+            path = _raw_path("moneyflow_hsgt", trade_date)
+        elif stem == "namechange":
+            path = _raw_path("namechange", trade_date)
+        else:
+            path = _raw_path(stem, trade_date)
+
         out[stem] = {
             "path": str(path),
             "loaded": bool(df is not None and not df.empty),
             "rows": int(len(df)) if df is not None and not df.empty else 0,
             "columns": list(df.columns) if df is not None and not df.empty else [],
         }
+
     meta_path = RAW_DIR / f"_sync_meta_{trade_date}.json"
     out["_sync_meta"] = {
         "path": str(meta_path),
         "loaded": meta_path.exists(),
+        "content": _safe_json_load(meta_path) if meta_path.exists() else {},
     }
     return out
 
@@ -669,18 +682,18 @@ def build_meta(
     truth_df: pd.DataFrame,
 ) -> dict[str, Any]:
     base_required = [
-        "open", "high", "low", "close", "pre_close", "returns_1d",
+        "open", "high", "low", "close", "pre_close_est", "returns_1d",
         "vol", "amount", "turnover_rate", "volume_ratio",
         "volatility_5d", "volatility_10d", "volatility_20d",
-        "total_mv", "circ_mv", "pe_ttm", "pb",
-        "moneyflow", "northbound_net",
-        "hot_boards_score", "board_crowding",
+        "total_mv", "float_mv", "pe_ttm",
+        "north_money_market", "south_money_market",
+        "hot_boards_score", "board_crowding_rank",
     ]
     limit_required = [
         "is_limit_up", "limit_type", "open_times", "seal_amount",
-        "first_seal_time", "last_seal_time", "break_count", "limit_up_strength",
+        "first_seal_time", "last_seal_time", "break_count_proxy", "limit_up_strength",
     ]
-    truth_required = ["close", "pre_close", "pct_chg"]
+    truth_required = ["close", "pre_close_est", "pct_chg"]
 
     sha = os.getenv("GITHUB_SHA", "")
     base_stats = _coverage_stats(base_df, base_required)
@@ -696,7 +709,7 @@ def build_meta(
         "trade_date": trade_date,
         "created_at_utc": _now_utc(),
         "commit_sha": sha,
-        "fs_version": "v0.2-raw-driven",
+        "fs_version": "v0.3-real-header-mapped",
         "richness_target": 0.75,
         "richness_estimate": richness_estimate,
         "raw_inputs": _raw_input_stats(bundle, trade_date),
@@ -707,9 +720,10 @@ def build_meta(
             "truth_close": truth_stats,
         },
         "notes": [
-            "当前版本已从 data/market/raw/ 多源原始文件构建 FS。",
-            "已接入 daily / daily_basic / stock_basic / stk_limit / limit_list_d / limit_break_d / limit_up_tags / hot_boards / top_list / moneyflow_hsgt。",
-            "多日滚动波动、ATR、回撤等历史窗口特征仍为后续增强项。",
+            "本版本已按真实上游表头修正 raw -> FS 的字段映射。",
+            "daily.csv 无 pre_close，当前使用 close 和 pct_chg 反推 pre_close_est。",
+            "moneyflow_hsgt 当前按市场级数据处理，并按 trade_date 广播到个股特征层。",
+            "break_count 当前无直接原始字段，暂用 break_count_proxy 作为保守代理。",
         ],
     }
 
