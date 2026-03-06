@@ -136,7 +136,7 @@ def _build_candidate_urls(owner: str, repo: str, branch: str, filename: str, tra
 
 def _http_get_text(url: str, token: str | None = None) -> tuple[bool, str, int]:
     headers = {
-        "User-Agent": "top10-decision-sync-market-raw/1.1",
+        "User-Agent": "top10-decision-sync-market-raw/1.2",
         "Accept": "text/plain,application/json;q=0.9,*/*;q=0.8",
     }
     if token:
@@ -246,6 +246,29 @@ def _build_meta_dated_path(trade_date: str) -> Path:
 
 def _build_meta_latest_path() -> Path:
     return _latest_dir() / "_sync_meta.json"
+
+
+def _legacy_flat_candidates(trade_date: str) -> list[Path]:
+    paths: list[Path] = [
+        RAW_DIR / f"_sync_meta_{trade_date}.json",
+        RAW_DIR / "_sync_meta_latest.json",
+    ]
+    for spec in SOURCE_SPECS:
+        paths.append(RAW_DIR / f"{spec.local_stem}_{trade_date}.csv")
+        paths.append(RAW_DIR / f"{spec.local_stem}_latest.csv")
+    return paths
+
+
+def _cleanup_legacy_flat_files(trade_date: str) -> list[str]:
+    removed: list[str] = []
+    for path in _legacy_flat_candidates(trade_date):
+        try:
+            if path.exists() and path.is_file():
+                path.unlink()
+                removed.append(str(path))
+        except Exception:
+            pass
+    return removed
 
 
 def parse_args() -> argparse.Namespace:
@@ -378,6 +401,8 @@ def main() -> int:
             write_failures.append(spec.local_stem)
             enriched_results.append(item)
 
+    legacy_removed = _cleanup_legacy_flat_files(resolved_trade_date)
+
     sync_meta = {
         "trade_date": resolved_trade_date,
         "created_at_utc": _now_utc(),
@@ -396,6 +421,11 @@ def main() -> int:
         "files": enriched_results,
         "required_failures": sorted(set(required_failures)),
         "write_failures": sorted(set(write_failures)),
+        "legacy_cleanup": {
+            "enabled": True,
+            "removed_files": legacy_removed,
+            "removed_count": len(legacy_removed),
+        },
         "summary": {
             "success_count": sum(1 for x in enriched_results if x.get("success")),
             "failure_count": sum(1 for x in enriched_results if not x.get("success")),
@@ -421,6 +451,13 @@ def main() -> int:
             f"dated={item.get('dated_path', '')} "
             f"latest={item.get('latest_path', '')}"
         )
+
+    if legacy_removed:
+        print(f"[sync_market_raw] legacy_flat_removed_count={len(legacy_removed)}")
+        for p in legacy_removed:
+            print(f"[sync_market_raw] legacy_flat_removed={p}")
+    else:
+        print("[sync_market_raw] legacy_flat_removed_count=0")
 
     print(f"[sync_market_raw] meta_dated={meta_dated_path}")
     print(f"[sync_market_raw] meta_latest={meta_latest_path}")
