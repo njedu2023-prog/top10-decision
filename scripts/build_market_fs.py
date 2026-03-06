@@ -663,7 +663,10 @@ def build_features_limit(df: pd.DataFrame) -> pd.DataFrame:
     out["is_limit_up"] = (close >= up_limit).astype("float")
 
     # 保守代理：有 break 记录视作 break>=1
-    break_exists = _to_numeric(df.get("open_times_break")).fillna(0.0)
+    # 注意：这里必须从 out 中取列，而不是再次对 df.get(...) 直接 fillna。
+    # 当 df 中该列不存在时，df.get(...) 可能返回标量 NaN，进而触发
+    # AttributeError: "numpy.float64" object has no attribute "fillna"。
+    break_exists = out["open_times_break"].fillna(0.0)
     out["break_count_proxy"] = (break_exists > 0).astype(float)
 
     score = pd.Series(0.0, index=df.index)
