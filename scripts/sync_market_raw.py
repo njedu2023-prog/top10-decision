@@ -6,9 +6,13 @@ sync_market_raw.py
 
 目标：
 - 从 a-share-top3-data 仓库同步 market 原始多源文件
-- 落到本仓库 data/market/raw/ 目录
-- 保存 dated 文件 + latest 文件
-- 记录同步审计 _sync_meta_{trade_date}.json
+- 按日期分目录落到本仓库：
+    data/market/raw/{YYYY}/{YYYYMMDD}/{filename}
+- 同时维护 latest 镜像目录：
+    data/market/raw/latest/{filename}
+- 记录同步审计：
+    data/market/raw/{YYYY}/{YYYYMMDD}/_sync_meta.json
+    data/market/raw/latest/_sync_meta.json
 
 已确认的上游主路径结构：
 - data/raw/{YYYY}/{YYYYMMDD}/{filename}
@@ -39,6 +43,7 @@ import requests
 
 
 RAW_DIR = Path("data/market/raw")
+LATEST_DIR_NAME = "latest"
 TIMEOUT = 20
 
 
@@ -92,11 +97,6 @@ def _base_raw_url(owner: str, repo: str, branch: str) -> str:
     return f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}"
 
 
-def _build_primary_relpath(filename: str, trade_date: str) -> str:
-    year = _trade_year(trade_date)
-    return f"data/raw/{year}/{trade_date}/{filename}"
-
-
 def _build_fallback_relpaths(filename: str, trade_date: str | None) -> list[str]:
     """
     主路径已确认，但仍保留少量兜底，便于上游结构微调时不至于完全失效。
@@ -136,7 +136,7 @@ def _build_candidate_urls(owner: str, repo: str, branch: str, filename: str, tra
 
 def _http_get_text(url: str, token: str | None = None) -> tuple[bool, str, int]:
     headers = {
-        "User-Agent": "top10-decision-sync-market-raw/1.0",
+        "User-Agent": "top10-decision-sync-market-raw/1.1",
         "Accept": "text/plain,application/json;q=0.9,*/*;q=0.8",
     }
     if token:
@@ -203,10 +203,12 @@ def _infer_trade_date_from_meta(meta: dict[str, Any]) -> str | None:
 
 
 def _write_text(path: Path, text: str) -> None:
+    _ensure_dir(path.parent)
     path.write_text(text, encoding="utf-8")
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    _ensure_dir(path.parent)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -222,12 +224,28 @@ def _load_upstream_meta(owner: str, repo: str, branch: str, trade_date: str | No
         return {}, hit_url
 
 
-def _build_dated_path(local_stem: str, trade_date: str) -> Path:
-    return RAW_DIR / f"{local_stem}_{trade_date}.csv"
+def _dated_dir(trade_date: str) -> Path:
+    return RAW_DIR / _trade_year(trade_date) / trade_date
 
 
-def _build_latest_path(local_stem: str) -> Path:
-    return RAW_DIR / f"{local_stem}_latest.csv"
+def _latest_dir() -> Path:
+    return RAW_DIR / LATEST_DIR_NAME
+
+
+def _build_dated_path(upstream_name: str, trade_date: str) -> Path:
+    return _dated_dir(trade_date) / upstream_name
+
+
+def _build_latest_path(upstream_name: str) -> Path:
+    return _latest_dir() / upstream_name
+
+
+def _build_meta_dated_path(trade_date: str) -> Path:
+    return _dated_dir(trade_date) / "_sync_meta.json"
+
+
+def _build_meta_latest_path() -> Path:
+    return _latest_dir() / "_sync_meta.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -260,7 +278,6 @@ def main() -> int:
     results: list[dict[str, Any]] = []
     required_failures: list[str] = []
 
-    # 先拉一次 daily，用于在未显式传 trade_date 时推断日期
     daily_cache_text: str | None = None
     daily_cache_url: str | None = None
 
@@ -293,6 +310,7 @@ def main() -> int:
 
             results.append({
                 "name": spec.local_stem,
+                "upstream_name": spec.upstream_name,
                 "required": spec.required,
                 "success": True,
                 "source_url": hit_url,
@@ -302,6 +320,7 @@ def main() -> int:
         else:
             results.append({
                 "name": spec.local_stem,
+                "upstream_name": spec.upstream_name,
                 "required": spec.required,
                 "success": False,
                 "source_url": "",
@@ -317,6 +336,11 @@ def main() -> int:
 
     write_failures: list[str] = []
     enriched_results: list[dict[str, Any]] = []
+
+    target_dated_dir = _dated_dir(resolved_trade_date)
+    target_latest_dir = _latest_dir()
+    _ensure_dir(target_dated_dir)
+    _ensure_dir(target_latest_dir)
 
     for item in results:
         spec = next(s for s in SOURCE_SPECS if s.local_stem == item["name"])
@@ -336,8 +360,8 @@ def main() -> int:
             enriched_results.append(item)
             continue
 
-        dated_path = _build_dated_path(spec.local_stem, resolved_trade_date)
-        latest_path = _build_latest_path(spec.local_stem)
+        dated_path = _build_dated_path(spec.upstream_name, resolved_trade_date)
+        latest_path = _build_latest_path(spec.upstream_name)
 
         try:
             _write_text(dated_path, text)
@@ -364,6 +388,8 @@ def main() -> int:
         },
         "requested_trade_date": trade_date,
         "resolved_trade_date": resolved_trade_date,
+        "raw_storage_pattern": "data/market/raw/{YYYY}/{YYYYMMDD}/{filename}",
+        "raw_latest_pattern": "data/market/raw/latest/{filename}",
         "upstream_primary_pattern": "data/raw/{YYYY}/{YYYYMMDD}/{filename}",
         "upstream_meta_url": upstream_meta_url or "",
         "upstream_meta": upstream_meta,
@@ -377,22 +403,27 @@ def main() -> int:
         },
     }
 
-    meta_dated_path = RAW_DIR / f"_sync_meta_{resolved_trade_date}.json"
-    meta_latest_path = RAW_DIR / "_sync_meta_latest.json"
+    meta_dated_path = _build_meta_dated_path(resolved_trade_date)
+    meta_latest_path = _build_meta_latest_path()
     _write_json(meta_dated_path, sync_meta)
     _write_json(meta_latest_path, sync_meta)
 
     print(f"[sync_market_raw] resolved_trade_date={resolved_trade_date}")
     print(f"[sync_market_raw] source_repo={owner}/{repo}@{branch}")
+    print(f"[sync_market_raw] dated_dir={target_dated_dir}")
+    print(f"[sync_market_raw] latest_dir={target_latest_dir}")
+
     for item in enriched_results:
         status = "OK" if item.get("success") else "FAIL"
         print(
             f"[sync_market_raw] {status} {item['name']} "
             f"url={item.get('source_url', '')} "
-            f"dated={item.get('dated_path', '')}"
+            f"dated={item.get('dated_path', '')} "
+            f"latest={item.get('latest_path', '')}"
         )
 
-    print(f"[sync_market_raw] meta={meta_dated_path}")
+    print(f"[sync_market_raw] meta_dated={meta_dated_path}")
+    print(f"[sync_market_raw] meta_latest={meta_latest_path}")
 
     if required_failures:
         print(f"[sync_market_raw] ERROR: required files missing -> {sorted(set(required_failures))}")
