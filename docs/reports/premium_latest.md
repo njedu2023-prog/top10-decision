@@ -5,7 +5,7 @@
 - 预测日（T）：**20260306**
 - 预测到期日（T+2）：**20260310**
 - 周期：**2 个交易日（T→T+2）**
-- 生成时间：2026-03-06T14:01:42Z
+- 生成时间：2026-03-06T17:08:32Z
 - 模型版本：**premium_v2**
 
 ## 预测表（Top30）
@@ -1219,12 +1219,12 @@
 
 ---
 ## 审计（Factor Packs / Degrade）
-- degrade_mode: **degraded**
-- packs_used: `Pack0, Pack2`
-- packs_missing: `Pack1`
+- degrade_mode: **full**
+- packs_used: `Pack0, Pack1, Pack2`
+- packs_missing: `-`
 
 ### notes
 - 01. Pack0 baseline always on
-- 02. Pack1 disabled: market cache missing -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260306.csv
+- 02. Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260306.csv
 - 03. Pack2 enabled (soft mode, fixed)
 

@@ -1,8 +1,8 @@
 trade_date: 20260306
-run_id: gh_22766678787
-commit_sha: 134c4c396ae0
+run_id: gh_22773724052
+commit_sha: 2bd1f1c52f6e
 model_version: premium_v2
-created_at_utc: 2026-03-06T14:01:42Z
+created_at_utc: 2026-03-06T17:08:32Z
 ok: True
 target_date: 20260310
 pending: True
@@ -15,10 +15,10 @@ out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premi
 out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260306.csv
 out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260306.csv
 report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260306.md
-degrade_mode: degraded
-packs_used: ['Pack0', 'Pack2']
-packs_missing: ['Pack1']
+degrade_mode: full
+packs_used: ['Pack0', 'Pack1', 'Pack2']
+packs_missing: []
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 disabled: market cache missing -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260306.csv', 'Pack2 enabled (soft mode, fixed)']
+notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260306.csv', 'Pack2 enabled (soft mode, fixed)']
 extra_prefix: factor
