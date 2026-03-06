@@ -11,15 +11,24 @@ top10-decision — V2 runner (Orchestrator Only)
 4) models 只算分数/概率：src/top10decision/models/*
 5) 写文件只在 writers：src/top10decision/writers/*
 6) run_v2.py 只编排：不再包含业务细节函数
+
+本次升级：
+- 优先使用 ingest.build_model_input() 读取 pred + FS 的统一输入
+- 若 FS 缺失，则自动降级回 pred_only
+- 将输入层状态写入 report / eval，便于审计
 """
 
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List
 
 import pandas as pd
 
-from top10decision.ingest import load_pred_snapshot
+from top10decision.ingest import (
+    build_model_input,
+    get_input_status,
+    load_pred_snapshot,
+)
 from top10decision.regime.simple_regime import simple_regime
 from top10decision.risk.guardrails import guardrails
 from top10decision.strategies.score_router import score_router
@@ -30,7 +39,11 @@ from top10decision.models.costs import cost_estimate_rule, risk_penalty_rule
 
 from top10decision.weights.engine import WeightCaps, build_weights_with_backups
 
-from top10decision.writers.filesystem import ensure_dirs, ensure_execution_table, ensure_learning_table
+from top10decision.writers.filesystem import (
+    ensure_dirs,
+    ensure_execution_table,
+    ensure_learning_table,
+)
 from top10decision.writers.artifacts import (
     write_candidates_snapshot,
     write_weights,
@@ -38,30 +51,113 @@ from top10decision.writers.artifacts import (
     build_signal_df_for_joinquant,
 )
 from top10decision.writers.reports import write_decision_report, write_eval_json
-from top10decision.writers.io_contract import TOPK_DEFAULT, TOPN_DEFAULT, W_MAX_DEFAULT, THEME_CAP_DEFAULT, GROSS_CAP_DEFAULT
-from top10decision.writers.io_contract import norm_ymd, get_first_value, choose_exec_date, fmt_num
+from top10decision.writers.io_contract import (
+    TOPK_DEFAULT,
+    TOPN_DEFAULT,
+    W_MAX_DEFAULT,
+    THEME_CAP_DEFAULT,
+    GROSS_CAP_DEFAULT,
+)
+from top10decision.writers.io_contract import (
+    norm_ymd,
+    get_first_value,
+    choose_exec_date,
+    fmt_num,
+)
+
+
+def _ensure_required_cols(df: pd.DataFrame, required_cols: list[str]) -> None:
+    if df is None or df.empty:
+        raise RuntimeError("输入数据为空，无法继续运行。")
+    for c in required_cols:
+        if c not in df.columns:
+            raise RuntimeError(f"缺少必要字段 {c}，请检查 ingest / adapter / pred_source_latest 输入链路。")
+
+
+def _build_input_bundle() -> tuple[pd.DataFrame, dict[str, Any], str, str]:
+    """
+    返回：
+    - input_df: 本轮实际使用的输入表
+    - input_status: ingest 层状态
+    - input_mode: pred_plus_fs / pred_only
+    - fs_degrade_reason: 降级原因
+    """
+    input_status = get_input_status()
+    merged_df = build_model_input(include_limit=True, include_truth=False)
+
+    fs_base_loaded = bool(input_status.get("features_base_loaded", False))
+    fs_limit_loaded = bool(input_status.get("features_limit_loaded", False))
+
+    if merged_df is not None and not merged_df.empty and fs_base_loaded:
+        input_mode = "pred_plus_fs"
+        fs_degrade_reason = ""
+        input_df = merged_df.copy()
+    else:
+        input_df = load_pred_snapshot()
+        input_mode = "pred_only"
+        missing_parts = []
+        if not fs_base_loaded:
+            missing_parts.append("features_base_missing")
+        if not fs_limit_loaded:
+            missing_parts.append("features_limit_missing")
+        fs_degrade_reason = ",".join(missing_parts) if missing_parts else "merged_input_unavailable"
+
+    if input_df is None or input_df.empty:
+        raise RuntimeError("ingest 返回空数据：pred / FS 输入均为空或不可读。")
+
+    return input_df, input_status, input_mode, fs_degrade_reason
+
+
+def _prepare_runtime_input(input_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    运行前最小清洗：
+    - 保障必要字段
+    - 尽量按单一 trade_date 过滤
+    """
+    _ensure_required_cols(input_df, ["ts_code", "name"])
+
+    out = input_df.copy()
+
+    if "trade_date" in out.columns:
+        td_vals = (
+            out["trade_date"]
+            .dropna()
+            .astype(str)
+            .str.replace(r"\.0$", "", regex=True)
+            .str.strip()
+        )
+        td_vals = td_vals[td_vals != ""]
+        if not td_vals.empty:
+            mode_vals = td_vals.mode()
+            trade_date = str(mode_vals.iloc[0]) if len(mode_vals) > 0 else str(td_vals.max())
+            filtered = out.loc[out["trade_date"].astype(str).str.replace(r"\.0$", "", regex=True) == trade_date].copy()
+            if not filtered.empty:
+                out = filtered
+
+    return out
 
 
 def main() -> int:
     ensure_dirs()
 
-    # ✅ 唯一入口：只读固定快照 data/pred/pred_source_latest.csv
-    pred_df = load_pred_snapshot()
-    if pred_df is None or pred_df.empty:
-        raise RuntimeError("ingest 返回空数据：data/pred/pred_source_latest.csv 为空或不可读。")
-
-    # 基础字段保障（入口已做适配，但这里再做显式保护，避免 silent）
-    for c in ("ts_code", "name"):
-        if c not in pred_df.columns:
-            raise RuntimeError(f"缺少必要字段 {c}，请检查 pred_source_latest.csv 以及 decisio_adapter 映射。")
+    # ✅ 唯一入口：统一通过 ingest 层取数
+    input_df, input_status, input_mode, fs_degrade_reason = _build_input_bundle()
+    input_df = _prepare_runtime_input(input_df)
 
     # 日志：用于验收“是否仍在吃 Top10(10行)”
-    n_rows = int(len(pred_df))
+    n_rows = int(len(input_df))
     if 0 < n_rows <= TOPN_DEFAULT:
-        print(f"[WARN] pred_df rows={n_rows} <= TOPN({TOPN_DEFAULT}). 这通常意味着数据源仍是 Top10（10行）而非 decisio 全量。")
+        print(
+            f"[WARN] input_df rows={n_rows} <= TOPN({TOPN_DEFAULT}). "
+            "这通常意味着数据源仍是 Top10（10行）而非 decisio 全量。"
+        )
 
-    reg = simple_regime(pred_df)
-    gr = guardrails(pred_df)
+    print(f"[run_v2] input_mode={input_mode}")
+    if fs_degrade_reason:
+        print(f"[run_v2] fs_degrade_reason={fs_degrade_reason}")
+
+    reg = simple_regime(input_df)
+    gr = guardrails(input_df)
 
     regime_name = str(getattr(reg, "regime", "RISK_ON"))
     risk_budget = float(getattr(reg, "risk_budget", 1.0))
@@ -70,9 +166,9 @@ def main() -> int:
     gr_topk = int(getattr(gr, "topk", TOPK_DEFAULT)) if hasattr(gr, "topk") else TOPK_DEFAULT
     if gr_topk <= 0:
         gr_topk = TOPK_DEFAULT
-    topk = min(max(10, gr_topk), max(10, len(pred_df)))
+    topk = min(max(10, gr_topk), max(10, len(input_df)))
 
-    routed_df = score_router(pred_df).head(topk).copy()
+    routed_df = score_router(input_df).head(topk).copy()
 
     trade_date = get_first_value(routed_df, "trade_date")
     target_trade_date = get_first_value(routed_df, "target_trade_date")
@@ -95,17 +191,44 @@ def main() -> int:
         cand_snapshot["cost_est"] = cost_estimate_rule()
         cand_snapshot["risk_penalty"] = risk_penalty_rule(regime_name)
         cand_snapshot["ev_pred"] = 0.0
+        cand_snapshot["input_mode"] = input_mode
+        cand_snapshot["fs_degrade_reason"] = fs_degrade_reason
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
 
-        weights_df = pd.DataFrame(columns=["exec_date", "ts_code", "name", "weight", "target_rank", "backup_rank", "ev_pred"])
+        weights_df = pd.DataFrame(
+            columns=["exec_date", "ts_code", "name", "weight", "target_rank", "backup_rank", "ev_pred"]
+        )
         weights_latest_path, weights_dated_path = write_weights(weights_df, exec_date=exec_date)
 
-        report_path = write_decision_report(exec_date, f"# Decision Report ({exec_date or 'unknown'})\n\n**停手：{stop_note}**\n")
-        eval_path = write_eval_json(exec_date, {"exec_date": exec_date, "signal_date": trade_date, "stop_trading": True, "reason": stop_note})
+        report_lines: List[str] = []
+        report_lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
+        report_lines.append(f"**停手：{stop_note}**\n\n")
+        report_lines.append("## Input Status\n\n")
+        report_lines.append(f"- input_mode: **{input_mode}**\n")
+        report_lines.append(f"- fs_degrade_reason: **{fs_degrade_reason or 'none'}**\n")
+        report_lines.append(f"- pred_loaded: **{input_status.get('pred_loaded', False)}**\n")
+        report_lines.append(f"- features_base_loaded: **{input_status.get('features_base_loaded', False)}**\n")
+        report_lines.append(f"- features_limit_loaded: **{input_status.get('features_limit_loaded', False)}**\n")
+        report_lines.append(f"- truth_close_loaded: **{input_status.get('truth_close_loaded', False)}**\n")
+        report_lines.append(f"- meta_loaded: **{input_status.get('meta_loaded', False)}**\n")
+        report_path = write_decision_report(exec_date, "".join(report_lines))
+
+        write_eval_json(
+            exec_date,
+            {
+                "exec_date": exec_date,
+                "signal_date": trade_date,
+                "stop_trading": True,
+                "reason": stop_note,
+                "input_mode": input_mode,
+                "fs_degrade_reason": fs_degrade_reason,
+                "input_status": input_status,
+            },
+        )
 
         return 0
 
-    # ===== 正常分支：P0.1 =====
+    # ===== 正常分支：P0.1（算法不变，只升级输入层）=====
     routed_df = routed_df.copy()
     routed_df["signal_date"] = norm_ymd(trade_date)
     routed_df["exec_date"] = norm_ymd(exec_date)
@@ -119,17 +242,29 @@ def main() -> int:
 
     routed_df["cost_est"] = cost_est
     routed_df["risk_penalty"] = risk_pen
-    routed_df["ev_pred"] = routed_df["p_fill_pred"].astype(float) * routed_df["e_ret_pred"].astype(float) - cost_est - risk_pen
+    routed_df["ev_pred"] = (
+        routed_df["p_fill_pred"].astype(float) * routed_df["e_ret_pred"].astype(float)
+        - cost_est
+        - risk_pen
+    )
+    routed_df["input_mode"] = input_mode
+    routed_df["fs_degrade_reason"] = fs_degrade_reason
 
     cand_path = write_candidates_snapshot(routed_df.copy(), signal_date=trade_date)
 
-    caps = WeightCaps(w_max=W_MAX_DEFAULT, theme_cap=THEME_CAP_DEFAULT, gross_cap=GROSS_CAP_DEFAULT)
+    caps = WeightCaps(
+        w_max=W_MAX_DEFAULT,
+        theme_cap=THEME_CAP_DEFAULT,
+        gross_cap=GROSS_CAP_DEFAULT,
+    )
     targets, backups = build_weights_with_backups(routed_df, topn=TOPN_DEFAULT, caps=caps)
 
     # weights：目标 + 候补（同一文件，候补 weight=0）
     weights_out = pd.concat([targets, backups], ignore_index=True)
     weights_out["exec_date"] = norm_ymd(exec_date)
-    weights_out = weights_out[["exec_date", "ts_code", "name", "weight", "target_rank", "backup_rank", "ev_pred"]].copy()
+    weights_out = weights_out[
+        ["exec_date", "ts_code", "name", "weight", "target_rank", "backup_rank", "ev_pred"]
+    ].copy()
     weights_latest_path, weights_dated_path = write_weights(weights_out, exec_date=exec_date)
 
     # signals：只输出目标（weight>0）——保持旧 joinquant 契约
@@ -145,15 +280,32 @@ def main() -> int:
     exec_path = ensure_execution_table(exec_date=exec_date)
     learning_path = ensure_learning_table()
 
-    # decision report（内容/表结构保持原脚本逻辑）
-    top_targets = weights_out[weights_out["weight"].astype(float) > 0].copy().sort_values("target_rank")
+    # decision report（内容/表结构保持原脚本逻辑，仅增加输入审计）
+    top_targets = (
+        weights_out[weights_out["weight"].astype(float) > 0]
+        .copy()
+        .sort_values("target_rank")
+    )
 
     lines: List[str] = []
     lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
     lines.append(f"- signal_date: **{trade_date or 'unknown'}**\n")
     lines.append(f"- exec_date: **{exec_date or 'unknown'}**\n")
     lines.append(f"- regime: **{regime_name}**\n")
-    lines.append(f"- risk_budget: **{fmt_num(risk_budget, 4)}**\n\n")
+    lines.append(f"- risk_budget: **{fmt_num(risk_budget, 4)}**\n")
+    lines.append(f"- input_mode: **{input_mode}**\n")
+    lines.append(f"- fs_degrade_reason: **{fs_degrade_reason or 'none'}**\n\n")
+
+    lines.append("## Input Status\n\n")
+    lines.append(f"- pred_loaded: **{input_status.get('pred_loaded', False)}**\n")
+    lines.append(f"- pred_rows: **{input_status.get('pred_rows', 0)}**\n")
+    lines.append(f"- features_base_loaded: **{input_status.get('features_base_loaded', False)}**\n")
+    lines.append(f"- features_base_rows: **{input_status.get('features_base_rows', 0)}**\n")
+    lines.append(f"- features_limit_loaded: **{input_status.get('features_limit_loaded', False)}**\n")
+    lines.append(f"- features_limit_rows: **{input_status.get('features_limit_rows', 0)}**\n")
+    lines.append(f"- truth_close_loaded: **{input_status.get('truth_close_loaded', False)}**\n")
+    lines.append(f"- truth_close_rows: **{input_status.get('truth_close_rows', 0)}**\n")
+    lines.append(f"- meta_loaded: **{input_status.get('meta_loaded', False)}**\n\n")
 
     lines.append("## Artifacts\n\n")
     lines.append(f"- candidates_snapshot: `{cand_path}`\n")
@@ -167,7 +319,7 @@ def main() -> int:
     lines.append("|---:|---|---|---:|---:|\n")
     for _, r in top_targets.iterrows():
         lines.append(
-            f"| {int(r.get('target_rank', 0))} | {r.get('ts_code','')} | {r.get('name','')} | "
+            f"| {int(r.get('target_rank', 0))} | {r.get('ts_code', '')} | {r.get('name', '')} | "
             f"{fmt_num(r.get('weight', 0.0), 6)} | {fmt_num(r.get('ev_pred', ''), 6)} |\n"
         )
 
@@ -182,6 +334,9 @@ def main() -> int:
         "picked": int(len(top_targets)),
         "cost_est": cost_est,
         "risk_penalty": risk_pen,
+        "input_mode": input_mode,
+        "fs_degrade_reason": fs_degrade_reason,
+        "input_status": input_status,
         "paths": {
             "candidates": cand_path,
             "execution": exec_path,
