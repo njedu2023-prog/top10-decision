@@ -5,24 +5,36 @@
 build_market_fs.py
 
 目标：
-- 将 data/market/daily_{trade_date}.csv 规范化为 Feature Store 四件套：
+- 从 data/market/raw/ 的多源原始文件构建 Feature Store 四件套：
   1) data/market/features_base_{trade_date}.csv
   2) data/market/features_limit_{trade_date}.csv
   3) data/market/truth_close_{trade_date}.csv
   4) data/market/_meta_{trade_date}.json
 
+当前输入主结构：
+- data/market/raw/daily_{trade_date}.csv
+- data/market/raw/daily_basic_{trade_date}.csv
+- data/market/raw/stock_basic_{trade_date}.csv
+- data/market/raw/stk_limit_{trade_date}.csv
+- data/market/raw/limit_list_d_{trade_date}.csv
+- data/market/raw/limit_break_d_{trade_date}.csv
+- data/market/raw/limit_up_tags_{trade_date}.csv
+- data/market/raw/hot_boards_{trade_date}.csv
+- data/market/raw/top_list_{trade_date}.csv
+- data/market/raw/moneyflow_hsgt_{trade_date}.csv
+- data/market/raw/namechange_{trade_date}.csv
+
 设计原则：
-- 先把 FS 生产层跑通，再逐步提高字段丰富度
-- 当前版本优先兼容已有 daily_* 输入，不要求一次达到 75% 丰富度
-- 缺什么字段就审计什么字段，不静默假装存在
-- 主键统一为：trade_date + ts_code
+- FS 是标准化特征层，不是原始快照层
+- 主键统一：trade_date + ts_code
+- 优先保证结构正确、审计完整，再逐步提高丰富度
+- 缺失字段要显式反映到 meta，不静默伪造
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import re
 from datetime import datetime, timezone
@@ -33,6 +45,7 @@ import pandas as pd
 
 
 MARKET_DIR = Path("data/market")
+RAW_DIR = MARKET_DIR / "raw"
 KEY_COLS = ["trade_date", "ts_code"]
 
 
@@ -50,29 +63,16 @@ def _read_csv_any(path: Path) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def _safe_float(v: Any) -> float | None:
+def _safe_json_load(path: Path) -> dict[str, Any]:
+    if path is None or not path.exists():
+        return {}
     try:
-        if pd.isna(v):
-            return None
-        return float(v)
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        return None
-
-
-def _safe_div(a: Any, b: Any) -> float | None:
-    a = _safe_float(a)
-    b = _safe_float(b)
-    if a is None or b in (None, 0):
-        return None
-    return a / b
-
-
-def _safe_pct(a: Any, b: Any) -> float | None:
-    a = _safe_float(a)
-    b = _safe_float(b)
-    if a is None or b in (None, 0):
-        return None
-    return a / b - 1.0
+        try:
+            return json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            return {}
 
 
 def _now_utc() -> str:
@@ -83,45 +83,8 @@ def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def _extract_trade_date_from_name(path: Path, prefix: str = "daily") -> str | None:
-    if path is None:
-        return None
-    m = re.match(rf"^{re.escape(prefix)}_(\d{{8}})\.csv$", path.name)
-    if not m:
-        return None
-    return m.group(1)
-
-
-def _find_latest_daily_file() -> Path | None:
-    if not MARKET_DIR.exists():
-        return None
-    files = sorted(MARKET_DIR.glob("daily_*.csv"))
-    if not files:
-        return None
-    return files[-1]
-
-
-def _resolve_daily_file(trade_date: str | None = None, source_file: str | None = None) -> tuple[Path | None, str | None]:
-    if source_file:
-        p = Path(source_file)
-        if p.exists():
-            td = _extract_trade_date_from_name(p, prefix="daily") or trade_date
-            return p, td
-
-    if trade_date:
-        p = MARKET_DIR / f"daily_{trade_date}.csv"
-        if p.exists():
-            return p, trade_date
-
-    latest = _find_latest_daily_file()
-    if latest is None:
-        return None, None
-    td = _extract_trade_date_from_name(latest, prefix="daily")
-    return latest, td
-
-
 def _normalize_trade_date(v: Any, fallback: str | None = None) -> str | None:
-    if v is None or (isinstance(v, float) and math.isnan(v)):
+    if v is None:
         return fallback
     s = str(v).strip()
     s = re.sub(r"\.0$", "", s)
@@ -133,10 +96,14 @@ def _normalize_trade_date(v: Any, fallback: str | None = None) -> str | None:
 
 
 def _normalize_ts_code(v: Any) -> str | None:
-    if v is None or (isinstance(v, float) and math.isnan(v)):
+    if v is None:
         return None
     s = str(v).strip()
     return s or None
+
+
+def _to_numeric(series: pd.Series) -> pd.Series:
+    return pd.to_numeric(series, errors="coerce")
 
 
 def _pick_first_existing(df: pd.DataFrame, candidates: list[str], default=None):
@@ -146,128 +113,412 @@ def _pick_first_existing(df: pd.DataFrame, candidates: list[str], default=None):
     return default
 
 
-def _coalesce_row(row: pd.Series, cols: list[str]) -> Any:
-    for c in cols:
-        if c in row.index:
-            val = row[c]
-            if pd.notna(val) and str(val).strip() != "":
-                return val
-    return None
+def _extract_trade_date_from_name(path: Path, stem_prefix: str) -> str | None:
+    if path is None:
+        return None
+    m = re.match(rf"^{re.escape(stem_prefix)}_(\d{{8}})\.csv$", path.name)
+    if not m:
+        return None
+    return m.group(1)
 
 
-def _standardize_daily(df: pd.DataFrame, trade_date_fallback: str | None) -> pd.DataFrame:
-    """
-    尽量兼容不同日表字段名，统一成常见列。
-    """
+def _find_latest_raw_trade_date() -> str | None:
+    if not RAW_DIR.exists():
+        return None
+    vals: list[str] = []
+    for p in RAW_DIR.glob("daily_*.csv"):
+        td = _extract_trade_date_from_name(p, "daily")
+        if td:
+            vals.append(td)
+    if not vals:
+        return None
+    return sorted(set(vals))[-1]
+
+
+def _resolve_trade_date(trade_date: str | None = None) -> str | None:
+    td = _normalize_trade_date(trade_date)
+    if td:
+        return td
+    return _find_latest_raw_trade_date()
+
+
+def _raw_path(stem: str, trade_date: str) -> Path:
+    return RAW_DIR / f"{stem}_{trade_date}.csv"
+
+
+def _load_raw_table(stem: str, trade_date: str) -> pd.DataFrame:
+    return _read_csv_any(_raw_path(stem, trade_date))
+
+
+def _ensure_keys(df: pd.DataFrame, trade_date_fallback: str) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
 
     out = df.copy()
 
+    if "trade_date" in out.columns:
+        out["trade_date"] = out["trade_date"].apply(lambda x: _normalize_trade_date(x, fallback=trade_date_fallback))
+    else:
+        out["trade_date"] = trade_date_fallback
+
+    if "ts_code" in out.columns:
+        out["ts_code"] = out["ts_code"].apply(_normalize_ts_code)
+    elif "code" in out.columns:
+        out["ts_code"] = out["code"].apply(_normalize_ts_code)
+    else:
+        out["ts_code"] = None
+
+    out = out.dropna(subset=["trade_date", "ts_code"]).copy()
+    out = out.drop_duplicates(subset=KEY_COLS, keep="last").reset_index(drop=True)
+    return out
+
+
+# -----------------------------
+# 各 raw 表标准化
+# -----------------------------
+def _std_daily(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = df.copy()
+    out = _ensure_keys(out, trade_date)
+
     alias_map = {
-        "trade_date": ["trade_date", "date"],
-        "ts_code": ["ts_code", "code", "jq_code"],
         "name": ["name", "stock_name"],
         "open": ["open"],
         "high": ["high"],
         "low": ["low"],
-        "close": ["close", "price"],
-        "pre_close": ["pre_close", "prev_close", "last_close"],
-        "pct_chg": ["pct_chg", "change_pct", "涨跌幅"],
+        "close": ["close"],
+        "pre_close": ["pre_close", "prev_close"],
+        "pct_chg": ["pct_chg", "change_pct"],
         "vol": ["vol", "volume"],
-        "amount": ["amount", "turnover", "成交额"],
-        "turnover_rate": ["turnover_rate", "换手率"],
-        "volume_ratio": ["volume_ratio", "量比"],
-        "total_mv": ["total_mv", "market_value_total", "总市值"],
-        "circ_mv": ["circ_mv", "market_value_circ", "流通市值"],
-        "pe_ttm": ["pe_ttm", "pe", "市盈率"],
-        "pb": ["pb", "市净率"],
-        "moneyflow": ["moneyflow", "net_mf_amount", "主力净流入"],
-        "northbound_net": ["northbound_net", "hsgt", "north_money"],
-        "market_regime": ["market_regime"],
-        "board": ["board", "industry", "concept"],
-        "limit_type": ["limit_type"],
-        "open_times": ["open_times"],
-        "seal_amount": ["seal_amount"],
-        "first_seal_time": ["first_seal_time"],
-        "last_seal_time": ["last_seal_time"],
-        "break_count": ["break_count", "炸板次数"],
-        "up_limit": ["up_limit"],
-        "down_limit": ["down_limit"],
-        "hot_boards_score": ["hot_boards_score"],
-        "board_crowding": ["board_crowding"],
-        "top_list_net_buy": ["top_list_net_buy"],
-        "abnormal_volume": ["abnormal_volume"],
+        "amount": ["amount", "turnover"],
     }
 
-    new_cols: dict[str, Any] = {}
+    std = out[KEY_COLS].copy()
     for std_col, aliases in alias_map.items():
         src = _pick_first_existing(out, aliases)
-        if src:
-            new_cols[std_col] = out[src]
-        else:
-            new_cols[std_col] = None
+        std[std_col] = out[src] if src else None
 
-    std = pd.DataFrame(new_cols)
-
-    std["trade_date"] = std["trade_date"].apply(lambda x: _normalize_trade_date(x, fallback=trade_date_fallback))
-    std["ts_code"] = std["ts_code"].apply(_normalize_ts_code)
-
-    # 清洗数值列
-    numeric_cols = [
-        "open", "high", "low", "close", "pre_close", "pct_chg",
-        "vol", "amount", "turnover_rate", "volume_ratio",
-        "total_mv", "circ_mv", "pe_ttm", "pb", "moneyflow",
-        "northbound_net", "open_times", "seal_amount", "break_count",
-        "up_limit", "down_limit", "hot_boards_score", "board_crowding",
-        "top_list_net_buy", "abnormal_volume",
-    ]
-    for c in numeric_cols:
+    for c in ["open", "high", "low", "close", "pre_close", "pct_chg", "vol", "amount"]:
         if c in std.columns:
-            std[c] = pd.to_numeric(std[c], errors="coerce")
+            std[c] = _to_numeric(std[c])
 
-    std = std.dropna(subset=["trade_date", "ts_code"]).copy()
-    std = std.drop_duplicates(subset=KEY_COLS, keep="last").reset_index(drop=True)
+    return std
+
+
+def _std_daily_basic(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+    alias_map = {
+        "turnover_rate": ["turnover_rate", "turnover_rate_f"],
+        "volume_ratio": ["volume_ratio"],
+        "total_mv": ["total_mv"],
+        "circ_mv": ["circ_mv"],
+        "pe_ttm": ["pe_ttm", "pe"],
+        "pb": ["pb"],
+    }
+
+    std = out[KEY_COLS].copy()
+    for std_col, aliases in alias_map.items():
+        src = _pick_first_existing(out, aliases)
+        std[std_col] = out[src] if src else None
+
+    for c in ["turnover_rate", "volume_ratio", "total_mv", "circ_mv", "pe_ttm", "pb"]:
+        if c in std.columns:
+            std[c] = _to_numeric(std[c])
+
+    return std
+
+
+def _std_stock_basic(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = df.copy()
+    if "ts_code" in out.columns:
+        out["ts_code"] = out["ts_code"].apply(_normalize_ts_code)
+    elif "code" in out.columns:
+        out["ts_code"] = out["code"].apply(_normalize_ts_code)
+    else:
+        out["ts_code"] = None
+
+    out["trade_date"] = trade_date
+    out = out.dropna(subset=["ts_code"]).copy()
+    out = out.drop_duplicates(subset=["ts_code"], keep="last").reset_index(drop=True)
+
+    alias_map = {
+        "name": ["name"],
+        "industry": ["industry"],
+        "market": ["market"],
+        "list_date": ["list_date"],
+    }
+
+    std = out[KEY_COLS].copy()
+    for std_col, aliases in alias_map.items():
+        src = _pick_first_existing(out, aliases)
+        std[std_col] = out[src] if src else None
+
+    return std
+
+
+def _std_stk_limit(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+    alias_map = {
+        "up_limit": ["up_limit"],
+        "down_limit": ["down_limit"],
+    }
+
+    std = out[KEY_COLS].copy()
+    for std_col, aliases in alias_map.items():
+        src = _pick_first_existing(out, aliases)
+        std[std_col] = out[src] if src else None
+
+    for c in ["up_limit", "down_limit"]:
+        if c in std.columns:
+            std[c] = _to_numeric(std[c])
+
+    return std
+
+
+def _std_limit_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+
+    alias_map = {
+        "name": ["name"],
+        "limit_type": ["limit_type"],
+        "close": ["close"],
+        "up_limit": ["up_limit"],
+        "down_limit": ["down_limit"],
+        "first_seal_time": ["first_seal_time", "first_time"],
+        "last_seal_time": ["last_seal_time", "last_time"],
+        "open_times": ["open_times"],
+        "seal_amount": ["seal_amount", "fd_amount", "封单额"],
+    }
+
+    std = out[KEY_COLS].copy()
+    for std_col, aliases in alias_map.items():
+        src = _pick_first_existing(out, aliases)
+        std[std_col] = out[src] if src else None
+
+    for c in ["close", "up_limit", "down_limit", "open_times", "seal_amount"]:
+        if c in std.columns:
+            std[c] = _to_numeric(std[c])
+
+    return std
+
+
+def _std_limit_break(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+
+    alias_map = {
+        "name": ["name"],
+        "break_count": ["break_count", "炸板次数", "open_times"],
+    }
+
+    std = out[KEY_COLS].copy()
+    for std_col, aliases in alias_map.items():
+        src = _pick_first_existing(out, aliases)
+        std[std_col] = out[src] if src else None
+
+    if "break_count" in std.columns:
+        std["break_count"] = _to_numeric(std["break_count"])
+
+    return std
+
+
+def _std_limit_up_tags(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+
+    # 兼容 tag / concept / reason 等可能列
+    tag_col = _pick_first_existing(out, ["tag", "tags", "concept", "reason"])
+    std = out[KEY_COLS].copy()
+    std["limit_up_tags"] = out[tag_col].astype(str) if tag_col else None
+    return std
+
+
+def _std_hot_boards(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    hot_boards 往往不是 ts_code 级，而是板块级。
+    这里先做 board -> hot_boards_score 的映射表。
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["board", "hot_boards_score", "board_crowding"])
+
+    out = df.copy()
+
+    board_col = _pick_first_existing(out, ["board", "name", "concept", "industry"])
+    score_col = _pick_first_existing(out, ["score", "hot_boards_score", "hot", "heat"])
+    crowd_col = _pick_first_existing(out, ["board_crowding", "crowding", "count", "num"])
+
+    std = pd.DataFrame()
+    std["board"] = out[board_col].astype(str).str.strip() if board_col else None
+    std["hot_boards_score"] = _to_numeric(out[score_col]) if score_col else None
+    std["board_crowding"] = _to_numeric(out[crowd_col]) if crowd_col else None
+
+    std = std.dropna(subset=["board"]).copy()
+    std = std.drop_duplicates(subset=["board"], keep="last").reset_index(drop=True)
+    return std
+
+
+def _std_top_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+
+    alias_map = {
+        "top_list_net_buy": ["net_buy", "net_buy_amount", "buy", "净买额"],
+    }
+
+    std = out[KEY_COLS].copy()
+    for std_col, aliases in alias_map.items():
+        src = _pick_first_existing(out, aliases)
+        std[std_col] = out[src] if src else None
+
+    if "top_list_net_buy" in std.columns:
+        std["top_list_net_buy"] = _to_numeric(std["top_list_net_buy"])
+
+    return std
+
+
+def _std_moneyflow_hsgt(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    这张表不一定是个股级。
+    当前版本先尝试个股级映射；若无 ts_code，则返回空表。
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    ts_col = _pick_first_existing(df, ["ts_code", "code"])
+    if not ts_col:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df.copy(), trade_date)
+    alias_map = {
+        "northbound_net": ["northbound_net", "hsgt", "net_amount", "amount"],
+    }
+
+    std = out[KEY_COLS].copy()
+    for std_col, aliases in alias_map.items():
+        src = _pick_first_existing(out, aliases)
+        std[std_col] = out[src] if src else None
+
+    if "northbound_net" in std.columns:
+        std["northbound_net"] = _to_numeric(std["northbound_net"])
 
     return std
 
 
 # -----------------------------
-# Base 特征构造
+# raw 装载
+# -----------------------------
+def load_raw_bundle(trade_date: str) -> dict[str, pd.DataFrame]:
+    return {
+        "daily": _std_daily(_load_raw_table("daily", trade_date), trade_date),
+        "daily_basic": _std_daily_basic(_load_raw_table("daily_basic", trade_date), trade_date),
+        "stock_basic": _std_stock_basic(_load_raw_table("stock_basic", trade_date), trade_date),
+        "stk_limit": _std_stk_limit(_load_raw_table("stk_limit", trade_date), trade_date),
+        "limit_list_d": _std_limit_list(_load_raw_table("limit_list_d", trade_date), trade_date),
+        "limit_break_d": _std_limit_break(_load_raw_table("limit_break_d", trade_date), trade_date),
+        "limit_up_tags": _std_limit_up_tags(_load_raw_table("limit_up_tags", trade_date), trade_date),
+        "hot_boards": _std_hot_boards(_load_raw_table("hot_boards", trade_date), trade_date),
+        "top_list": _std_top_list(_load_raw_table("top_list", trade_date), trade_date),
+        "moneyflow_hsgt": _std_moneyflow_hsgt(_load_raw_table("moneyflow_hsgt", trade_date), trade_date),
+        "namechange": _load_raw_table("namechange", trade_date),  # 暂存原始，当前版本不直接入模
+    }
+
+
+def _outer_merge(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+    if left is None or left.empty:
+        return right.copy() if right is not None else pd.DataFrame()
+    if right is None or right.empty:
+        return left.copy()
+    return left.merge(right, on=KEY_COLS, how="outer")
+
+
+def build_master_table(bundle: dict[str, pd.DataFrame], trade_date: str) -> pd.DataFrame:
+    daily = bundle.get("daily", pd.DataFrame())
+    daily_basic = bundle.get("daily_basic", pd.DataFrame())
+    stock_basic = bundle.get("stock_basic", pd.DataFrame())
+    stk_limit = bundle.get("stk_limit", pd.DataFrame())
+    limit_list_d = bundle.get("limit_list_d", pd.DataFrame())
+    limit_break_d = bundle.get("limit_break_d", pd.DataFrame())
+    limit_up_tags = bundle.get("limit_up_tags", pd.DataFrame())
+    top_list = bundle.get("top_list", pd.DataFrame())
+    moneyflow_hsgt = bundle.get("moneyflow_hsgt", pd.DataFrame())
+
+    master = pd.DataFrame(columns=KEY_COLS)
+    for tbl in [daily, daily_basic, stock_basic, stk_limit, limit_list_d, limit_break_d, limit_up_tags, top_list, moneyflow_hsgt]:
+        master = _outer_merge(master, tbl)
+
+    if master.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    # 补 board / industry
+    if "industry" in master.columns and "board" not in master.columns:
+        master["board"] = master["industry"]
+
+    # hot_boards 是板块级映射，单独 merge
+    hot_boards = bundle.get("hot_boards", pd.DataFrame())
+    if hot_boards is not None and not hot_boards.empty and "board" in master.columns:
+        master["board"] = master["board"].astype(str).str.strip()
+        master = master.merge(hot_boards, on="board", how="left")
+
+    # 补 trade_date / ts_code 清洗
+    master["trade_date"] = master["trade_date"].apply(lambda x: _normalize_trade_date(x, fallback=trade_date))
+    master["ts_code"] = master["ts_code"].apply(_normalize_ts_code)
+    master = master.dropna(subset=["trade_date", "ts_code"]).copy()
+    master = master.drop_duplicates(subset=KEY_COLS, keep="last").reset_index(drop=True)
+
+    return master
+
+
+# -----------------------------
+# Feature 构造
 # -----------------------------
 def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
-    out = pd.DataFrame()
-    out["trade_date"] = df["trade_date"]
-    out["ts_code"] = df["ts_code"]
+    out = df[KEY_COLS].copy()
     out["name"] = df.get("name")
     out["board"] = df.get("board")
 
-    # 基础行情
     for c in ["open", "high", "low", "close", "pre_close", "pct_chg"]:
         out[c] = df.get(c)
 
-    # 当日价格行为派生
+    # 收益与价格行为
     out["returns_1d"] = df.get("pct_chg")
-    if "pct_chg" in out.columns:
-        out["returns_1d"] = out["returns_1d"].where(out["returns_1d"].isna(), out["returns_1d"] / 100.0)
+    if "returns_1d" in out.columns:
+        out["returns_1d"] = _to_numeric(out["returns_1d"]) / 100.0
 
-    out["high_low_range"] = (df.get("high") - df.get("low")) / df.get("pre_close")
-    out["candle_body"] = (df.get("close") - df.get("open")) / df.get("pre_close")
-    out["gap_open"] = (df.get("open") - df.get("pre_close")) / df.get("pre_close")
+    out["high_low_range"] = (_to_numeric(df.get("high")) - _to_numeric(df.get("low"))) / _to_numeric(df.get("pre_close"))
+    out["candle_body"] = (_to_numeric(df.get("close")) - _to_numeric(df.get("open"))) / _to_numeric(df.get("pre_close"))
+    out["gap_open"] = (_to_numeric(df.get("open")) - _to_numeric(df.get("pre_close"))) / _to_numeric(df.get("pre_close"))
 
-    # 成交与流动性
-    out["vol"] = df.get("vol")
-    out["amount"] = df.get("amount")
-    out["turnover_rate"] = df.get("turnover_rate")
-    out["volume_ratio"] = df.get("volume_ratio")
-    out["amihud_illiquidity"] = df.get("pct_chg").abs() / df.get("amount")
-    if "pct_chg" in df.columns:
-        out["amihud_illiquidity"] = (df.get("pct_chg").abs() / 100.0) / df.get("amount")
+    # 流动性
+    out["vol"] = _to_numeric(df.get("vol"))
+    out["amount"] = _to_numeric(df.get("amount"))
+    out["turnover_rate"] = _to_numeric(df.get("turnover_rate"))
+    out["volume_ratio"] = _to_numeric(df.get("volume_ratio"))
+    out["amihud_illiquidity"] = ((_to_numeric(df.get("pct_chg")).abs() / 100.0) / _to_numeric(df.get("amount")))
 
-    # 波动与风险结构（当前日表不一定具备历史，先保留骨架）
+    # 波动骨架：当前仍无历史窗口，先保留占位
     out["volatility_5d"] = None
     out["volatility_10d"] = None
     out["volatility_20d"] = None
@@ -276,26 +527,26 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     out["max_drawdown_20d"] = None
     out["tail_risk_score"] = None
 
-    # 估值与市值
-    out["total_mv"] = df.get("total_mv")
-    out["circ_mv"] = df.get("circ_mv")
-    out["pe_ttm"] = df.get("pe_ttm")
-    out["pb"] = df.get("pb")
+    # 估值市值
+    out["total_mv"] = _to_numeric(df.get("total_mv"))
+    out["circ_mv"] = _to_numeric(df.get("circ_mv"))
+    out["pe_ttm"] = _to_numeric(df.get("pe_ttm"))
+    out["pb"] = _to_numeric(df.get("pb"))
 
-    # 资金流与情绪
-    out["moneyflow"] = df.get("moneyflow")
-    out["northbound_net"] = df.get("northbound_net")
+    # 资金流/情绪
+    out["moneyflow"] = _to_numeric(df.get("moneyflow"))
+    out["northbound_net"] = _to_numeric(df.get("northbound_net"))
     out["market_regime"] = df.get("market_regime")
 
     # 题材热度
-    out["hot_boards_score"] = df.get("hot_boards_score")
-    out["board_crowding"] = df.get("board_crowding")
+    out["hot_boards_score"] = _to_numeric(df.get("hot_boards_score"))
+    out["board_crowding"] = _to_numeric(df.get("board_crowding"))
 
     # 龙虎榜/异动
-    out["top_list_net_buy"] = df.get("top_list_net_buy")
-    out["abnormal_volume"] = df.get("abnormal_volume")
+    out["top_list_net_buy"] = _to_numeric(df.get("top_list_net_buy"))
+    out["abnormal_volume"] = _to_numeric(df.get("abnormal_volume"))
 
-    # 当前还没有多日序列时，先占位
+    # 多周期占位
     out["ret_2d"] = None
     out["ret_5d"] = None
     out["ret_10d"] = None
@@ -305,64 +556,55 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-# -----------------------------
-# Limit 特征构造
-# -----------------------------
 def build_features_limit(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
-    out = pd.DataFrame()
-    out["trade_date"] = df["trade_date"]
-    out["ts_code"] = df["ts_code"]
+    out = df[KEY_COLS].copy()
     out["name"] = df.get("name")
 
     out["limit_type"] = df.get("limit_type")
-    out["open_times"] = df.get("open_times")
-    out["seal_amount"] = df.get("seal_amount")
+    out["open_times"] = _to_numeric(df.get("open_times"))
+    out["seal_amount"] = _to_numeric(df.get("seal_amount"))
     out["first_seal_time"] = df.get("first_seal_time")
     out["last_seal_time"] = df.get("last_seal_time")
-    out["break_count"] = df.get("break_count")
-    out["up_limit"] = df.get("up_limit")
-    out["down_limit"] = df.get("down_limit")
+    out["break_count"] = _to_numeric(df.get("break_count"))
+    out["up_limit"] = _to_numeric(df.get("up_limit"))
+    out["down_limit"] = _to_numeric(df.get("down_limit"))
+    out["limit_up_tags"] = df.get("limit_up_tags")
 
-    # 是否涨停
-    is_limit_up = None
-    if "close" in df.columns and "up_limit" in df.columns:
-        is_limit_up = (pd.to_numeric(df["close"], errors="coerce") >= pd.to_numeric(df["up_limit"], errors="coerce")).astype("float")
-    out["is_limit_up"] = is_limit_up
+    close = _to_numeric(df.get("close"))
+    up_limit = _to_numeric(df.get("up_limit"))
+    out["is_limit_up"] = (close >= up_limit).astype("float")
 
-    # 简单强度分数：后续可升级
     score = pd.Series(0.0, index=df.index)
-    if "open_times" in df.columns:
-        ot = pd.to_numeric(df["open_times"], errors="coerce").fillna(0.0)
-        score += (1.0 / (1.0 + ot))
-    if "seal_amount" in df.columns:
-        sa = pd.to_numeric(df["seal_amount"], errors="coerce").fillna(0.0)
-        max_sa = sa.max()
-        if pd.notna(max_sa) and max_sa > 0:
-            score += sa / max_sa
+    ot = _to_numeric(df.get("open_times")).fillna(0.0)
+    score += 1.0 / (1.0 + ot)
+
+    sa = _to_numeric(df.get("seal_amount")).fillna(0.0)
+    max_sa = sa.max()
+    if pd.notna(max_sa) and max_sa > 0:
+        score += sa / max_sa
+
+    bc = _to_numeric(df.get("break_count")).fillna(0.0)
+    score += 1.0 / (1.0 + bc)
+
     out["limit_up_strength"] = score.replace([float("inf"), -float("inf")], pd.NA)
 
     return out
 
 
-# -----------------------------
-# Truth 层构造
-# -----------------------------
 def build_truth_close(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
 
-    out = pd.DataFrame()
-    out["trade_date"] = df["trade_date"]
-    out["ts_code"] = df["ts_code"]
+    out = df[KEY_COLS].copy()
     out["name"] = df.get("name")
-    out["close"] = df.get("close")
-    out["pre_close"] = df.get("pre_close")
-    out["pct_chg"] = df.get("pct_chg")
-    out["up_limit"] = df.get("up_limit")
-    out["down_limit"] = df.get("down_limit")
+    out["close"] = _to_numeric(df.get("close"))
+    out["pre_close"] = _to_numeric(df.get("pre_close"))
+    out["pct_chg"] = _to_numeric(df.get("pct_chg"))
+    out["up_limit"] = _to_numeric(df.get("up_limit"))
+    out["down_limit"] = _to_numeric(df.get("down_limit"))
     return out
 
 
@@ -400,10 +642,28 @@ def _coverage_stats(df: pd.DataFrame, required_cols: list[str]) -> dict[str, Any
     }
 
 
+def _raw_input_stats(bundle: dict[str, pd.DataFrame], trade_date: str) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for stem, df in bundle.items():
+        path = _raw_path(stem, trade_date)
+        out[stem] = {
+            "path": str(path),
+            "loaded": bool(df is not None and not df.empty),
+            "rows": int(len(df)) if df is not None and not df.empty else 0,
+            "columns": list(df.columns) if df is not None and not df.empty else [],
+        }
+    meta_path = RAW_DIR / f"_sync_meta_{trade_date}.json"
+    out["_sync_meta"] = {
+        "path": str(meta_path),
+        "loaded": meta_path.exists(),
+    }
+    return out
+
+
 def build_meta(
     trade_date: str,
-    source_file: Path,
-    raw_df: pd.DataFrame,
+    bundle: dict[str, pd.DataFrame],
+    master_df: pd.DataFrame,
     base_df: pd.DataFrame,
     limit_df: pd.DataFrame,
     truth_df: pd.DataFrame,
@@ -423,8 +683,6 @@ def build_meta(
     truth_required = ["close", "pre_close", "pct_chg"]
 
     sha = os.getenv("GITHUB_SHA", "")
-    snapshot_id = f"{trade_date}:{source_file.name}"
-
     base_stats = _coverage_stats(base_df, base_required)
     limit_stats = _coverage_stats(limit_df, limit_required)
     truth_stats = _coverage_stats(truth_df, truth_required)
@@ -437,22 +695,21 @@ def build_meta(
     return {
         "trade_date": trade_date,
         "created_at_utc": _now_utc(),
-        "source_snapshot_id": snapshot_id,
-        "source_file": str(source_file),
-        "source_rows": int(len(raw_df)) if raw_df is not None else 0,
         "commit_sha": sha,
-        "fs_version": "v0.1",
+        "fs_version": "v0.2-raw-driven",
         "richness_target": 0.75,
         "richness_estimate": richness_estimate,
+        "raw_inputs": _raw_input_stats(bundle, trade_date),
+        "master_rows": int(len(master_df)) if master_df is not None else 0,
         "tables": {
             "features_base": base_stats,
             "features_limit": limit_stats,
             "truth_close": truth_stats,
         },
         "notes": [
-            "当前版本优先从 daily_* 日表构建 FS 四件套。",
-            "多日波动、回撤、北向、limit 微结构、题材热度等字段后续可继续注入增强。",
-            "若字段缺失，将在本 meta 中显式反映，不静默伪造。",
+            "当前版本已从 data/market/raw/ 多源原始文件构建 FS。",
+            "已接入 daily / daily_basic / stock_basic / stk_limit / limit_list_d / limit_break_d / limit_up_tags / hot_boards / top_list / moneyflow_hsgt。",
+            "多日滚动波动、ATR、回撤等历史窗口特征仍为后续增强项。",
         ],
     }
 
@@ -486,39 +743,36 @@ def write_outputs(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="构建 market Feature Store 四件套")
     parser.add_argument("--trade-date", dest="trade_date", default=None, help="交易日 YYYYMMDD")
-    parser.add_argument("--source-file", dest="source_file", default=None, help="指定输入 daily csv 文件路径")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    trade_date = _resolve_trade_date(args.trade_date)
 
-    daily_file, trade_date = _resolve_daily_file(
-        trade_date=args.trade_date,
-        source_file=args.source_file,
-    )
-
-    if daily_file is None or trade_date is None:
-        print("[build_market_fs] ERROR: 未找到可用的 daily_{trade_date}.csv")
+    if not trade_date:
+        print("[build_market_fs] ERROR: 无法解析 trade_date，且 raw 目录中无可用 daily_*.csv")
         return 2
 
-    raw_df = _read_csv_any(daily_file)
-    if raw_df.empty:
-        print(f"[build_market_fs] ERROR: 输入文件为空或读取失败: {daily_file}")
+    bundle = load_raw_bundle(trade_date)
+    daily_df = bundle.get("daily", pd.DataFrame())
+
+    if daily_df.empty:
+        print(f"[build_market_fs] ERROR: 缺少核心输入 daily_{trade_date}.csv")
         return 2
 
-    std_df = _standardize_daily(raw_df, trade_date_fallback=trade_date)
-    if std_df.empty:
-        print(f"[build_market_fs] ERROR: 标准化后为空，无法构建 FS: {daily_file}")
+    master_df = build_master_table(bundle, trade_date)
+    if master_df.empty:
+        print(f"[build_market_fs] ERROR: 多源合并后 master 为空: trade_date={trade_date}")
         return 2
 
-    base_df = build_features_base(std_df)
-    limit_df = build_features_limit(std_df)
-    truth_df = build_truth_close(std_df)
+    base_df = build_features_base(master_df)
+    limit_df = build_features_limit(master_df)
+    truth_df = build_truth_close(master_df)
     meta = build_meta(
         trade_date=trade_date,
-        source_file=daily_file,
-        raw_df=std_df,
+        bundle=bundle,
+        master_df=master_df,
         base_df=base_df,
         limit_df=limit_df,
         truth_df=truth_df,
@@ -533,9 +787,8 @@ def main() -> int:
     )
 
     print(f"[build_market_fs] OK trade_date={trade_date}")
-    print(f"[build_market_fs] source={daily_file}")
-    print(f"[build_market_fs] rows={len(std_df)}")
-    print(f"[build_market_fs] outputs:")
+    print(f"[build_market_fs] master_rows={len(master_df)}")
+    print("[build_market_fs] outputs:")
     print(f"  - data/market/features_base_{trade_date}.csv")
     print(f"  - data/market/features_limit_{trade_date}.csv")
     print(f"  - data/market/truth_close_{trade_date}.csv")
