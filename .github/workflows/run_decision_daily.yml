@@ -21,7 +21,7 @@ concurrency:
 jobs:
   decision:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -49,6 +49,7 @@ jobs:
         run: |
           set -e
           mkdir -p data/pred
+          mkdir -p data/market
           mkdir -p data/decision
           mkdir -p docs/signals
           mkdir -p docs/reports
@@ -95,8 +96,27 @@ jobs:
           echo "[sync] lines:"
           wc -l data/pred/pred_source_latest.csv || true
 
-      # ✅ 运行决策编排器：只读 data/pred/pred_source_latest.csv
-      # ✅ 硬规则：runner 不读 URL / 不读 PATH env
+      # ✅ 新增：先构建 market FS 四件套
+      # ✅ 当前版本允许 FS 丰富度未达 75%，但必须先稳定落库
+      - name: Build market FS
+        env:
+          TRADE_DATE: ${{ inputs.trade_date }}
+        run: |
+          set -e
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
+            echo "[fs] build with manual trade_date=${TRADE_DATE}"
+            python scripts/build_market_fs.py --trade-date "${TRADE_DATE}"
+          else
+            echo "[fs] build with latest daily snapshot"
+            python scripts/build_market_fs.py
+          fi
+
+          echo "[fs] generated files:"
+          ls -lah data/market || true
+
+      # ✅ 运行决策编排器：统一通过 ingest 入口取数
+      # ✅ ingest 将优先吃 pred + FS，FS 缺失时自动降级到 pred_only
       - name: Run decision pipeline (V2 orchestrator)
         run: |
           set -e
@@ -126,12 +146,19 @@ jobs:
           echo "*.pyc" >> .git/info/exclude
 
           # ✅ 精准 add：把所有需要落库/发布的产物全纳入
+
           # --- a-top10 全量输入快照（可追溯）
           git add data/pred/pred_source_latest.csv || true
 
           # --- 保留旧路径的 add（即便未来不再写入也不影响）
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
+
+          # --- market FS 四件套（新增）
+          git add data/market/features_base_*.csv || true
+          git add data/market/features_limit_*.csv || true
+          git add data/market/truth_close_*.csv || true
+          git add data/market/_meta_*.json || true
 
           # --- decision 输出（可执行权重 + 决策报告 + 评估）
           git add docs/weights/weights_latest.csv || true
@@ -159,7 +186,7 @@ jobs:
 
           # 仅当有变更时提交
           if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "auto: update decision signal"
+            git commit -m "auto: update decision signal and market fs"
             git push
             echo "[push] done"
           else
