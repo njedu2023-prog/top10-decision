@@ -22,8 +22,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260306",
-      "created_at_utc": "2026-03-06T18:05:39+00:00",
-      "commit_sha": "8a3b9ca7daea818443062a2fab581d3013cc9789",
+      "created_at_utc": "2026-03-06T18:33:55+00:00",
+      "commit_sha": "692ff32192c4df349e3c6d97b30b62a2d11db543",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -186,7 +186,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260306",
-            "created_at_utc": "2026-03-06T18:05:39+00:00",
+            "created_at_utc": "2026-03-06T18:33:54+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -494,6 +494,36 @@
             ],
             "required_failures": [],
             "write_failures": [],
+            "legacy_cleanup": {
+              "enabled": true,
+              "removed_files": [
+                "data/market/raw/_sync_meta_20260306.json",
+                "data/market/raw/_sync_meta_latest.json",
+                "data/market/raw/daily_20260306.csv",
+                "data/market/raw/daily_latest.csv",
+                "data/market/raw/daily_basic_20260306.csv",
+                "data/market/raw/daily_basic_latest.csv",
+                "data/market/raw/hot_boards_20260306.csv",
+                "data/market/raw/hot_boards_latest.csv",
+                "data/market/raw/limit_break_d_20260306.csv",
+                "data/market/raw/limit_break_d_latest.csv",
+                "data/market/raw/limit_list_d_20260306.csv",
+                "data/market/raw/limit_list_d_latest.csv",
+                "data/market/raw/limit_up_tags_20260306.csv",
+                "data/market/raw/limit_up_tags_latest.csv",
+                "data/market/raw/moneyflow_hsgt_20260306.csv",
+                "data/market/raw/moneyflow_hsgt_latest.csv",
+                "data/market/raw/namechange_20260306.csv",
+                "data/market/raw/namechange_latest.csv",
+                "data/market/raw/stk_limit_20260306.csv",
+                "data/market/raw/stk_limit_latest.csv",
+                "data/market/raw/stock_basic_20260306.csv",
+                "data/market/raw/stock_basic_latest.csv",
+                "data/market/raw/top_list_20260306.csv",
+                "data/market/raw/top_list_latest.csv"
+              ],
+              "removed_count": 24
+            },
             "summary": {
               "success_count": 11,
               "failure_count": 0,
