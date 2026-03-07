@@ -11,10 +11,14 @@ train_pfill.py
     models/pfill_lr.joblib
     models/pfill_lgbm.joblib
     models/pfill_meta.json
+    models/pfill_lr_{trade_date}.joblib
+    models/pfill_lgbm_{trade_date}.joblib
+    models/pfill_meta_{trade_date}.json
 
 当前策略：
 - 主模型 1：LogisticRegression
 - 主模型 2：LightGBM（若环境缺失则降级为 HistGradientBoosting）
+- 只训练 label_ready_fill=1 的成熟样本
 - 时间切分优先；若单日样本不足，再退化为行切分
 """
 
@@ -32,7 +36,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss, roc_auc_score, brier_score_loss
+from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -64,7 +68,7 @@ def utc_now_iso() -> str:
 
 
 # =========================================================
-# 读取
+# 读取与清洗
 # =========================================================
 
 def load_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame, Path]:
@@ -79,6 +83,24 @@ def load_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame, Pa
     return df, path
 
 
+def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["y_fill"] = pd.to_numeric(out["y_fill"], errors="coerce").fillna(0).astype(int)
+
+    if "label_ready_fill" in out.columns:
+        out["label_ready_fill"] = pd.to_numeric(out["label_ready_fill"], errors="coerce").fillna(0).astype(int)
+        out = out[out["label_ready_fill"] == 1].copy()
+
+    if out.empty:
+        raise ValueError("过滤 label_ready_fill=1 后无可训练样本")
+
+    uniq = sorted(out["y_fill"].dropna().unique().tolist())
+    if len(uniq) < 2:
+        raise ValueError(f"可训练样本只有单一标签，无法训练二分类模型：labels={uniq}")
+
+    return out
+
+
 # =========================================================
 # 切分
 # =========================================================
@@ -88,6 +110,7 @@ def split_train_valid(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, str
     优先按 trade_date 时间切分：
     - 若至少有 3 个不同 trade_date：最后一个日期做 valid，其余做 train
     - 否则：按行切分 80/20
+    - 保证 train/valid 两边都尽量包含 0/1 两类；否则报错
     """
     if "trade_date" in df.columns:
         dates = sorted({norm_ymd(x) for x in df["trade_date"].dropna().tolist() if norm_ymd(x)})
@@ -96,7 +119,8 @@ def split_train_valid(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, str
             train_df = df[df["trade_date"].map(norm_ymd) < valid_date].copy()
             valid_df = df[df["trade_date"].map(norm_ymd) == valid_date].copy()
             if len(train_df) > 0 and len(valid_df) > 0:
-                return train_df, valid_df, f"time_holdout:{valid_date}"
+                if train_df["y_fill"].nunique() >= 2 and valid_df["y_fill"].nunique() >= 2:
+                    return train_df, valid_df, f"time_holdout:{valid_date}"
 
     n = len(df)
     cut = max(int(n * 0.8), 1)
@@ -105,6 +129,10 @@ def split_train_valid(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, str
     if len(valid_df) == 0:
         valid_df = df.iloc[-max(1, min(20, n)):].copy()
         train_df = df.iloc[: max(1, n - len(valid_df))].copy()
+
+    if train_df["y_fill"].nunique() < 2 or valid_df["y_fill"].nunique() < 2:
+        raise ValueError("训练/验证切分后标签类别不足，无法稳定评估；请扩大样本窗口")
+
     return train_df, valid_df, "row_holdout:80_20"
 
 
@@ -118,6 +146,10 @@ LEAKAGE_COLS = {
     "entry_price_proxy_t1",
     "entry_price_proxy_mode",
     "exec_date",
+    "target_date",
+    "sample_maturity",
+    "label_ready_fill",
+    "label_ready_ret",
     "open_t1",
     "high_t1",
     "low_t1",
@@ -146,6 +178,7 @@ ID_COLS = {
 NON_FEATURE_PREFIXES = (
     "Unnamed:",
 )
+
 
 def select_feature_columns(df: pd.DataFrame) -> List[str]:
     cols: List[str] = []
@@ -239,11 +272,6 @@ def fit_gbm(
     valid_df: pd.DataFrame,
     feature_cols: List[str],
 ) -> Tuple[object, pd.DataFrame, pd.DataFrame]:
-    """
-    GBM 侧直接走轻预处理：
-    - 数值列：转 numeric，缺失填 -999
-    - 类别列：category -> code
-    """
     x_train = train_df[feature_cols].copy()
     x_valid = valid_df[feature_cols].copy()
 
@@ -311,14 +339,10 @@ def evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> Dict[str, float | 
 # =========================================================
 
 def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, object]:
-    df, trainset_path = load_trainset(project_root, trade_date)
-
-    df = df.copy()
-    df["y_fill"] = pd.to_numeric(df["y_fill"], errors="coerce").fillna(0).astype(int)
+    raw_df, trainset_path = load_trainset(project_root, trade_date)
+    df = prepare_train_df(raw_df)
 
     train_df, valid_df, split_mode = split_train_valid(df)
-    if len(train_df) == 0 or len(valid_df) == 0:
-        raise ValueError("训练/验证切分失败，样本不足")
 
     feature_cols = select_feature_columns(df)
     num_cols, cat_cols = split_feature_types(df, feature_cols)
@@ -351,8 +375,21 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
     gbm_path = models_dir / "pfill_lgbm.joblib"
     meta_path = models_dir / "pfill_meta.json"
 
+    lr_dated_path = models_dir / f"pfill_lr_{trade_date}.joblib"
+    gbm_dated_path = models_dir / f"pfill_lgbm_{trade_date}.joblib"
+    meta_dated_path = models_dir / f"pfill_meta_{trade_date}.json"
+
     joblib.dump(lr_pipe, lr_path)
     joblib.dump(gbm_model, gbm_path)
+    joblib.dump(lr_pipe, lr_dated_path)
+    joblib.dump(gbm_model, gbm_dated_path)
+
+    sample_maturity_distribution: Dict[str, int] = {}
+    if "sample_maturity" in df.columns:
+        sample_maturity_distribution = {
+            str(k): int(v)
+            for k, v in df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict().items()
+        }
 
     meta: Dict[str, object] = {
         "train_time_utc": utc_now_iso(),
@@ -362,19 +399,25 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
         "model_paths": {
             "lr": str(lr_path),
             "lgbm": str(gbm_path),
+            "lr_dated": str(lr_dated_path),
+            "lgbm_dated": str(gbm_dated_path),
         },
+        "meta_path_dated": str(meta_dated_path),
         "model_backend": {
             "lr": "sklearn.LogisticRegression",
             "lgbm": "lightgbm.LGBMClassifier" if HAS_LGBM else "sklearn.HistGradientBoostingClassifier",
         },
         "rows": {
-            "all": int(len(df)),
+            "raw_all": int(len(raw_df)),
+            "ready_only": int(len(df)),
             "train": int(len(train_df)),
             "valid": int(len(valid_df)),
         },
+        "fill_truth_ready_only": True,
+        "sample_maturity_distribution": sample_maturity_distribution,
         "label_distribution": {
-            "all_pos": int((df["y_fill"] == 1).sum()),
-            "all_neg": int((df["y_fill"] == 0).sum()),
+            "ready_all_pos": int((df["y_fill"] == 1).sum()),
+            "ready_all_neg": int((df["y_fill"] == 0).sum()),
             "train_pos": int((train_df["y_fill"] == 1).sum()),
             "train_neg": int((train_df["y_fill"] == 0).sum()),
             "valid_pos": int((valid_df["y_fill"] == 1).sum()),
@@ -395,18 +438,21 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
             "lgbm": gbm_metrics,
         },
         "notes": [
-            "首版只解决 P_fill 学习模型训练，不接 run_v2.py。",
+            "仅训练 label_ready_fill=1 的成熟样本。",
             "采用时间切分优先，样本不足时退化为行切分。",
-            "泄露列（T+1 真值列/标签列）已从特征中剔除。",
+            "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
+            "同时输出 latest 与 dated 模型文件，便于追溯。",
         ],
     }
 
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    meta_text = json.dumps(meta, ensure_ascii=False, indent=2)
+    meta_path.write_text(meta_text, encoding="utf-8")
+    meta_dated_path.write_text(meta_text, encoding="utf-8")
 
     print(f"[train_pfill] trade_date={trade_date}")
     print(f"[train_pfill] trainset={trainset_path}")
     print(f"[train_pfill] split_mode={split_mode}")
-    print(f"[train_pfill] rows_all={len(df)} train={len(train_df)} valid={len(valid_df)}")
+    print(f"[train_pfill] rows_raw={len(raw_df)} ready={len(df)} train={len(train_df)} valid={len(valid_df)}")
     print(f"[train_pfill] features_total={len(feature_cols)}")
     print(f"[train_pfill] lr_auc={lr_metrics['auc']} gbm_auc={gbm_metrics['auc']}")
     print(f"[train_pfill] out_lr={lr_path}")
