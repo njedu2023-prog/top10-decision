@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       trade_date:
-        description: "手动指定交易日 YYYYMMDD（留空=使用 a-top10 decisio latest）"
+        description: "手动指定交易日 YYYYMMDD（Decision: 留空=使用 a-top10 decisio latest；Learning: 留空=自动选择已成熟 trade_date）"
         required: false
         type: string
 
@@ -57,6 +57,7 @@ jobs:
           mkdir -p docs/weights
           mkdir -p outputs/decision
           mkdir -p outputs/learning
+          mkdir -p models
 
       # 1) 同步 prior：pred_source_latest + pred archive
       - name: Sync pred source snapshot (to data/pred/pred_source_latest.csv)
@@ -215,4 +216,153 @@ jobs:
             echo "[push] done"
           else
             echo "[push] no changes"
+          fi
+
+  pfill_learning:
+    needs: decision
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Reset to latest remote main
+        run: |
+          set -e
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install deps
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> $GITHUB_ENV
+
+      - name: Ensure learning dirs
+        run: |
+          set -e
+          mkdir -p data/market
+          mkdir -p outputs/learning
+          mkdir -p models
+
+      - name: Resolve matured trade_date for P_fill learning
+        id: resolve_learning_td
+        env:
+          TRADE_DATE_INPUT: ${{ inputs.trade_date }}
+        run: |
+          set -e
+
+          if [ -n "${TRADE_DATE_INPUT}" ]; then
+            TD="${TRADE_DATE_INPUT}"
+          else
+            TD="$(python - <<'PY'
+from pathlib import Path
+import re
+
+market_dir = Path('data/market')
+raw_root = market_dir / 'raw'
+
+feature_dates = []
+for p in market_dir.glob('features_limit_*.csv'):
+    m = re.fullmatch(r'features_limit_(\d{8})\.csv', p.name)
+    if m:
+        feature_dates.append(m.group(1))
+
+raw_dates = []
+if raw_root.exists():
+    for year_dir in raw_root.iterdir():
+        if not year_dir.is_dir():
+            continue
+        for day_dir in year_dir.iterdir():
+            if day_dir.is_dir() and re.fullmatch(r'\d{8}', day_dir.name):
+                raw_dates.append(day_dir.name)
+
+feature_dates = sorted(set(feature_dates))
+raw_dates = sorted(set(raw_dates))
+
+candidates = []
+for td in feature_dates:
+    if any(rd > td for rd in raw_dates):
+        candidates.append(td)
+
+print(candidates[-1] if candidates else '')
+PY
+)"
+          fi
+
+          if echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
+            echo "[learning] resolved matured trade_date=${TD}"
+            echo "trade_date=${TD}" >> "$GITHUB_OUTPUT"
+            echo "has_trade_date=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "[learning] no matured trade_date found; skip learning job"
+            echo "trade_date=" >> "$GITHUB_OUTPUT"
+            echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build fill truth
+        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          python scripts/build_fill_truth.py --trade-date "${{ steps.resolve_learning_td.outputs.trade_date }}"
+
+      - name: Build P_fill trainset
+        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          python scripts/build_pfill_trainset.py --trade-date "${{ steps.resolve_learning_td.outputs.trade_date }}"
+
+      - name: Train P_fill models
+        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          python scripts/train_pfill.py --trade-date "${{ steps.resolve_learning_td.outputs.trade_date }}"
+
+      - name: Show learning artifacts
+        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          echo "[learning] trade_date=${{ steps.resolve_learning_td.outputs.trade_date }}"
+          ls -lah data/market || true
+          ls -lah models || true
+
+      - name: Commit learning artifacts
+        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git pull --rebase origin main || true
+
+          git add data/market/fill_truth_*.csv || true
+          git add data/market/fill_truth_*.meta.json || true
+          git add data/market/pfill_trainset_*.csv || true
+          git add data/market/pfill_trainset_*.meta.json || true
+          git add models/pfill_*.joblib || true
+          git add models/pfill_*.json || true
+
+          echo "[git-learning] status after add:"
+          git status --porcelain || true
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "auto: build fill_truth, pfill trainset, and pfill models"
+            git push
+            echo "[push-learning] done"
+          else
+            echo "[push-learning] no changes"
           fi
