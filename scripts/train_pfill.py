@@ -20,6 +20,8 @@ train_pfill.py
 - 主模型 2：LightGBM（若环境缺失则降级为 HistGradientBoosting）
 - 只训练 label_ready_fill=1 的成熟样本
 - 时间切分优先；若单日样本不足，再退化为行切分
+- 若切分后 train/valid 标签类别不足，则进入 small_sample_mode：
+  使用全量样本训练，跳过稳定评估，但不断链
 """
 
 from __future__ import annotations
@@ -28,21 +30,22 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.ensemble import HistGradientBoostingClassifier
 
 try:
     from lightgbm import LGBMClassifier
+
     HAS_LGBM = True
 except Exception:
     HAS_LGBM = False
@@ -52,7 +55,6 @@ except Exception:
 # =========================================================
 # 路径
 # =========================================================
-
 def detect_project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
@@ -70,7 +72,6 @@ def utc_now_iso() -> str:
 # =========================================================
 # 读取与清洗
 # =========================================================
-
 def load_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame, Path]:
     path = project_root / "data" / "market" / f"pfill_trainset_{trade_date}.csv"
     if not path.exists():
@@ -88,7 +89,9 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     out["y_fill"] = pd.to_numeric(out["y_fill"], errors="coerce").fillna(0).astype(int)
 
     if "label_ready_fill" in out.columns:
-        out["label_ready_fill"] = pd.to_numeric(out["label_ready_fill"], errors="coerce").fillna(0).astype(int)
+        out["label_ready_fill"] = (
+            pd.to_numeric(out["label_ready_fill"], errors="coerce").fillna(0).astype(int)
+        )
         out = out[out["label_ready_fill"] == 1].copy()
 
     if out.empty:
@@ -104,13 +107,21 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
 # =========================================================
 # 切分
 # =========================================================
-
-def split_train_valid(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+def split_train_valid(
+    df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, Optional[pd.DataFrame], str, bool]:
     """
+    返回：
+    - train_df
+    - valid_df（small_sample_mode 时为 None）
+    - split_mode
+    - small_sample_mode
+
     优先按 trade_date 时间切分：
     - 若至少有 3 个不同 trade_date：最后一个日期做 valid，其余做 train
     - 否则：按行切分 80/20
-    - 保证 train/valid 两边都尽量包含 0/1 两类；否则报错
+    - 若切分后 train/valid 任一边标签类别不足，则进入 small_sample_mode：
+      使用全量样本训练，跳过验证评估
     """
     if "trade_date" in df.columns:
         dates = sorted({norm_ymd(x) for x in df["trade_date"].dropna().tolist() if norm_ymd(x)})
@@ -120,26 +131,28 @@ def split_train_valid(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, str
             valid_df = df[df["trade_date"].map(norm_ymd) == valid_date].copy()
             if len(train_df) > 0 and len(valid_df) > 0:
                 if train_df["y_fill"].nunique() >= 2 and valid_df["y_fill"].nunique() >= 2:
-                    return train_df, valid_df, f"time_holdout:{valid_date}"
+                    return train_df, valid_df, f"time_holdout:{valid_date}", False
 
     n = len(df)
     cut = max(int(n * 0.8), 1)
     train_df = df.iloc[:cut].copy()
     valid_df = df.iloc[cut:].copy()
+
     if len(valid_df) == 0:
-        valid_df = df.iloc[-max(1, min(20, n)):].copy()
+        valid_df = df.iloc[-max(1, min(20, n)) :].copy()
         train_df = df.iloc[: max(1, n - len(valid_df))].copy()
 
-    if train_df["y_fill"].nunique() < 2 or valid_df["y_fill"].nunique() < 2:
-        raise ValueError("训练/验证切分后标签类别不足，无法稳定评估；请扩大样本窗口")
+    if len(train_df) > 0 and len(valid_df) > 0:
+        if train_df["y_fill"].nunique() >= 2 and valid_df["y_fill"].nunique() >= 2:
+            return train_df, valid_df, "row_holdout:80_20", False
 
-    return train_df, valid_df, "row_holdout:80_20"
+    # 小样本容错：全量训练，不做验证评估
+    return df.copy(), None, "small_sample_full_train", True
 
 
 # =========================================================
 # 特征选择
 # =========================================================
-
 LEAKAGE_COLS = {
     "y_fill",
     "fill_label_quality",
@@ -175,9 +188,7 @@ ID_COLS = {
     "name",
 }
 
-NON_FEATURE_PREFIXES = (
-    "Unnamed:",
-)
+NON_FEATURE_PREFIXES = ("Unnamed:",)
 
 
 def select_feature_columns(df: pd.DataFrame) -> List[str]:
@@ -207,24 +218,27 @@ def split_feature_types(df: pd.DataFrame, feature_cols: List[str]) -> Tuple[List
 # =========================================================
 # 模型
 # =========================================================
-
 def build_lr_pipeline(num_cols: List[str], cat_cols: List[str]) -> Pipeline:
     pre = ColumnTransformer(
         transformers=[
             (
                 "num",
-                Pipeline([
-                    ("imputer", SimpleImputer(strategy="median")),
-                    ("scaler", StandardScaler()),
-                ]),
+                Pipeline(
+                    [
+                        ("imputer", SimpleImputer(strategy="median")),
+                        ("scaler", StandardScaler()),
+                    ]
+                ),
                 num_cols,
             ),
             (
                 "cat",
-                Pipeline([
-                    ("imputer", SimpleImputer(strategy="most_frequent")),
-                    ("ohe", OneHotEncoder(handle_unknown="ignore")),
-                ]),
+                Pipeline(
+                    [
+                        ("imputer", SimpleImputer(strategy="most_frequent")),
+                        ("ohe", OneHotEncoder(handle_unknown="ignore")),
+                    ]
+                ),
                 cat_cols,
             ),
         ],
@@ -238,10 +252,12 @@ def build_lr_pipeline(num_cols: List[str], cat_cols: List[str]) -> Pipeline:
         n_jobs=None,
     )
 
-    return Pipeline([
-        ("pre", pre),
-        ("clf", clf),
-    ])
+    return Pipeline(
+        [
+            ("pre", pre),
+            ("clf", clf),
+        ]
+    )
 
 
 def build_gbm_model() -> object:
@@ -267,42 +283,67 @@ def build_gbm_model() -> object:
     )
 
 
-def fit_gbm(
+def encode_gbm_frame(df: pd.DataFrame, feature_cols: List[str]) -> pd.DataFrame:
+    x = df[feature_cols].copy()
+    for c in feature_cols:
+        if pd.api.types.is_numeric_dtype(x[c]):
+            x[c] = pd.to_numeric(x[c], errors="coerce").fillna(-999.0)
+        else:
+            cat = x[c].astype(str)
+            uniq = pd.Index(cat.unique())
+            mapping = {v: i for i, v in enumerate(uniq)}
+            x[c] = cat.map(mapping).fillna(-1).astype(float)
+    return x
+
+
+def fit_gbm_train_only(
+    train_df: pd.DataFrame,
+    feature_cols: List[str],
+) -> object:
+    x_train = encode_gbm_frame(train_df, feature_cols)
+    model = build_gbm_model()
+    sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
+    if sample_weight is not None:
+        model.fit(x_train, train_df["y_fill"].astype(int).values, sample_weight=sample_weight)
+    else:
+        model.fit(x_train, train_df["y_fill"].astype(int).values)
+    return model
+
+
+def fit_gbm_with_valid(
     train_df: pd.DataFrame,
     valid_df: pd.DataFrame,
     feature_cols: List[str],
-) -> Tuple[object, pd.DataFrame, pd.DataFrame]:
-    x_train = train_df[feature_cols].copy()
-    x_valid = valid_df[feature_cols].copy()
+) -> Tuple[object, pd.DataFrame]:
+    train_all = pd.concat([train_df[feature_cols], valid_df[feature_cols]], axis=0).copy()
+    encoded_all = train_all.copy()
 
     for c in feature_cols:
-        if pd.api.types.is_numeric_dtype(x_train[c]):
-            x_train[c] = pd.to_numeric(x_train[c], errors="coerce").fillna(-999.0)
-            x_valid[c] = pd.to_numeric(x_valid[c], errors="coerce").fillna(-999.0)
+        if pd.api.types.is_numeric_dtype(encoded_all[c]):
+            encoded_all[c] = pd.to_numeric(encoded_all[c], errors="coerce").fillna(-999.0)
         else:
-            train_cat = x_train[c].astype("category")
-            valid_cat = x_valid[c].astype("category")
-            all_vals = pd.Index(train_cat.astype(str).unique()).union(pd.Index(valid_cat.astype(str).unique()))
-            mapping = {v: i for i, v in enumerate(all_vals)}
-            x_train[c] = train_cat.astype(str).map(mapping).fillna(-1).astype(float)
-            x_valid[c] = valid_cat.astype(str).map(mapping).fillna(-1).astype(float)
+            cat = encoded_all[c].astype(str)
+            uniq = pd.Index(cat.unique())
+            mapping = {v: i for i, v in enumerate(uniq)}
+            encoded_all[c] = cat.map(mapping).fillna(-1).astype(float)
+
+    x_train = encoded_all.iloc[: len(train_df)].copy()
+    x_valid = encoded_all.iloc[len(train_df) :].copy()
 
     model = build_gbm_model()
-
     sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
     if sample_weight is not None:
         model.fit(x_train, train_df["y_fill"].astype(int).values, sample_weight=sample_weight)
     else:
         model.fit(x_train, train_df["y_fill"].astype(int).values)
 
-    return model, x_train, x_valid
+    return model, x_valid
 
 
 # =========================================================
 # 评估
 # =========================================================
-
-def safe_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
+def safe_auc(y_true: np.ndarray, y_prob: np.ndarray) -> Optional[float]:
     try:
         if len(np.unique(y_true)) < 2:
             return None
@@ -311,7 +352,7 @@ def safe_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
         return None
 
 
-def safe_logloss(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
+def safe_logloss(y_true: np.ndarray, y_prob: np.ndarray) -> Optional[float]:
     try:
         y_prob = np.clip(y_prob, 1e-6, 1 - 1e-6)
         return float(log_loss(y_true, y_prob))
@@ -319,14 +360,14 @@ def safe_logloss(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
         return None
 
 
-def safe_brier(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
+def safe_brier(y_true: np.ndarray, y_prob: np.ndarray) -> Optional[float]:
     try:
         return float(brier_score_loss(y_true, y_prob))
     except Exception:
         return None
 
 
-def evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> Dict[str, float | None]:
+def evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> Dict[str, Optional[float]]:
     return {
         "auc": safe_auc(y_true, y_prob),
         "logloss": safe_logloss(y_true, y_prob),
@@ -334,15 +375,23 @@ def evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> Dict[str, float | 
     }
 
 
+def empty_metrics(reason: str) -> Dict[str, Optional[float] | str]:
+    return {
+        "auc": None,
+        "logloss": None,
+        "brier": None,
+        "reason": reason,
+    }
+
+
 # =========================================================
 # 主流程
 # =========================================================
-
 def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, object]:
     raw_df, trainset_path = load_trainset(project_root, trade_date)
     df = prepare_train_df(raw_df)
 
-    train_df, valid_df, split_mode = split_train_valid(df)
+    train_df, valid_df, split_mode, small_sample_mode = split_train_valid(df)
 
     feature_cols = select_feature_columns(df)
     num_cols, cat_cols = split_feature_types(df, feature_cols)
@@ -355,17 +404,25 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
         train_df["y_fill"].values,
         clf__sample_weight=lr_sample_weight,
     )
-    lr_valid_prob = lr_pipe.predict_proba(valid_df[feature_cols])[:, 1]
-    lr_metrics = evaluate_probs(valid_df["y_fill"].values, lr_valid_prob)
+
+    if valid_df is not None:
+        lr_valid_prob = lr_pipe.predict_proba(valid_df[feature_cols])[:, 1]
+        lr_metrics = evaluate_probs(valid_df["y_fill"].values, lr_valid_prob)
+    else:
+        lr_metrics = empty_metrics("small_sample_mode_skip_valid")
 
     # GBM / LGBM
-    gbm_model, _, x_valid_gbm = fit_gbm(train_df, valid_df, feature_cols)
-    if hasattr(gbm_model, "predict_proba"):
-        gbm_valid_prob = gbm_model.predict_proba(x_valid_gbm)[:, 1]
+    if valid_df is not None:
+        gbm_model, x_valid_gbm = fit_gbm_with_valid(train_df, valid_df, feature_cols)
+        if hasattr(gbm_model, "predict_proba"):
+            gbm_valid_prob = gbm_model.predict_proba(x_valid_gbm)[:, 1]
+        else:
+            raw = gbm_model.predict(x_valid_gbm)
+            gbm_valid_prob = np.asarray(raw, dtype=float)
+        gbm_metrics = evaluate_probs(valid_df["y_fill"].values, gbm_valid_prob)
     else:
-        raw = gbm_model.predict(x_valid_gbm)
-        gbm_valid_prob = np.asarray(raw, dtype=float)
-    gbm_metrics = evaluate_probs(valid_df["y_fill"].values, gbm_valid_prob)
+        gbm_model = fit_gbm_train_only(train_df, feature_cols)
+        gbm_metrics = empty_metrics("small_sample_mode_skip_valid")
 
     # 输出
     models_dir = project_root / "models"
@@ -396,6 +453,7 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
         "trade_date": trade_date,
         "trainset_path": str(trainset_path),
         "split_mode": split_mode,
+        "small_sample_mode": bool(small_sample_mode),
         "model_paths": {
             "lr": str(lr_path),
             "lgbm": str(gbm_path),
@@ -411,7 +469,7 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
             "raw_all": int(len(raw_df)),
             "ready_only": int(len(df)),
             "train": int(len(train_df)),
-            "valid": int(len(valid_df)),
+            "valid": int(len(valid_df)) if valid_df is not None else 0,
         },
         "fill_truth_ready_only": True,
         "sample_maturity_distribution": sample_maturity_distribution,
@@ -420,8 +478,8 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
             "ready_all_neg": int((df["y_fill"] == 0).sum()),
             "train_pos": int((train_df["y_fill"] == 1).sum()),
             "train_neg": int((train_df["y_fill"] == 0).sum()),
-            "valid_pos": int((valid_df["y_fill"] == 1).sum()),
-            "valid_neg": int((valid_df["y_fill"] == 0).sum()),
+            "valid_pos": int((valid_df["y_fill"] == 1).sum()) if valid_df is not None else 0,
+            "valid_neg": int((valid_df["y_fill"] == 0).sum()) if valid_df is not None else 0,
         },
         "features": {
             "n_total": int(len(feature_cols)),
@@ -429,10 +487,7 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
             "n_categorical": int(len(cat_cols)),
             "feature_cols": feature_cols,
         },
-        "missing_ratio": {
-            c: round(float(df[c].isna().mean()), 6)
-            for c in feature_cols
-        },
+        "missing_ratio": {c: round(float(df[c].isna().mean()), 6) for c in feature_cols},
         "metrics_valid": {
             "lr": lr_metrics,
             "lgbm": gbm_metrics,
@@ -440,6 +495,7 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
         "notes": [
             "仅训练 label_ready_fill=1 的成熟样本。",
             "采用时间切分优先，样本不足时退化为行切分。",
+            "若切分后标签类别不足，则进入 small_sample_mode：全量训练，跳过 valid 评估。",
             "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
         ],
@@ -452,9 +508,13 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
     print(f"[train_pfill] trade_date={trade_date}")
     print(f"[train_pfill] trainset={trainset_path}")
     print(f"[train_pfill] split_mode={split_mode}")
-    print(f"[train_pfill] rows_raw={len(raw_df)} ready={len(df)} train={len(train_df)} valid={len(valid_df)}")
+    print(f"[train_pfill] small_sample_mode={small_sample_mode}")
+    print(
+        f"[train_pfill] rows_raw={len(raw_df)} ready={len(df)} "
+        f"train={len(train_df)} valid={len(valid_df) if valid_df is not None else 0}"
+    )
     print(f"[train_pfill] features_total={len(feature_cols)}")
-    print(f"[train_pfill] lr_auc={lr_metrics['auc']} gbm_auc={gbm_metrics['auc']}")
+    print(f"[train_pfill] lr_auc={lr_metrics.get('auc')} gbm_auc={gbm_metrics.get('auc')}")
     print(f"[train_pfill] out_lr={lr_path}")
     print(f"[train_pfill] out_lgbm={gbm_path}")
     print(f"[train_pfill] out_meta={meta_path}")
