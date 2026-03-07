@@ -10,11 +10,19 @@ build_fill_truth.py
 - 生成 P_fill 学习标签文件：
     data/market/fill_truth_{trade_date}.csv
 
-当前只做“标签层”：
+当前阶段只做 P_fill 标签层：
 - y_fill
 - fill_label_quality
 - entry_price_proxy_t1
 - entry_price_proxy_mode
+
+并补充训练窗口 / 成熟度字段：
+- trade_date
+- exec_date
+- target_date
+- sample_maturity
+- label_ready_fill
+- label_ready_ret
 
 不负责：
 - 训练样本拼装
@@ -156,35 +164,56 @@ def build_paths(trade_date: str, project_root: Optional[Path] = None) -> Paths:
     )
 
 
-def infer_exec_date(raw_root: Path, trade_date: str) -> str:
-    """
-    从 data/market/raw/{YYYY}/{YYYYMMDD}/ 扫描出 > trade_date 的最早快照，视为 T+1。
-    """
-    candidates: List[str] = []
-
-    yearly_root = raw_root
-    if not yearly_root.exists():
-        return ""
-
-    for year_dir in yearly_root.iterdir():
-        if not year_dir.is_dir():
-            continue
-        year_name = year_dir.name
-        if not year_name.isdigit() or len(year_name) != 4:
-            continue
-        for day_dir in year_dir.iterdir():
-            if day_dir.is_dir():
-                ymd = norm_ymd(day_dir.name)
-                if len(ymd) == 8 and ymd > trade_date:
-                    candidates.append(ymd)
-
-    if not candidates:
-        return ""
-    return sorted(set(candidates))[0]
-
-
 def snapshot_dir(raw_root: Path, ymd: str) -> Path:
     return raw_root / ymd[:4] / ymd
+
+
+def scan_available_raw_dates(raw_root: Path) -> List[str]:
+    out: List[str] = []
+    if not raw_root.exists():
+        return out
+
+    for year_dir in raw_root.iterdir():
+        if not year_dir.is_dir():
+            continue
+        if not (year_dir.name.isdigit() and len(year_dir.name) == 4):
+            continue
+        for day_dir in year_dir.iterdir():
+            if not day_dir.is_dir():
+                continue
+            ymd = norm_ymd(day_dir.name)
+            if len(ymd) == 8:
+                out.append(ymd)
+
+    return sorted(set(out))
+
+
+def infer_next_date(raw_root: Path, anchor_date: str, step: int = 1) -> str:
+    dates = [d for d in scan_available_raw_dates(raw_root) if d > anchor_date]
+    if len(dates) < step:
+        return ""
+    return dates[step - 1]
+
+
+def infer_exec_date(raw_root: Path, trade_date: str) -> str:
+    return infer_next_date(raw_root, trade_date, step=1)
+
+
+def infer_target_date(raw_root: Path, trade_date: str, exec_date: str) -> str:
+    if exec_date:
+        return infer_next_date(raw_root, exec_date, step=1)
+    return infer_next_date(raw_root, trade_date, step=2)
+
+
+def resolve_sample_maturity(exec_date: str, target_date: str) -> Tuple[str, int, int]:
+    """
+    基于当前已存在的 raw 快照判断成熟度。
+    """
+    if exec_date and target_date:
+        return "FULLY_READY", 1, 1
+    if exec_date:
+        return "PFILL_READY", 1, 0
+    return "PRED_ONLY", 0, 0
 
 
 # =========================
@@ -281,8 +310,8 @@ def prep_limit_break(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=["ts_code"])
     out = ensure_ts_code(df)
-
     rename_map: Dict[str, str] = {}
+
     for srcs, target in [
         (["open_times"], "break_open_times_t1"),
         (["limit_times"], "limit_times_t1"),
@@ -370,8 +399,6 @@ def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
         or (pd.notna(break_open_times_t1) and break_open_times_t1 > 0)
     )
     if has_break:
-        # 当前只有日级 truth，无法精确恢复窗口内首个成交价
-        # 这里按契约：允许弱代理，但必须明确标注 mode/quality
         if pd.notna(open_t1):
             return 1, "weak_intraday_break_without_minbar", float(open_t1), "weak_daily_proxy"
         return 1, "weak_intraday_break_without_price", None, ""
@@ -392,7 +419,12 @@ def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
 # 主流程
 # =========================
 
-def build_fill_truth(trade_date: str, exec_date: str, paths: Paths) -> pd.DataFrame:
+def build_fill_truth(
+    trade_date: str,
+    exec_date: str,
+    target_date: str,
+    paths: Paths,
+) -> pd.DataFrame:
     feat = safe_read_csv(paths.features_limit)
     if feat.empty:
         raise FileNotFoundError(f"找不到或读不到 features_limit 文件：{paths.features_limit}")
@@ -404,12 +436,16 @@ def build_fill_truth(trade_date: str, exec_date: str, paths: Paths) -> pd.DataFr
     truth = load_t1_truth(paths.raw_root, exec_date)
     t1 = merge_t1_truth(truth)
 
+    maturity, label_ready_fill, label_ready_ret = resolve_sample_maturity(exec_date, target_date)
+
     base_cols = ["trade_date", "ts_code"]
     if "name" in feat.columns:
         base_cols.append("name")
+
     out = feat[base_cols].drop_duplicates(subset=["trade_date", "ts_code"]).copy()
     out = out.merge(t1, on="ts_code", how="left")
     out["exec_date"] = exec_date
+    out["target_date"] = target_date
 
     labels = out.apply(infer_fill_label, axis=1, result_type="expand")
     labels.columns = [
@@ -420,17 +456,25 @@ def build_fill_truth(trade_date: str, exec_date: str, paths: Paths) -> pd.DataFr
     ]
     out = pd.concat([out, labels], axis=1)
 
+    # 成熟度 / 训练窗口字段
+    out["sample_maturity"] = maturity
+    out["label_ready_fill"] = int(label_ready_fill)
+    out["label_ready_ret"] = int(label_ready_ret)
+
     # 审计字段
-    out["label_version"] = "pfill_truth_v1"
+    out["label_version"] = "pfill_truth_v2"
     out["buy_window_start"] = "09:30:00"
     out["buy_window_end"] = "10:30:00"
 
-    # 列顺序
     front = [
         "trade_date",
         "exec_date",
+        "target_date",
         "ts_code",
         "name",
+        "sample_maturity",
+        "label_ready_fill",
+        "label_ready_ret",
         "y_fill",
         "fill_label_quality",
         "entry_price_proxy_t1",
@@ -442,17 +486,26 @@ def build_fill_truth(trade_date: str, exec_date: str, paths: Paths) -> pd.DataFr
     remain = [c for c in out.columns if c not in front]
     out = out[[c for c in front if c in out.columns] + remain].copy()
 
-    # 类型整理
     out["y_fill"] = out["y_fill"].fillna(0).astype(int)
+    out["label_ready_fill"] = out["label_ready_fill"].fillna(0).astype(int)
+    out["label_ready_ret"] = out["label_ready_ret"].fillna(0).astype(int)
 
     return out
 
 
-def write_meta(df: pd.DataFrame, trade_date: str, exec_date: str, paths: Paths) -> None:
+def write_meta(df: pd.DataFrame, trade_date: str, exec_date: str, target_date: str, paths: Paths) -> None:
     payload = {
         "trade_date": trade_date,
         "exec_date": exec_date,
+        "target_date": target_date,
         "rows": int(len(df)),
+        "sample_maturity": (
+            df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict()
+            if "sample_maturity" in df.columns
+            else {}
+        ),
+        "label_ready_fill": int(df["label_ready_fill"].fillna(0).sum()) if "label_ready_fill" in df.columns else 0,
+        "label_ready_ret": int(df["label_ready_ret"].fillna(0).sum()) if "label_ready_ret" in df.columns else 0,
         "y_fill_1": int((df["y_fill"] == 1).sum()) if "y_fill" in df.columns else 0,
         "y_fill_0": int((df["y_fill"] == 0).sum()) if "y_fill" in df.columns else 0,
         "quality_counts": (
@@ -480,6 +533,11 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="T+1 执行日，格式 YYYYMMDD；留空则从 data/market/raw 自动推断最早下一快照",
     )
+    ap.add_argument(
+        "--target-date",
+        default="",
+        help="T+2 目标日，格式 YYYYMMDD；留空则从 data/market/raw 自动推断下一快照",
+    )
     return ap.parse_args()
 
 
@@ -502,12 +560,26 @@ def main() -> int:
             "或确认 data/market/raw/{YYYY}/{YYYYMMDD}/ 已存在下一交易日快照。"
         )
 
-    df = build_fill_truth(trade_date=trade_date, exec_date=exec_date, paths=paths)
+    target_date = norm_ymd(args.target_date)
+    if not target_date:
+        target_date = infer_target_date(paths.raw_root, trade_date, exec_date)
+
+    # target_date 允许为空：表示当前只到 PFILL_READY
+    if target_date and len(target_date) != 8:
+        raise ValueError("--target-date 必须是 YYYYMMDD 或留空")
+
+    df = build_fill_truth(
+        trade_date=trade_date,
+        exec_date=exec_date,
+        target_date=target_date,
+        paths=paths,
+    )
     df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")
-    write_meta(df, trade_date, exec_date, paths)
+    write_meta(df, trade_date, exec_date, target_date, paths)
 
     print(f"[build_fill_truth] trade_date={trade_date}")
     print(f"[build_fill_truth] exec_date={exec_date}")
+    print(f"[build_fill_truth] target_date={target_date}")
     print(f"[build_fill_truth] rows={len(df)}")
     print(f"[build_fill_truth] out={paths.out_csv}")
     print(f"[build_fill_truth] meta={paths.out_meta}")
