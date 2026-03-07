@@ -1,6 +1,6 @@
 {
   "trade_date": "20260306",
-  "created_at_utc": "2026-03-06T18:33:54+00:00",
+  "created_at_utc": "2026-03-07T13:25:52+00:00",
   "source_repo": {
     "owner": "njedu2023-prog",
     "repo": "a-share-top3-data",
@@ -310,33 +310,8 @@
   "write_failures": [],
   "legacy_cleanup": {
     "enabled": true,
-    "removed_files": [
-      "data/market/raw/_sync_meta_20260306.json",
-      "data/market/raw/_sync_meta_latest.json",
-      "data/market/raw/daily_20260306.csv",
-      "data/market/raw/daily_latest.csv",
-      "data/market/raw/daily_basic_20260306.csv",
-      "data/market/raw/daily_basic_latest.csv",
-      "data/market/raw/hot_boards_20260306.csv",
-      "data/market/raw/hot_boards_latest.csv",
-      "data/market/raw/limit_break_d_20260306.csv",
-      "data/market/raw/limit_break_d_latest.csv",
-      "data/market/raw/limit_list_d_20260306.csv",
-      "data/market/raw/limit_list_d_latest.csv",
-      "data/market/raw/limit_up_tags_20260306.csv",
-      "data/market/raw/limit_up_tags_latest.csv",
-      "data/market/raw/moneyflow_hsgt_20260306.csv",
-      "data/market/raw/moneyflow_hsgt_latest.csv",
-      "data/market/raw/namechange_20260306.csv",
-      "data/market/raw/namechange_latest.csv",
-      "data/market/raw/stk_limit_20260306.csv",
-      "data/market/raw/stk_limit_latest.csv",
-      "data/market/raw/stock_basic_20260306.csv",
-      "data/market/raw/stock_basic_latest.csv",
-      "data/market/raw/top_list_20260306.csv",
-      "data/market/raw/top_list_latest.csv"
-    ],
-    "removed_count": 24
+    "removed_files": [],
+    "removed_count": 0
   },
   "summary": {
     "success_count": 11,
