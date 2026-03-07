@@ -1,0 +1,437 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+train_pfill.py
+
+用途：
+- 读取 data/market/pfill_trainset_{trade_date}.csv
+- 训练 P_fill 二分类模型
+- 输出：
+    models/pfill_lr.joblib
+    models/pfill_lgbm.joblib
+    models/pfill_meta.json
+
+当前策略：
+- 主模型 1：LogisticRegression
+- 主模型 2：LightGBM（若环境缺失则降级为 HistGradientBoosting）
+- 时间切分优先；若单日样本不足，再退化为行切分
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import log_loss, roc_auc_score, brier_score_loss
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.ensemble import HistGradientBoostingClassifier
+
+try:
+    from lightgbm import LGBMClassifier
+    HAS_LGBM = True
+except Exception:
+    HAS_LGBM = False
+    LGBMClassifier = None  # type: ignore
+
+
+# =========================================================
+# 路径
+# =========================================================
+
+def detect_project_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def norm_ymd(x: object) -> str:
+    s = str(x or "").strip()
+    digits = "".join(ch for ch in s if ch.isdigit())
+    return digits[:8] if len(digits) >= 8 else s
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+# =========================================================
+# 读取
+# =========================================================
+
+def load_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame, Path]:
+    path = project_root / "data" / "market" / f"pfill_trainset_{trade_date}.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"找不到训练样本文件：{path}")
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    if df.empty:
+        raise ValueError(f"训练样本为空：{path}")
+    if "y_fill" not in df.columns:
+        raise ValueError("训练样本缺少 y_fill 列")
+    return df, path
+
+
+# =========================================================
+# 切分
+# =========================================================
+
+def split_train_valid(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+    """
+    优先按 trade_date 时间切分：
+    - 若至少有 3 个不同 trade_date：最后一个日期做 valid，其余做 train
+    - 否则：按行切分 80/20
+    """
+    if "trade_date" in df.columns:
+        dates = sorted({norm_ymd(x) for x in df["trade_date"].dropna().tolist() if norm_ymd(x)})
+        if len(dates) >= 3:
+            valid_date = dates[-1]
+            train_df = df[df["trade_date"].map(norm_ymd) < valid_date].copy()
+            valid_df = df[df["trade_date"].map(norm_ymd) == valid_date].copy()
+            if len(train_df) > 0 and len(valid_df) > 0:
+                return train_df, valid_df, f"time_holdout:{valid_date}"
+
+    n = len(df)
+    cut = max(int(n * 0.8), 1)
+    train_df = df.iloc[:cut].copy()
+    valid_df = df.iloc[cut:].copy()
+    if len(valid_df) == 0:
+        valid_df = df.iloc[-max(1, min(20, n)):].copy()
+        train_df = df.iloc[: max(1, n - len(valid_df))].copy()
+    return train_df, valid_df, "row_holdout:80_20"
+
+
+# =========================================================
+# 特征选择
+# =========================================================
+
+LEAKAGE_COLS = {
+    "y_fill",
+    "fill_label_quality",
+    "entry_price_proxy_t1",
+    "entry_price_proxy_mode",
+    "exec_date",
+    "open_t1",
+    "high_t1",
+    "low_t1",
+    "close_t1",
+    "up_limit_t1",
+    "down_limit_t1",
+    "limit_type_t1",
+    "open_times_t1",
+    "break_open_times_t1",
+    "first_seal_time_t1",
+    "last_seal_time_t1",
+    "seal_amount_t1",
+    "is_suspended_t1",
+    "dataset_split",
+    "label_version",
+    "buy_window_start",
+    "buy_window_end",
+}
+
+ID_COLS = {
+    "trade_date",
+    "ts_code",
+    "name",
+}
+
+NON_FEATURE_PREFIXES = (
+    "Unnamed:",
+)
+
+def select_feature_columns(df: pd.DataFrame) -> List[str]:
+    cols: List[str] = []
+    for c in df.columns:
+        if c in LEAKAGE_COLS or c in ID_COLS:
+            continue
+        if any(str(c).startswith(p) for p in NON_FEATURE_PREFIXES):
+            continue
+        cols.append(c)
+    if not cols:
+        raise ValueError("未找到可训练特征列")
+    return cols
+
+
+def split_feature_types(df: pd.DataFrame, feature_cols: List[str]) -> Tuple[List[str], List[str]]:
+    num_cols: List[str] = []
+    cat_cols: List[str] = []
+    for c in feature_cols:
+        if pd.api.types.is_numeric_dtype(df[c]):
+            num_cols.append(c)
+        else:
+            cat_cols.append(c)
+    return num_cols, cat_cols
+
+
+# =========================================================
+# 模型
+# =========================================================
+
+def build_lr_pipeline(num_cols: List[str], cat_cols: List[str]) -> Pipeline:
+    pre = ColumnTransformer(
+        transformers=[
+            (
+                "num",
+                Pipeline([
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler()),
+                ]),
+                num_cols,
+            ),
+            (
+                "cat",
+                Pipeline([
+                    ("imputer", SimpleImputer(strategy="most_frequent")),
+                    ("ohe", OneHotEncoder(handle_unknown="ignore")),
+                ]),
+                cat_cols,
+            ),
+        ],
+        remainder="drop",
+    )
+
+    clf = LogisticRegression(
+        max_iter=2000,
+        class_weight="balanced",
+        random_state=42,
+        n_jobs=None,
+    )
+
+    return Pipeline([
+        ("pre", pre),
+        ("clf", clf),
+    ])
+
+
+def build_gbm_model() -> object:
+    if HAS_LGBM:
+        return LGBMClassifier(
+            n_estimators=300,
+            learning_rate=0.03,
+            num_leaves=31,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            reg_alpha=0.1,
+            reg_lambda=0.1,
+            objective="binary",
+            random_state=42,
+            class_weight="balanced",
+            verbosity=-1,
+        )
+    return HistGradientBoostingClassifier(
+        max_iter=300,
+        learning_rate=0.03,
+        max_depth=6,
+        random_state=42,
+    )
+
+
+def fit_gbm(
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    feature_cols: List[str],
+) -> Tuple[object, pd.DataFrame, pd.DataFrame]:
+    """
+    GBM 侧直接走轻预处理：
+    - 数值列：转 numeric，缺失填 -999
+    - 类别列：category -> code
+    """
+    x_train = train_df[feature_cols].copy()
+    x_valid = valid_df[feature_cols].copy()
+
+    for c in feature_cols:
+        if pd.api.types.is_numeric_dtype(x_train[c]):
+            x_train[c] = pd.to_numeric(x_train[c], errors="coerce").fillna(-999.0)
+            x_valid[c] = pd.to_numeric(x_valid[c], errors="coerce").fillna(-999.0)
+        else:
+            train_cat = x_train[c].astype("category")
+            valid_cat = x_valid[c].astype("category")
+            all_vals = pd.Index(train_cat.astype(str).unique()).union(pd.Index(valid_cat.astype(str).unique()))
+            mapping = {v: i for i, v in enumerate(all_vals)}
+            x_train[c] = train_cat.astype(str).map(mapping).fillna(-1).astype(float)
+            x_valid[c] = valid_cat.astype(str).map(mapping).fillna(-1).astype(float)
+
+    model = build_gbm_model()
+
+    sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
+    if sample_weight is not None:
+        model.fit(x_train, train_df["y_fill"].astype(int).values, sample_weight=sample_weight)
+    else:
+        model.fit(x_train, train_df["y_fill"].astype(int).values)
+
+    return model, x_train, x_valid
+
+
+# =========================================================
+# 评估
+# =========================================================
+
+def safe_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
+    try:
+        if len(np.unique(y_true)) < 2:
+            return None
+        return float(roc_auc_score(y_true, y_prob))
+    except Exception:
+        return None
+
+
+def safe_logloss(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
+    try:
+        y_prob = np.clip(y_prob, 1e-6, 1 - 1e-6)
+        return float(log_loss(y_true, y_prob))
+    except Exception:
+        return None
+
+
+def safe_brier(y_true: np.ndarray, y_prob: np.ndarray) -> float | None:
+    try:
+        return float(brier_score_loss(y_true, y_prob))
+    except Exception:
+        return None
+
+
+def evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> Dict[str, float | None]:
+    return {
+        "auc": safe_auc(y_true, y_prob),
+        "logloss": safe_logloss(y_true, y_prob),
+        "brier": safe_brier(y_true, y_prob),
+    }
+
+
+# =========================================================
+# 主流程
+# =========================================================
+
+def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, object]:
+    df, trainset_path = load_trainset(project_root, trade_date)
+
+    df = df.copy()
+    df["y_fill"] = pd.to_numeric(df["y_fill"], errors="coerce").fillna(0).astype(int)
+
+    train_df, valid_df, split_mode = split_train_valid(df)
+    if len(train_df) == 0 or len(valid_df) == 0:
+        raise ValueError("训练/验证切分失败，样本不足")
+
+    feature_cols = select_feature_columns(df)
+    num_cols, cat_cols = split_feature_types(df, feature_cols)
+
+    # LR
+    lr_pipe = build_lr_pipeline(num_cols, cat_cols)
+    lr_sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
+    lr_pipe.fit(
+        train_df[feature_cols],
+        train_df["y_fill"].values,
+        clf__sample_weight=lr_sample_weight,
+    )
+    lr_valid_prob = lr_pipe.predict_proba(valid_df[feature_cols])[:, 1]
+    lr_metrics = evaluate_probs(valid_df["y_fill"].values, lr_valid_prob)
+
+    # GBM / LGBM
+    gbm_model, _, x_valid_gbm = fit_gbm(train_df, valid_df, feature_cols)
+    if hasattr(gbm_model, "predict_proba"):
+        gbm_valid_prob = gbm_model.predict_proba(x_valid_gbm)[:, 1]
+    else:
+        raw = gbm_model.predict(x_valid_gbm)
+        gbm_valid_prob = np.asarray(raw, dtype=float)
+    gbm_metrics = evaluate_probs(valid_df["y_fill"].values, gbm_valid_prob)
+
+    # 输出
+    models_dir = project_root / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    lr_path = models_dir / "pfill_lr.joblib"
+    gbm_path = models_dir / "pfill_lgbm.joblib"
+    meta_path = models_dir / "pfill_meta.json"
+
+    joblib.dump(lr_pipe, lr_path)
+    joblib.dump(gbm_model, gbm_path)
+
+    meta: Dict[str, object] = {
+        "train_time_utc": utc_now_iso(),
+        "trade_date": trade_date,
+        "trainset_path": str(trainset_path),
+        "split_mode": split_mode,
+        "model_paths": {
+            "lr": str(lr_path),
+            "lgbm": str(gbm_path),
+        },
+        "model_backend": {
+            "lr": "sklearn.LogisticRegression",
+            "lgbm": "lightgbm.LGBMClassifier" if HAS_LGBM else "sklearn.HistGradientBoostingClassifier",
+        },
+        "rows": {
+            "all": int(len(df)),
+            "train": int(len(train_df)),
+            "valid": int(len(valid_df)),
+        },
+        "label_distribution": {
+            "all_pos": int((df["y_fill"] == 1).sum()),
+            "all_neg": int((df["y_fill"] == 0).sum()),
+            "train_pos": int((train_df["y_fill"] == 1).sum()),
+            "train_neg": int((train_df["y_fill"] == 0).sum()),
+            "valid_pos": int((valid_df["y_fill"] == 1).sum()),
+            "valid_neg": int((valid_df["y_fill"] == 0).sum()),
+        },
+        "features": {
+            "n_total": int(len(feature_cols)),
+            "n_numeric": int(len(num_cols)),
+            "n_categorical": int(len(cat_cols)),
+            "feature_cols": feature_cols,
+        },
+        "missing_ratio": {
+            c: round(float(df[c].isna().mean()), 6)
+            for c in feature_cols
+        },
+        "metrics_valid": {
+            "lr": lr_metrics,
+            "lgbm": gbm_metrics,
+        },
+        "notes": [
+            "首版只解决 P_fill 学习模型训练，不接 run_v2.py。",
+            "采用时间切分优先，样本不足时退化为行切分。",
+            "泄露列（T+1 真值列/标签列）已从特征中剔除。",
+        ],
+    }
+
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print(f"[train_pfill] trade_date={trade_date}")
+    print(f"[train_pfill] trainset={trainset_path}")
+    print(f"[train_pfill] split_mode={split_mode}")
+    print(f"[train_pfill] rows_all={len(df)} train={len(train_df)} valid={len(valid_df)}")
+    print(f"[train_pfill] features_total={len(feature_cols)}")
+    print(f"[train_pfill] lr_auc={lr_metrics['auc']} gbm_auc={gbm_metrics['auc']}")
+    print(f"[train_pfill] out_lr={lr_path}")
+    print(f"[train_pfill] out_lgbm={gbm_path}")
+    print(f"[train_pfill] out_meta={meta_path}")
+
+    return meta
+
+
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="训练 P_fill 学习模型")
+    ap.add_argument("--trade-date", required=True, help="训练样本交易日 YYYYMMDD")
+    return ap.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    trade_date = norm_ymd(args.trade_date)
+    if len(trade_date) != 8:
+        raise ValueError("--trade-date 必须是 YYYYMMDD")
+
+    project_root = detect_project_root()
+    train_one_trade_date(project_root, trade_date)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
