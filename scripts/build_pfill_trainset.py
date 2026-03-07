@@ -173,6 +173,7 @@ def candidate_prior_paths(root: Path, trade_date: str) -> List[Tuple[str, Path]]
     优先 trade_date 归档，其次 latest。
     """
     cands: List[Tuple[str, Path]] = [
+        ("dated_pred_source_archive", root / "data" / "pred" / "archive" / f"pred_source_{trade_date}.csv"),
         ("dated_pred_source", root / "data" / "pred" / f"pred_source_{trade_date}.csv"),
         ("latest_pred_source", root / "data" / "pred" / "pred_source_latest.csv"),
         ("dated_pred_top10", root / "data" / "pred" / f"pred_top10_{trade_date}.csv"),
@@ -247,67 +248,32 @@ def load_fill_truth(path: Path, trade_date: str) -> pd.DataFrame:
 # =========================================================
 
 def choose_prior_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    prior 层只保留对 P_fill 有价值的上游浓缩信号。
-    为避免污染，把明显属于标签或未来结果的列剔掉。
-    """
     if df.empty:
         return df.copy()
 
     key_cols = ["trade_date", "ts_code"]
-
     prefer_cols = [
-        "name",
-        "rank",
-        "score",
-        "prob",
-        "prob_prior",
-        "probability",
-        "strengthscore",
-        "StrengthScore",
-        "strength_score",
-        "themeboost",
-        "ThemeBoost",
-        "theme_boost",
-        "board",
-        "industry",
-        "concept",
-        "reason",
-        "label",
-        "hot_rank",
-        "turnover_rate",
-        "seal_amount",
-        "open_times",
+        "name", "rank", "score", "prob", "prob_prior", "probability",
+        "strengthscore", "StrengthScore", "strength_score",
+        "themeboost", "ThemeBoost", "theme_boost",
+        "board", "industry", "concept", "reason", "label", "hot_rank",
+        "turnover_rate", "seal_amount", "open_times",
     ]
-
     banned_cols = {
-        "y_fill",
-        "fill_label_quality",
-        "entry_price_proxy_t1",
-        "entry_price_proxy_mode",
-        "premiumret",
-        "premium_ret",
-        "e_ret",
-        "e_ret_pred",
-        "ev",
-        "ev_score",
-        "target_weight",
-        "target_date",
-        "verify_status",
+        "y_fill", "fill_label_quality", "entry_price_proxy_t1", "entry_price_proxy_mode",
+        "premiumret", "premium_ret", "e_ret", "e_ret_pred", "ev", "ev_score",
+        "target_weight", "target_date", "verify_status",
     }
 
     keep = list(key_cols)
     for c in df.columns:
         cl = str(c).strip()
-        if cl in key_cols:
-            continue
-        if cl in banned_cols:
+        if cl in key_cols or cl in banned_cols:
             continue
         if cl in prefer_cols:
             keep.append(cl)
 
     if len(keep) == len(key_cols):
-        # 没命中 prefer，就做保守兜底：保留最多前 20 个非标签列
         extra: List[str] = []
         for c in df.columns:
             if c in key_cols or c in banned_cols:
@@ -329,49 +295,26 @@ def choose_prior_columns(df: pd.DataFrame) -> pd.DataFrame:
             rename_map[hit] = target
     out = out.rename(columns=rename_map)
 
-    # prior 前缀，避免与 FS 层硬碰撞；但保留 rank / name 不加前缀
     protected = {"trade_date", "ts_code", "name", "rank"}
     final_rename: Dict[str, str] = {}
     for c in out.columns:
-        if c in protected:
-            continue
-        if c.startswith("prior_"):
+        if c in protected or c.startswith("prior_"):
             continue
         final_rename[c] = f"prior_{c}"
     out = out.rename(columns=final_rename)
-
     return out
 
 
 def choose_truth_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    fill_truth 中除了主标签，还保留少量 T+1 审计列，方便训练审查。
-    """
     keep = [
-        "trade_date",
-        "ts_code",
-        "exec_date",
-        "name",
-        "y_fill",
-        "fill_label_quality",
-        "entry_price_proxy_t1",
-        "entry_price_proxy_mode",
-        "label_version",
-        "buy_window_start",
-        "buy_window_end",
-        "open_t1",
-        "high_t1",
-        "low_t1",
-        "close_t1",
-        "up_limit_t1",
-        "down_limit_t1",
-        "limit_type_t1",
-        "open_times_t1",
-        "break_open_times_t1",
-        "first_seal_time_t1",
-        "last_seal_time_t1",
-        "seal_amount_t1",
-        "is_suspended_t1",
+        "trade_date", "ts_code", "exec_date", "target_date", "name",
+        "sample_maturity", "label_ready_fill", "label_ready_ret",
+        "y_fill", "fill_label_quality", "entry_price_proxy_t1", "entry_price_proxy_mode",
+        "label_version", "buy_window_start", "buy_window_end",
+        "open_t1", "high_t1", "low_t1", "close_t1",
+        "up_limit_t1", "down_limit_t1", "limit_type_t1", "open_times_t1",
+        "break_open_times_t1", "first_seal_time_t1", "last_seal_time_t1",
+        "seal_amount_t1", "is_suspended_t1",
     ]
     keep = [c for c in keep if c in df.columns]
     return df[keep].copy()
@@ -388,21 +331,11 @@ def split_feature_columns(
     prior_df: pd.DataFrame,
 ) -> Dict[str, List[str]]:
     keys = {"trade_date", "ts_code"}
-
-    base_cols = [c for c in base_df.columns if c not in keys]
-    limit_cols = [c for c in limit_df.columns if c not in keys]
-
-    truth_cols = [
-        c for c in truth_df.columns
-        if c not in keys
-    ]
-    prior_cols = [c for c in prior_df.columns if c not in keys]
-
     return {
-        "base_cols": base_cols,
-        "limit_cols": limit_cols,
-        "truth_cols": truth_cols,
-        "prior_cols": prior_cols,
+        "base_cols": [c for c in base_df.columns if c not in keys],
+        "limit_cols": [c for c in limit_df.columns if c not in keys],
+        "truth_cols": [c for c in truth_df.columns if c not in keys],
+        "prior_cols": [c for c in prior_df.columns if c not in keys],
     }
 
 
@@ -416,16 +349,15 @@ def build_trainset(
     truth_df_raw = load_fill_truth(paths.fill_truth, trade_date)
     truth_df = choose_truth_columns(truth_df_raw)
 
+    if "label_ready_fill" in truth_df.columns:
+        truth_df = truth_df[truth_df["label_ready_fill"].fillna(0).astype(int) == 1].copy()
+
     prior = pick_prior_source(paths.project_root, trade_date)
     prior_df = choose_prior_columns(prior.df)
 
-    # 先以 fill_truth 为锚。理由：没有标签的样本不进入训练主表。
     train = truth_df.copy()
 
-    # 合并 features_base
-    base_merge_cols = ["trade_date", "ts_code"] + [
-        c for c in base_df.columns if c not in {"trade_date", "ts_code"}
-    ]
+    base_merge_cols = ["trade_date", "ts_code"] + [c for c in base_df.columns if c not in {"trade_date", "ts_code"}]
     train = train.merge(
         base_df[base_merge_cols],
         on=["trade_date", "ts_code"],
@@ -433,17 +365,9 @@ def build_trainset(
         suffixes=("", "__dup_base"),
     )
 
-    # 合并 features_limit
-    limit_add_cols = [
-        c for c in limit_df.columns
-        if c not in {"trade_date", "ts_code"} and c not in train.columns
-    ]
-    limit_overlap_cols = [
-        c for c in limit_df.columns
-        if c not in {"trade_date", "ts_code"} and c in train.columns
-    ]
+    limit_add_cols = [c for c in limit_df.columns if c not in {"trade_date", "ts_code"} and c not in train.columns]
+    limit_overlap_cols = [c for c in limit_df.columns if c not in {"trade_date", "ts_code"} and c in train.columns]
 
-    # 对已经存在于 truth 的列，limit 只补“同名补洞列”
     if limit_add_cols:
         train = train.merge(
             limit_df[["trade_date", "ts_code"] + limit_add_cols],
@@ -456,13 +380,9 @@ def build_trainset(
         tmp_col = f"{c}__from_limit"
         sub = limit_df[["trade_date", "ts_code", c]].rename(columns={c: tmp_col})
         train = train.merge(sub, on=["trade_date", "ts_code"], how="left")
-        if c in train.columns:
-            train[c] = train[c].combine_first(train[tmp_col])
-        else:
-            train[c] = train[tmp_col]
+        train[c] = train[c].combine_first(train[tmp_col]) if c in train.columns else train[tmp_col]
         train = train.drop(columns=[tmp_col])
 
-    # 合并 prior
     if not prior_df.empty:
         prior_cols = [c for c in prior_df.columns if c not in {"trade_date", "ts_code"}]
         train = train.merge(
@@ -472,50 +392,28 @@ def build_trainset(
             suffixes=("", "__dup_prior"),
         )
 
-    # 清理重复后缀列
     dup_cols = [c for c in train.columns if c.endswith("__dup_base") or c.endswith("__dup_limit") or c.endswith("__dup_prior")]
     if dup_cols:
         train = train.drop(columns=dup_cols)
 
-    # 主键去重
     train = dedupe_by_key(train, ["trade_date", "ts_code"])
 
-    # name 统一：truth/base/prior 可能重复
-    name_cols = [c for c in ["name", "prior_name"] if c in train.columns]
     if "name" not in train.columns and "prior_name" in train.columns:
         train = train.rename(columns={"prior_name": "name"})
 
-    # dataset_split：当前先全部标 raw_train_pool，后续训练脚本再做时间切分
     train["dataset_split"] = "raw_train_pool"
 
-    # coverage 分数：先按关键列覆盖率粗评分
-    coverage_cols = [
-        "y_fill",
-        "fill_label_quality",
-        "open_t1",
-        "up_limit_t1",
-        "open_times_t1",
-        "seal_amount_t1",
-    ]
+    coverage_cols = ["y_fill", "fill_label_quality", "open_t1", "up_limit_t1", "open_times_t1", "seal_amount_t1"]
     existing_cov_cols = [c for c in coverage_cols if c in train.columns]
-    if existing_cov_cols:
-        train["feature_coverage_score"] = train[existing_cov_cols].notna().mean(axis=1).round(4)
-    else:
-        train["feature_coverage_score"] = 0.0
+    train["feature_coverage_score"] = train[existing_cov_cols].notna().mean(axis=1).round(4) if existing_cov_cols else 0.0
 
-    # 冷启动标记：truth 很弱或 prior 缺失
     weak_truth = train["fill_label_quality"].astype(str).str.contains("weak", case=False, na=False)
-    prior_missing = True
     prior_core_cols = [c for c in ["prior_prob_prior", "prior_strength_score", "prior_theme_boost", "rank"] if c in train.columns]
     if prior_core_cols:
-        prior_missing = False
-        train["is_cold_start"] = (
-            weak_truth | train[prior_core_cols].isna().all(axis=1)
-        ).astype(int)
+        train["is_cold_start"] = (weak_truth | train[prior_core_cols].isna().all(axis=1)).astype(int)
     else:
         train["is_cold_start"] = 1
 
-    # sample_weight：先做首版工程权重，不引入复杂学习逻辑
     train["sample_weight"] = 1.0
     if "rank" in train.columns:
         rank_num = pd.to_numeric(train["rank"], errors="coerce")
@@ -526,37 +424,19 @@ def build_trainset(
     train.loc[quality_s.str.startswith("weak", na=False), "sample_weight"] -= 0.25
     train["sample_weight"] = train["sample_weight"].clip(lower=0.5, upper=2.0)
 
-    # 缺失标识列
     if add_missing_flags:
         important_missing_cols = [
-            "open_times_t1",
-            "seal_amount_t1",
-            "limit_type_t1",
-            "is_suspended_t1",
-            "prior_prob_prior",
-            "prior_strength_score",
-            "prior_theme_boost",
+            "open_times_t1", "seal_amount_t1", "limit_type_t1", "is_suspended_t1",
+            "prior_prob_prior", "prior_strength_score", "prior_theme_boost",
         ]
         train = add_missing_indicator(train, [c for c in important_missing_cols if c in train.columns])
 
-    # 列排序：先把关键列顶前
     front = [
-        "trade_date",
-        "exec_date",
-        "ts_code",
-        "name",
-        "rank",
-        "y_fill",
-        "fill_label_quality",
-        "entry_price_proxy_t1",
-        "entry_price_proxy_mode",
-        "dataset_split",
-        "sample_weight",
-        "is_cold_start",
-        "feature_coverage_score",
-        "label_version",
-        "buy_window_start",
-        "buy_window_end",
+        "trade_date", "exec_date", "target_date", "ts_code", "name", "rank",
+        "sample_maturity", "label_ready_fill", "label_ready_ret",
+        "y_fill", "fill_label_quality", "entry_price_proxy_t1", "entry_price_proxy_mode",
+        "dataset_split", "sample_weight", "is_cold_start", "feature_coverage_score",
+        "label_version", "buy_window_start", "buy_window_end",
     ]
     front = [c for c in front if c in train.columns]
     remain = [c for c in train.columns if c not in front]
@@ -598,37 +478,20 @@ def build_meta(
     split_cols: Dict[str, List[str]],
 ) -> Dict[str, object]:
     coverage_cols = [
-        "y_fill",
-        "fill_label_quality",
-        "entry_price_proxy_t1",
-        "open_t1",
-        "up_limit_t1",
-        "open_times_t1",
-        "seal_amount_t1",
-        "prior_prob_prior",
-        "prior_strength_score",
-        "prior_theme_boost",
-        "rank",
+        "y_fill", "fill_label_quality", "entry_price_proxy_t1", "open_t1", "up_limit_t1",
+        "open_times_t1", "seal_amount_t1", "prior_prob_prior", "prior_strength_score",
+        "prior_theme_boost", "rank",
     ]
     coverage = {c: nonnull_ratio(train_df, c) for c in coverage_cols if c in train_df.columns}
 
-    y_dist = {}
-    if "y_fill" in train_df.columns:
-        y_dist = {
-            str(k): int(v)
-            for k, v in train_df["y_fill"].value_counts(dropna=False).to_dict().items()
-        }
-
-    quality_dist = {}
-    if "fill_label_quality" in train_df.columns:
-        quality_dist = {
-            str(k): int(v)
-            for k, v in train_df["fill_label_quality"].astype(str).value_counts(dropna=False).to_dict().items()
-        }
+    y_dist = {str(k): int(v) for k, v in train_df["y_fill"].value_counts(dropna=False).to_dict().items()} if "y_fill" in train_df.columns else {}
+    quality_dist = {str(k): int(v) for k, v in train_df["fill_label_quality"].astype(str).value_counts(dropna=False).to_dict().items()} if "fill_label_quality" in train_df.columns else {}
+    maturity_dist = {str(k): int(v) for k, v in train_df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict().items()} if "sample_maturity" in train_df.columns else {}
 
     meta: Dict[str, object] = {
         "trade_date": trade_date,
         "rows": int(len(train_df)),
+        "fill_truth_ready_only": True,
         "source": {
             "features_base": str(paths.features_base),
             "features_limit": str(paths.features_limit),
@@ -646,6 +509,7 @@ def build_meta(
         "coverage": coverage,
         "label_distribution": y_dist,
         "quality_distribution": quality_dist,
+        "sample_maturity_distribution": maturity_dist,
         "column_groups": {
             "base_cols": split_cols["base_cols"],
             "limit_cols": split_cols["limit_cols"],
@@ -657,9 +521,9 @@ def build_meta(
         "sample_weight_mean": round(float(train_df["sample_weight"].mean()), 6) if "sample_weight" in train_df.columns and len(train_df) else 0.0,
         "notes": [
             "本文件是 P_fill 训练前宽表，不是训练结果文件。",
+            "训练集只保留 label_ready_fill=1 的成熟样本。",
             "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_pfill.py 再做。",
             "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。",
-            "EntryPriceProxy_T+1 仍遵守弱代理原则，不在本脚本中新增伪价格。",
         ],
     }
     return meta
@@ -672,11 +536,7 @@ def build_meta(
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="构建 P_fill 训练宽表 pfill_trainset_{trade_date}.csv")
     ap.add_argument("--trade-date", required=True, help="T 日，格式 YYYYMMDD")
-    ap.add_argument(
-        "--no-missing-flags",
-        action="store_true",
-        help="关闭缺失指示器列生成",
-    )
+    ap.add_argument("--no-missing-flags", action="store_true", help="关闭缺失指示器列生成")
     return ap.parse_args()
 
 
@@ -696,10 +556,7 @@ def main() -> int:
     )
 
     train_df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")
-    paths.out_meta.write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    paths.out_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"[build_pfill_trainset] trade_date={trade_date}")
     print(f"[build_pfill_trainset] rows={len(train_df)}")
