@@ -5,8 +5,8 @@
 build_fill_truth.py
 
 用途：
-- 基于 T 日 features_limit 候选样本
-- 读取 T+1 原始快照（日级 truth / 涨停辅助表）
+- 基于 T 日 pred_source 候选池（不是全市场 features_limit）
+- 使用 features_limit / raw(T+1) 仅为候选池股票补字段与打标签
 - 生成 P_fill 学习标签文件：
     data/market/fill_truth_{trade_date}.csv
 
@@ -31,6 +31,8 @@ build_fill_truth.py
 
 主口径（与契约一致）：
 - P_fill 只回答：T+1 是否可买
+- 计算对象必须严格限制在 pred_source 候选池名单内
+- features_limit / raw 只负责给候选池股票补字段，不得反向扩池
 - EntryPriceProxy_T+1 不是 PredOpen_T+1，也不是理想成交价
 - 在分钟级真值缺失时，首版优先把 y_fill 做稳
 """
@@ -138,6 +140,9 @@ class Paths:
     project_root: Path
     market_dir: Path
     raw_root: Path
+    pred_dir: Path
+    pred_latest: Path
+    pred_archive: Path
     features_limit: Path
     out_csv: Path
     out_meta: Path
@@ -151,6 +156,9 @@ def build_paths(trade_date: str, project_root: Optional[Path] = None) -> Paths:
     root = project_root or detect_project_root()
     market_dir = root / "data" / "market"
     raw_root = market_dir / "raw"
+    pred_dir = root / "data" / "pred"
+    pred_latest = pred_dir / "pred_source_latest.csv"
+    pred_archive = pred_dir / "archive" / f"pred_source_{trade_date}.csv"
     features_limit = market_dir / f"features_limit_{trade_date}.csv"
     out_csv = market_dir / f"fill_truth_{trade_date}.csv"
     out_meta = market_dir / f"fill_truth_{trade_date}.meta.json"
@@ -158,6 +166,9 @@ def build_paths(trade_date: str, project_root: Optional[Path] = None) -> Paths:
         project_root=root,
         market_dir=market_dir,
         raw_root=raw_root,
+        pred_dir=pred_dir,
+        pred_latest=pred_latest,
+        pred_archive=pred_archive,
         features_limit=features_limit,
         out_csv=out_csv,
         out_meta=out_meta,
@@ -206,14 +217,45 @@ def infer_target_date(raw_root: Path, trade_date: str, exec_date: str) -> str:
 
 
 def resolve_sample_maturity(exec_date: str, target_date: str) -> Tuple[str, int, int]:
-    """
-    基于当前已存在的 raw 快照判断成熟度。
-    """
     if exec_date and target_date:
         return "FULLY_READY", 1, 1
     if exec_date:
         return "PFILL_READY", 1, 0
     return "PRED_ONLY", 0, 0
+
+
+# =========================
+# 候选池读取（严格以 pred_source 为准）
+# =========================
+
+def load_candidate_pool(paths: Paths, trade_date: str) -> Tuple[pd.DataFrame, str]:
+    src_path = paths.pred_archive if paths.pred_archive.exists() else paths.pred_latest
+    if not src_path.exists():
+        raise FileNotFoundError(
+            f"找不到 pred_source 候选池：{paths.pred_archive} / {paths.pred_latest}"
+        )
+
+    pred = safe_read_csv(src_path)
+    if pred.empty:
+        raise ValueError(f"pred_source 候选池为空：{src_path}")
+
+    pred = ensure_ts_code(pred)
+    if "trade_date" in pred.columns:
+        pred["trade_date"] = pred["trade_date"].map(norm_ymd)
+        filtered = pred[pred["trade_date"] == trade_date].copy()
+        if not filtered.empty:
+            pred = filtered
+        else:
+            pred = pred.copy()
+            pred["trade_date"] = trade_date
+    else:
+        pred["trade_date"] = trade_date
+
+    if pred.empty:
+        raise ValueError(f"pred_source 在 trade_date={trade_date} 下无候选样本：{src_path}")
+
+    pred = pred.drop_duplicates(subset=["trade_date", "ts_code"]).copy()
+    return pred, str(src_path)
 
 
 # =========================
@@ -375,10 +417,6 @@ def is_limit_up_dead(row: pd.Series) -> bool:
 
 
 def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
-    """
-    返回：
-    y_fill, fill_label_quality, entry_price_proxy_t1, entry_price_proxy_mode
-    """
     is_suspended = row.get("is_suspended_t1")
     if pd.notna(is_suspended) and bool(is_suspended):
         return 0, "strong_suspend", None, ""
@@ -388,12 +426,10 @@ def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
     open_times_t1 = to_float(row.get("open_times_t1"))
     break_open_times_t1 = to_float(row.get("break_open_times_t1"))
 
-    # 情况 A：开盘即可买
     if pd.notna(open_t1):
         if pd.isna(up_limit_t1) or abs(open_t1 - up_limit_t1) >= 1e-8:
             return 1, "strong_open_tradable", float(open_t1), "open_t1"
 
-    # 情况 B：开盘封板，但存在开板/可进入痕迹
     has_break = (
         (pd.notna(open_times_t1) and open_times_t1 > 0)
         or (pd.notna(break_open_times_t1) and break_open_times_t1 > 0)
@@ -403,15 +439,12 @@ def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
             return 1, "weak_intraday_break_without_minbar", float(open_t1), "weak_daily_proxy"
         return 1, "weak_intraday_break_without_price", None, ""
 
-    # 情况 C：开盘即涨停且无开板痕迹
     if is_limit_up_dead(row):
         return 0, "strong_dead_limit_up", None, ""
 
-    # 情况 D：truth 缺失严重，保守记 0
     if pd.isna(open_t1) and pd.isna(up_limit_t1):
         return 0, "weak_missing_truth", None, ""
 
-    # 情况 E：保守兜底
     return 0, "soft_not_tradable", None, ""
 
 
@@ -424,25 +457,45 @@ def build_fill_truth(
     exec_date: str,
     target_date: str,
     paths: Paths,
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, str]:
+    pred, pred_source_path = load_candidate_pool(paths, trade_date)
+
     feat = safe_read_csv(paths.features_limit)
     if feat.empty:
         raise FileNotFoundError(f"找不到或读不到 features_limit 文件：{paths.features_limit}")
-
     feat = ensure_ts_code(feat)
-    feat["trade_date"] = feat.get("trade_date", trade_date)
-    feat["trade_date"] = feat["trade_date"].map(norm_ymd)
+    if "trade_date" in feat.columns:
+        feat["trade_date"] = feat["trade_date"].map(norm_ymd)
+        feat = feat[feat["trade_date"] == trade_date].copy()
+    else:
+        feat["trade_date"] = trade_date
 
     truth = load_t1_truth(paths.raw_root, exec_date)
     t1 = merge_t1_truth(truth)
 
     maturity, label_ready_fill, label_ready_ret = resolve_sample_maturity(exec_date, target_date)
 
-    base_cols = ["trade_date", "ts_code"]
-    if "name" in feat.columns:
-        base_cols.append("name")
+    pred_base_cols = ["trade_date", "ts_code"]
+    for c in ["name", "rank", "prob", "StrengthScore", "ThemeBoost", "board", "run_id", "run_attempt", "commit_sha", "generated_at_utc"]:
+        if c in pred.columns:
+            pred_base_cols.append(c)
 
-    out = feat[base_cols].drop_duplicates(subset=["trade_date", "ts_code"]).copy()
+    out = pred[pred_base_cols].drop_duplicates(subset=["trade_date", "ts_code"]).copy()
+
+    # 用 features_limit 仅补充候选池股票的字段，不得扩池
+    feat = feat.drop_duplicates(subset=["trade_date", "ts_code"]).copy()
+    feat_cols_to_add = [
+        c for c in feat.columns
+        if c not in out.columns and c not in {"trade_date", "ts_code"}
+    ]
+    if feat_cols_to_add:
+        out = out.merge(
+            feat[["trade_date", "ts_code"] + feat_cols_to_add],
+            on=["trade_date", "ts_code"],
+            how="left",
+        )
+
+    # T+1 truth 同样只给候选池补字段，不扩池
     out = out.merge(t1, on="ts_code", how="left")
     out["exec_date"] = exec_date
     out["target_date"] = target_date
@@ -456,13 +509,11 @@ def build_fill_truth(
     ]
     out = pd.concat([out, labels], axis=1)
 
-    # 成熟度 / 训练窗口字段
     out["sample_maturity"] = maturity
     out["label_ready_fill"] = int(label_ready_fill)
     out["label_ready_ret"] = int(label_ready_ret)
 
-    # 审计字段
-    out["label_version"] = "pfill_truth_v2"
+    out["label_version"] = "pfill_truth_v3_candidate_pool"
     out["buy_window_start"] = "09:30:00"
     out["buy_window_end"] = "10:30:00"
 
@@ -472,6 +523,11 @@ def build_fill_truth(
         "target_date",
         "ts_code",
         "name",
+        "rank",
+        "prob",
+        "StrengthScore",
+        "ThemeBoost",
+        "board",
         "sample_maturity",
         "label_ready_fill",
         "label_ready_ret",
@@ -490,10 +546,17 @@ def build_fill_truth(
     out["label_ready_fill"] = out["label_ready_fill"].fillna(0).astype(int)
     out["label_ready_ret"] = out["label_ready_ret"].fillna(0).astype(int)
 
-    return out
+    return out, pred_source_path
 
 
-def write_meta(df: pd.DataFrame, trade_date: str, exec_date: str, target_date: str, paths: Paths) -> None:
+def write_meta(
+    df: pd.DataFrame,
+    trade_date: str,
+    exec_date: str,
+    target_date: str,
+    paths: Paths,
+    pred_source_path: str,
+) -> None:
     payload = {
         "trade_date": trade_date,
         "exec_date": exec_date,
@@ -514,6 +577,7 @@ def write_meta(df: pd.DataFrame, trade_date: str, exec_date: str, target_date: s
             else {}
         ),
         "source": {
+            "pred_source": pred_source_path,
             "features_limit": str(paths.features_limit),
             "raw_root": str(paths.raw_root),
         },
@@ -564,23 +628,23 @@ def main() -> int:
     if not target_date:
         target_date = infer_target_date(paths.raw_root, trade_date, exec_date)
 
-    # target_date 允许为空：表示当前只到 PFILL_READY
     if target_date and len(target_date) != 8:
         raise ValueError("--target-date 必须是 YYYYMMDD 或留空")
 
-    df = build_fill_truth(
+    df, pred_source_path = build_fill_truth(
         trade_date=trade_date,
         exec_date=exec_date,
         target_date=target_date,
         paths=paths,
     )
     df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")
-    write_meta(df, trade_date, exec_date, target_date, paths)
+    write_meta(df, trade_date, exec_date, target_date, paths, pred_source_path)
 
     print(f"[build_fill_truth] trade_date={trade_date}")
     print(f"[build_fill_truth] exec_date={exec_date}")
     print(f"[build_fill_truth] target_date={target_date}")
     print(f"[build_fill_truth] rows={len(df)}")
+    print(f"[build_fill_truth] pred_source={pred_source_path}")
     print(f"[build_fill_truth] out={paths.out_csv}")
     print(f"[build_fill_truth] meta={paths.out_meta}")
     return 0
