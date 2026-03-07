@@ -1,12 +1,11 @@
-核心算法需求规范（Core Algorithm Spec）
+# 核心算法需求规范（Core Algorithm Spec）
 
 项目：top10-decision / Premium + Decision
 
-版本：V1.2（锚定补充版）
+版本：V1.3（正式硬规则整合版）
 
-定位：系统级共识锚定（需求/契约），用于中断/续开发时无缝对齐，避免跑偏。
-
-注意：本 MD 不是程序代码接口说明，代码可迭代，但必须满足本 MD 的目标、契约与闭环。
+定位：系统级共识锚定（需求/契约），用于中断/续开发时无缝对齐，避免跑偏。  
+注意：本 MD 不是程序代码接口说明；代码可以迭代，但必须满足本 MD 的目标、契约、时间机制与闭环规则。
 
 ---
 
@@ -14,533 +13,355 @@
 
 ### 0.1 总目标（全系统价值）
 
-在给定候选池（pred_source_latest）的前提下，对每只候选票估计并优化：
+在给定候选池（`pred_source_latest`）的前提下，对每只候选票估计并优化：
 
-[
+\[
 EV = P_{fill} \times E_{ret} - Cost - RiskPenalty
-]
+\]
 
 其中：
 
-- P_fill：T+1 买入是否可成交（或限定窗口内可成交概率）
-- E_ret：买入→卖出（默认 T+1→T+2）的预期收益（可扩展到分布/分位数）
-- Cost：交易成本（手续费、滑点、冲击成本近似）
-- RiskPenalty：风险惩罚（波动、流动性、尾部风险、题材拥挤度等）
+- **P_fill**：T+1 买入是否可成交（或限定窗口内可成交概率）
+- **E_ret**：买入→卖出（默认 T+1→T+2）的预期收益
+- **Cost**：交易成本（手续费、滑点、冲击成本近似）
+- **RiskPenalty**：风险惩罚（波动、流动性、尾部风险、题材拥挤度等）
 
 最终输出：
 
-- Decision：TopN 交易信号（权重/风险预算/执行策略）
-- Premium：T→T+2 收盘价分布预测（分位数）+ 溢价预期 + 风险解释
+- **Decision**：TopN 交易信号（权重 / 风险预算 / 执行策略）
+- **Premium**：T→T+2 收盘价分布预测（分位数）+ 溢价预期 + 风险解释
 
-### 0.2 约束（必须遵守）
+### 0.2 总边界（必须遵守）
 
-- FS 必须达到 ≥75% 丰富度：覆盖基础行情、流动性、波动、资金流、估值、市值、涨停微结构、题材热度、龙虎榜/异动等主要类别（详见第2章）。
-- 融合采用方案C（贝叶斯视角）：pred_source_latest 作为 prior，FS 提供 likelihood 修正；模型采用 LR + GBDT（可包含 LightGBM）。
-- Premium 与 Decision 必须使用学习模型并形成闭环：训练—落盘—加载—滚动更新—评估门控（详见第10章）。
-- MD 是需求锚定，不作为代码接口：代码实现可迭代，但不得破坏本 MD 的输出契约与评估闭环。
+- 候选池入口只能来自 `pred_source_latest` 或其按日归档版本
+- 后续所有计算对象，必须以候选池名单为主，不得被 FS / raw 反向扩池
+- FS 是全系统唯一真值与共享特征层
+- Premium 与 Decision 都必须使用学习模型并形成训练—落盘—加载—更新闭环
+- 本 MD 高于具体脚本实现；若实现与本 MD 冲突，以本 MD 为准
 
 ---
 
-## 1. 两类输入：pred_source_latest 与 Feature Store（FS）
+## 1. 两条主线与职责边界
 
-### 1.1 pred_source_latest（上游浓缩特征）定位
+### 1.1 Premium（面向人）
+
+定位：面向人类的价格 / 空间判断层
+
+主口径：
+
+- `PredClose_T+2`
+- 分位数区间
+- 溢价预期
+- 风险解释
+
+作用：
+
+- 帮助人类理解未来空间
+- 指导 T+1 如何做交易判断
+- 不直接等同于机器可执行信号
+
+### 1.2 Decision（面向机器）
+
+定位：面向机器执行的交易决策层
+
+主口径：
+
+- `P_fill`
+- `EntryPriceProxy_T+1`
+- `E_ret`
+- `Cost`
+- `RiskPenalty`
+- `EV`
+- `target_weight / risk_budget / regime`
+
+作用：
+
+- 输出能直接进入自动交易系统的可执行结果
+- 必须优先保证可交易性与可执行性
+
+### 1.3 当前开发主线
+
+开发顺序锁死：
+
+1. FS ≥ 75%
+2. `P_fill` 学习模块
+3. `E_ret` 学习模块
+4. `Cost / RiskPenalty` 模块
+5. `EV` 融合与校准
+6. 滚动训练与门控更新
+
+---
+
+## 2. 候选池与输入层硬规则
+
+### 2.1 候选池（pred_source_latest）定位
 
 角色：强 prior（先验） + 候选池入口
 
-本质：上游模型/因子系统对“上涨/强势/题材”的信息压缩结果
+必须字段最小集：
 
-必须字段（最小集）：
+- `trade_date`
+- `ts_code`
+- `name`
+- `rank`
+- `prob`
+- `StrengthScore`
+- `ThemeBoost`
+- `board`
 
-- trade_date, ts_code, name, rank
-- prob（上游上涨概率/强度概率）
-- StrengthScore
-- ThemeBoost
-- board
-- 追溯：run_id, commit_sha, generated_at_utc
+追溯字段：
 
-价值结论（锚定）：在 FS 存在后，pred_source_latest 仍属高价值输入（非替代关系，而是与 FS 互补）。
+- `run_id`
+- `commit_sha`
+- `generated_at_utc`
 
-### 1.2 Feature Store（FS）定位
+### 2.2 候选池主导规则（正式锁死）
 
-角色：likelihood（证据） + 真值层（Truth Layer） + 全系统共享特征层
+后续所有计算对象必须以候选池名单为主。
 
-要求：
+允许的流程：
 
-- 主键统一：trade_date + ts_code
-- 可追溯：每行带 source_snapshot_id/commit_sha/created_at_utc
-- 可回测：必须能复现历史某日的特征与真值
-- 与 Premium/Decision 解耦：两者只读 FS，不重复各自拉原始数据
+1. 先读取 `pred_source_{trade_date}` / `pred_source_latest`
+2. 再用 FS / raw 为这批股票补字段
+3. 再生成 `fill_truth / trainset / decision inputs`
 
----
+禁止的流程：
 
-## 2. FS 的“≥75% 丰富度”字段要求（按类别）
+1. 先读取 `features_limit / features_base / raw`
+2. 再把全市场或大池股票反向扩回训练或决策对象集
 
-说明：这里是“字段类别 + 代表字段”。实现时允许列名不同，但必须能映射到等价信息；并在 _meta_{trade_date}.json 记录覆盖率/缺失率。
+一句话锚定：
 
-### 2.1 基础行情与价格行为（必需）
-
-- open, high, low, close, pre_close
-- pct_chg / returns_1d
-- 派生：high_low_range, candle_body, gap_open
-- 多周期收益：ret_2d, ret_5d, ret_10d（可派生）
-
-### 2.2 成交与流动性（必需）
-
-- vol, amount
-- turnover_rate
-- volume_ratio
-- 派生：amihud_illiquidity
-- 若无盘口：bid_ask_proxy / spread_proxy（代理指标）
-
-### 2.3 波动率与风险结构（必需）
-
-- volatility_5d/10d/20d
-- 派生：ATR, downside_vol, max_drawdown_20d
-- tail_risk_score（由历史分位/极值派生）
-
-### 2.4 估值与市值结构（建议强制，缺失需降级审计）
-
-- total_mv, circ_mv
-- pe_ttm, pb
-- float_share（可选）
-
-### 2.5 资金流与情绪（建议强烈引入）
-
-- moneyflow（若有）
-- northbound_net / hsgt（若有）
-- market_regime（系统内部生成：强势/震荡/弱势）
-
-### 2.6 涨停/开板微结构（Decision 的 P_fill 核心，必需）
-
-从 limit_list_d / limit_break_d / stk_limit / limit_up_tags 等提取：
-
-- is_limit_up, limit_type
-- open_times（开板次数）
-- seal_amount（封单金额/封单量）
-- first_seal_time / last_seal_time（若有）
-- break_count（炸板次数）
-- 派生：limit_up_strength
-
-锚定：若缺失该类字段，Decision 的 P_fill 只能退化为弱模型，系统 EV 价值显著下降。
-
-### 2.7 题材/板块热度（建议强烈引入）
-
-- hot_boards_score（来自 hot_boards）
-- limit_up_tags（多标签可展开/聚合）
-- 派生：board_crowding（拥挤度/集中度）
-
-### 2.8 龙虎榜/异动（可选但高价值）
-
-- top_list（上榜/机构参与/净买入）
-- abnormal_volume（异动代理）
+**pred_source 决定“算谁”，FS/raw 只负责“给这些股票补什么”。**
 
 ---
 
-## 3. 方案C：贝叶斯视角融合（LR + GBDT）
+## 3. Feature Store（FS）定位与要求
 
-### 3.1 核心思想（锚定）
+### 3.1 FS 定位
 
-- pred_source_latest 提供 prior：如 prob（建议转 logit(prob)）
-- FS 提供 likelihood 修正：用市场特征解释“先验是否可信、成交/风险是否支持、收益分布如何偏移”
+FS 是：
 
-模型形态（锚定）：
+- likelihood（证据层）
+- truth layer（真值层）
+- Premium / Decision 的共享特征层
 
-- LR：校准与可解释融合（稳定、抗过拟合）
-- GBDT/LGBM：非线性修正与交互（表达力）
+### 3.2 FS 输出契约
 
-### 3.2 数学表述（锚定）
+必须存在四件套：
 
-以二分类为例（上涨/可成交）：
+- `data/market/features_base_{trade_date}.csv|parquet`
+- `data/market/features_limit_{trade_date}.csv|parquet`
+- `data/market/truth_close_{trade_date}.csv|parquet`
+- `data/market/meta_{trade_date}.json`
 
-[
-\text{logit}(P(y=1|FS,pred)) = \text{logit}(P(y=1|pred)) + g(FS)
-]
+### 3.3 raw 层定位
+
+raw 层是 FS 的唯一上游原料层，目录锁定为：
+
+- `data/market/raw/{YYYY}/{YYYYMMDD}/{filename}`
+- `data/market/raw/latest/{filename}`
+
+raw 的职责：
+
+- 提供原始快照
+- 供 FS 构建使用
+- 供候选池股票补充真值与微结构字段
+
+raw 不得独立决定训练或决策对象全集。
+
+---
+
+## 4. 五模块决策引擎（正式命名）
+
+系统统一采用“五模块决策引擎”结构：
+
+1. **P_fill / Execution Fill Probability Module**  
+   可成交概率模块
+
+2. **E_ret / Expected Return Module**  
+   预期收益模块
+
+3. **Cost / Transaction Cost Module**  
+   交易成本模块
+
+4. **RiskPenalty / Risk Penalty Module**  
+   风险惩罚模块
+
+5. **EV / Expected Value Module**  
+   综合价值模块
 
 其中：
 
-- logit(P(y=1|pred)) 来自 pred 的 prob
-- g(FS) 由 LR/GBDT 学得（修正项）
-
-### 3.3 两条核心子模型（必须）
-
-- P_fill 模型：目标 y_fill（是否可成交/窗口内成交）
-  - 特征：FS_limit（主）+ FS_base（辅）+ pred_summary（辅）
-  - 模型：GBDT（主）+ LR（校准）
-
-- E_ret / Premium 分布模型
-  - 目标：E_ret（回归）+ Quantiles（分位回归/分布拟合）
-  - 特征：FS_base（主）+ pred_summary（辅）+（可选）FS_limit（尾部修正）
-  - 模型：GBDT/LGBM（主）+ LR（校准/融合）
+- 前四个更适合独立建模 / 独立训练
+- EV 是融合层，不是最底层原始标签模块
 
 ---
 
-## 4. Premium 与 Decision 的职责分工（必须同时用 FS + pred）
+## 5. 五模块之间的关系
 
-### 4.1 Premium（溢价/分布层）必须输出
+### 5.1 前四个是基础子模块
 
-- Top30 表：close_T2_p05/p25/p50/p75/p95（分位预测）
-- up_prob（融合后上涨概率）
-- expected_premium（预期溢价）
-- premium_score（综合评分）
-- 审计：packs_used/missing/degrade_mode + 数据可用等级说明 + model_mode 说明（详见第10章）
+#### A. P_fill
+回答：T+1 是否可成交 / 成交概率多大
 
-### 4.2 Decision（执行层）必须输出
+#### B. E_ret
+回答：若 T+1 买到，T+1→T+2 预期收益多少
 
-- TopN 信号：jq_code/ts_code, target_weight, risk_budget, buy_window, sell_window
-- 中间量可追溯：p_fill, e_ret, EV, cost, risk_penalty
-- 交易约束：最大持仓、单票上限、流动性过滤、风险 regime
+#### C. Cost
+回答：执行这笔交易的成本有多高
 
----
+#### D. RiskPenalty
+回答：这笔交易应该扣除多少风险惩罚
 
-## 5. pred_source_latest 与 FS 的合并规则（契约）
+### 5.2 EV 是融合层
 
-### 5.1 Join 主键
-
-- trade_date + ts_code
-- name 仅做辅助校验，不作主键
-
-### 5.2 冲突优先级（锚定）
-
-- 真值/行情类：以 FS 为准（Truth Layer）
-- 上游信号类：以 pred_source_latest 为准（prob/StrengthScore/ThemeBoost）
-- 同名冲突：必须重命名（例如 prob_prior vs prob_post），禁止静默覆盖
-
----
-
-## 6. 评估与自学习闭环（必须）
-
-### 6.1 必须评估指标
-
-- hit_rate_up（方向命中）
-- fill_rate（成交率）
-- avg_ret / median_ret（收益）
-- EV_after_cost（扣成本期望）
-- tail_loss（尾部损失/回撤）
-
-### 6.2 在线更新策略（锚定）
-
-- 滚动窗口训练：60/120/180 交易日可配置（默认建议 120）
-- 训练数据：必须来自 FS + pred 的历史快照，保证可复现
-- 模型产物：版本化落盘（含训练窗口/数据hash）
-
----
-
-## 7. 工程输出契约（路径/命名/落盘）
-
-### 7.1 Premium 输出
-
-- outputs/premium/premium_top30_{trade_date}.csv
-- outputs/premium/premium_full_{trade_date}.csv
-- outputs/premium/premium_verify_{trade_date}.csv（pending 也必须产出）
-- docs/reports/premium_latest.md
-- outputs/premium/_last_run.txt（必须包含：trade_date、target_date、packs_used、数据等级、commit_sha、model_mode）
-
-### 7.2 Decision 输出
-
-- docs/signals/top10_latest.csv（或系统锁死的信号路径）
-- outputs/decision/decision_report_{exec_date}.md
-- data/decision/decision_candidates_{trade_date}.csv（候选快照）
-
-### 7.3 Feature Store 输出（新增契约，必须）
-
-- data/market/features_base_{trade_date}.csv|parquet
-- data/market/features_limit_{trade_date}.csv|parquet
-- data/market/truth_close_{trade_date}.csv|parquet
-- data/market/_meta_{trade_date}.json（来源快照、字段覆盖率、缺失率、版本）
-
-### 7.4 raw 原料层输出（新增锚定）
-
-raw 层是 FS 的唯一上游原料层，目录结构锁定为：
-
-- data/market/raw/{YYYY}/{YYYYMMDD}/{filename}
-- data/market/raw/latest/{filename}
-
-其中：
-
-- latest/：最新镜像目录，每日覆盖更新
-- {YYYY}/{YYYYMMDD}/：历史冻结快照目录，保留当日原始记录用于审计/复现/回测
-
-旧扁平结构：
-
-- data/market/raw/daily_{trade_date}.csv
-- data/market/raw/daily_latest.csv
-- data/market/raw/_sync_meta_{trade_date}.json
-- data/market/raw/_sync_meta_latest.json
-
-属于历史过渡形态，不得作为后续主结构长期保留。
-
----
-
-## 8. 关键原则（防跑偏）
-
-- FS 是全系统唯一真值与特征源：Premium/Decision 不应各自到处抓数据导致不一致。
-- pred_source_latest 是强 prior：必须保留并进入融合模型。
-- 权重不拍脑袋：通过 LR+GBDT 学习融合（贝叶斯修正项），不允许固定常数权重长期运行。
-- 可追溯 > 漂亮结果：每次输出必须能回答“用了哪些数据/哪个版本/为何降级/可信度等级”。
-
----
-
-## 9. 当前状态与下一阶段里程碑（用于无缝续开发）
-
-### 9.1 当前状态（以你目前系统为基准）
-
-- Premium 已跑通并产出报告；Pack2 已固定 soft mode
-- pred_source_latest 已包含 prob/StrengthScore/ThemeBoost/board 等浓缩特征
-- 当前缺口：FS 尚未达到 ≥75% 丰富度；P_fill 关键微结构特征未统一接入 FS；Tushare token/真值链路需稳定注入
-
-### 9.2 下一阶段里程碑（先后顺序锁死）
-
-- M1：FS ≥75% 丰富度落地（features_base + features_limit + truth_close + meta）
-- M2：Decision 的 P_fill 学习模型接入 FS_limit（输出可成交概率 + 校准）
-- M3：Premium 的分布学习模型接入 FS_base（输出分位预测 + 覆盖率校准）
-- M4：LR 校准 + GBDT 非线性修正上线（贝叶斯融合完成：logit(prob_prior)+g(FS)）
-- M5：闭环评估与在线更新（滚动训练 + 门控覆盖 + 版本化回滚）
-
----
-
-## 10. 学习模型（必须）与训练闭环（锁死）
-
-### 10.1 总原则（必须）
-
-Premium 与 Decision 都必须使用学习模型（LR + GBDT/LGBM），不得长期停留在纯规则/纯展示形态。
-
-规则允许存在，但只能作为：
-
-- 冷启动兜底（样本不足）
-- 风控硬闸门（流动性、涨停不可买等）
-- 模型输出后处理（阈值、截断、权重归一）
-
-### 10.2 必须存在的模型（两条主线）
-
-系统必须至少包含并持续更新以下学习模型：
-
-A) Decision 模型组（交易可落地 EV）
-
-- P_fill：预测“能否成交/成交概率”
-- E_ret：预测“买入→卖出期望收益/或收益分布参数”
-- EV 组合层：使用贝叶斯视角融合 prior 与 likelihood，输出 EV_after_cost
-
-B) Premium 模型组（价格分布预测）
-
-- 分位预测：输出 close_T2_p05/p25/p50/p75/p95（分位回归/分布拟合）
-- 校准模型（LR/Isotonic）：保证分位覆盖率与概率校准
-
-锚定：Premium 不是“画分位表”，而是“可训练、可回测的分布预测系统”。
-
-### 10.3 模型输入（锁死）
-
-训练与推理必须同时包含：
-
-- Prior（pred）：logit(prob) + StrengthScore + ThemeBoost + 其它浓缩特征
-- Likelihood（FS）：FS_base + FS_limit（按任务选择）
-
-禁止长期只用单一来源运行。
-
-### 10.4 训练数据落库与可复现（必须）
-
-必须落盘训练样本与元信息，保证可复现：
-
-训练样本表：
-
-- data/learning/decision_train_{asof_date}.parquet|csv
-- data/learning/premium_train_{asof_date}.parquet|csv
-
-特征元信息：
-
-- data/learning/feature_meta_{asof_date}.json（字段覆盖率/缺失率/版本）
-
-真值元信息：
-
-- data/learning/truth_meta_{asof_date}.json（交易日历、收盘价、成交判定）
-
-### 10.5 模型落盘（必须）
-
-训练后模型必须落盘并版本化：
-
-- models/decision/p_fill_lr.joblib
-- models/decision/p_fill_gbdt.joblib
-- models/decision/e_ret_lr.joblib
-- models/decision/e_ret_gbdt.joblib
-- models/premium/q05_gbdt.joblib ... q95_gbdt.joblib（或多输出模型）
-- models/_meta.json（训练窗口、特征集合hash、评估指标、commit_sha、创建时间）
-
-### 10.6 滚动训练与更新策略（锁死）
-
-- 滚动窗口默认 120 交易日（可配置 60/120/180）
-- 更新频率：每日/每周（默认每日）
-- 冷启动：样本不足允许回退，但必须在审计中标记 model_mode=cold_start
-
-### 10.7 评估与门控（必须）
-
-每次训练必须产出评估报告，并设置门控规则：
-
-Decision：
-
-- fill_rate、EV_after_cost、hit_rate_up、tail_loss
-
-Premium：
-
-- 分位覆盖率（实际落在 [p05,p95] 的比例）
-- 中位误差（p50误差）
-- 尾部误差（p05/p95误差）
-
-门控规则（锚定示例）：
-
-若新模型在滚动回测窗口内 EV_after_cost 低于旧模型超过阈值，则拒绝覆盖，保留旧模型，并记录原因。
-
-### 10.8 在线推理必须加载模型（锁死）
-
-每日预测必须：
-
-- 优先加载 latest 模型
-- 模型缺失允许降级，但必须在报告审计中写明：
-  - model_loaded=false
-  - degrade_reason=model_missing
-  - fallback_mode=rule_only
-
----
-
-## 11. 新增锚定：时间轴、交易语义与两条主线口径
-
-### 11.1 时间轴定义（锁死）
-
-本系统统一采用以下时间轴定义：
-
-- T：信号生成日 / 预测日 / 系统运行日
-- T+1：实际买入执行日
-- T+2：持有后的下一交易日，用于卖出/验证/收益结算
-
-锚定：P_fill 对应 T+1；Premium 主收益定义对应 T+1→T+2，不得混淆。
-
-### 11.2 P_fill 的严格定义（锁死）
-
-P_fill 预测的是：
-
-> T 日生成的候选票，在 T+1 实际执行时，是否能买到 / 成交概率多大。
-
-因此，P_fill 解决的是“可交易性 / 可执行性”问题，不是 T+2 的价格问题。
-
-### 11.3 系统测的“溢价”定义（锁死）
-
-本系统当前主溢价口径定义为：
-
-[
-PremiumRet_{T+1 \to T+2} = \frac{Price_{T+2,\text{exit}}}{Price_{T+1,\text{entry}}} - 1
-]
-
-其中默认建议：
-
-- entry 口径：T+1 买入价代理（见 11.6）
-- exit 口径：T+2 收盘价（Premium 主展示层）
-
-锚定：
-
-- 不是 T+1 相对 T
-- 不是 T+2 相对 T
-- 而是 T+2 相对于 T+1 的溢价
-
-### 11.4 Premium 与 Decision 的主口径分线（锁死）
-
-系统必须严格区分两条输出主线：
-
-A) Premium（面向人）
-
-- 主要服务人工判断
-- 主展示口径：PredClose_T+2（T+2 预测收盘价）
-- 输出重点：价格区间、分位数、未来空间、溢价预期、风险解释
-- 作用：指导人类在 T+1 如何做交易，而不是直接给机器下单
-
-B) Decision（面向机器）
-
-- 主要服务自动执行（聚宽）
-- 主输出口径：可交易性 / 可执行性 / 风险约束 / 权重分配
-- 输出重点：P_fill、EntryPriceProxy_T+1、E_ret、EV、target_weight、risk_budget、regime、最终可执行信号
-- 作用：给机器“能直接交易”的结果，而不是报告展示
-
-锚定：
-
-- Premium 主口径可以显示 T+2 预测价格
-- Decision 主口径必须偏向可交易与可执行
-- P_fill 属于 Decision，不属于 Premium 主展示口径
-
-### 11.5 为什么 T 日可以预测 T+2（锁死）
-
-系统在 T 日运行时，只知道 T 日收盘信息，不知道 T+1 的真实价格与 T+2 的真实价格。
-
-因此系统不是“直接知道 T+2”，而是做条件预测。核心链条为：
-
-第一层：估计 T+1 执行相关变量
-
-- P_fill_T+1
-- PredOpen_T+1（可作为价格桥变量）
-- EntryPriceProxy_T+1（真实买入价代理）
-
-第二层：估计 T+2 价格/收益变量
-
-- PredClose_T+2
-- PremiumRet_{T+1→T+2}
-
-第三层：Decision/EV 融合
-
-[
+\[
 EV = P_{fill} \times E_{ret} - Cost - RiskPenalty
-]
+\]
 
-锚定：系统并非“直接从 T 硬推绝对 T+2”，而是通过“先近后远”的链式预测完成。
-
-### 11.6 四个必须锁死的中间变量（新增）
-
-后续实现中，必须显式区分并可审计以下四个变量：
-
-- PredOpen_T+1：预测的 T+1 开盘价（价格路径桥变量）
-- PredClose_T+2：预测的 T+2 收盘价（Premium 主展示变量）
-- P_fill_T+1：T+1 可成交概率（Decision 主执行变量）
-- EntryPriceProxy_T+1：T+1 真实买入价代理（Decision 收益/EV 核心变量）
-
-锚定：
-
-- PredOpen_T+1 可以作为价格预测锚点
-- 但 PredOpen_T+1 不得直接偷换成真实成交买入价
-- 真正用于收益与 EV 的买入价格，应使用 EntryPriceProxy_T+1
-
-### 11.7 “T→预测 T+1 开盘→预测 T+2 收盘”的定位（新增）
-
-以下思路被正式确认可作为系统中的价格预测链：
-
-- T 日，先预测 T+1 开盘价
-- 再用 T 日信息 + PredOpen_T+1 去预测 T+2 收盘价
-
-其定位为：
-
-- 合理
-- 值得做
-- 更适合作为“价格路径预测链”
-- 不应直接等同于“真实可成交买入价链”
-
-因此：
-
-- Premium 可优先使用该链来增强价格展示与分位预测
-- Decision 仍需独立保留执行链：P_fill + EntryPriceProxy + E_ret + EV
-
-### 11.8 Premium 与 Decision 的最终职责边界（新增）
-
-Premium 的本质：
-
-- 面向人类的价格/空间判断层
-- 可以用 T+2 预测收盘价作为最直观主口径
-- 强调未来空间、分位区间、上沿/中位/下沿、风险说明
-
-Decision 的本质：
-
-- 面向机器的执行决策层
-- 必须围绕“明天能不能买、买到多少钱、值不值得下单”组织输出
-- 不能只吃 PredClose_T+2，而必须纳入可交易性约束
+EV 是上层融合结果，不应在系统第一阶段就替代前四个独立学习模块。
 
 ---
 
-## 13. 新增正式硬规则：预测、训练、更新、生效的统一时间机制（锁死）
+## 6. 时间轴定义（正式锁死）
 
-### 13.1 总原则（必须）
+统一时间定义：
+
+- `T`：信号生成日 / 预测日 / 系统运行日
+- `T+1`：实际买入执行日
+- `T+2`：持有后的下一交易日，用于卖出 / 验证 / 收益结算
+
+### 6.1 P_fill 的严格定义
+
+`P_fill` 预测的是：
+
+- T 日生成候选票
+- 在 T+1 执行时是否能买到
+
+所以 `P_fill` 解决的是：
+
+- 可交易性
+- 可执行性
+
+不是 T+2 价格问题。
+
+### 6.2 Premium / E_ret 的严格定义
+
+`E_ret / PremiumRet` 预测的是：
+
+- T+1 买入后
+- 持有到 T+2 的收益 / 溢价
+
+---
+
+## 7. 四个必须显式区分的中间变量
+
+后续实现必须显式区分以下四个变量：
+
+- `PredOpen_T+1`：预测的 T+1 开盘价
+- `PredClose_T+2`：预测的 T+2 收盘价
+- `P_fill_T+1`：T+1 可成交概率
+- `EntryPriceProxy_T+1`：T+1 真实买入价代理
+
+锚定：
+
+- `PredOpen_T+1` 可以作为价格路径桥变量
+- 但 `PredOpen_T+1` 不得偷换成真实成交买入价
+- 真正用于收益与 EV 的买入价格，应使用 `EntryPriceProxy_T+1`
+
+---
+
+## 8. 学习模型总原则（必须）
+
+### 8.1 学习模型必须存在
+
+Premium 与 Decision 都不得长期停留在纯规则系统。  
+系统必须逐步形成以下学习模型：
+
+- `P_fill`
+- `E_ret`
+- `Cost`（可先规则后学习）
+- `RiskPenalty`（可先规则后学习）
+- Premium 分位预测
+- EV 融合 / 校准层
+
+### 8.2 学习模块优先级
+
+当前阶段优先级锁死：
+
+1. `P_fill`
+2. `E_ret`
+3. `Cost`
+4. `RiskPenalty`
+5. `EV` 组合校准层
+
+---
+
+## 9. 候选池、标签、训练集的统一对象约束
+
+### 9.1 fill_truth
+
+`fill_truth_{trade_date}.csv` 必须满足：
+
+- 主表对象来自 `pred_source`
+- FS / raw 只补字段
+- 不得扩池
+
+### 9.2 pfill_trainset
+
+`pfill_trainset_{trade_date}.csv` 必须满足：
+
+- 主表对象来自 `fill_truth`
+- 再 merge `features_base / features_limit / prior`
+- 不得重新扩池
+
+### 9.3 train_pfill
+
+`train_pfill.py` 只允许吃：
+
+- `pfill_trainset_{trade_date}.csv`
+
+不得自行改写对象池。
+
+---
+
+## 10. 训练闭环与模型落盘
+
+### 10.1 模型落盘
+
+训练后模型必须落盘并版本化，例如：
+
+- `models/pfill_lr.joblib`
+- `models/pfill_lgbm.joblib`
+- `models/pfill_meta.json`
+- `models/pfill_lr_{trade_date}.joblib`
+- `models/pfill_lgbm_{trade_date}.joblib`
+- `models/pfill_meta_{trade_date}.json`
+
+### 10.2 跳过训练也是合法状态
+
+若某日出现：
+
+- 单一标签
+- 样本不足
+- 无成熟样本
+- 真值缺失严重
+
+则允许：
+
+- 不训练
+- 写 meta
+- 记录 `skip_reason`
+- 保留旧模型
+
+这是正常状态，不等于系统失效。
+
+---
+
+## 11. 统一时间机制：预测、训练、更新、生效（正式硬规则）
+
+### 11.1 总原则
 
 系统必须严格区分四个动作：
 
@@ -549,237 +370,152 @@ Decision 的本质：
 3. 学习训练
 4. 模型生效
 
-四者不得混淆，不得在同一批样本上发生时序污染。
-
 锚定原则：
 
-* `T` 日运行时，预测只能使用 `T-1` 及以前已经冻结的模型与数据
-* `T` 日新落地的真值，只能用于训练过去已经成熟的老样本
-* `T` 日训练出的新模型，不得反向作用于 `T` 日自己的预测结果
-* `T` 日训练出的新模型，最早只能从 `T+1` 开始生效
+- `T` 日预测只能使用 `T-1` 及以前已冻结模型
+- `T` 日新落地真值，只能训练过去成熟样本
+- `T` 日训练出的新模型，不得反向污染 `T` 日预测
+- `T` 日训练出的新模型，最早只能从 `T+1` 开始生效
 
----
-
-### 13.2 统一运行顺序（必须）
-
-系统每日运行的正确顺序固定为：
+### 11.2 每日统一顺序
 
 #### 第一步：先预测未来
+在 `T` 日先用旧模型输出：
 
-在 `T` 日，系统先使用当前 latest 模型（即 `T-1` 时点已经存在的模型），输出：
-
-* `PredOpen_T+1`
-* `PredClose_T+2`
-* `P_fill_T+1`
-* `E_ret_{T+1→T+2}`
-* `Cost`
-* `RiskPenalty`
-* `EV`
-
-锚定：
-
-`T` 日预测时，不得使用 `T` 日训练后才生成的新模型。
-
----
+- `PredOpen_T+1`
+- `PredClose_T+2`
+- `P_fill_T+1`
+- `E_ret_{T+1→T+2}`
+- `Cost`
+- `RiskPenalty`
+- `EV`
 
 #### 第二步：再用今天刚落地的真值训练过去样本
 
-在 `T` 日真实行情落地后，系统只允许用今天的新真值去训练“今天刚成熟”的过去样本。
+- 用 `T` 日真实开盘 / 成交，训练 `T-1` 日对 `T` 的 `PredOpen_T+1 / P_fill`
+- 用 `T` 日真实收盘，训练 `T-2` 日对 `T` 的 `PredClose_T+2 / E_ret / PremiumRet`
 
-具体规则：
+#### 第三步：训练后经过门控再决定是否更新
+若满足：
 
-* `PredOpen_T+1` / `P_fill_T+1` 的训练：
-  用 `T` 日真实开盘/成交真值，回填 `T-1` 日发出的 `T+1` 预测
+- 样本量达标
+- 标签类别达标
+- 评估达标
+- 新模型不劣于旧模型
 
-* `PredClose_T+2` / `E_ret_{T+1→T+2}` / PremiumRet 的训练：
-  用 `T` 日真实收盘真值，回填 `T-2` 日发出的 `T+2` 预测
+则更新 latest；否则跳过更新。
 
-锚定：
+#### 第四步：新模型从下一交易日生效
+`T` 日训练出的模型，只允许从 `T+1` 开始服务预测。
 
-* `T` 不训练 `T`
-* `T` 只训练今天刚成熟的过去样本
-* 训练方向永远是“今天回收过去”，不是“今天训练今天”
+### 11.3 分模块成熟节奏
 
----
+#### A. P_fill / PredOpen_T+1
+最小成熟条件：`T+1` 真值落地即可训练
 
-#### 第三步：训练后必须经过门控，不能无条件覆盖
+#### B. E_ret / PredClose_T+2 / PremiumRet
+最小成熟条件：必须等到 `T+2` 真值落地
 
-`T` 日训练完成后，不允许无条件覆盖 latest 模型。
+#### C. Cost / RiskPenalty
+若学习化，也必须遵守同样时间机制
 
-必须经过门控判断：
+### 11.4 系统不是“当天预测、当天训练同一批样本”
 
-* 样本是否达到最低数量门槛
-* 标签是否同时包含正类与负类
-* 评估指标是否达到最低要求
-* 新模型是否优于旧模型或至少不显著劣化
-
-若门控通过：
-
-* 更新 latest 模型
-
-若门控不通过：
-
-* 跳过本次更新
-* 保留旧模型继续服务
-* 记录 skip_reason / degrade_reason / model_mode
-
-锚定：
-
-系统允许“今日不更新模型”，但不允许“今日错误更新模型”。
-
----
-
-#### 第四步：新模型从下一交易日开始生效
-
-`T` 日训练出的新模型，只允许从 `T+1` 开始参与预测。
-
-严格禁止：
-
-* `T` 日预测先输出，再被 `T` 日刚训练出的新模型回写或改写
-* 用 `T` 日训练后的模型重新解释 `T` 日已经产生的预测结果
-
-锚定：
-
-模型更新时间与模型生效时间必须分离。
-
----
-
-### 13.3 分模块成熟节奏（锁死）
-
-不同模块必须按各自真值成熟节奏训练，不得混用。
-
-#### A. P_fill / PredOpen_T+1 模块
-
-最小成熟条件：
-
-* 只要 `T+1` 真值落地即可训练
-
-训练关系：
-
-* `T` 日真实开盘 / 成交信息
-* 用于训练 `T-1` 日对 `T` 的 `P_fill_T+1` 与 `PredOpen_T+1`
-
-#### B. E_ret / PredClose_T+2 / PremiumRet 模块
-
-最小成熟条件：
-
-* 必须等到 `T+2` 真值落地
-
-训练关系：
-
-* `T` 日真实收盘
-* 用于训练 `T-2` 日对 `T` 的 `PredClose_T+2`、`E_ret`、PremiumRet
-
-#### C. Cost / RiskPenalty 模块
-
-若采用学习模型，也必须遵守同样规则：
-
-* 只能使用当日已经真实发生的执行结果/风险结果回填过去样本
-* 不得在 `T` 日拿未来尚未发生的数据训练 `T` 日自己
-
-锚定：
-
-该时间机制适用于所有学习模块，不仅适用于 `P_fill`。
-
----
-
-### 13.4 单日不满足训练条件时的处理（必须）
-
-若某日出现以下情况之一：
-
-* 无新增成熟样本
-* 样本量过小
-* 标签只有单一类别
-* 真值缺失严重
-* 训练评估未通过门控
-
-则系统必须执行：
-
-* 跳过该模块当日训练
-* 写出训练元信息（含 skip_reason）
-* 保留旧模型
-* 不得使主预测链停摆
-
-锚定：
-
-“跳过训练”是系统允许的正常状态，不等于系统失效。
-
----
-
-### 13.5 正式定义：系统不是“当天预测、当天训练同一批样本”
-
-系统必须同时存在两条并行但时间方向相反的链：
+系统必须同时存在两条并行链：
 
 #### 在线预测链
-
-* `T` 日预测未来
-* 输出 `T+1 / T+2` 相关结果
-* 服务 Decision / Premium
+- `T` 日预测未来
+- 服务 Decision / Premium
 
 #### 离线学习链
+- `T` 日回收刚成熟的过去样本
+- 训练并更新模型
+- 服务未来 `T+1` 及以后预测
 
-* `T` 日回收今天刚成熟的历史样本
-* 训练并更新模型
-* 服务未来的 `T+1` 及以后预测
+### 11.5 示例
 
-锚定：
-
-系统是“同日并行双链”，不是“同批样本同日预测又同日训练”。
-
----
-
-### 13.6 统一生效规则（必须）
-
-后续所有学习模块必须统一遵守以下硬规则：
-
-* `P_fill`：遵守
-* `PredOpen_T+1`：遵守
-* `E_ret`：遵守
-* `PredClose_T+2`：遵守
-* `PremiumRet`：遵守
-* `Cost`：遵守
-* `RiskPenalty`：遵守
-* `EV` 的组合校准层：遵守
-
-锚定：
-
-本规则为全系统统一时间机制，不允许某个模块私自采用“当天训练当天生效”的口径。
-
----
-
-### 13.7 示例（锁死）
-
-假设连续交易日为 `01, 02, 03, 04, 05, 06, 07, 08`，当前运行日为 `06`：
+假设连续交易日为：`01, 02, 03, 04, 05, 06, 07, 08`，当前运行日为 `06`
 
 #### 在 `06` 日先预测：
-
-* 预测 `07(T+1)` 开盘价
-* 预测 `08(T+2)` 收盘价
-* 预测 `07` 的 `P_fill`
-* 预测 `07→08` 的 `E_ret`
+- 预测 `07(T+1)` 开盘价
+- 预测 `08(T+2)` 收盘价
+- 预测 `07` 的 `P_fill`
+- 预测 `07→08` 的 `E_ret`
 
 #### 在 `06` 日再训练：
-
-* 用 `06` 真实开盘/成交，训练 `05` 对 `06` 的 `PredOpen_T+1 / P_fill`
-* 用 `06` 真实收盘，训练 `04` 对 `06` 的 `PredClose_T+2 / E_ret / PremiumRet`
+- 用 `06` 真实开盘 / 成交，训练 `05` 对 `06` 的 `PredOpen_T+1 / P_fill`
+- 用 `06` 真实收盘，训练 `04` 对 `06` 的 `PredClose_T+2 / E_ret / PremiumRet`
 
 #### 在 `06` 日训练后：
-
-* 若通过门控，则更新 latest
-* 若不通过门控，则保留旧模型
+- 若通过门控，则更新 latest
+- 若不通过门控，则保留旧模型
 
 #### 在 `07` 日起：
+- `06` 日训练出的新模型才允许参与 `07` 日预测
 
-* `06` 日训练出的新模型才允许参与 `07` 日预测
-
----
-
-### 13.8 最终锚定结论
+### 11.6 最终锚定结论
 
 正式锁死：
 
-* `T` 日先预测，再训练过去，不得反向污染 `T` 日预测
-* `T` 日训练出的模型，只能从 `T+1` 起生效
-* 学习系统允许跳过，不允许乱更新
-* 所有学习模块必须遵守同一时间机制
+- `T` 日先预测，再训练过去，不得反向污染 `T` 日预测
+- `T` 日训练出的模型，只能从 `T+1` 起生效
+- 学习系统允许跳过，不允许乱更新
+- 所有学习模块必须遵守同一时间机制
 
+---
+
+## 12. 当前阶段正式结论
+
+### 12.1 已经完成
+
+- 决策主链基本跑通
+- `P_fill` 学习链首轮打通
+- 候选池驱动规则已明确
+- 样本成熟度规则已明确
+- 统一时间机制已锁死
+
+### 12.2 当前正在做
+
+- 把 `P_fill` 从“单日能跑”升级为“多日稳定”
+- 收紧 `y_fill` 口径
+- 提升标签区分度
+- 处理单一标签日、样本不足日的正常跳过逻辑
+
+### 12.3 下一阶段
+
+1. 把 `P_fill` 扩展到成熟窗口
+2. 正式进入 `E_ret`
+3. 再进入 `Cost / RiskPenalty`
+4. 最后做 `EV` 融合与校准
+
+---
+
+## 13. 工程协作规则（保留）
+
+- 一个文件一个文件来
+- 每次先给：
+  1. 文件全路径
+  2. 简要修改报告
+  3. 完整可覆盖代码
+- 超过 300 行代码文件，优先基于 Raw 链接修改
+- 所有交流与输出继续使用简体中文
+
+---
+
+## 14. 最高锚定总结
+
+本系统不是：
+
+- 纯预测展示系统
+- 纯规则交易系统
+- 当天预测、当天训练同一批样本的混合系统
+
+本系统必须是：
+
+- 候选池驱动
+- FS 共享证据层
+- 双主线分工明确
+- 五模块分层建模
+- 统一时间机制
+- 允许跳过但不允许乱更新
+- 可持续滚动学习的交易决策系统
