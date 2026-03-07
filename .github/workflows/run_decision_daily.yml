@@ -270,38 +270,38 @@ jobs:
             TD="${TRADE_DATE_INPUT}"
           else
             TD="$(python - <<'PY'
-from pathlib import Path
-import re
+          from pathlib import Path
+          import re
 
-market_dir = Path('data/market')
-raw_root = market_dir / 'raw'
+          market_dir = Path("data/market")
+          raw_root = market_dir / "raw"
 
-feature_dates = []
-for p in market_dir.glob('features_limit_*.csv'):
-    m = re.fullmatch(r'features_limit_(\d{8})\.csv', p.name)
-    if m:
-        feature_dates.append(m.group(1))
+          feature_dates = []
+          for p in market_dir.glob("features_limit_*.csv"):
+              m = re.fullmatch(r"features_limit_(\d{8})\.csv", p.name)
+              if m:
+                  feature_dates.append(m.group(1))
 
-raw_dates = []
-if raw_root.exists():
-    for year_dir in raw_root.iterdir():
-        if not year_dir.is_dir():
-            continue
-        for day_dir in year_dir.iterdir():
-            if day_dir.is_dir() and re.fullmatch(r'\d{8}', day_dir.name):
-                raw_dates.append(day_dir.name)
+          raw_dates = []
+          if raw_root.exists():
+              for year_dir in raw_root.iterdir():
+                  if not year_dir.is_dir():
+                      continue
+                  for day_dir in year_dir.iterdir():
+                      if day_dir.is_dir() and re.fullmatch(r"\d{8}", day_dir.name):
+                          raw_dates.append(day_dir.name)
 
-feature_dates = sorted(set(feature_dates))
-raw_dates = sorted(set(raw_dates))
+          feature_dates = sorted(set(feature_dates))
+          raw_dates = sorted(set(raw_dates))
 
-candidates = []
-for td in feature_dates:
-    if any(rd > td for rd in raw_dates):
-        candidates.append(td)
+          candidates = []
+          for td in feature_dates:
+              if any(rd > td for rd in raw_dates):
+                  candidates.append(td)
 
-print(candidates[-1] if candidates else '')
-PY
-)"
+          print(candidates[-1] if candidates else "")
+          PY
+          )"
           fi
 
           if echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
