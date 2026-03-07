@@ -1,6 +1,6 @@
 {
   "trade_date": "20260302",
-  "rows": 5470,
+  "rows": 88,
   "fill_truth_ready_only": true,
   "source": {
     "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260302.csv",
@@ -13,34 +13,33 @@
   "input_rows": {
     "features_base": 5470,
     "features_limit": 5470,
-    "fill_truth": 5470,
+    "fill_truth": 88,
     "prior": 88
   },
   "coverage": {
     "y_fill": 1.0,
     "fill_label_quality": 1.0,
-    "entry_price_proxy_t1": 0.997989,
-    "open_t1": 0.999817,
+    "entry_price_proxy_t1": 0.931818,
+    "open_t1": 1.0,
     "up_limit_t1": 1.0,
-    "open_times_t1": 0.015174,
-    "seal_amount_t1": 0.014991,
-    "prior_prob_prior": 0.016088,
-    "prior_strength_score": 0.016088,
-    "prior_theme_boost": 0.016088,
-    "rank": 0.016088
+    "open_times_t1": 0.420455,
+    "seal_amount_t1": 0.420455,
+    "prior_prob_prior": 1.0,
+    "prior_strength_score": 1.0,
+    "prior_theme_boost": 1.0,
+    "rank": 1.0
   },
   "label_distribution": {
-    "1": 5459,
-    "0": 11
+    "1": 82,
+    "0": 6
   },
   "quality_distribution": {
-    "strong_open_tradable": 5452,
-    "strong_dead_limit_up": 10,
+    "strong_open_tradable": 75,
     "weak_intraday_break_without_minbar": 7,
-    "soft_not_tradable": 1
+    "strong_dead_limit_up": 6
   },
   "sample_maturity_distribution": {
-    "FULLY_READY": 5470
+    "FULLY_READY": 88
   },
   "column_groups": {
     "base_cols": [
@@ -157,9 +156,9 @@
       "prior_board"
     ]
   },
-  "cold_start_ratio": 0.985192,
-  "feature_coverage_score_mean": 0.671696,
-  "sample_weight_mean": 1.249909,
+  "cold_start_ratio": 0.079545,
+  "feature_coverage_score_mean": 0.806837,
+  "sample_weight_mean": 1.247159,
   "notes": [
     "本文件是 P_fill 训练前宽表，不是训练结果文件。",
     "训练集只保留 label_ready_fill=1 的成熟样本。",
