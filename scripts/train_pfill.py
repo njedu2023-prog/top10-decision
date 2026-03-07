@@ -22,6 +22,14 @@ train_pfill.py
 - 时间切分优先；若单日样本不足，再退化为行切分
 - 若切分后 train/valid 标签类别不足，则进入 small_sample_mode：
   使用全量样本训练，跳过稳定评估，但不断链
+
+新增规则：
+- 若某个 trade_date 的可训练样本只有单一标签（全 1 或全 0），
+  则不报错退出，而是：
+  1) 跳过训练
+  2) 写出 pfill_meta / pfill_meta_{trade_date}.json
+  3) 记录 skip_reason=single_label
+  4) 不覆盖已有模型文件
 """
 
 from __future__ import annotations
@@ -97,11 +105,14 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     if out.empty:
         raise ValueError("过滤 label_ready_fill=1 后无可训练样本")
 
-    uniq = sorted(out["y_fill"].dropna().unique().tolist())
-    if len(uniq) < 2:
-        raise ValueError(f"可训练样本只有单一标签，无法训练二分类模型：labels={uniq}")
-
     return out
+
+
+def get_label_set(df: pd.DataFrame) -> List[int]:
+    if "y_fill" not in df.columns or df.empty:
+        return []
+    uniq = sorted(pd.to_numeric(df["y_fill"], errors="coerce").dropna().astype(int).unique().tolist())
+    return uniq
 
 
 # =========================================================
@@ -385,11 +396,114 @@ def empty_metrics(reason: str) -> Dict[str, Optional[float] | str]:
 
 
 # =========================================================
+# meta / skip
+# =========================================================
+def build_skip_meta(
+    trade_date: str,
+    trainset_path: Path,
+    raw_df: pd.DataFrame,
+    df: pd.DataFrame,
+    skip_reason: str,
+    label_set: List[int],
+) -> Dict[str, object]:
+    sample_maturity_distribution: Dict[str, int] = {}
+    if "sample_maturity" in df.columns:
+        sample_maturity_distribution = {
+            str(k): int(v)
+            for k, v in df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict().items()
+        }
+
+    return {
+        "train_time_utc": utc_now_iso(),
+        "trade_date": trade_date,
+        "trainset_path": str(trainset_path),
+        "status": "skipped",
+        "skip_reason": skip_reason,
+        "label_set": label_set,
+        "split_mode": "skipped",
+        "small_sample_mode": False,
+        "model_paths": {
+            "lr": "",
+            "lgbm": "",
+            "lr_dated": "",
+            "lgbm_dated": "",
+        },
+        "model_backend": {
+            "lr": "sklearn.LogisticRegression",
+            "lgbm": "lightgbm.LGBMClassifier" if HAS_LGBM else "sklearn.HistGradientBoostingClassifier",
+        },
+        "rows": {
+            "raw_all": int(len(raw_df)),
+            "ready_only": int(len(df)),
+            "train": 0,
+            "valid": 0,
+        },
+        "fill_truth_ready_only": True,
+        "sample_maturity_distribution": sample_maturity_distribution,
+        "label_distribution": {
+            "ready_all_pos": int((df["y_fill"] == 1).sum()) if "y_fill" in df.columns else 0,
+            "ready_all_neg": int((df["y_fill"] == 0).sum()) if "y_fill" in df.columns else 0,
+            "train_pos": 0,
+            "train_neg": 0,
+            "valid_pos": 0,
+            "valid_neg": 0,
+        },
+        "features": {
+            "n_total": 0,
+            "n_numeric": 0,
+            "n_categorical": 0,
+            "feature_cols": [],
+        },
+        "missing_ratio": {},
+        "metrics_valid": {
+            "lr": empty_metrics(skip_reason),
+            "lgbm": empty_metrics(skip_reason),
+        },
+        "notes": [
+            "本次未训练模型。",
+            "原因：单一标签或不满足训练条件时，跳过训练但不断链。",
+            "不会覆盖已有 latest 模型文件。",
+        ],
+    }
+
+
+def write_meta_files(project_root: Path, trade_date: str, meta: Dict[str, object]) -> Tuple[Path, Path]:
+    models_dir = project_root / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = models_dir / "pfill_meta.json"
+    meta_dated_path = models_dir / f"pfill_meta_{trade_date}.json"
+    meta_text = json.dumps(meta, ensure_ascii=False, indent=2)
+    meta_path.write_text(meta_text, encoding="utf-8")
+    meta_dated_path.write_text(meta_text, encoding="utf-8")
+    return meta_path, meta_dated_path
+
+
+# =========================================================
 # 主流程
 # =========================================================
 def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, object]:
     raw_df, trainset_path = load_trainset(project_root, trade_date)
     df = prepare_train_df(raw_df)
+
+    label_set = get_label_set(df)
+    if len(label_set) < 2:
+        meta = build_skip_meta(
+            trade_date=trade_date,
+            trainset_path=trainset_path,
+            raw_df=raw_df,
+            df=df,
+            skip_reason="single_label_skip_train",
+            label_set=label_set,
+        )
+        meta_path, meta_dated_path = write_meta_files(project_root, trade_date, meta)
+        print(f"[train_pfill] trade_date={trade_date}")
+        print(f"[train_pfill] trainset={trainset_path}")
+        print(f"[train_pfill] skipped=True")
+        print(f"[train_pfill] skip_reason=single_label_skip_train")
+        print(f"[train_pfill] label_set={label_set}")
+        print(f"[train_pfill] out_meta={meta_path}")
+        print(f"[train_pfill] out_meta_dated={meta_dated_path}")
+        return meta
 
     train_df, valid_df, split_mode, small_sample_mode = split_train_valid(df)
 
@@ -452,6 +566,9 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
         "train_time_utc": utc_now_iso(),
         "trade_date": trade_date,
         "trainset_path": str(trainset_path),
+        "status": "trained",
+        "skip_reason": "",
+        "label_set": label_set,
         "split_mode": split_mode,
         "small_sample_mode": bool(small_sample_mode),
         "model_paths": {
@@ -496,6 +613,7 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
             "仅训练 label_ready_fill=1 的成熟样本。",
             "采用时间切分优先，样本不足时退化为行切分。",
             "若切分后标签类别不足，则进入 small_sample_mode：全量训练，跳过 valid 评估。",
+            "若整天样本只有单一标签，则跳过训练并写出 skip meta，不覆盖旧模型。",
             "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
         ],
