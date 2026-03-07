@@ -48,6 +48,7 @@ jobs:
         run: |
           set -e
           mkdir -p data/pred
+          mkdir -p data/pred/archive
           mkdir -p data/market
           mkdir -p data/market/raw
           mkdir -p data/decision
@@ -57,7 +58,7 @@ jobs:
           mkdir -p outputs/decision
           mkdir -p outputs/learning
 
-      # 1) 同步 prior：pred_source_latest
+      # 1) 同步 prior：pred_source_latest + pred archive
       - name: Sync pred source snapshot (to data/pred/pred_source_latest.csv)
         env:
           TRADE_DATE: ${{ inputs.trade_date }}
@@ -79,7 +80,7 @@ jobs:
             RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
             echo "[sync-pred] TOP10_PRED_URL=${RAW_URL}"
 
-            TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
+            TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
           else
             RAW_URL="https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv"
             echo "[sync-pred] TOP10_PRED_URL=${RAW_URL}"
@@ -90,6 +91,9 @@ jobs:
           echo "[sync-pred] snapshot saved -> data/pred/pred_source_latest.csv"
           head -n 3 data/pred/pred_source_latest.csv || true
           wc -l data/pred/pred_source_latest.csv || true
+
+          echo "[sync-pred] archive tree:"
+          find data/pred -maxdepth 3 -type f | sort || true
 
       # 2) 同步 market raw 多源原料
       - name: Sync market raw snapshots
@@ -165,6 +169,8 @@ jobs:
 
           # prior 输入
           git add data/pred/pred_source_latest.csv || true
+          git add data/pred/archive/*.csv || true
+          git add -A data/pred/archive || true
 
           # 旧路径兼容
           git add data/pred/pred_top10_latest.csv || true
