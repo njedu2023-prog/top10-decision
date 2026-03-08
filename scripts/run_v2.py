@@ -77,6 +77,18 @@ def _ensure_required_cols(df: pd.DataFrame, required_cols: list[str]) -> None:
             raise RuntimeError(f"缺少必要字段 {c}，请检查 ingest / adapter / pred_source_latest 输入链路。")
 
 
+def _safe_first_value(df: pd.DataFrame, col: str, fallback: Any = "") -> Any:
+    try:
+        v = get_first_value(df, col)
+        if v is None:
+            return fallback
+        if isinstance(v, str) and v.strip() == "":
+            return fallback
+        return v
+    except Exception:
+        return fallback
+
+
 def _build_input_bundle() -> tuple[pd.DataFrame, dict[str, Any], str, str]:
     """
     返回：
@@ -149,7 +161,6 @@ def _load_engine_apply_func(
     """
     先尝试常规 import。
     若 engines/ 目录尚未放 __init__.py，允许退化为按文件路径加载。
-    这样本次接线不被包结构细节卡死。
     """
     try:
         if engine_file_name == "pfill_engine.py" and func_name == "apply_pfill_engine":
@@ -202,11 +213,11 @@ def _run_pfill_engine(
         out = apply_func(out)
 
     audit = {
-        "p_fill_pred_src": str(get_first_value(out, "p_fill_pred_src")),
-        "p_fill_model_loaded": bool(get_first_value(out, "p_fill_model_loaded", default=False)),
-        "p_fill_model_kind": str(get_first_value(out, "p_fill_model_kind")),
-        "p_fill_model_path": str(get_first_value(out, "p_fill_model_path")),
-        "p_fill_degrade_reason": str(get_first_value(out, "p_fill_degrade_reason")),
+        "p_fill_pred_src": str(_safe_first_value(out, "p_fill_pred_src", "unknown")),
+        "p_fill_model_loaded": bool(_safe_first_value(out, "p_fill_model_loaded", False)),
+        "p_fill_model_kind": str(_safe_first_value(out, "p_fill_model_kind", "")),
+        "p_fill_model_path": str(_safe_first_value(out, "p_fill_model_path", "")),
+        "p_fill_degrade_reason": str(_safe_first_value(out, "p_fill_degrade_reason", "")),
     }
     return out, audit
 
@@ -220,7 +231,7 @@ def _run_eret_engine(
     if apply_func is None:
         out["e_ret_pred"] = overnight_model_rule(
             out,
-            regime=str(get_first_value(out, "regime_name", default="RISK_ON")),
+            regime=str(_safe_first_value(out, "regime_name", "RISK_ON")),
         )
         out["eret_pred"] = out["e_ret_pred"]
         out["eret_pred_rule"] = out["e_ret_pred"]
@@ -241,11 +252,11 @@ def _run_eret_engine(
         out["eret_pred"] = out["e_ret_pred"]
 
     audit = {
-        "eret_pred_src": str(get_first_value(out, "eret_pred_src")),
-        "eret_model_loaded": bool(get_first_value(out, "eret_model_loaded", default=False)),
-        "eret_model_kind": str(get_first_value(out, "eret_model_kind")),
-        "eret_model_path": str(get_first_value(out, "eret_model_path")),
-        "eret_degrade_reason": str(get_first_value(out, "eret_degrade_reason")),
+        "eret_pred_src": str(_safe_first_value(out, "eret_pred_src", "unknown")),
+        "eret_model_loaded": bool(_safe_first_value(out, "eret_model_loaded", False)),
+        "eret_model_kind": str(_safe_first_value(out, "eret_model_kind", "")),
+        "eret_model_path": str(_safe_first_value(out, "eret_model_path", "")),
+        "eret_degrade_reason": str(_safe_first_value(out, "eret_degrade_reason", "")),
     }
     return out, audit
 
