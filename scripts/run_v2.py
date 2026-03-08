@@ -17,11 +17,15 @@ top10-decision — V2 runner (Orchestrator Only)
 - 若 FS 缺失，则自动降级回 pred_only
 - P_fill / E_ret 不再直接写死规则函数，升级为优先 engine 推理、失败自动回退规则
 - 将输入层状态与 engine 审计状态写入 report / eval，便于验收
+- 新增手动 trade_date 契约：支持 --trade-date / TRADE_DATE，并对输入表做显式过滤
 """
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import os
+import re
 from pathlib import Path
 from typing import Any, Callable, List
 
@@ -89,6 +93,37 @@ def _safe_first_value(df: pd.DataFrame, col: str, fallback: Any = "") -> Any:
         return fallback
 
 
+def _normalize_trade_date_str(value: Any) -> str:
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if s == "":
+        return ""
+    s = re.sub(r"\.0$", "", s)
+    s = re.sub(r"[^0-9]", "", s)
+    return s
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run top10-decision V2 orchestrator.")
+    parser.add_argument(
+        "--trade-date",
+        default="",
+        help="手动指定 Decision 输入 trade_date（YYYYMMDD）。留空=自动从输入表推断主日期。",
+    )
+    return parser.parse_args()
+
+
+def _resolve_requested_trade_date(args: argparse.Namespace) -> str:
+    cli_td = _normalize_trade_date_str(getattr(args, "trade_date", ""))
+    env_td = _normalize_trade_date_str(os.environ.get("TRADE_DATE", ""))
+
+    requested = cli_td or env_td
+    if requested and not re.fullmatch(r"\d{8}", requested):
+        raise RuntimeError(f"非法 trade_date: {requested}，期望 YYYYMMDD。")
+    return requested
+
+
 def _build_input_bundle() -> tuple[pd.DataFrame, dict[str, Any], str, str]:
     """
     返回：
@@ -123,34 +158,64 @@ def _build_input_bundle() -> tuple[pd.DataFrame, dict[str, Any], str, str]:
     return input_df, input_status, input_mode, fs_degrade_reason
 
 
-def _prepare_runtime_input(input_df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_runtime_input(
+    input_df: pd.DataFrame,
+    requested_trade_date: str = "",
+) -> pd.DataFrame:
     """
     运行前最小清洗：
     - 保障必要字段
-    - 尽量按单一 trade_date 过滤
+    - 若指定 requested_trade_date，则强制按该日期过滤
+    - 否则按输入表内主日期（mode/max）过滤
     """
     _ensure_required_cols(input_df, ["ts_code", "name"])
 
     out = input_df.copy()
 
-    if "trade_date" in out.columns:
-        td_vals = (
-            out["trade_date"]
-            .dropna()
-            .astype(str)
-            .str.replace(r"\.0$", "", regex=True)
-            .str.strip()
-        )
+    if "trade_date" not in out.columns:
+        if requested_trade_date:
+            raise RuntimeError(
+                "输入表缺少 trade_date 字段，无法按手动指定 trade_date 过滤。"
+            )
+        return out
+
+    td_series = (
+        out["trade_date"]
+        .astype(str)
+        .str.replace(r"\.0$", "", regex=True)
+        .str.strip()
+    )
+    out["_trade_date_norm_tmp"] = td_series
+    available_trade_dates = sorted(
+        {
+            _normalize_trade_date_str(v)
+            for v in out["_trade_date_norm_tmp"].dropna().tolist()
+            if _normalize_trade_date_str(v)
+        }
+    )
+
+    if requested_trade_date:
+        filtered = out.loc[
+            out["_trade_date_norm_tmp"].map(_normalize_trade_date_str) == requested_trade_date
+        ].copy()
+        if filtered.empty:
+            available_preview = ",".join(available_trade_dates[:20]) if available_trade_dates else "none"
+            raise RuntimeError(
+                f"手动指定 trade_date={requested_trade_date}，但输入表中无匹配行。"
+                f" available_trade_dates={available_preview}"
+            )
+        out = filtered
+    else:
+        td_vals = out["_trade_date_norm_tmp"].dropna().astype(str).str.strip()
         td_vals = td_vals[td_vals != ""]
         if not td_vals.empty:
             mode_vals = td_vals.mode()
             trade_date = str(mode_vals.iloc[0]) if len(mode_vals) > 0 else str(td_vals.max())
-            filtered = out.loc[
-                out["trade_date"].astype(str).str.replace(r"\.0$", "", regex=True) == trade_date
-            ].copy()
+            filtered = out.loc[out["_trade_date_norm_tmp"] == trade_date].copy()
             if not filtered.empty:
                 out = filtered
 
+    out = out.drop(columns=["_trade_date_norm_tmp"], errors="ignore")
     return out
 
 
@@ -262,11 +327,14 @@ def _run_eret_engine(
 
 
 def main() -> int:
+    args = _parse_args()
+    requested_trade_date = _resolve_requested_trade_date(args)
+
     ensure_dirs()
 
     # ✅ 唯一入口：统一通过 ingest 层取数
     input_df, input_status, input_mode, fs_degrade_reason = _build_input_bundle()
-    input_df = _prepare_runtime_input(input_df)
+    input_df = _prepare_runtime_input(input_df, requested_trade_date=requested_trade_date)
 
     # 日志：用于验收“是否仍在吃 Top10(10行)”
     n_rows = int(len(input_df))
@@ -277,6 +345,8 @@ def main() -> int:
         )
 
     print(f"[run_v2] input_mode={input_mode}")
+    if requested_trade_date:
+        print(f"[run_v2] requested_trade_date={requested_trade_date}")
     if fs_degrade_reason:
         print(f"[run_v2] fs_degrade_reason={fs_degrade_reason}")
 
@@ -295,6 +365,7 @@ def main() -> int:
     routed_df = score_router(input_df).head(topk).copy()
 
     trade_date = get_first_value(routed_df, "trade_date")
+    trade_date = requested_trade_date or trade_date
     target_trade_date = get_first_value(routed_df, "target_trade_date")
     exec_date = choose_exec_date(trade_date, target_trade_date)
     exit_date = ""
@@ -317,6 +388,7 @@ def main() -> int:
         cand_snapshot["ev_pred"] = 0.0
         cand_snapshot["input_mode"] = input_mode
         cand_snapshot["fs_degrade_reason"] = fs_degrade_reason
+        cand_snapshot["requested_trade_date"] = requested_trade_date
         cand_snapshot["p_fill_pred_src"] = "stop_zero"
         cand_snapshot["eret_pred_src"] = "stop_zero"
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
@@ -331,6 +403,7 @@ def main() -> int:
         report_lines.append(f"**停手：{stop_note}**\n\n")
         report_lines.append("## Input Status\n\n")
         report_lines.append(f"- input_mode: **{input_mode}**\n")
+        report_lines.append(f"- requested_trade_date: **{requested_trade_date or 'auto'}**\n")
         report_lines.append(f"- fs_degrade_reason: **{fs_degrade_reason or 'none'}**\n")
         report_lines.append(f"- pred_loaded: **{input_status.get('pred_loaded', False)}**\n")
         report_lines.append(f"- features_base_loaded: **{input_status.get('features_base_loaded', False)}**\n")
@@ -346,6 +419,7 @@ def main() -> int:
             {
                 "exec_date": exec_date,
                 "signal_date": trade_date,
+                "requested_trade_date": requested_trade_date,
                 "stop_trading": True,
                 "reason": stop_note,
                 "input_mode": input_mode,
@@ -366,6 +440,7 @@ def main() -> int:
     routed_df["exec_date"] = norm_ymd(exec_date)
     routed_df["exit_date"] = norm_ymd(exit_date)
     routed_df["regime_name"] = regime_name
+    routed_df["requested_trade_date"] = requested_trade_date
 
     routed_df, pfill_audit = _run_pfill_engine(routed_df)
     routed_df, eret_audit = _run_eret_engine(routed_df)
@@ -425,6 +500,7 @@ def main() -> int:
     lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
     lines.append(f"- signal_date: **{trade_date or 'unknown'}**\n")
     lines.append(f"- exec_date: **{exec_date or 'unknown'}**\n")
+    lines.append(f"- requested_trade_date: **{requested_trade_date or 'auto'}**\n")
     lines.append(f"- regime: **{regime_name}**\n")
     lines.append(f"- risk_budget: **{fmt_num(risk_budget, 4)}**\n")
     lines.append(f"- input_mode: **{input_mode}**\n")
@@ -478,6 +554,7 @@ def main() -> int:
     eval_payload = {
         "signal_date": trade_date,
         "exec_date": exec_date,
+        "requested_trade_date": requested_trade_date,
         "regime": regime_name,
         "risk_budget": risk_budget,
         "topk": int(len(routed_df)),
