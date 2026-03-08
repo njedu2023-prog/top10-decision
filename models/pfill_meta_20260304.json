@@ -1,15 +1,14 @@
 {
-  "train_time_utc": "2026-03-07T19:27:47+00:00",
-  "trade_date": "20260304",
-  "trainset_path": "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260304.csv",
+  "train_time_utc": "2026-03-08T21:31:27+00:00",
+  "anchor_trade_date": "20260304",
   "status": "trained",
   "skip_reason": "",
   "label_set": [
     0,
     1
   ],
-  "split_mode": "small_sample_full_train",
-  "small_sample_mode": true,
+  "split_mode": "time_holdout:20260304",
+  "small_sample_mode": false,
   "model_paths": {
     "lr": "/home/runner/work/top10-decision/top10-decision/models/pfill_lr.joblib",
     "lgbm": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
@@ -21,23 +20,54 @@
     "lr": "sklearn.LogisticRegression",
     "lgbm": "lightgbm.LGBMClassifier"
   },
+  "window": {
+    "maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv",
+    "matured_trade_dates": [
+      "20260302",
+      "20260303",
+      "20260304"
+    ],
+    "loaded_trade_dates": [
+      "20260302",
+      "20260303",
+      "20260304"
+    ],
+    "missing_trade_dates": [],
+    "loaded_trainset_paths": [
+      "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260302.csv",
+      "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260303.csv",
+      "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260304.csv"
+    ],
+    "n_matured_dates": 3,
+    "n_loaded_dates": 3,
+    "window_start": "20260302",
+    "window_end": "20260304",
+    "train_dates": [
+      "20260302",
+      "20260303"
+    ],
+    "valid_dates": [
+      "20260304"
+    ]
+  },
   "rows": {
-    "raw_all": 44,
-    "ready_only": 44,
-    "train": 44,
-    "valid": 0
+    "raw_all": 215,
+    "ready_only": 215,
+    "train": 171,
+    "valid": 44
   },
   "fill_truth_ready_only": true,
   "sample_maturity_distribution": {
-    "FULLY_READY": 44
+    "FULLY_READY": 171,
+    "PFILL_READY": 44
   },
   "label_distribution": {
-    "ready_all_pos": 41,
-    "ready_all_neg": 3,
-    "train_pos": 41,
-    "train_neg": 3,
-    "valid_pos": 0,
-    "valid_neg": 0
+    "ready_all_pos": 206,
+    "ready_all_neg": 9,
+    "train_pos": 165,
+    "train_neg": 6,
+    "valid_pos": 41,
+    "valid_neg": 3
   },
   "features": {
     "n_total": 85,
@@ -129,6 +159,104 @@
       "prior_prob_prior__is_missing",
       "prior_strength_score__is_missing",
       "prior_theme_boost__is_missing"
+    ],
+    "numeric_cols": [
+      "rank",
+      "sample_weight",
+      "is_cold_start",
+      "feature_coverage_score",
+      "symbol",
+      "list_date",
+      "open",
+      "high",
+      "low",
+      "close",
+      "pct_chg",
+      "pre_close_est",
+      "returns_1d",
+      "high_low_range",
+      "candle_body",
+      "gap_open",
+      "vol",
+      "amount",
+      "turnover_rate",
+      "turnover_rate_f",
+      "volume_ratio",
+      "amihud_illiquidity",
+      "volatility_5d",
+      "volatility_10d",
+      "volatility_20d",
+      "atr",
+      "downside_vol",
+      "max_drawdown_20d",
+      "tail_risk_score",
+      "total_mv",
+      "float_mv",
+      "pe_ttm",
+      "pb",
+      "north_money_market",
+      "south_money_market",
+      "hgt_market",
+      "sgt_market",
+      "market_regime",
+      "hot_boards_score",
+      "board_crowding_rank",
+      "is_hot_board",
+      "board_rank",
+      "board_limit_up_count",
+      "is_st_like",
+      "top_list_net_buy",
+      "top_net_rate",
+      "amount_rate",
+      "float_values",
+      "abnormal_volume",
+      "has_namechange_record",
+      "latest_change_reason",
+      "ret_2d",
+      "ret_5d",
+      "ret_10d",
+      "bid_ask_proxy",
+      "spread_proxy",
+      "open_times",
+      "fd_amount",
+      "seal_amount",
+      "first_seal_time",
+      "last_seal_time",
+      "open_times_break",
+      "fd_amount_break",
+      "seal_amount_break",
+      "first_time_break",
+      "last_time_break",
+      "up_limit",
+      "down_limit",
+      "is_limit_up",
+      "break_count_proxy",
+      "limit_up_strength",
+      "prior_prob_prior",
+      "prior_strength_score",
+      "prior_theme_boost",
+      "open_times_t1__is_missing",
+      "seal_amount_t1__is_missing",
+      "limit_type_t1__is_missing",
+      "prior_prob_prior__is_missing",
+      "prior_strength_score__is_missing",
+      "prior_theme_boost__is_missing"
+    ],
+    "categorical_cols": [
+      "board",
+      "area",
+      "market",
+      "limit_type",
+      "prior_board"
+    ],
+    "category_like_cols_detected": [
+      "symbol",
+      "board",
+      "area",
+      "market",
+      "market_regime",
+      "limit_type",
+      "prior_board"
     ]
   },
   "missing_ratio": {
@@ -173,17 +301,17 @@
     "hgt_market": 0.0,
     "sgt_market": 0.0,
     "market_regime": 1.0,
-    "hot_boards_score": 0.363636,
-    "board_crowding_rank": 0.363636,
+    "hot_boards_score": 0.265116,
+    "board_crowding_rank": 0.265116,
     "is_hot_board": 0.0,
-    "board_rank": 0.363636,
-    "board_limit_up_count": 0.363636,
+    "board_rank": 0.265116,
+    "board_limit_up_count": 0.265116,
     "is_st_like": 0.0,
-    "top_list_net_buy": 0.522727,
-    "top_net_rate": 0.522727,
-    "amount_rate": 0.522727,
-    "float_values": 0.522727,
-    "abnormal_volume": 0.522727,
+    "top_list_net_buy": 0.516279,
+    "top_net_rate": 0.516279,
+    "amount_rate": 0.516279,
+    "float_values": 0.516279,
+    "abnormal_volume": 0.516279,
     "has_namechange_record": 0.0,
     "latest_change_reason": 1.0,
     "ret_2d": 1.0,
@@ -193,10 +321,10 @@
     "spread_proxy": 1.0,
     "limit_type": 0.0,
     "open_times": 0.0,
-    "fd_amount": 0.0,
-    "seal_amount": 0.0,
+    "fd_amount": 0.004651,
+    "seal_amount": 0.004651,
     "first_seal_time": 0.0,
-    "last_seal_time": 0.0,
+    "last_seal_time": 0.004651,
     "open_times_break": 1.0,
     "fd_amount_break": 1.0,
     "seal_amount_break": 1.0,
@@ -220,24 +348,24 @@
   },
   "metrics_valid": {
     "lr": {
-      "auc": null,
-      "logloss": null,
-      "brier": null,
-      "reason": "small_sample_mode_skip_valid"
+      "auc": 0.951219512195122,
+      "logloss": 0.2209995701877661,
+      "brier": 0.062137812474116365
     },
     "lgbm": {
-      "auc": null,
-      "logloss": null,
-      "brier": null,
-      "reason": "small_sample_mode_skip_valid"
+      "auc": 0.853658536585366,
+      "logloss": 0.34409235763910223,
+      "brier": 0.07581708981372696
     }
   },
   "notes": [
     "仅训练 label_ready_fill=1 的成熟样本。",
+    "本文件已升级为成熟窗口训练，训练样本来自 sample_maturity 中 PFILL_READY=1 的全部历史样本日。",
     "采用时间切分优先，样本不足时退化为行切分。",
     "若切分后标签类别不足，则进入 small_sample_mode：全量训练，跳过 valid 评估。",
-    "若整天样本只有单一标签，则跳过训练并写出 skip meta，不覆盖旧模型。",
+    "若整个成熟窗口只有单一标签，则跳过训练并写出 skip meta，不覆盖旧模型。",
     "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
-    "同时输出 latest 与 dated 模型文件，便于追溯。"
+    "同时输出 latest 与 dated 模型文件，便于追溯。",
+    "已显式写出 numeric_cols / categorical_cols / category_like_cols_detected，供线上推理层严格对齐训练态输入契约。"
   ]
 }
