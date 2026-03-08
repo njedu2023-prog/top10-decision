@@ -5,7 +5,7 @@
   "rows": 44,
   "eret_sample_eligible_rows": 41,
   "sample_maturity": {
-    "FULLY_READY": 44
+    "PFILL_READY": 44
   },
   "label_ready_fill": 44,
   "label_ready_ret": 44,

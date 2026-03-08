@@ -42,7 +42,7 @@
     "weak_intraday_break_without_minbar": 1
   },
   "sample_maturity_distribution": {
-    "FULLY_READY": 41
+    "PFILL_READY": 41
   },
   "target_stats": {
     "mean": 0.002993,

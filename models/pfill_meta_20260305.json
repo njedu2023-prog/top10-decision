@@ -1,5 +1,5 @@
 {
-  "train_time_utc": "2026-03-08T21:05:37+00:00",
+  "train_time_utc": "2026-03-08T22:49:08+00:00",
   "anchor_trade_date": "20260305",
   "status": "trained",
   "skip_reason": "",
@@ -23,6 +23,7 @@
   "window": {
     "maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv",
     "matured_trade_dates": [
+      "20260227",
       "20260302",
       "20260303",
       "20260304",
@@ -34,14 +35,16 @@
       "20260304",
       "20260305"
     ],
-    "missing_trade_dates": [],
+    "missing_trade_dates": [
+      "20260227"
+    ],
     "loaded_trainset_paths": [
       "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260302.csv",
       "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260303.csv",
       "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260304.csv",
       "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260305.csv"
     ],
-    "n_matured_dates": 4,
+    "n_matured_dates": 5,
     "n_loaded_dates": 4,
     "window_start": "20260302",
     "window_end": "20260305",
@@ -62,8 +65,7 @@
   },
   "fill_truth_ready_only": true,
   "sample_maturity_distribution": {
-    "FULLY_READY": 215,
-    "PFILL_READY": 69
+    "PFILL_READY": 284
   },
   "label_distribution": {
     "ready_all_pos": 272,

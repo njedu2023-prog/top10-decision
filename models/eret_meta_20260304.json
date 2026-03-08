@@ -1,10 +1,10 @@
 {
-  "train_time_utc": "2026-03-08T21:05:40+00:00",
+  "train_time_utc": "2026-03-08T22:49:10+00:00",
   "anchor_trade_date": "20260304",
   "status": "trained",
   "skip_reason": "",
   "target_column": "realized_ret_t1_to_t2",
-  "split_mode": "row_holdout:80_20",
+  "split_mode": "time_holdout:20260304",
   "small_sample_mode": false,
   "model_paths": {
     "lr": "/home/runner/work/top10-decision/top10-decision/models/eret_lr.joblib",
@@ -20,47 +20,53 @@
   "window": {
     "maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv",
     "matured_trade_dates": [
+      "20260227",
       "20260302",
       "20260303",
       "20260304"
     ],
     "loaded_trade_dates": [
+      "20260302",
+      "20260303",
       "20260304"
     ],
     "missing_trade_dates": [
-      "20260302",
-      "20260303"
+      "20260227"
     ],
     "loaded_trainset_paths": [
+      "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260302.csv",
+      "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260303.csv",
       "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260304.csv"
     ],
-    "n_matured_dates": 3,
-    "n_loaded_dates": 1,
-    "window_start": "20260304",
+    "n_matured_dates": 4,
+    "n_loaded_dates": 3,
+    "window_start": "20260302",
     "window_end": "20260304",
     "train_dates": [
-      "20260304"
+      "20260302",
+      "20260303"
     ],
     "valid_dates": [
       "20260304"
     ]
   },
   "rows": {
-    "raw_all": 41,
-    "ready_only": 41,
-    "train": 32,
-    "valid": 9
+    "raw_all": 206,
+    "ready_only": 206,
+    "train": 165,
+    "valid": 41
   },
   "eret_truth_ready_only": true,
   "sample_maturity_distribution": {
-    "FULLY_READY": 41
+    "FULLY_READY": 165,
+    "PFILL_READY": 41
   },
   "target_distribution": {
-    "mean": 0.002993390071042335,
-    "median": -0.0117328519855596,
-    "min": -0.1177884615384615,
+    "mean": -0.029882629331947057,
+    "median": -0.0330917795269695,
+    "min": -0.2072222222222222,
     "max": 0.2632776934749619,
-    "positive_rate": 0.43902439024390244
+    "positive_rate": 0.30097087378640774
   },
   "features": {
     "n_total": 89,
@@ -205,17 +211,17 @@
     "hgt_market": 0.0,
     "sgt_market": 0.0,
     "market_regime": 1.0,
-    "hot_boards_score": 0.341463,
-    "board_crowding_rank": 0.341463,
+    "hot_boards_score": 0.257282,
+    "board_crowding_rank": 0.257282,
     "is_hot_board": 0.0,
-    "board_rank": 0.341463,
-    "board_limit_up_count": 0.341463,
+    "board_rank": 0.257282,
+    "board_limit_up_count": 0.257282,
     "is_st_like": 0.0,
-    "top_list_net_buy": 0.512195,
-    "top_net_rate": 0.512195,
-    "amount_rate": 0.512195,
-    "float_values": 0.512195,
-    "abnormal_volume": 0.512195,
+    "top_list_net_buy": 0.504854,
+    "top_net_rate": 0.504854,
+    "amount_rate": 0.504854,
+    "float_values": 0.504854,
+    "abnormal_volume": 0.504854,
     "has_namechange_record": 0.0,
     "latest_change_reason": 1.0,
     "ret_2d": 1.0,
@@ -225,10 +231,10 @@
     "spread_proxy": 1.0,
     "limit_type": 0.0,
     "open_times": 0.0,
-    "fd_amount": 0.0,
-    "seal_amount": 0.0,
+    "fd_amount": 0.004854,
+    "seal_amount": 0.004854,
     "first_seal_time": 0.0,
-    "last_seal_time": 0.0,
+    "last_seal_time": 0.004854,
     "open_times_break": 1.0,
     "fd_amount_break": 1.0,
     "seal_amount_break": 1.0,
@@ -251,18 +257,18 @@
   },
   "metrics_valid": {
     "lr": {
-      "mae": 0.1041845163595082,
-      "rmse": 0.12116061925921127,
-      "r2": -0.09118118457155622,
-      "corr": 0.059400287374780446,
-      "directional_acc": 0.4444444444444444
+      "mae": 0.06402361455081744,
+      "rmse": 0.08442043714467888,
+      "r2": -0.18046627372253177,
+      "corr": 0.4424296275377674,
+      "directional_acc": 0.7317073170731707
     },
     "lgbm": {
-      "mae": 0.08871022295378604,
-      "rmse": 0.11648123374421904,
-      "r2": -0.008523039227182672,
-      "corr": null,
-      "directional_acc": 0.4444444444444444
+      "mae": 0.05478705411485774,
+      "rmse": 0.07490148715957852,
+      "r2": 0.07073566013398647,
+      "corr": 0.33373607825868157,
+      "directional_acc": 0.5365853658536586
     }
   },
   "notes": [
