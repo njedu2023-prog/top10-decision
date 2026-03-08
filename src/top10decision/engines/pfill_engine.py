@@ -21,7 +21,7 @@ pfill_engine.py
   5) 落盘输出
 
 当前版本：
-- v3：在线推理严格对齐训练态 feature contract，并增强诊断信息
+- v4：在线推理严格对齐训练态 feature contract，并按 5 个明确类别列收口
 - 若 models/pfill_lr.joblib 或 models/pfill_lgbm.joblib 存在，则优先走学习模型
 - 学习模型输出做裁剪到 [0.02, 0.98]
 """
@@ -43,6 +43,15 @@ PRED_MIN = 0.02
 PRED_MAX = 0.98
 ERRMSG_MAXLEN = 240
 MISSING_CATEGORY_TOKEN = "__MISSING__"
+
+# 与 pfill_meta.json 的 n_categorical=5 对齐
+CATEGORY_HINT_COLS = [
+    "board",
+    "area",
+    "market",
+    "limit_type",
+    "prior_board",
+]
 
 
 def _detect_project_root() -> Path:
@@ -87,6 +96,8 @@ class PFillModelBundle:
     feature_mode: str
     meta_path: str
     feature_cols: list[str]
+    categorical_cols: list[str]
+    numeric_cols: list[str]
 
 
 def _load_pfill_meta(meta_path: Path) -> Dict[str, Any]:
@@ -113,6 +124,37 @@ def _resolve_feature_cols(meta: Dict[str, Any]) -> list[str]:
     return out
 
 
+def _resolve_category_cols(meta: Dict[str, Any], feature_cols: list[str]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    meta_n_categorical = 0
+    if isinstance(features, dict):
+        try:
+            meta_n_categorical = int(features.get("n_categorical", 0) or 0)
+        except Exception:
+            meta_n_categorical = 0
+
+    # 若未来 train_meta 升级后直接落 categorical_cols，则优先使用
+    explicit = []
+    if isinstance(features, dict):
+        raw = features.get("categorical_cols", [])
+        if isinstance(raw, list):
+            for c in raw:
+                s = str(c).strip()
+                if s and s in feature_cols:
+                    explicit.append(s)
+    if explicit:
+        return explicit
+
+    # 当前版本按训练元数据 n_categorical=5 的显式提示列收口
+    resolved = [c for c in CATEGORY_HINT_COLS if c in feature_cols]
+
+    # 若未来 meta 数量变化但这里不足，则只保留已知列，不盲扩 category
+    if meta_n_categorical > 0 and len(resolved) > meta_n_categorical:
+        resolved = resolved[:meta_n_categorical]
+
+    return resolved
+
+
 def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[PFillModelBundle], Dict[str, Any]]:
     root = project_root or _detect_project_root()
 
@@ -129,14 +171,21 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_feature_mode": "",
             "pfill_model_meta_path": str(meta_path) if meta_path else "",
             "pfill_model_expected_n_features": 0,
+            "pfill_model_expected_categorical_cols": "",
+            "pfill_model_expected_numeric_feature_count": 0,
             "pfill_model_degrade_reason": "model_missing_use_rule",
         }
 
     meta: Dict[str, Any] = {}
     feature_cols: list[str] = []
+    categorical_cols: list[str] = []
+    numeric_cols: list[str] = []
+
     if meta_path is not None:
         meta = _load_pfill_meta(meta_path)
         feature_cols = _resolve_feature_cols(meta)
+        categorical_cols = _resolve_category_cols(meta, feature_cols)
+        numeric_cols = [c for c in feature_cols if c not in set(categorical_cols)]
 
     try:
         model = joblib.load(chosen)
@@ -149,6 +198,8 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             feature_mode=feature_mode,
             meta_path=str(meta_path) if meta_path else "",
             feature_cols=feature_cols,
+            categorical_cols=categorical_cols,
+            numeric_cols=numeric_cols,
         ), {
             "pfill_model_loaded": True,
             "pfill_model_kind": model_kind,
@@ -156,6 +207,8 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_feature_mode": feature_mode,
             "pfill_model_meta_path": str(meta_path) if meta_path else "",
             "pfill_model_expected_n_features": len(feature_cols),
+            "pfill_model_expected_categorical_cols": "|".join(categorical_cols),
+            "pfill_model_expected_numeric_feature_count": len(numeric_cols),
             "pfill_model_degrade_reason": "",
         }
     except Exception as e:
@@ -166,6 +219,8 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_feature_mode": "",
             "pfill_model_meta_path": str(meta_path) if meta_path else "",
             "pfill_model_expected_n_features": len(feature_cols),
+            "pfill_model_expected_categorical_cols": "|".join(categorical_cols),
+            "pfill_model_expected_numeric_feature_count": len(numeric_cols),
             "pfill_model_degrade_reason": f"model_load_failed:{type(e).__name__}:{_safe_errmsg(e)}",
         }
 
@@ -196,7 +251,6 @@ LEAKAGE_COLS = {
     "eret_sample_eligible",
     "eret_label_quality",
     "dataset_split",
-    "sample_weight",
     "eret_truth_version",
     "return_holding_mode",
     "buy_window_start",
@@ -233,33 +287,51 @@ def _select_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df[feature_cols].copy()
 
 
-def _normalize_feature_frame(x: pd.DataFrame) -> pd.DataFrame:
-    out = x.copy()
-
-    for c in out.columns:
-        col = out[c]
-
-        if pd.api.types.is_bool_dtype(col):
-            out[c] = col.astype("int64")
-            continue
-
-        if pd.api.types.is_numeric_dtype(col):
-            out[c] = pd.to_numeric(col, errors="coerce").replace([np.inf, -np.inf], np.nan)
-            continue
-
-        if pd.api.types.is_datetime64_any_dtype(col):
-            out[c] = col.dt.strftime("%Y%m%d").fillna(MISSING_CATEGORY_TOKEN).astype("category")
-            continue
-
-        # 其余全部统一转为 category，避免 LightGBM 直接吃 object/string 报 dtype 错。
-        as_str = col.astype("string")
-        as_str = as_str.fillna(MISSING_CATEGORY_TOKEN)
-        as_str = as_str.replace({
+def _coerce_category_series(col: pd.Series) -> pd.Series:
+    as_str = col.astype("string")
+    as_str = as_str.fillna(MISSING_CATEGORY_TOKEN)
+    as_str = as_str.replace(
+        {
             "<NA>": MISSING_CATEGORY_TOKEN,
             "nan": MISSING_CATEGORY_TOKEN,
             "None": MISSING_CATEGORY_TOKEN,
-        })
-        out[c] = as_str.astype("category")
+        }
+    )
+    return as_str.astype("category")
+
+
+def _coerce_numeric_series(col: pd.Series) -> pd.Series:
+    if pd.api.types.is_bool_dtype(col):
+        return col.astype("int64")
+
+    if pd.api.types.is_numeric_dtype(col):
+        return pd.to_numeric(col, errors="coerce").replace([np.inf, -np.inf], np.nan)
+
+    if pd.api.types.is_datetime64_any_dtype(col):
+        return pd.to_numeric(col.dt.strftime("%Y%m%d"), errors="coerce")
+
+    # 其余统一按数值尝试，失败则 NaN
+    as_str = col.astype("string").replace(
+        {
+            "<NA>": np.nan,
+            "nan": np.nan,
+            "None": np.nan,
+            "": np.nan,
+        }
+    )
+    return pd.to_numeric(as_str, errors="coerce").replace([np.inf, -np.inf], np.nan)
+
+
+def _normalize_feature_frame(x: pd.DataFrame, categorical_cols: list[str]) -> pd.DataFrame:
+    out = x.copy()
+    categorical_set = set(categorical_cols)
+
+    for c in out.columns:
+        col = out[c]
+        if c in categorical_set:
+            out[c] = _coerce_category_series(col)
+        else:
+            out[c] = _coerce_numeric_series(col)
 
     return out
 
@@ -274,11 +346,11 @@ def _build_feature_frame(df: pd.DataFrame, bundle: PFillModelBundle) -> pd.DataF
                 x[col] = np.nan
         x = x.loc[:, bundle.feature_cols]
         x.columns = [str(c) for c in x.columns]
-        return _normalize_feature_frame(x)
+        return _normalize_feature_frame(x, bundle.categorical_cols)
 
-    x = _normalize_feature_frame(_select_feature_frame(df))
+    x = _select_feature_frame(df)
     x.columns = [str(c) for c in x.columns]
-    return x
+    return _normalize_feature_frame(x, bundle.categorical_cols)
 
 
 def _summarize_alignment(df: pd.DataFrame, bundle: PFillModelBundle, x: pd.DataFrame) -> Dict[str, Any]:
@@ -400,6 +472,9 @@ def apply_pfill_engine(
     out["p_fill_model_feature_mode"] = str(audit.get("pfill_model_feature_mode", ""))
     out["p_fill_model_meta_path"] = str(audit.get("pfill_model_meta_path", ""))
     out["p_fill_model_expected_n_features"] = int(audit.get("pfill_model_expected_n_features", 0) or 0)
+    out["p_fill_expected_categorical_cols"] = str(audit.get("pfill_model_expected_categorical_cols", ""))
+    out["p_fill_expected_numeric_feature_count"] = int(audit.get("pfill_model_expected_numeric_feature_count", 0) or 0)
+
     out["p_fill_model_actual_n_features"] = int(predict_audit.get("actual_n_features", 0) or 0)
     out["p_fill_missing_feature_count"] = int(predict_audit.get("missing_feature_count", 0) or 0)
     out["p_fill_missing_feature_sample"] = str(predict_audit.get("missing_feature_sample", ""))
@@ -409,6 +484,7 @@ def apply_pfill_engine(
     out["p_fill_categorical_feature_sample_online"] = str(predict_audit.get("categorical_feature_sample_online", ""))
     out["p_fill_numeric_feature_count_online"] = int(predict_audit.get("numeric_feature_count_online", 0) or 0)
     out["p_fill_online_dtypes_sample"] = str(predict_audit.get("online_dtypes_sample", ""))
+
     out["p_fill_pred_src"] = pred_src
     out["p_fill_degrade_reason"] = degrade_reason
 
