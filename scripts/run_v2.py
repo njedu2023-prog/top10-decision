@@ -8,19 +8,22 @@ top10-decision — V2 runner (Orchestrator Only)
 1) 数据入口只允许一个：src/top10decision/ingest.py（本文件不读 URL/不读旧文件）
 2) sync 独立：scripts/sync_pred_source.py（本文件不做跨仓库拉取）
 3) adapters 仅字段映射：src/top10decision/adapters/decisio_adapter.py
-4) models 只算分数/概率：src/top10decision/models/*
+4) models / engines 只算分数/概率：src/top10decision/models/*, src/top10decision/engines/*
 5) 写文件只在 writers：src/top10decision/writers/*
 6) run_v2.py 只编排：不再包含业务细节函数
 
 本次升级：
 - 优先使用 ingest.build_model_input() 读取 pred + FS 的统一输入
 - 若 FS 缺失，则自动降级回 pred_only
-- 将输入层状态写入 report / eval，便于审计
+- P_fill / E_ret 不再直接写死规则函数，升级为优先 engine 推理、失败自动回退规则
+- 将输入层状态与 engine 审计状态写入 report / eval，便于验收
 """
 
 from __future__ import annotations
 
-from typing import Any, List
+import importlib.util
+from pathlib import Path
+from typing import Any, Callable, List
 
 import pandas as pd
 
@@ -130,11 +133,121 @@ def _prepare_runtime_input(input_df: pd.DataFrame) -> pd.DataFrame:
         if not td_vals.empty:
             mode_vals = td_vals.mode()
             trade_date = str(mode_vals.iloc[0]) if len(mode_vals) > 0 else str(td_vals.max())
-            filtered = out.loc[out["trade_date"].astype(str).str.replace(r"\.0$", "", regex=True) == trade_date].copy()
+            filtered = out.loc[
+                out["trade_date"].astype(str).str.replace(r"\.0$", "", regex=True) == trade_date
+            ].copy()
             if not filtered.empty:
                 out = filtered
 
     return out
+
+
+def _load_engine_apply_func(
+    engine_file_name: str,
+    func_name: str,
+) -> Callable[..., pd.DataFrame] | None:
+    """
+    先尝试常规 import。
+    若 engines/ 目录尚未放 __init__.py，允许退化为按文件路径加载。
+    这样本次接线不被包结构细节卡死。
+    """
+    try:
+        if engine_file_name == "pfill_engine.py" and func_name == "apply_pfill_engine":
+            from top10decision.engines.pfill_engine import apply_pfill_engine  # type: ignore
+            return apply_pfill_engine
+        if engine_file_name == "eret_engine.py" and func_name == "apply_eret_engine":
+            from top10decision.engines.eret_engine import apply_eret_engine  # type: ignore
+            return apply_eret_engine
+    except Exception:
+        pass
+
+    try:
+        root = Path(__file__).resolve().parent.parent
+        engine_path = root / "src" / "top10decision" / "engines" / engine_file_name
+        if not engine_path.exists():
+            return None
+
+        spec = importlib.util.spec_from_file_location(
+            f"_dynamic_{engine_file_name.replace('.py', '')}",
+            engine_path,
+        )
+        if spec is None or spec.loader is None:
+            return None
+
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return getattr(mod, func_name, None)
+    except Exception:
+        return None
+
+
+def _run_pfill_engine(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    apply_func = _load_engine_apply_func("pfill_engine.py", "apply_pfill_engine")
+    out = df.copy()
+
+    if apply_func is None:
+        out["p_fill_pred"] = fill_model_rule(out)
+        out["p_fill_pred_rule"] = out["p_fill_pred"]
+        out["p_fill_pred_model"] = pd.NA
+        out["p_fill_pred_final"] = out["p_fill_pred"]
+        out["p_fill_model_loaded"] = False
+        out["p_fill_model_kind"] = ""
+        out["p_fill_model_path"] = ""
+        out["p_fill_model_feature_mode"] = ""
+        out["p_fill_pred_src"] = "rule_direct_fallback"
+        out["p_fill_degrade_reason"] = "engine_import_failed"
+    else:
+        out = apply_func(out)
+
+    audit = {
+        "p_fill_pred_src": str(get_first_value(out, "p_fill_pred_src")),
+        "p_fill_model_loaded": bool(get_first_value(out, "p_fill_model_loaded", default=False)),
+        "p_fill_model_kind": str(get_first_value(out, "p_fill_model_kind")),
+        "p_fill_model_path": str(get_first_value(out, "p_fill_model_path")),
+        "p_fill_degrade_reason": str(get_first_value(out, "p_fill_degrade_reason")),
+    }
+    return out, audit
+
+
+def _run_eret_engine(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    apply_func = _load_engine_apply_func("eret_engine.py", "apply_eret_engine")
+    out = df.copy()
+
+    if apply_func is None:
+        out["e_ret_pred"] = overnight_model_rule(
+            out,
+            regime=str(get_first_value(out, "regime_name", default="RISK_ON")),
+        )
+        out["eret_pred"] = out["e_ret_pred"]
+        out["eret_pred_rule"] = out["e_ret_pred"]
+        out["eret_pred_model"] = pd.NA
+        out["eret_pred_final"] = out["e_ret_pred"]
+        out["eret_model_loaded"] = False
+        out["eret_model_kind"] = ""
+        out["eret_model_path"] = ""
+        out["eret_model_feature_mode"] = ""
+        out["eret_pred_src"] = "rule_direct_fallback"
+        out["eret_degrade_reason"] = "engine_import_failed"
+    else:
+        out = apply_func(out)
+
+    if "e_ret_pred" not in out.columns and "eret_pred" in out.columns:
+        out["e_ret_pred"] = out["eret_pred"]
+    if "eret_pred" not in out.columns and "e_ret_pred" in out.columns:
+        out["eret_pred"] = out["e_ret_pred"]
+
+    audit = {
+        "eret_pred_src": str(get_first_value(out, "eret_pred_src")),
+        "eret_model_loaded": bool(get_first_value(out, "eret_model_loaded", default=False)),
+        "eret_model_kind": str(get_first_value(out, "eret_model_kind")),
+        "eret_model_path": str(get_first_value(out, "eret_model_path")),
+        "eret_degrade_reason": str(get_first_value(out, "eret_degrade_reason")),
+    }
+    return out, audit
 
 
 def main() -> int:
@@ -193,6 +306,8 @@ def main() -> int:
         cand_snapshot["ev_pred"] = 0.0
         cand_snapshot["input_mode"] = input_mode
         cand_snapshot["fs_degrade_reason"] = fs_degrade_reason
+        cand_snapshot["p_fill_pred_src"] = "stop_zero"
+        cand_snapshot["eret_pred_src"] = "stop_zero"
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
 
         weights_df = pd.DataFrame(
@@ -211,6 +326,8 @@ def main() -> int:
         report_lines.append(f"- features_limit_loaded: **{input_status.get('features_limit_loaded', False)}**\n")
         report_lines.append(f"- truth_close_loaded: **{input_status.get('truth_close_loaded', False)}**\n")
         report_lines.append(f"- meta_loaded: **{input_status.get('meta_loaded', False)}**\n")
+        report_lines.append("- p_fill_pred_src: **stop_zero**\n")
+        report_lines.append("- eret_pred_src: **stop_zero**\n")
         report_path = write_decision_report(exec_date, "".join(report_lines))
 
         write_eval_json(
@@ -223,19 +340,24 @@ def main() -> int:
                 "input_mode": input_mode,
                 "fs_degrade_reason": fs_degrade_reason,
                 "input_status": input_status,
+                "engine_status": {
+                    "p_fill_pred_src": "stop_zero",
+                    "eret_pred_src": "stop_zero",
+                },
             },
         )
 
         return 0
 
-    # ===== 正常分支：P0.1（算法不变，只升级输入层）=====
+    # ===== 正常分支：接入 P_fill / E_ret engine =====
     routed_df = routed_df.copy()
     routed_df["signal_date"] = norm_ymd(trade_date)
     routed_df["exec_date"] = norm_ymd(exec_date)
     routed_df["exit_date"] = norm_ymd(exit_date)
+    routed_df["regime_name"] = regime_name
 
-    routed_df["p_fill_pred"] = fill_model_rule(routed_df)
-    routed_df["e_ret_pred"] = overnight_model_rule(routed_df, regime=regime_name)
+    routed_df, pfill_audit = _run_pfill_engine(routed_df)
+    routed_df, eret_audit = _run_eret_engine(routed_df)
 
     cost_est = cost_estimate_rule()
     risk_pen = risk_penalty_rule(regime_name)
@@ -243,7 +365,8 @@ def main() -> int:
     routed_df["cost_est"] = cost_est
     routed_df["risk_penalty"] = risk_pen
     routed_df["ev_pred"] = (
-        routed_df["p_fill_pred"].astype(float) * routed_df["e_ret_pred"].astype(float)
+        pd.to_numeric(routed_df["p_fill_pred"], errors="coerce").fillna(0.0).astype(float)
+        * pd.to_numeric(routed_df["e_ret_pred"], errors="coerce").fillna(0.0).astype(float)
         - cost_est
         - risk_pen
     )
@@ -307,6 +430,16 @@ def main() -> int:
     lines.append(f"- truth_close_rows: **{input_status.get('truth_close_rows', 0)}**\n")
     lines.append(f"- meta_loaded: **{input_status.get('meta_loaded', False)}**\n\n")
 
+    lines.append("## Engine Status\n\n")
+    lines.append(f"- p_fill_pred_src: **{pfill_audit.get('p_fill_pred_src', '') or 'unknown'}**\n")
+    lines.append(f"- p_fill_model_loaded: **{pfill_audit.get('p_fill_model_loaded', False)}**\n")
+    lines.append(f"- p_fill_model_kind: **{pfill_audit.get('p_fill_model_kind', '') or 'none'}**\n")
+    lines.append(f"- p_fill_degrade_reason: **{pfill_audit.get('p_fill_degrade_reason', '') or 'none'}**\n")
+    lines.append(f"- eret_pred_src: **{eret_audit.get('eret_pred_src', '') or 'unknown'}**\n")
+    lines.append(f"- eret_model_loaded: **{eret_audit.get('eret_model_loaded', False)}**\n")
+    lines.append(f"- eret_model_kind: **{eret_audit.get('eret_model_kind', '') or 'none'}**\n")
+    lines.append(f"- eret_degrade_reason: **{eret_audit.get('eret_degrade_reason', '') or 'none'}**\n\n")
+
     lines.append("## Artifacts\n\n")
     lines.append(f"- candidates_snapshot: `{cand_path}`\n")
     lines.append(f"- execution_table: `{exec_path}`\n")
@@ -315,12 +448,18 @@ def main() -> int:
     lines.append(f"- weights_dated: `{weights_dated_path}`\n\n")
 
     lines.append("## TopN Targets\n\n")
-    lines.append("| rank | ts_code | name | weight | EV |\n")
-    lines.append("|---:|---|---|---:|---:|\n")
-    for _, r in top_targets.iterrows():
+    lines.append("| rank | ts_code | name | weight | EV | P_fill | E_ret |\n")
+    lines.append("|---:|---|---|---:|---:|---:|---:|\n")
+    merged_targets = top_targets.merge(
+        routed_df[["ts_code", "ev_pred", "p_fill_pred", "e_ret_pred"]],
+        on=["ts_code", "ev_pred"],
+        how="left",
+    )
+    for _, r in merged_targets.iterrows():
         lines.append(
             f"| {int(r.get('target_rank', 0))} | {r.get('ts_code', '')} | {r.get('name', '')} | "
-            f"{fmt_num(r.get('weight', 0.0), 6)} | {fmt_num(r.get('ev_pred', ''), 6)} |\n"
+            f"{fmt_num(r.get('weight', 0.0), 6)} | {fmt_num(r.get('ev_pred', ''), 6)} | "
+            f"{fmt_num(r.get('p_fill_pred', ''), 6)} | {fmt_num(r.get('e_ret_pred', ''), 6)} |\n"
         )
 
     report_path = write_decision_report(exec_date, "".join(lines))
@@ -337,6 +476,18 @@ def main() -> int:
         "input_mode": input_mode,
         "fs_degrade_reason": fs_degrade_reason,
         "input_status": input_status,
+        "engine_status": {
+            "p_fill_pred_src": pfill_audit.get("p_fill_pred_src", ""),
+            "p_fill_model_loaded": pfill_audit.get("p_fill_model_loaded", False),
+            "p_fill_model_kind": pfill_audit.get("p_fill_model_kind", ""),
+            "p_fill_model_path": pfill_audit.get("p_fill_model_path", ""),
+            "p_fill_degrade_reason": pfill_audit.get("p_fill_degrade_reason", ""),
+            "eret_pred_src": eret_audit.get("eret_pred_src", ""),
+            "eret_model_loaded": eret_audit.get("eret_model_loaded", False),
+            "eret_model_kind": eret_audit.get("eret_model_kind", ""),
+            "eret_model_path": eret_audit.get("eret_model_path", ""),
+            "eret_degrade_reason": eret_audit.get("eret_degrade_reason", ""),
+        },
         "paths": {
             "candidates": cand_path,
             "execution": exec_path,
