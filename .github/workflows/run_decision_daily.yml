@@ -221,7 +221,7 @@ jobs:
   pfill_learning:
     needs: decision
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout latest main
@@ -255,6 +255,8 @@ jobs:
       - name: Ensure learning dirs
         run: |
           set -e
+          mkdir -p data/pred
+          mkdir -p data/pred/archive
           mkdir -p data/market
           mkdir -p outputs/learning
           mkdir -p models
@@ -337,7 +339,7 @@ jobs:
                   writer.writerow(
                       {
                           "trade_date": td,
-                          "candidate_type": "PFILL",
+                          "candidate_type": "PFILL_ERET",
                       }
                   )
 
@@ -364,7 +366,7 @@ jobs:
           cat data/market/sample_maturity_latest.csv || true
 
       - name: Resolve matured trade_date for P_fill learning
-        id: resolve_learning_td
+        id: resolve_pfill_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
@@ -397,34 +399,92 @@ jobs:
             echo "trade_date=${TD}" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=true" >> "$GITHUB_OUTPUT"
           else
-            echo "[learning] no PFILL_READY trade_date found; skip learning job"
+            echo "[learning] no PFILL_READY trade_date found; skip P_fill learning"
             echo "trade_date=" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build fill truth
-        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/build_fill_truth.py --trade-date "${{ steps.resolve_learning_td.outputs.trade_date }}"
+          python scripts/build_fill_truth.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
 
       - name: Build P_fill trainset
-        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/build_pfill_trainset.py --trade-date "${{ steps.resolve_learning_td.outputs.trade_date }}"
+          python scripts/build_pfill_trainset.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
 
       - name: Train P_fill models
-        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/train_pfill.py --trade-date "${{ steps.resolve_learning_td.outputs.trade_date }}"
+          python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
+
+      - name: Resolve matured trade_date for E_ret learning
+        id: resolve_eret_learning_td
+        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
+        run: |
+          set -e
+
+          TD="$(python - <<'PY'
+          from pathlib import Path
+          import csv
+
+          path = Path("data/market/sample_maturity_latest.csv")
+          if not path.exists():
+              print("")
+              raise SystemExit(0)
+
+          rows = []
+          with path.open("r", encoding="utf-8-sig", newline="") as f:
+              reader = csv.DictReader(f)
+              for row in reader:
+                  td = (row.get("trade_date") or "").strip()
+                  eret_ready = (row.get("ERET_READY") or "").strip()
+                  if td and eret_ready == "1":
+                      rows.append(td)
+
+          rows = sorted(set(rows))
+          print(rows[-1] if rows else "")
+          PY
+          )"
+
+          if echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
+            echo "[learning] resolved matured E_ret trade_date=${TD}"
+            echo "trade_date=${TD}" >> "$GITHUB_OUTPUT"
+            echo "has_trade_date=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "[learning] no ERET_READY trade_date found; skip E_ret learning"
+            echo "trade_date=" >> "$GITHUB_OUTPUT"
+            echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build E_ret truth
+        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          python scripts/build_eret_truth.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+
+      - name: Build E_ret trainset
+        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          python scripts/build_eret_trainset.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+
+      - name: Train E_ret models
+        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
 
       - name: Show learning artifacts
-        if: steps.resolve_learning_td.outputs.has_trade_date == 'true'
+        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
-          echo "[learning] trade_date=${{ steps.resolve_learning_td.outputs.trade_date }}"
+          echo "[learning] pfill_trade_date=${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
+          echo "[learning] eret_trade_date=${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
           ls -lah data/market || true
           ls -lah models || true
 
@@ -445,14 +505,22 @@ jobs:
           git add data/market/fill_truth_*.meta.json || true
           git add data/market/pfill_trainset_*.csv || true
           git add data/market/pfill_trainset_*.meta.json || true
+
+          git add data/market/eret_truth_*.csv || true
+          git add data/market/eret_truth_*.meta.json || true
+          git add data/market/eret_trainset_*.csv || true
+          git add data/market/eret_trainset_*.meta.json || true
+
           git add models/pfill_*.joblib || true
           git add models/pfill_*.json || true
+          git add models/eret_*.joblib || true
+          git add models/eret_*.json || true
 
           echo "[git-learning] status after add:"
           git status --porcelain || true
 
           if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "auto: resolve sample maturity and update pfill learning artifacts"
+            git commit -m "auto: resolve sample maturity and update pfill + eret learning artifacts"
             git push
             echo "[push-learning] done"
           else
