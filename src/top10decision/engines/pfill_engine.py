@@ -21,7 +21,7 @@ pfill_engine.py
   5) 落盘输出
 
 当前版本：
-- v2：在线推理严格对齐训练态 feature contract
+- v3：在线推理严格对齐训练态 feature contract，并增强诊断信息
 - 若 models/pfill_lr.joblib 或 models/pfill_lgbm.joblib 存在，则优先走学习模型
 - 学习模型输出做裁剪到 [0.02, 0.98]
 """
@@ -41,6 +41,8 @@ from top10decision.models.fill_model import fill_model_rule
 
 PRED_MIN = 0.02
 PRED_MAX = 0.98
+ERRMSG_MAXLEN = 240
+MISSING_CATEGORY_TOKEN = "__MISSING__"
 
 
 def _detect_project_root() -> Path:
@@ -65,6 +67,16 @@ def _existing_meta_path(root: Path, candidates: list[str]) -> Optional[Path]:
         if p.exists():
             return p
     return None
+
+
+def _safe_errmsg(exc: Exception, maxlen: int = ERRMSG_MAXLEN) -> str:
+    msg = str(exc).replace("\n", " ").replace("\r", " ").strip()
+    if not msg:
+        msg = repr(exc)
+    msg = " ".join(msg.split())
+    if len(msg) > maxlen:
+        msg = msg[:maxlen] + "..."
+    return msg
 
 
 @dataclass
@@ -154,7 +166,7 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_feature_mode": "",
             "pfill_model_meta_path": str(meta_path) if meta_path else "",
             "pfill_model_expected_n_features": len(feature_cols),
-            "pfill_model_degrade_reason": f"model_load_failed:{type(e).__name__}",
+            "pfill_model_degrade_reason": f"model_load_failed:{type(e).__name__}:{_safe_errmsg(e)}",
         }
 
 
@@ -223,6 +235,7 @@ def _select_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
 
 def _normalize_feature_frame(x: pd.DataFrame) -> pd.DataFrame:
     out = x.copy()
+
     for c in out.columns:
         col = out[c]
 
@@ -235,14 +248,18 @@ def _normalize_feature_frame(x: pd.DataFrame) -> pd.DataFrame:
             continue
 
         if pd.api.types.is_datetime64_any_dtype(col):
-            out[c] = col.astype("string")
+            out[c] = col.dt.strftime("%Y%m%d").fillna(MISSING_CATEGORY_TOKEN).astype("category")
             continue
 
-        if pd.api.types.is_categorical_dtype(col):
-            out[c] = col.astype("object")
-            continue
-
-        out[c] = col.replace({None: np.nan})
+        # 其余全部统一转为 category，避免 LightGBM 直接吃 object/string 报 dtype 错。
+        as_str = col.astype("string")
+        as_str = as_str.fillna(MISSING_CATEGORY_TOKEN)
+        as_str = as_str.replace({
+            "<NA>": MISSING_CATEGORY_TOKEN,
+            "nan": MISSING_CATEGORY_TOKEN,
+            "None": MISSING_CATEGORY_TOKEN,
+        })
+        out[c] = as_str.astype("category")
 
     return out
 
@@ -255,13 +272,44 @@ def _build_feature_frame(df: pd.DataFrame, bundle: PFillModelBundle) -> pd.DataF
                 x[col] = df[col]
             else:
                 x[col] = np.nan
+        x = x.loc[:, bundle.feature_cols]
+        x.columns = [str(c) for c in x.columns]
         return _normalize_feature_frame(x)
 
-    return _normalize_feature_frame(_select_feature_frame(df))
+    x = _normalize_feature_frame(_select_feature_frame(df))
+    x.columns = [str(c) for c in x.columns]
+    return x
 
 
-def _predict_by_model(bundle: PFillModelBundle, df: pd.DataFrame) -> pd.Series:
+def _summarize_alignment(df: pd.DataFrame, bundle: PFillModelBundle, x: pd.DataFrame) -> Dict[str, Any]:
+    expected = bundle.feature_cols or list(x.columns)
+    expected_set = set(expected)
+    incoming_cols = [str(c) for c in df.columns]
+    incoming_set = set(incoming_cols)
+
+    missing_cols = [c for c in expected if c not in incoming_set]
+    unexpected_cols = [c for c in incoming_cols if c not in expected_set]
+
+    categorical_cols = [c for c in x.columns if str(x[c].dtype) == "category"]
+    numeric_cols = [c for c in x.columns if pd.api.types.is_numeric_dtype(x[c])]
+
+    return {
+        "expected_n_features": len(expected),
+        "actual_n_features": int(x.shape[1]),
+        "missing_feature_count": len(missing_cols),
+        "missing_feature_sample": "|".join(missing_cols[:8]),
+        "unexpected_feature_count": len(unexpected_cols),
+        "unexpected_feature_sample": "|".join(unexpected_cols[:8]),
+        "categorical_feature_count_online": len(categorical_cols),
+        "categorical_feature_sample_online": "|".join(categorical_cols[:8]),
+        "numeric_feature_count_online": len(numeric_cols),
+        "online_dtypes_sample": "|".join(f"{c}:{x[c].dtype}" for c in list(x.columns)[:8]),
+    }
+
+
+def _predict_by_model(bundle: PFillModelBundle, df: pd.DataFrame) -> Tuple[pd.Series, Dict[str, Any]]:
     x = _build_feature_frame(df, bundle)
+    audit = _summarize_alignment(df=df, bundle=bundle, x=x)
 
     if hasattr(bundle.model, "predict_proba"):
         proba = bundle.model.predict_proba(x)
@@ -277,7 +325,8 @@ def _predict_by_model(bundle: PFillModelBundle, df: pd.DataFrame) -> pd.Series:
         out = pred.copy()
     else:
         out = pd.Series(np.asarray(pred).reshape(-1), index=df.index, name="p_fill_pred_model")
-    return _clip_prob_series(out)
+
+    return _clip_prob_series(out), audit
 
 
 def apply_pfill_engine(
@@ -314,15 +363,27 @@ def apply_pfill_engine(
     model_pred = pd.Series([np.nan] * len(out), index=out.index, name="p_fill_pred_model")
     pred_src = "rule"
     degrade_reason = str(audit.get("pfill_model_degrade_reason", "") or "")
+    predict_audit: Dict[str, Any] = {
+        "expected_n_features": int(audit.get("pfill_model_expected_n_features", 0) or 0),
+        "actual_n_features": 0,
+        "missing_feature_count": 0,
+        "missing_feature_sample": "",
+        "unexpected_feature_count": 0,
+        "unexpected_feature_sample": "",
+        "categorical_feature_count_online": 0,
+        "categorical_feature_sample_online": "",
+        "numeric_feature_count_online": 0,
+        "online_dtypes_sample": "",
+    }
 
     if bundle is not None:
         try:
-            model_pred = _predict_by_model(bundle, out)
+            model_pred, predict_audit = _predict_by_model(bundle, out)
             pred_src = f"model:{bundle.model_kind}"
             degrade_reason = ""
         except Exception as e:
             pred_src = "rule"
-            degrade_reason = f"model_predict_failed:{type(e).__name__}"
+            degrade_reason = f"model_predict_failed:{type(e).__name__}:{_safe_errmsg(e)}"
 
     final_pred = pd.to_numeric(model_pred, errors="coerce")
     final_pred = final_pred.where(final_pred.notna(), rule_pred)
@@ -339,6 +400,15 @@ def apply_pfill_engine(
     out["p_fill_model_feature_mode"] = str(audit.get("pfill_model_feature_mode", ""))
     out["p_fill_model_meta_path"] = str(audit.get("pfill_model_meta_path", ""))
     out["p_fill_model_expected_n_features"] = int(audit.get("pfill_model_expected_n_features", 0) or 0)
+    out["p_fill_model_actual_n_features"] = int(predict_audit.get("actual_n_features", 0) or 0)
+    out["p_fill_missing_feature_count"] = int(predict_audit.get("missing_feature_count", 0) or 0)
+    out["p_fill_missing_feature_sample"] = str(predict_audit.get("missing_feature_sample", ""))
+    out["p_fill_unexpected_feature_count"] = int(predict_audit.get("unexpected_feature_count", 0) or 0)
+    out["p_fill_unexpected_feature_sample"] = str(predict_audit.get("unexpected_feature_sample", ""))
+    out["p_fill_categorical_feature_count_online"] = int(predict_audit.get("categorical_feature_count_online", 0) or 0)
+    out["p_fill_categorical_feature_sample_online"] = str(predict_audit.get("categorical_feature_sample_online", ""))
+    out["p_fill_numeric_feature_count_online"] = int(predict_audit.get("numeric_feature_count_online", 0) or 0)
+    out["p_fill_online_dtypes_sample"] = str(predict_audit.get("online_dtypes_sample", ""))
     out["p_fill_pred_src"] = pred_src
     out["p_fill_degrade_reason"] = degrade_reason
 
