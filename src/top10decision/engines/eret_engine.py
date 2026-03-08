@@ -21,13 +21,14 @@ eret_engine.py
   5) 落盘输出
 
 当前版本：
-- v1：先兼容现有 overnight_model_rule 的规则逻辑
+- v2：按 eret_meta.json 的训练态 feature contract 对齐线上推理输入
 - 若 models/eret_lr.joblib 或 models/eret_lgbm.joblib 存在，则优先走学习模型
 - 学习模型输出做合理裁剪，避免极端离群值直接污染 EV
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -40,12 +41,19 @@ try:
     from top10decision.models.overnight_model import overnight_model_rule
 except Exception:  # pragma: no cover
     def overnight_model_rule(df: pd.DataFrame, regime: str = "RISK_ON") -> pd.Series:
-        # 最低兜底：若规则模型导入失败，给一个很弱的零收益先验
         return pd.Series(np.zeros(len(df)), index=df.index, name="eret_rule_fallback")
 
 
 PRED_MIN = -0.30
 PRED_MAX = 0.30
+ERRMSG_MAXLEN = 240
+CATEGORY_HINT_COLS = [
+    "board",
+    "area",
+    "market",
+    "limit_type",
+    "prior_board",
+]
 
 
 def _detect_project_root() -> Path:
@@ -64,12 +72,113 @@ def _existing_model_path(root: Path, candidates: list[str]) -> Optional[Path]:
     return None
 
 
+def _existing_meta_path(root: Path, candidates: list[str]) -> Optional[Path]:
+    for name in candidates:
+        p = root / "models" / name
+        if p.exists():
+            return p
+    return None
+
+
+def _safe_errmsg(exc: Exception, maxlen: int = ERRMSG_MAXLEN) -> str:
+    msg = str(exc).replace("\n", " ").replace("\r", " ").strip()
+    if not msg:
+        msg = repr(exc)
+    msg = " ".join(msg.split())
+    if len(msg) > maxlen:
+        msg = msg[:maxlen] + "..."
+    return msg
+
+
 @dataclass
 class ERetModelBundle:
     model: Any
     model_kind: str
     model_path: str
     feature_mode: str
+    meta_path: str
+    feature_cols: list[str]
+    categorical_cols: list[str]
+    numeric_cols: list[str]
+    category_like_cols_detected: list[str]
+
+
+def _load_eret_meta(meta_path: Path) -> Dict[str, Any]:
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _resolve_feature_cols(meta: Dict[str, Any]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    cols = features.get("feature_cols", []) if isinstance(features, dict) else []
+    if not isinstance(cols, list):
+        return []
+
+    out: list[str] = []
+    for c in cols:
+        if c is None:
+            continue
+        s = str(c).strip()
+        if not s:
+            continue
+        out.append(s)
+    return out
+
+
+def _resolve_category_cols(meta: Dict[str, Any], feature_cols: list[str]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    explicit = []
+    if isinstance(features, dict):
+        raw = features.get("categorical_cols", [])
+        if isinstance(raw, list):
+            for c in raw:
+                s = str(c).strip()
+                if s and s in feature_cols:
+                    explicit.append(s)
+    if explicit:
+        return explicit
+
+    resolved = [c for c in CATEGORY_HINT_COLS if c in feature_cols]
+    meta_n_categorical = 0
+    if isinstance(features, dict):
+        try:
+            meta_n_categorical = int(features.get("n_categorical", 0) or 0)
+        except Exception:
+            meta_n_categorical = 0
+    if meta_n_categorical > 0 and len(resolved) > meta_n_categorical:
+        resolved = resolved[:meta_n_categorical]
+    return resolved
+
+
+def _resolve_numeric_cols(meta: Dict[str, Any], feature_cols: list[str], categorical_cols: list[str]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    explicit = []
+    if isinstance(features, dict):
+        raw = features.get("numeric_cols", [])
+        if isinstance(raw, list):
+            for c in raw:
+                s = str(c).strip()
+                if s and s in feature_cols:
+                    explicit.append(s)
+    if explicit:
+        return explicit
+    categorical_set = set(categorical_cols)
+    return [c for c in feature_cols if c not in categorical_set]
+
+
+def _resolve_category_like_cols(meta: Dict[str, Any]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    raw = features.get("category_like_cols_detected", []) if isinstance(features, dict) else []
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for c in raw:
+        s = str(c).strip()
+        if s:
+            out.append(s)
+    return out
 
 
 def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[ERetModelBundle], Dict[str, Any]]:
@@ -77,6 +186,7 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
 
     lgbm_path = _existing_model_path(root, ["eret_lgbm.joblib"])
     lr_path = _existing_model_path(root, ["eret_lr.joblib"])
+    meta_path = _existing_meta_path(root, ["eret_meta.json"])
 
     chosen = lgbm_path or lr_path
     if chosen is None:
@@ -85,23 +195,50 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
             "eret_model_kind": "",
             "eret_model_path": "",
             "eret_model_feature_mode": "",
+            "eret_model_meta_path": str(meta_path) if meta_path else "",
+            "eret_model_expected_n_features": 0,
+            "eret_model_expected_categorical_cols": "",
+            "eret_model_expected_numeric_feature_count": 0,
+            "eret_model_category_like_cols_detected": "",
             "eret_model_degrade_reason": "model_missing_use_rule",
         }
+
+    meta: Dict[str, Any] = {}
+    feature_cols: list[str] = []
+    categorical_cols: list[str] = []
+    numeric_cols: list[str] = []
+    category_like_cols_detected: list[str] = []
+    if meta_path is not None:
+        meta = _load_eret_meta(meta_path)
+        feature_cols = _resolve_feature_cols(meta)
+        categorical_cols = _resolve_category_cols(meta, feature_cols)
+        numeric_cols = _resolve_numeric_cols(meta, feature_cols, categorical_cols)
+        category_like_cols_detected = _resolve_category_like_cols(meta)
 
     try:
         model = joblib.load(chosen)
         model_kind = "lgbm" if "lgbm" in chosen.name.lower() else "lr"
-        feature_mode = "pipeline_auto" if hasattr(model, "predict") else "unknown"
+        feature_mode = "meta_feature_contract" if feature_cols else "pipeline_auto"
         return ERetModelBundle(
             model=model,
             model_kind=model_kind,
             model_path=str(chosen),
             feature_mode=feature_mode,
+            meta_path=str(meta_path) if meta_path else "",
+            feature_cols=feature_cols,
+            categorical_cols=categorical_cols,
+            numeric_cols=numeric_cols,
+            category_like_cols_detected=category_like_cols_detected,
         ), {
             "eret_model_loaded": True,
             "eret_model_kind": model_kind,
             "eret_model_path": str(chosen),
             "eret_model_feature_mode": feature_mode,
+            "eret_model_meta_path": str(meta_path) if meta_path else "",
+            "eret_model_expected_n_features": len(feature_cols),
+            "eret_model_expected_categorical_cols": "|".join(categorical_cols),
+            "eret_model_expected_numeric_feature_count": len(numeric_cols),
+            "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
             "eret_model_degrade_reason": "",
         }
     except Exception as e:
@@ -110,7 +247,12 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
             "eret_model_kind": "",
             "eret_model_path": str(chosen),
             "eret_model_feature_mode": "",
-            "eret_model_degrade_reason": f"model_load_failed:{type(e).__name__}",
+            "eret_model_meta_path": str(meta_path) if meta_path else "",
+            "eret_model_expected_n_features": len(feature_cols),
+            "eret_model_expected_categorical_cols": "|".join(categorical_cols),
+            "eret_model_expected_numeric_feature_count": len(numeric_cols),
+            "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+            "eret_model_degrade_reason": f"model_load_failed:{type(e).__name__}:{_safe_errmsg(e)}",
         }
 
 
@@ -178,14 +320,92 @@ def _select_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df[feature_cols].copy()
 
 
-def _predict_by_model(bundle: ERetModelBundle, df: pd.DataFrame) -> pd.Series:
+def _encode_category_series(col: pd.Series) -> pd.Series:
+    cat = col.astype("string").fillna("__MISSING__")
+    cat = cat.replace({"<NA>": "__MISSING__", "nan": "__MISSING__", "None": "__MISSING__", "": "__MISSING__"})
+    uniq = pd.Index(cat.unique())
+    mapping = {v: i for i, v in enumerate(uniq)}
+    return cat.map(mapping).fillna(-1).astype(float)
+
+
+def _coerce_numeric_series(col: pd.Series) -> pd.Series:
+    if pd.api.types.is_bool_dtype(col):
+        return col.astype("int64")
+    if pd.api.types.is_numeric_dtype(col):
+        return pd.to_numeric(col, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    if pd.api.types.is_datetime64_any_dtype(col):
+        return pd.to_numeric(col.dt.strftime("%Y%m%d"), errors="coerce")
+    as_str = col.astype("string").replace({"<NA>": np.nan, "nan": np.nan, "None": np.nan, "": np.nan})
+    return pd.to_numeric(as_str, errors="coerce").replace([np.inf, -np.inf], np.nan)
+
+
+def _normalize_feature_frame(x: pd.DataFrame, categorical_cols: list[str], numeric_cols: list[str]) -> pd.DataFrame:
+    out = x.copy()
+    categorical_set = set(categorical_cols)
+    numeric_set = set(numeric_cols)
+
+    for c in out.columns:
+        col = out[c]
+        if c in categorical_set:
+            out[c] = _encode_category_series(col)
+        elif c in numeric_set:
+            out[c] = _coerce_numeric_series(col)
+        else:
+            out[c] = _coerce_numeric_series(col)
+
+    return out.astype(float)
+
+
+def _build_feature_frame(df: pd.DataFrame, bundle: ERetModelBundle) -> pd.DataFrame:
+    if bundle.feature_cols:
+        x = pd.DataFrame(index=df.index)
+        for col in bundle.feature_cols:
+            if col in df.columns:
+                x[col] = df[col]
+            else:
+                x[col] = np.nan
+        x = x.loc[:, bundle.feature_cols]
+        x.columns = [str(c) for c in x.columns]
+        return _normalize_feature_frame(x, bundle.categorical_cols, bundle.numeric_cols)
+
     x = _select_feature_frame(df)
+    x.columns = [str(c) for c in x.columns]
+    return _normalize_feature_frame(x, bundle.categorical_cols, bundle.numeric_cols)
+
+
+def _summarize_alignment(df: pd.DataFrame, bundle: ERetModelBundle, x: pd.DataFrame) -> Dict[str, Any]:
+    expected = bundle.feature_cols or list(x.columns)
+    expected_set = set(expected)
+    incoming_cols = [str(c) for c in df.columns]
+    incoming_set = set(incoming_cols)
+
+    missing_cols = [c for c in expected if c not in incoming_set]
+    unexpected_cols = [c for c in incoming_cols if c not in expected_set]
+    numeric_cols = [c for c in x.columns if pd.api.types.is_numeric_dtype(x[c])]
+
+    return {
+        "expected_n_features": len(expected),
+        "actual_n_features": int(x.shape[1]),
+        "missing_feature_count": len(missing_cols),
+        "missing_feature_sample": "|".join(missing_cols[:8]),
+        "unexpected_feature_count": len(unexpected_cols),
+        "unexpected_feature_sample": "|".join(unexpected_cols[:8]),
+        "categorical_feature_count_online": len(bundle.categorical_cols),
+        "categorical_feature_sample_online": "|".join(bundle.categorical_cols[:8]),
+        "numeric_feature_count_online": len(numeric_cols),
+        "online_dtypes_sample": "|".join(f"{c}:{x[c].dtype}" for c in list(x.columns)[:8]),
+    }
+
+
+def _predict_by_model(bundle: ERetModelBundle, df: pd.DataFrame) -> Tuple[pd.Series, Dict[str, Any]]:
+    x = _build_feature_frame(df, bundle)
+    audit = _summarize_alignment(df=df, bundle=bundle, x=x)
     pred = bundle.model.predict(x)
     if isinstance(pred, pd.Series):
         out = pred.copy()
     else:
         out = pd.Series(np.asarray(pred).reshape(-1), index=df.index, name="eret_pred_model")
-    return _clip_ret_series(out)
+    return _clip_ret_series(out), audit
 
 
 def _get_regime_name(df: pd.DataFrame) -> str:
@@ -207,24 +427,6 @@ def apply_eret_engine(
     df: pd.DataFrame,
     project_root: Optional[Path] = None,
 ) -> pd.DataFrame:
-    """
-    输入：
-    - df: 候选池 + 证据层 DataFrame
-
-    输出：
-    - 原表附加以下字段：
-      eret_pred
-      e_ret_pred
-      eret_pred_rule
-      eret_pred_model
-      eret_pred_final
-      eret_model_loaded
-      eret_model_kind
-      eret_model_path
-      eret_model_feature_mode
-      eret_pred_src
-      eret_degrade_reason
-    """
     if df is None or df.empty:
         return pd.DataFrame() if df is None else df.copy()
 
@@ -241,15 +443,27 @@ def apply_eret_engine(
     model_pred = pd.Series([np.nan] * len(out), index=out.index, name="eret_pred_model")
     pred_src = "rule"
     degrade_reason = str(audit.get("eret_model_degrade_reason", "") or "")
+    predict_audit: Dict[str, Any] = {
+        "expected_n_features": int(audit.get("eret_model_expected_n_features", 0) or 0),
+        "actual_n_features": 0,
+        "missing_feature_count": 0,
+        "missing_feature_sample": "",
+        "unexpected_feature_count": 0,
+        "unexpected_feature_sample": "",
+        "categorical_feature_count_online": 0,
+        "categorical_feature_sample_online": "",
+        "numeric_feature_count_online": 0,
+        "online_dtypes_sample": "",
+    }
 
     if bundle is not None:
         try:
-            model_pred = _predict_by_model(bundle, out)
+            model_pred, predict_audit = _predict_by_model(bundle, out)
             pred_src = f"model:{bundle.model_kind}"
             degrade_reason = ""
         except Exception as e:
             pred_src = "rule"
-            degrade_reason = f"model_predict_failed:{type(e).__name__}"
+            degrade_reason = f"model_predict_failed:{type(e).__name__}:{_safe_errmsg(e)}"
 
     final_pred = pd.to_numeric(model_pred, errors="coerce")
     final_pred = final_pred.where(final_pred.notna(), rule_pred)
@@ -265,6 +479,22 @@ def apply_eret_engine(
     out["eret_model_kind"] = str(audit.get("eret_model_kind", ""))
     out["eret_model_path"] = str(audit.get("eret_model_path", ""))
     out["eret_model_feature_mode"] = str(audit.get("eret_model_feature_mode", ""))
+    out["eret_model_meta_path"] = str(audit.get("eret_model_meta_path", ""))
+    out["eret_model_expected_n_features"] = int(audit.get("eret_model_expected_n_features", 0) or 0)
+    out["eret_expected_categorical_cols"] = str(audit.get("eret_model_expected_categorical_cols", ""))
+    out["eret_expected_numeric_feature_count"] = int(audit.get("eret_model_expected_numeric_feature_count", 0) or 0)
+    out["eret_model_category_like_cols_detected"] = str(audit.get("eret_model_category_like_cols_detected", ""))
+
+    out["eret_model_actual_n_features"] = int(predict_audit.get("actual_n_features", 0) or 0)
+    out["eret_missing_feature_count"] = int(predict_audit.get("missing_feature_count", 0) or 0)
+    out["eret_missing_feature_sample"] = str(predict_audit.get("missing_feature_sample", ""))
+    out["eret_unexpected_feature_count"] = int(predict_audit.get("unexpected_feature_count", 0) or 0)
+    out["eret_unexpected_feature_sample"] = str(predict_audit.get("unexpected_feature_sample", ""))
+    out["eret_categorical_feature_count_online"] = int(predict_audit.get("categorical_feature_count_online", 0) or 0)
+    out["eret_categorical_feature_sample_online"] = str(predict_audit.get("categorical_feature_sample_online", ""))
+    out["eret_numeric_feature_count_online"] = int(predict_audit.get("numeric_feature_count_online", 0) or 0)
+    out["eret_online_dtypes_sample"] = str(predict_audit.get("online_dtypes_sample", ""))
+
     out["eret_pred_src"] = pred_src
     out["eret_degrade_reason"] = degrade_reason
     out["eret_regime_used"] = regime_name
