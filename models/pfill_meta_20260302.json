@@ -1,7 +1,12 @@
 {
-  "train_time_utc": "2026-03-07T17:56:08+00:00",
-  "trade_date": "20260302",
-  "trainset_path": "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260302.csv",
+  "train_time_utc": "2026-03-08T21:39:38+00:00",
+  "anchor_trade_date": "20260302",
+  "status": "trained",
+  "skip_reason": "",
+  "label_set": [
+    0,
+    1
+  ],
   "split_mode": "row_holdout:80_20",
   "small_sample_mode": false,
   "model_paths": {
@@ -15,6 +20,29 @@
     "lr": "sklearn.LogisticRegression",
     "lgbm": "lightgbm.LGBMClassifier"
   },
+  "window": {
+    "maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv",
+    "matured_trade_dates": [
+      "20260302"
+    ],
+    "loaded_trade_dates": [
+      "20260302"
+    ],
+    "missing_trade_dates": [],
+    "loaded_trainset_paths": [
+      "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260302.csv"
+    ],
+    "n_matured_dates": 1,
+    "n_loaded_dates": 1,
+    "window_start": "20260302",
+    "window_end": "20260302",
+    "train_dates": [
+      "20260302"
+    ],
+    "valid_dates": [
+      "20260302"
+    ]
+  },
   "rows": {
     "raw_all": 88,
     "ready_only": 88,
@@ -23,7 +51,7 @@
   },
   "fill_truth_ready_only": true,
   "sample_maturity_distribution": {
-    "FULLY_READY": 88
+    "PFILL_READY": 88
   },
   "label_distribution": {
     "ready_all_pos": 82,
@@ -123,6 +151,104 @@
       "prior_prob_prior__is_missing",
       "prior_strength_score__is_missing",
       "prior_theme_boost__is_missing"
+    ],
+    "numeric_cols": [
+      "rank",
+      "sample_weight",
+      "is_cold_start",
+      "feature_coverage_score",
+      "symbol",
+      "list_date",
+      "open",
+      "high",
+      "low",
+      "close",
+      "pct_chg",
+      "pre_close_est",
+      "returns_1d",
+      "high_low_range",
+      "candle_body",
+      "gap_open",
+      "vol",
+      "amount",
+      "turnover_rate",
+      "turnover_rate_f",
+      "volume_ratio",
+      "amihud_illiquidity",
+      "volatility_5d",
+      "volatility_10d",
+      "volatility_20d",
+      "atr",
+      "downside_vol",
+      "max_drawdown_20d",
+      "tail_risk_score",
+      "total_mv",
+      "float_mv",
+      "pe_ttm",
+      "pb",
+      "north_money_market",
+      "south_money_market",
+      "hgt_market",
+      "sgt_market",
+      "market_regime",
+      "hot_boards_score",
+      "board_crowding_rank",
+      "is_hot_board",
+      "board_rank",
+      "board_limit_up_count",
+      "is_st_like",
+      "top_list_net_buy",
+      "top_net_rate",
+      "amount_rate",
+      "float_values",
+      "abnormal_volume",
+      "has_namechange_record",
+      "latest_change_reason",
+      "ret_2d",
+      "ret_5d",
+      "ret_10d",
+      "bid_ask_proxy",
+      "spread_proxy",
+      "open_times",
+      "fd_amount",
+      "seal_amount",
+      "first_seal_time",
+      "last_seal_time",
+      "open_times_break",
+      "fd_amount_break",
+      "seal_amount_break",
+      "first_time_break",
+      "last_time_break",
+      "up_limit",
+      "down_limit",
+      "is_limit_up",
+      "break_count_proxy",
+      "limit_up_strength",
+      "prior_prob_prior",
+      "prior_strength_score",
+      "prior_theme_boost",
+      "open_times_t1__is_missing",
+      "seal_amount_t1__is_missing",
+      "limit_type_t1__is_missing",
+      "prior_prob_prior__is_missing",
+      "prior_strength_score__is_missing",
+      "prior_theme_boost__is_missing"
+    ],
+    "categorical_cols": [
+      "board",
+      "area",
+      "market",
+      "limit_type",
+      "prior_board"
+    ],
+    "category_like_cols_detected": [
+      "symbol",
+      "board",
+      "area",
+      "market",
+      "market_regime",
+      "limit_type",
+      "prior_board"
     ]
   },
   "missing_ratio": {
@@ -226,9 +352,12 @@
   },
   "notes": [
     "仅训练 label_ready_fill=1 的成熟样本。",
+    "本文件已升级为成熟窗口训练，训练样本来自 sample_maturity 中 PFILL_READY=1 的全部历史样本日。",
     "采用时间切分优先，样本不足时退化为行切分。",
     "若切分后标签类别不足，则进入 small_sample_mode：全量训练，跳过 valid 评估。",
+    "若整个成熟窗口只有单一标签，则跳过训练并写出 skip meta，不覆盖旧模型。",
     "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
-    "同时输出 latest 与 dated 模型文件，便于追溯。"
+    "同时输出 latest 与 dated 模型文件，便于追溯。",
+    "已显式写出 numeric_cols / categorical_cols / category_like_cols_detected，供线上推理层严格对齐训练态输入契约。"
   ]
 }

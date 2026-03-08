@@ -39,7 +39,7 @@
     "strong_dead_limit_up": 6
   },
   "sample_maturity_distribution": {
-    "FULLY_READY": 88
+    "PFILL_READY": 88
   },
   "column_groups": {
     "base_cols": [

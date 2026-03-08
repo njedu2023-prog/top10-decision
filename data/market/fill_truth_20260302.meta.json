@@ -4,10 +4,10 @@
   "target_date": "20260304",
   "rows": 88,
   "sample_maturity": {
-    "FULLY_READY": 88
+    "PFILL_READY": 88
   },
   "label_ready_fill": 88,
-  "label_ready_ret": 88,
+  "label_ready_ret": 0,
   "y_fill_1": 82,
   "y_fill_0": 6,
   "quality_counts": {
@@ -18,7 +18,8 @@
   "source": {
     "pred_source": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260302.csv",
     "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260302.csv",
-    "raw_root": "/home/runner/work/top10-decision/top10-decision/data/market/raw"
+    "raw_root": "/home/runner/work/top10-decision/top10-decision/data/market/raw",
+    "sample_maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv"
   },
   "output": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260302.csv"
 }
