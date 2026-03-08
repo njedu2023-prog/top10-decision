@@ -21,7 +21,8 @@ pfill_engine.py
   5) 落盘输出
 
 当前版本：
-- v4：在线推理严格对齐训练态 feature contract，并按 5 个明确类别列收口
+- v5：严格按 pfill_meta.json 中显式落盘的 numeric_cols / categorical_cols 构造线上推理输入
+- 关键修复：与 train_pfill.py 的 GBM 编码方式保持一致——类别列在线上也编码为 float，而不是直接喂 pandas category
 - 若 models/pfill_lr.joblib 或 models/pfill_lgbm.joblib 存在，则优先走学习模型
 - 学习模型输出做裁剪到 [0.02, 0.98]
 """
@@ -44,7 +45,7 @@ PRED_MAX = 0.98
 ERRMSG_MAXLEN = 240
 MISSING_CATEGORY_TOKEN = "__MISSING__"
 
-# 与 pfill_meta.json 的 n_categorical=5 对齐
+# 仅在 meta 未显式给出 categorical_cols 时的兜底集合
 CATEGORY_HINT_COLS = [
     "board",
     "area",
@@ -98,6 +99,7 @@ class PFillModelBundle:
     feature_cols: list[str]
     categorical_cols: list[str]
     numeric_cols: list[str]
+    category_like_cols_detected: list[str]
 
 
 def _load_pfill_meta(meta_path: Path) -> Dict[str, Any]:
@@ -126,15 +128,7 @@ def _resolve_feature_cols(meta: Dict[str, Any]) -> list[str]:
 
 def _resolve_category_cols(meta: Dict[str, Any], feature_cols: list[str]) -> list[str]:
     features = meta.get("features", {}) if isinstance(meta, dict) else {}
-    meta_n_categorical = 0
-    if isinstance(features, dict):
-        try:
-            meta_n_categorical = int(features.get("n_categorical", 0) or 0)
-        except Exception:
-            meta_n_categorical = 0
-
-    # 若未来 train_meta 升级后直接落 categorical_cols，则优先使用
-    explicit = []
+    explicit: list[str] = []
     if isinstance(features, dict):
         raw = features.get("categorical_cols", [])
         if isinstance(raw, list):
@@ -145,14 +139,38 @@ def _resolve_category_cols(meta: Dict[str, Any], feature_cols: list[str]) -> lis
     if explicit:
         return explicit
 
-    # 当前版本按训练元数据 n_categorical=5 的显式提示列收口
-    resolved = [c for c in CATEGORY_HINT_COLS if c in feature_cols]
+    # 兜底：兼容旧 meta
+    return [c for c in CATEGORY_HINT_COLS if c in feature_cols]
 
-    # 若未来 meta 数量变化但这里不足，则只保留已知列，不盲扩 category
-    if meta_n_categorical > 0 and len(resolved) > meta_n_categorical:
-        resolved = resolved[:meta_n_categorical]
 
-    return resolved
+def _resolve_numeric_cols(meta: Dict[str, Any], feature_cols: list[str], categorical_cols: list[str]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    explicit: list[str] = []
+    if isinstance(features, dict):
+        raw = features.get("numeric_cols", [])
+        if isinstance(raw, list):
+            for c in raw:
+                s = str(c).strip()
+                if s and s in feature_cols:
+                    explicit.append(s)
+    if explicit:
+        return explicit
+
+    cat_set = set(categorical_cols)
+    return [c for c in feature_cols if c not in cat_set]
+
+
+def _resolve_category_like_cols(meta: Dict[str, Any], feature_cols: list[str]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    raw = features.get("category_like_cols_detected", []) if isinstance(features, dict) else []
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for c in raw:
+        s = str(c).strip()
+        if s and s in feature_cols:
+            out.append(s)
+    return out
 
 
 def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[PFillModelBundle], Dict[str, Any]]:
@@ -173,6 +191,7 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_expected_n_features": 0,
             "pfill_model_expected_categorical_cols": "",
             "pfill_model_expected_numeric_feature_count": 0,
+            "pfill_model_category_like_cols_detected": "",
             "pfill_model_degrade_reason": "model_missing_use_rule",
         }
 
@@ -180,12 +199,14 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
     feature_cols: list[str] = []
     categorical_cols: list[str] = []
     numeric_cols: list[str] = []
+    category_like_cols_detected: list[str] = []
 
     if meta_path is not None:
         meta = _load_pfill_meta(meta_path)
         feature_cols = _resolve_feature_cols(meta)
         categorical_cols = _resolve_category_cols(meta, feature_cols)
-        numeric_cols = [c for c in feature_cols if c not in set(categorical_cols)]
+        numeric_cols = _resolve_numeric_cols(meta, feature_cols, categorical_cols)
+        category_like_cols_detected = _resolve_category_like_cols(meta, feature_cols)
 
     try:
         model = joblib.load(chosen)
@@ -200,6 +221,7 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             feature_cols=feature_cols,
             categorical_cols=categorical_cols,
             numeric_cols=numeric_cols,
+            category_like_cols_detected=category_like_cols_detected,
         ), {
             "pfill_model_loaded": True,
             "pfill_model_kind": model_kind,
@@ -209,6 +231,7 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_expected_n_features": len(feature_cols),
             "pfill_model_expected_categorical_cols": "|".join(categorical_cols),
             "pfill_model_expected_numeric_feature_count": len(numeric_cols),
+            "pfill_model_category_like_cols_detected": "|".join(category_like_cols_detected),
             "pfill_model_degrade_reason": "",
         }
     except Exception as e:
@@ -221,6 +244,7 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_expected_n_features": len(feature_cols),
             "pfill_model_expected_categorical_cols": "|".join(categorical_cols),
             "pfill_model_expected_numeric_feature_count": len(numeric_cols),
+            "pfill_model_category_like_cols_detected": "|".join(category_like_cols_detected),
             "pfill_model_degrade_reason": f"model_load_failed:{type(e).__name__}:{_safe_errmsg(e)}",
         }
 
@@ -287,17 +311,17 @@ def _select_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df[feature_cols].copy()
 
 
-def _coerce_category_series(col: pd.Series) -> pd.Series:
-    as_str = col.astype("string")
-    as_str = as_str.fillna(MISSING_CATEGORY_TOKEN)
-    as_str = as_str.replace(
-        {
-            "<NA>": MISSING_CATEGORY_TOKEN,
-            "nan": MISSING_CATEGORY_TOKEN,
-            "None": MISSING_CATEGORY_TOKEN,
-        }
-    )
-    return as_str.astype("category")
+def _coerce_category_to_float(col: pd.Series) -> pd.Series:
+    cat = col.astype("string").fillna(MISSING_CATEGORY_TOKEN)
+    cat = cat.replace({
+        "<NA>": MISSING_CATEGORY_TOKEN,
+        "nan": MISSING_CATEGORY_TOKEN,
+        "None": MISSING_CATEGORY_TOKEN,
+        "": MISSING_CATEGORY_TOKEN,
+    })
+    uniq = pd.Index(cat.unique())
+    mapping = {v: i for i, v in enumerate(uniq)}
+    return cat.map(mapping).fillna(-1).astype(float)
 
 
 def _coerce_numeric_series(col: pd.Series) -> pd.Series:
@@ -310,27 +334,28 @@ def _coerce_numeric_series(col: pd.Series) -> pd.Series:
     if pd.api.types.is_datetime64_any_dtype(col):
         return pd.to_numeric(col.dt.strftime("%Y%m%d"), errors="coerce")
 
-    # 其余统一按数值尝试，失败则 NaN
-    as_str = col.astype("string").replace(
-        {
-            "<NA>": np.nan,
-            "nan": np.nan,
-            "None": np.nan,
-            "": np.nan,
-        }
-    )
+    as_str = col.astype("string").replace({
+        "<NA>": np.nan,
+        "nan": np.nan,
+        "None": np.nan,
+        "": np.nan,
+    })
     return pd.to_numeric(as_str, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
 
-def _normalize_feature_frame(x: pd.DataFrame, categorical_cols: list[str]) -> pd.DataFrame:
-    out = x.copy()
+def _normalize_feature_frame(x: pd.DataFrame, numeric_cols: list[str], categorical_cols: list[str]) -> pd.DataFrame:
+    out = pd.DataFrame(index=x.index)
+    numeric_set = set(numeric_cols)
     categorical_set = set(categorical_cols)
 
-    for c in out.columns:
-        col = out[c]
+    for c in x.columns:
+        col = x[c]
         if c in categorical_set:
-            out[c] = _coerce_category_series(col)
+            out[c] = _coerce_category_to_float(col)
+        elif c in numeric_set:
+            out[c] = _coerce_numeric_series(col)
         else:
+            # 理论上不会走到这里；兜底仍按 numeric 处理，保证模型输入为纯数值
             out[c] = _coerce_numeric_series(col)
 
     return out
@@ -346,11 +371,12 @@ def _build_feature_frame(df: pd.DataFrame, bundle: PFillModelBundle) -> pd.DataF
                 x[col] = np.nan
         x = x.loc[:, bundle.feature_cols]
         x.columns = [str(c) for c in x.columns]
-        return _normalize_feature_frame(x, bundle.categorical_cols)
+        return _normalize_feature_frame(x, bundle.numeric_cols, bundle.categorical_cols)
 
     x = _select_feature_frame(df)
     x.columns = [str(c) for c in x.columns]
-    return _normalize_feature_frame(x, bundle.categorical_cols)
+    # fallback：若 meta 缺失，全部按 numeric 兜底
+    return _normalize_feature_frame(x, list(x.columns), [])
 
 
 def _summarize_alignment(df: pd.DataFrame, bundle: PFillModelBundle, x: pd.DataFrame) -> Dict[str, Any]:
@@ -362,7 +388,6 @@ def _summarize_alignment(df: pd.DataFrame, bundle: PFillModelBundle, x: pd.DataF
     missing_cols = [c for c in expected if c not in incoming_set]
     unexpected_cols = [c for c in incoming_cols if c not in expected_set]
 
-    categorical_cols = [c for c in x.columns if str(x[c].dtype) == "category"]
     numeric_cols = [c for c in x.columns if pd.api.types.is_numeric_dtype(x[c])]
 
     return {
@@ -372,8 +397,8 @@ def _summarize_alignment(df: pd.DataFrame, bundle: PFillModelBundle, x: pd.DataF
         "missing_feature_sample": "|".join(missing_cols[:8]),
         "unexpected_feature_count": len(unexpected_cols),
         "unexpected_feature_sample": "|".join(unexpected_cols[:8]),
-        "categorical_feature_count_online": len(categorical_cols),
-        "categorical_feature_sample_online": "|".join(categorical_cols[:8]),
+        "categorical_feature_count_online": len(bundle.categorical_cols),
+        "categorical_feature_sample_online": "|".join(bundle.categorical_cols[:8]),
         "numeric_feature_count_online": len(numeric_cols),
         "online_dtypes_sample": "|".join(f"{c}:{x[c].dtype}" for c in list(x.columns)[:8]),
     }
@@ -474,6 +499,7 @@ def apply_pfill_engine(
     out["p_fill_model_expected_n_features"] = int(audit.get("pfill_model_expected_n_features", 0) or 0)
     out["p_fill_expected_categorical_cols"] = str(audit.get("pfill_model_expected_categorical_cols", ""))
     out["p_fill_expected_numeric_feature_count"] = int(audit.get("pfill_model_expected_numeric_feature_count", 0) or 0)
+    out["p_fill_model_category_like_cols_detected"] = str(audit.get("pfill_model_category_like_cols_detected", ""))
 
     out["p_fill_model_actual_n_features"] = int(predict_audit.get("actual_n_features", 0) or 0)
     out["p_fill_missing_feature_count"] = int(predict_audit.get("missing_feature_count", 0) or 0)
