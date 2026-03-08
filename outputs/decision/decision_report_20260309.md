@@ -24,7 +24,7 @@
 - p_fill_pred_src: **rule**
 - p_fill_model_loaded: **True**
 - p_fill_model_kind: **lgbm**
-- p_fill_degrade_reason: **model_predict_failed:ValueError**
+- p_fill_degrade_reason: **model_predict_failed:ValueError:train and valid dataset categorical_feature do not match.**
 - eret_pred_src: **rule**
 - eret_model_loaded: **True**
 - eret_model_kind: **lgbm**

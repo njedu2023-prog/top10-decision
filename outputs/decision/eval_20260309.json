@@ -22,8 +22,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260306",
-      "created_at_utc": "2026-03-08T19:42:54+00:00",
-      "commit_sha": "04a10e38bd81a1d9f2e3fe79144c7c8f5e87864d",
+      "created_at_utc": "2026-03-08T19:57:22+00:00",
+      "commit_sha": "96c46e71bd66b294fd1797cbf1cfaab87bbc9ac3",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -186,7 +186,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260306",
-            "created_at_utc": "2026-03-08T19:42:54+00:00",
+            "created_at_utc": "2026-03-08T19:57:21+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -683,7 +683,7 @@
     "p_fill_model_loaded": true,
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
-    "p_fill_degrade_reason": "model_predict_failed:ValueError",
+    "p_fill_degrade_reason": "model_predict_failed:ValueError:train and valid dataset categorical_feature do not match.",
     "eret_pred_src": "rule",
     "eret_model_loaded": true,
     "eret_model_kind": "lgbm",
