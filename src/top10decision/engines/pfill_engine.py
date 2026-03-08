@@ -21,13 +21,14 @@ pfill_engine.py
   5) 落盘输出
 
 当前版本：
-- v1：先兼容现有 fill_model_rule 的规则逻辑
+- v2：在线推理严格对齐训练态 feature contract
 - 若 models/pfill_lr.joblib 或 models/pfill_lgbm.joblib 存在，则优先走学习模型
 - 学习模型输出做裁剪到 [0.02, 0.98]
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -58,12 +59,46 @@ def _existing_model_path(root: Path, candidates: list[str]) -> Optional[Path]:
     return None
 
 
+def _existing_meta_path(root: Path, candidates: list[str]) -> Optional[Path]:
+    for name in candidates:
+        p = root / "models" / name
+        if p.exists():
+            return p
+    return None
+
+
 @dataclass
 class PFillModelBundle:
     model: Any
     model_kind: str
     model_path: str
     feature_mode: str
+    meta_path: str
+    feature_cols: list[str]
+
+
+def _load_pfill_meta(meta_path: Path) -> Dict[str, Any]:
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _resolve_feature_cols(meta: Dict[str, Any]) -> list[str]:
+    features = meta.get("features", {}) if isinstance(meta, dict) else {}
+    cols = features.get("feature_cols", []) if isinstance(features, dict) else []
+    if not isinstance(cols, list):
+        return []
+
+    out: list[str] = []
+    for c in cols:
+        if c is None:
+            continue
+        s = str(c).strip()
+        if not s:
+            continue
+        out.append(s)
+    return out
 
 
 def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[PFillModelBundle], Dict[str, Any]]:
@@ -71,6 +106,7 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
 
     lgbm_path = _existing_model_path(root, ["pfill_lgbm.joblib"])
     lr_path = _existing_model_path(root, ["pfill_lr.joblib"])
+    meta_path = _existing_meta_path(root, ["pfill_meta.json"])
 
     chosen = lgbm_path or lr_path
     if chosen is None:
@@ -79,23 +115,35 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_kind": "",
             "pfill_model_path": "",
             "pfill_model_feature_mode": "",
+            "pfill_model_meta_path": str(meta_path) if meta_path else "",
+            "pfill_model_expected_n_features": 0,
             "pfill_model_degrade_reason": "model_missing_use_rule",
         }
+
+    meta: Dict[str, Any] = {}
+    feature_cols: list[str] = []
+    if meta_path is not None:
+        meta = _load_pfill_meta(meta_path)
+        feature_cols = _resolve_feature_cols(meta)
 
     try:
         model = joblib.load(chosen)
         model_kind = "lgbm" if "lgbm" in chosen.name.lower() else "lr"
-        feature_mode = "pipeline_auto" if hasattr(model, "predict") else "unknown"
+        feature_mode = "meta_feature_contract" if feature_cols else "pipeline_auto"
         return PFillModelBundle(
             model=model,
             model_kind=model_kind,
             model_path=str(chosen),
             feature_mode=feature_mode,
+            meta_path=str(meta_path) if meta_path else "",
+            feature_cols=feature_cols,
         ), {
             "pfill_model_loaded": True,
             "pfill_model_kind": model_kind,
             "pfill_model_path": str(chosen),
             "pfill_model_feature_mode": feature_mode,
+            "pfill_model_meta_path": str(meta_path) if meta_path else "",
+            "pfill_model_expected_n_features": len(feature_cols),
             "pfill_model_degrade_reason": "",
         }
     except Exception as e:
@@ -104,6 +152,8 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_kind": "",
             "pfill_model_path": str(chosen),
             "pfill_model_feature_mode": "",
+            "pfill_model_meta_path": str(meta_path) if meta_path else "",
+            "pfill_model_expected_n_features": len(feature_cols),
             "pfill_model_degrade_reason": f"model_load_failed:{type(e).__name__}",
         }
 
@@ -171,9 +221,58 @@ def _select_feature_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df[feature_cols].copy()
 
 
+def _normalize_feature_frame(x: pd.DataFrame) -> pd.DataFrame:
+    out = x.copy()
+    for c in out.columns:
+        col = out[c]
+
+        if pd.api.types.is_bool_dtype(col):
+            out[c] = col.astype("int64")
+            continue
+
+        if pd.api.types.is_numeric_dtype(col):
+            out[c] = pd.to_numeric(col, errors="coerce").replace([np.inf, -np.inf], np.nan)
+            continue
+
+        if pd.api.types.is_datetime64_any_dtype(col):
+            out[c] = col.astype("string")
+            continue
+
+        if pd.api.types.is_categorical_dtype(col):
+            out[c] = col.astype("object")
+            continue
+
+        out[c] = col.replace({None: np.nan})
+
+    return out
+
+
+def _build_feature_frame(df: pd.DataFrame, bundle: PFillModelBundle) -> pd.DataFrame:
+    if bundle.feature_cols:
+        x = pd.DataFrame(index=df.index)
+        for col in bundle.feature_cols:
+            if col in df.columns:
+                x[col] = df[col]
+            else:
+                x[col] = np.nan
+        return _normalize_feature_frame(x)
+
+    return _normalize_feature_frame(_select_feature_frame(df))
+
+
 def _predict_by_model(bundle: PFillModelBundle, df: pd.DataFrame) -> pd.Series:
-    x = _select_feature_frame(df)
-    pred = bundle.model.predict(x)
+    x = _build_feature_frame(df, bundle)
+
+    if hasattr(bundle.model, "predict_proba"):
+        proba = bundle.model.predict_proba(x)
+        arr = np.asarray(proba)
+        if arr.ndim == 2 and arr.shape[1] >= 2:
+            pred = arr[:, 1]
+        else:
+            pred = arr.reshape(-1)
+    else:
+        pred = bundle.model.predict(x)
+
     if isinstance(pred, pd.Series):
         out = pred.copy()
     else:
@@ -238,6 +337,8 @@ def apply_pfill_engine(
     out["p_fill_model_kind"] = str(audit.get("pfill_model_kind", ""))
     out["p_fill_model_path"] = str(audit.get("pfill_model_path", ""))
     out["p_fill_model_feature_mode"] = str(audit.get("pfill_model_feature_mode", ""))
+    out["p_fill_model_meta_path"] = str(audit.get("pfill_model_meta_path", ""))
+    out["p_fill_model_expected_n_features"] = int(audit.get("pfill_model_expected_n_features", 0) or 0)
     out["p_fill_pred_src"] = pred_src
     out["p_fill_degrade_reason"] = degrade_reason
 
