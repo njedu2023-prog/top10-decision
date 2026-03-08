@@ -140,9 +140,17 @@ jobs:
           ls -lah data/market || true
 
       - name: Run decision pipeline (V2 orchestrator)
+        env:
+          TRADE_DATE: ${{ inputs.trade_date }}
         run: |
           set -e
-          python scripts/run_v2.py
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
+            echo "[run_v2] manual trade_date=${TRADE_DATE}"
+            python scripts/run_v2.py --trade-date "${TRADE_DATE}"
+          else
+            echo "[run_v2] auto mode"
+            python scripts/run_v2.py
+          fi
 
       - name: Validate IO contract (must pass)
         run: |
