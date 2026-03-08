@@ -1,43 +1,55 @@
 {
-  "trade_date": "20260303",
-  "rows": 83,
-  "fill_truth_ready_only": true,
+  "trade_date": "20260302",
+  "rows": 82,
+  "eret_truth_ready_only": true,
+  "eret_sample_eligible_only": true,
+  "target_column": "realized_ret_t1_to_t2",
   "source": {
-    "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260303.csv",
-    "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260303.csv",
-    "fill_truth": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260303.csv",
+    "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260302.csv",
+    "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260302.csv",
+    "eret_truth": "/home/runner/work/top10-decision/top10-decision/data/market/eret_truth_20260302.csv",
     "prior_mode": "dated_pred_source_archive",
-    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260303.csv"
+    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260302.csv"
   },
-  "output": "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260303.csv",
+  "output": "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260302.csv",
   "input_rows": {
-    "features_base": 5472,
-    "features_limit": 5472,
-    "fill_truth": 83,
-    "prior": 83
+    "features_base": 5470,
+    "features_limit": 5470,
+    "eret_truth_after_filter": 82,
+    "prior": 88
   },
   "coverage": {
+    "realized_ret_t1_to_t2": 1.0,
+    "premium_ret_t1_to_t2": 1.0,
+    "entry_price_t1": 1.0,
+    "exit_price_t2_close": 1.0,
     "y_fill": 1.0,
     "fill_label_quality": 1.0,
-    "entry_price_proxy_t1": 1.0,
     "open_t1": 1.0,
-    "up_limit_t1": 1.0,
-    "open_times_t1": 0.072289,
-    "seal_amount_t1": 0.072289,
     "prior_prob_prior": 1.0,
     "prior_strength_score": 1.0,
     "prior_theme_boost": 1.0,
     "rank": 1.0
   },
-  "label_distribution": {
-    "1": 83
+  "y_fill_distribution": {
+    "1": 82
   },
-  "quality_distribution": {
-    "strong_open_tradable": 79,
-    "weak_intraday_break_without_minbar": 4
+  "eret_quality_distribution": {
+    "strong_close_t2_over_entry_proxy_t1": 82
+  },
+  "fill_quality_distribution": {
+    "strong_open_tradable": 75,
+    "weak_intraday_break_without_minbar": 7
   },
   "sample_maturity_distribution": {
-    "PFILL_READY": 83
+    "FULLY_READY": 82
+  },
+  "target_stats": {
+    "mean": -0.008948,
+    "median": -0.021512,
+    "min": -0.135412,
+    "max": 0.133718,
+    "positive_rate": 0.378049
   },
   "column_groups": {
     "base_cols": [
@@ -124,26 +136,38 @@
     "truth_cols": [
       "exec_date",
       "target_date",
+      "entry_date",
+      "exit_date",
       "name",
       "sample_maturity",
       "label_ready_fill",
       "label_ready_ret",
       "y_fill",
       "fill_label_quality",
+      "eret_sample_eligible",
+      "eret_label_quality",
+      "entry_price_t1",
       "entry_price_proxy_t1",
       "entry_price_proxy_mode",
-      "label_version",
+      "exit_price_t2_close",
+      "close_t2",
+      "realized_ret_t1_to_t2",
+      "premium_ret_t1_to_t2",
+      "eret_truth_version",
+      "return_holding_mode",
       "buy_window_start",
       "buy_window_end",
       "open_t1",
       "high_t1",
       "low_t1",
       "close_t1",
-      "up_limit_t1",
-      "down_limit_t1",
-      "limit_type_t1",
-      "open_times_t1",
-      "seal_amount_t1"
+      "open_t2",
+      "high_t2",
+      "low_t2",
+      "close_t2",
+      "vol_t2",
+      "amount_t2",
+      "pct_chg_t2"
     ],
     "prior_cols": [
       "rank",
@@ -154,13 +178,14 @@
       "prior_board"
     ]
   },
-  "cold_start_ratio": 0.048193,
-  "feature_coverage_score_mean": 0.690794,
-  "sample_weight_mean": 1.26506,
+  "cold_start_ratio": 0.0,
+  "feature_coverage_score_mean": 1.0,
+  "sample_weight_mean": 1.257927,
   "notes": [
-    "本文件是 P_fill 训练前宽表，不是训练结果文件。",
-    "训练集只保留 label_ready_fill=1 的成熟样本。",
-    "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_pfill.py 再做。",
+    "本文件是 E_ret 训练前宽表，不是训练结果文件。",
+    "训练集只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本。",
+    "当前 realized_ret_t1_to_t2 / premium_ret_t1_to_t2 口径来自 build_eret_truth.py。",
+    "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_eret.py 再做。",
     "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。"
   ]
 }
