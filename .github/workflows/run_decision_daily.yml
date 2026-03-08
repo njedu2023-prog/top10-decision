@@ -160,13 +160,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git pull --rebase origin main || true
-
           find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
           find . -type f -name "*.pyc" -delete || true
 
-          echo "__pycache__/" >> .git/info/exclude
-          echo "*.pyc" >> .git/info/exclude
+          mkdir -p .git/info
+          grep -qxF "__pycache__/" .git/info/exclude 2>/dev/null || echo "__pycache__/" >> .git/info/exclude
+          grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
 
           # prior 输入
           git add data/pred/pred_source_latest.csv || true
@@ -210,12 +209,33 @@ jobs:
           echo "[git] status after add:"
           git status --porcelain || true
 
-          if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "auto: sync market raw, build fs, update decision outputs"
-            git push
-            echo "[push] done"
-          else
+          if [ -z "$(git status --porcelain)" ]; then
             echo "[push] no changes"
+            exit 0
+          fi
+
+          git commit -m "auto: sync market raw, build fs, update decision outputs"
+
+          pushed=0
+          for attempt in 1 2 3; do
+            echo "[push] attempt=${attempt}"
+            git fetch origin main
+            if git rebase origin/main; then
+              if git push origin HEAD:main; then
+                echo "[push] done"
+                pushed=1
+                break
+              fi
+            else
+              echo "[push] rebase conflict on attempt=${attempt}, abort and retry"
+              git rebase --abort || true
+            fi
+            sleep 2
+          done
+
+          if [ "${pushed}" != "1" ]; then
+            echo "[push] failed after retries"
+            exit 1
           fi
 
   pfill_learning:
@@ -495,8 +515,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git pull --rebase origin main || true
-
           git add data/market/sample_maturity_candidates.csv || true
           git add data/market/sample_maturity_*.csv || true
           git add data/market/sample_maturity_*.json || true
@@ -519,10 +537,31 @@ jobs:
           echo "[git-learning] status after add:"
           git status --porcelain || true
 
-          if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "auto: resolve sample maturity and update pfill + eret learning artifacts"
-            git push
-            echo "[push-learning] done"
-          else
+          if [ -z "$(git status --porcelain)" ]; then
             echo "[push-learning] no changes"
+            exit 0
+          fi
+
+          git commit -m "auto: resolve sample maturity and update pfill + eret learning artifacts"
+
+          pushed=0
+          for attempt in 1 2 3; do
+            echo "[push-learning] attempt=${attempt}"
+            git fetch origin main
+            if git rebase origin/main; then
+              if git push origin HEAD:main; then
+                echo "[push-learning] done"
+                pushed=1
+                break
+              fi
+            else
+              echo "[push-learning] rebase conflict on attempt=${attempt}, abort and retry"
+              git rebase --abort || true
+            fi
+            sleep 2
+          done
+
+          if [ "${pushed}" != "1" ]; then
+            echo "[push-learning] failed after retries"
+            exit 1
           fi
