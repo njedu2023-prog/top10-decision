@@ -40,6 +40,10 @@ train_pfill.py
   2) 写出 pfill_meta / pfill_meta_{anchor_trade_date}.json
   3) 记录 skip_reason=single_label_skip_train
   4) 不覆盖已有模型文件
+
+本次增强：
+- 训练时把真实 categorical_cols / numeric_cols 显式写入 pfill_meta.json
+- 同时写出 category_like_cols_detected，供线上推理层严格复现训练态输入契约
 """
 
 from __future__ import annotations
@@ -339,6 +343,28 @@ def split_feature_types(df: pd.DataFrame, feature_cols: List[str]) -> Tuple[List
     return num_cols, cat_cols
 
 
+def detect_category_like_cols(df: pd.DataFrame, feature_cols: List[str]) -> List[str]:
+    """
+    仅作为审计信息落到 meta，帮助线上推理理解训练态可能的类别语义。
+    不改变当前训练逻辑。
+    """
+    out: List[str] = []
+    for c in feature_cols:
+        s = str(c).strip().lower()
+        if s in {"board", "area", "market", "limit_type", "prior_board", "symbol", "market_regime"}:
+            out.append(c)
+            continue
+        if not pd.api.types.is_numeric_dtype(df[c]):
+            out.append(c)
+    seen = set()
+    uniq: List[str] = []
+    for c in out:
+        if c not in seen:
+            seen.add(c)
+            uniq.append(c)
+    return uniq
+
+
 # =========================================================
 # 模型
 # =========================================================
@@ -580,6 +606,9 @@ def build_skip_meta(
             "n_numeric": 0,
             "n_categorical": 0,
             "feature_cols": [],
+            "numeric_cols": [],
+            "categorical_cols": [],
+            "category_like_cols_detected": [],
         },
         "missing_ratio": {},
         "metrics_valid": {
@@ -591,6 +620,7 @@ def build_skip_meta(
             "原因：单一标签或不满足训练条件时，跳过训练但不断链。",
             "不会覆盖已有 latest 模型文件。",
             "本文件已升级为成熟窗口训练，不再限定单日训练。",
+            "已为线上推理补充 categorical_cols / numeric_cols / category_like_cols_detected 契约字段。",
         ],
     }
 
@@ -663,6 +693,7 @@ def train_window_as_of(
 
     feature_cols = select_feature_columns(df)
     num_cols, cat_cols = split_feature_types(df, feature_cols)
+    category_like_cols_detected = detect_category_like_cols(df, feature_cols)
 
     # LR
     lr_pipe = build_lr_pipeline(num_cols, cat_cols)
@@ -712,8 +743,7 @@ def train_window_as_of(
     sample_maturity_distribution: Dict[str, int] = {}
     if "sample_maturity" in df.columns:
         sample_maturity_distribution = {
-            str(k): int(v)
-            for k, v in df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict().items()
+            str(k): int(v) for k, v in df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict().items()
         }
 
     train_dates = sorted(set(train_df["trade_date"].map(norm_ymd).tolist())) if "trade_date" in train_df.columns else []
@@ -772,6 +802,9 @@ def train_window_as_of(
             "n_numeric": int(len(num_cols)),
             "n_categorical": int(len(cat_cols)),
             "feature_cols": feature_cols,
+            "numeric_cols": num_cols,
+            "categorical_cols": cat_cols,
+            "category_like_cols_detected": category_like_cols_detected,
         },
         "missing_ratio": {c: round(float(df[c].isna().mean()), 6) for c in feature_cols},
         "metrics_valid": {
@@ -786,6 +819,7 @@ def train_window_as_of(
             "若整个成熟窗口只有单一标签，则跳过训练并写出 skip meta，不覆盖旧模型。",
             "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
+            "已显式写出 numeric_cols / categorical_cols / category_like_cols_detected，供线上推理层严格对齐训练态输入契约。",
         ],
     }
 
@@ -805,6 +839,9 @@ def train_window_as_of(
         f"train={len(train_df)} valid={len(valid_df) if valid_df is not None else 0}"
     )
     print(f"[train_pfill] features_total={len(feature_cols)}")
+    print(f"[train_pfill] features_numeric={len(num_cols)} features_categorical={len(cat_cols)}")
+    print(f"[train_pfill] categorical_cols={cat_cols}")
+    print(f"[train_pfill] category_like_cols_detected={category_like_cols_detected}")
     print(f"[train_pfill] lr_auc={lr_metrics.get('auc')} gbm_auc={gbm_metrics.get('auc')}")
     print(f"[train_pfill] out_lr={lr_path}")
     print(f"[train_pfill] out_lgbm={gbm_path}")
