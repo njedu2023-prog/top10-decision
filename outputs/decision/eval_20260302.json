@@ -1,7 +1,7 @@
 {
   "signal_date": "20260227",
   "exec_date": "20260302",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260227",
   "regime": "RISK_ON",
   "risk_budget": 1.0,
   "topk": 75,
@@ -23,8 +23,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260227",
-      "created_at_utc": "2026-03-08T22:33:22+00:00",
-      "commit_sha": "b21b5bc6dd9416a3749d663d3fd6d504bfe18d7a",
+      "created_at_utc": "2026-03-08T22:40:04+00:00",
+      "commit_sha": "3febaf04d851f0bbf266848572f650d9f06eefcd",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -187,7 +187,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260227",
-            "created_at_utc": "2026-03-08T22:33:21+00:00",
+            "created_at_utc": "2026-03-08T22:40:03+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
