@@ -328,10 +328,18 @@ jobs:
           rows = sorted(candidates)
 
           with out_path.open("w", encoding="utf-8-sig", newline="") as f:
-              writer = csv.DictWriter(f, fieldnames=["trade_date"])
+              writer = csv.DictWriter(
+                  f,
+                  fieldnames=["trade_date", "candidate_type"],
+              )
               writer.writeheader()
               for td in rows:
-                  writer.writerow({"trade_date": td})
+                  writer.writerow(
+                      {
+                          "trade_date": td,
+                          "candidate_type": "PFILL",
+                      }
+                  )
 
           print(f"[learning] candidate trade_dates={len(rows)}")
           print(f"[learning] candidate file={out_path}")
