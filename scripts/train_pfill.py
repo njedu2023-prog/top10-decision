@@ -5,30 +5,40 @@
 train_pfill.py
 
 用途：
-- 读取 data/market/pfill_trainset_{trade_date}.csv
+- 基于成熟窗口读取多个 data/market/pfill_trainset_{trade_date}.csv
 - 训练 P_fill 二分类模型
 - 输出：
     models/pfill_lr.joblib
     models/pfill_lgbm.joblib
     models/pfill_meta.json
-    models/pfill_lr_{trade_date}.joblib
-    models/pfill_lgbm_{trade_date}.joblib
-    models/pfill_meta_{trade_date}.json
+    models/pfill_lr_{anchor_trade_date}.joblib
+    models/pfill_lgbm_{anchor_trade_date}.joblib
+    models/pfill_meta_{anchor_trade_date}.json
 
 当前策略：
 - 主模型 1：LogisticRegression
 - 主模型 2：LightGBM（若环境缺失则降级为 HistGradientBoosting）
 - 只训练 label_ready_fill=1 的成熟样本
-- 时间切分优先；若单日样本不足，再退化为行切分
+- 优先使用成熟窗口的时间切分：
+    最后一个样本 trade_date 做 valid，其余做 train
+- 若窗口样本不足，再退化为行切分
 - 若切分后 train/valid 标签类别不足，则进入 small_sample_mode：
   使用全量样本训练，跳过稳定评估，但不断链
 
 新增规则：
-- 若某个 trade_date 的可训练样本只有单一标签（全 1 或全 0），
+- 训练入口参数 --trade-date 不再表示“只训练这一天”
+  而是表示“训练窗口锚点日 / as_of_date”
+- 实际训练样本来自：
+    data/market/sample_maturity_latest.csv
+  中满足：
+    trade_date <= anchor_trade_date
+    PFILL_READY = 1
+  的全部成熟样本日
+- 若整个成熟窗口可训练样本只有单一标签（全 1 或全 0），
   则不报错退出，而是：
   1) 跳过训练
-  2) 写出 pfill_meta / pfill_meta_{trade_date}.json
-  3) 记录 skip_reason=single_label
+  2) 写出 pfill_meta / pfill_meta_{anchor_trade_date}.json
+  3) 记录 skip_reason=single_label_skip_train
   4) 不覆盖已有模型文件
 """
 
@@ -61,7 +71,7 @@ except Exception:
 
 
 # =========================================================
-# 路径
+# 路径 / 基础工具
 # =========================================================
 def detect_project_root() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -77,19 +87,113 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def safe_read_csv(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
+    for enc in ("utf-8-sig", "utf-8", "gbk", "gb18030"):
+        try:
+            return pd.read_csv(path, encoding=enc)
+        except Exception:
+            continue
+    return pd.read_csv(path)
+
+
 # =========================================================
-# 读取与清洗
+# 成熟窗口解析
 # =========================================================
-def load_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame, Path]:
+def load_maturity_table(project_root: Path, maturity_csv: str = "") -> Tuple[pd.DataFrame, Path]:
+    path = Path(maturity_csv) if maturity_csv else (project_root / "data" / "market" / "sample_maturity_latest.csv")
+    if not path.exists():
+        raise FileNotFoundError(
+            f"缺少样本成熟度表：{path}。请先运行 scripts/resolve_sample_maturity.py"
+        )
+
+    df = safe_read_csv(path)
+    if df.empty:
+        raise ValueError(f"样本成熟度表为空：{path}")
+    if "trade_date" not in df.columns:
+        raise ValueError(f"样本成熟度表缺少 trade_date 列：{path}")
+    if "PFILL_READY" not in df.columns:
+        raise ValueError(f"样本成熟度表缺少 PFILL_READY 列：{path}")
+
+    out = df.copy()
+    out["trade_date"] = out["trade_date"].map(norm_ymd)
+    out["PFILL_READY"] = pd.to_numeric(out["PFILL_READY"], errors="coerce").fillna(0).astype(int)
+    return out, path
+
+
+def resolve_matured_trade_dates_for_pfill(
+    maturity_df: pd.DataFrame,
+    anchor_trade_date: str,
+    window_size: int = 0,
+) -> List[str]:
+    out = maturity_df.copy()
+    out = out[(out["trade_date"] != "") & (out["trade_date"] <= anchor_trade_date)].copy()
+    out = out[out["PFILL_READY"] == 1].copy()
+
+    dates = sorted(set(out["trade_date"].tolist()))
+    if window_size and window_size > 0:
+        dates = dates[-window_size:]
+    return dates
+
+
+# =========================================================
+# 读取与拼窗
+# =========================================================
+def load_one_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame, Path]:
     path = project_root / "data" / "market" / f"pfill_trainset_{trade_date}.csv"
     if not path.exists():
         raise FileNotFoundError(f"找不到训练样本文件：{path}")
-    df = pd.read_csv(path, encoding="utf-8-sig")
+
+    df = safe_read_csv(path)
     if df.empty:
         raise ValueError(f"训练样本为空：{path}")
     if "y_fill" not in df.columns:
-        raise ValueError("训练样本缺少 y_fill 列")
+        raise ValueError(f"训练样本缺少 y_fill 列：{path}")
+
+    df = df.copy()
+    if "trade_date" in df.columns:
+        df["trade_date"] = df["trade_date"].map(norm_ymd)
+        df = df[df["trade_date"] == trade_date].copy() if not df.empty else df
+        if df.empty:
+            df = safe_read_csv(path)
+    if "trade_date" not in df.columns:
+        df["trade_date"] = trade_date
+    else:
+        df["trade_date"] = df["trade_date"].replace("", trade_date).fillna(trade_date)
+
+    df["trainset_trade_date"] = trade_date
     return df, path
+
+
+def load_window_trainsets(
+    project_root: Path,
+    matured_trade_dates: List[str],
+) -> Tuple[pd.DataFrame, List[str], List[str], List[str]]:
+    dfs: List[pd.DataFrame] = []
+    loaded_dates: List[str] = []
+    missing_dates: List[str] = []
+    loaded_paths: List[str] = []
+
+    for td in matured_trade_dates:
+        try:
+            df, path = load_one_trainset(project_root, td)
+            dfs.append(df)
+            loaded_dates.append(td)
+            loaded_paths.append(str(path))
+        except FileNotFoundError:
+            missing_dates.append(td)
+
+    if not dfs:
+        raise FileNotFoundError(
+            "成熟窗口内没有任何可用的 pfill_trainset_*.csv。"
+        )
+
+    out = pd.concat(dfs, axis=0, ignore_index=True)
+    if out.empty:
+        raise ValueError("成熟窗口训练样本拼接后为空")
+
+    return out, loaded_dates, missing_dates, loaded_paths
 
 
 def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -105,13 +209,22 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     if out.empty:
         raise ValueError("过滤 label_ready_fill=1 后无可训练样本")
 
+    if "trade_date" in out.columns:
+        out["trade_date"] = out["trade_date"].map(norm_ymd)
+
     return out
 
 
 def get_label_set(df: pd.DataFrame) -> List[int]:
     if "y_fill" not in df.columns or df.empty:
         return []
-    uniq = sorted(pd.to_numeric(df["y_fill"], errors="coerce").dropna().astype(int).unique().tolist())
+    uniq = sorted(
+        pd.to_numeric(df["y_fill"], errors="coerce")
+        .dropna()
+        .astype(int)
+        .unique()
+        .tolist()
+    )
     return uniq
 
 
@@ -157,7 +270,6 @@ def split_train_valid(
         if train_df["y_fill"].nunique() >= 2 and valid_df["y_fill"].nunique() >= 2:
             return train_df, valid_df, "row_holdout:80_20", False
 
-    # 小样本容错：全量训练，不做验证评估
     return df.copy(), None, "small_sample_full_train", True
 
 
@@ -197,6 +309,7 @@ ID_COLS = {
     "trade_date",
     "ts_code",
     "name",
+    "trainset_trade_date",
 }
 
 NON_FEATURE_PREFIXES = ("Unnamed:",)
@@ -399,8 +512,12 @@ def empty_metrics(reason: str) -> Dict[str, Optional[float] | str]:
 # meta / skip
 # =========================================================
 def build_skip_meta(
-    trade_date: str,
-    trainset_path: Path,
+    anchor_trade_date: str,
+    maturity_path: Path,
+    loaded_trainset_paths: List[str],
+    matured_trade_dates: List[str],
+    loaded_trade_dates: List[str],
+    missing_trade_dates: List[str],
     raw_df: pd.DataFrame,
     df: pd.DataFrame,
     skip_reason: str,
@@ -415,8 +532,7 @@ def build_skip_meta(
 
     return {
         "train_time_utc": utc_now_iso(),
-        "trade_date": trade_date,
-        "trainset_path": str(trainset_path),
+        "anchor_trade_date": anchor_trade_date,
         "status": "skipped",
         "skip_reason": skip_reason,
         "label_set": label_set,
@@ -431,6 +547,17 @@ def build_skip_meta(
         "model_backend": {
             "lr": "sklearn.LogisticRegression",
             "lgbm": "lightgbm.LGBMClassifier" if HAS_LGBM else "sklearn.HistGradientBoostingClassifier",
+        },
+        "window": {
+            "maturity_csv": str(maturity_path),
+            "matured_trade_dates": matured_trade_dates,
+            "loaded_trade_dates": loaded_trade_dates,
+            "missing_trade_dates": missing_trade_dates,
+            "loaded_trainset_paths": loaded_trainset_paths,
+            "n_matured_dates": int(len(matured_trade_dates)),
+            "n_loaded_dates": int(len(loaded_trade_dates)),
+            "window_start": loaded_trade_dates[0] if loaded_trade_dates else "",
+            "window_end": loaded_trade_dates[-1] if loaded_trade_dates else "",
         },
         "rows": {
             "raw_all": int(len(raw_df)),
@@ -463,15 +590,16 @@ def build_skip_meta(
             "本次未训练模型。",
             "原因：单一标签或不满足训练条件时，跳过训练但不断链。",
             "不会覆盖已有 latest 模型文件。",
+            "本文件已升级为成熟窗口训练，不再限定单日训练。",
         ],
     }
 
 
-def write_meta_files(project_root: Path, trade_date: str, meta: Dict[str, object]) -> Tuple[Path, Path]:
+def write_meta_files(project_root: Path, anchor_trade_date: str, meta: Dict[str, object]) -> Tuple[Path, Path]:
     models_dir = project_root / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
     meta_path = models_dir / "pfill_meta.json"
-    meta_dated_path = models_dir / f"pfill_meta_{trade_date}.json"
+    meta_dated_path = models_dir / f"pfill_meta_{anchor_trade_date}.json"
     meta_text = json.dumps(meta, ensure_ascii=False, indent=2)
     meta_path.write_text(meta_text, encoding="utf-8")
     meta_dated_path.write_text(meta_text, encoding="utf-8")
@@ -481,23 +609,49 @@ def write_meta_files(project_root: Path, trade_date: str, meta: Dict[str, object
 # =========================================================
 # 主流程
 # =========================================================
-def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, object]:
-    raw_df, trainset_path = load_trainset(project_root, trade_date)
+def train_window_as_of(
+    project_root: Path,
+    anchor_trade_date: str,
+    maturity_csv: str = "",
+    window_size: int = 0,
+) -> Dict[str, object]:
+    maturity_df, maturity_path = load_maturity_table(project_root, maturity_csv=maturity_csv)
+    matured_trade_dates = resolve_matured_trade_dates_for_pfill(
+        maturity_df=maturity_df,
+        anchor_trade_date=anchor_trade_date,
+        window_size=window_size,
+    )
+    if not matured_trade_dates:
+        raise ValueError(
+            f"在 sample_maturity 中找不到 trade_date <= {anchor_trade_date} 且 PFILL_READY=1 的成熟样本日"
+        )
+
+    raw_df, loaded_trade_dates, missing_trade_dates, loaded_trainset_paths = load_window_trainsets(
+        project_root=project_root,
+        matured_trade_dates=matured_trade_dates,
+    )
     df = prepare_train_df(raw_df)
 
     label_set = get_label_set(df)
     if len(label_set) < 2:
         meta = build_skip_meta(
-            trade_date=trade_date,
-            trainset_path=trainset_path,
+            anchor_trade_date=anchor_trade_date,
+            maturity_path=maturity_path,
+            loaded_trainset_paths=loaded_trainset_paths,
+            matured_trade_dates=matured_trade_dates,
+            loaded_trade_dates=loaded_trade_dates,
+            missing_trade_dates=missing_trade_dates,
             raw_df=raw_df,
             df=df,
             skip_reason="single_label_skip_train",
             label_set=label_set,
         )
-        meta_path, meta_dated_path = write_meta_files(project_root, trade_date, meta)
-        print(f"[train_pfill] trade_date={trade_date}")
-        print(f"[train_pfill] trainset={trainset_path}")
+        meta_path, meta_dated_path = write_meta_files(project_root, anchor_trade_date, meta)
+
+        print(f"[train_pfill] anchor_trade_date={anchor_trade_date}")
+        print(f"[train_pfill] matured_trade_dates={len(matured_trade_dates)}")
+        print(f"[train_pfill] loaded_trade_dates={loaded_trade_dates}")
+        print(f"[train_pfill] missing_trade_dates={missing_trade_dates}")
         print(f"[train_pfill] skipped=True")
         print(f"[train_pfill] skip_reason=single_label_skip_train")
         print(f"[train_pfill] label_set={label_set}")
@@ -546,9 +700,9 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
     gbm_path = models_dir / "pfill_lgbm.joblib"
     meta_path = models_dir / "pfill_meta.json"
 
-    lr_dated_path = models_dir / f"pfill_lr_{trade_date}.joblib"
-    gbm_dated_path = models_dir / f"pfill_lgbm_{trade_date}.joblib"
-    meta_dated_path = models_dir / f"pfill_meta_{trade_date}.json"
+    lr_dated_path = models_dir / f"pfill_lr_{anchor_trade_date}.joblib"
+    gbm_dated_path = models_dir / f"pfill_lgbm_{anchor_trade_date}.joblib"
+    meta_dated_path = models_dir / f"pfill_meta_{anchor_trade_date}.json"
 
     joblib.dump(lr_pipe, lr_path)
     joblib.dump(gbm_model, gbm_path)
@@ -562,10 +716,12 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
             for k, v in df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict().items()
         }
 
+    train_dates = sorted(set(train_df["trade_date"].map(norm_ymd).tolist())) if "trade_date" in train_df.columns else []
+    valid_dates = sorted(set(valid_df["trade_date"].map(norm_ymd).tolist())) if valid_df is not None and "trade_date" in valid_df.columns else []
+
     meta: Dict[str, object] = {
         "train_time_utc": utc_now_iso(),
-        "trade_date": trade_date,
-        "trainset_path": str(trainset_path),
+        "anchor_trade_date": anchor_trade_date,
         "status": "trained",
         "skip_reason": "",
         "label_set": label_set,
@@ -581,6 +737,19 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
         "model_backend": {
             "lr": "sklearn.LogisticRegression",
             "lgbm": "lightgbm.LGBMClassifier" if HAS_LGBM else "sklearn.HistGradientBoostingClassifier",
+        },
+        "window": {
+            "maturity_csv": str(maturity_path),
+            "matured_trade_dates": matured_trade_dates,
+            "loaded_trade_dates": loaded_trade_dates,
+            "missing_trade_dates": missing_trade_dates,
+            "loaded_trainset_paths": loaded_trainset_paths,
+            "n_matured_dates": int(len(matured_trade_dates)),
+            "n_loaded_dates": int(len(loaded_trade_dates)),
+            "window_start": loaded_trade_dates[0] if loaded_trade_dates else "",
+            "window_end": loaded_trade_dates[-1] if loaded_trade_dates else "",
+            "train_dates": train_dates,
+            "valid_dates": valid_dates,
         },
         "rows": {
             "raw_all": int(len(raw_df)),
@@ -611,9 +780,10 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
         },
         "notes": [
             "仅训练 label_ready_fill=1 的成熟样本。",
+            "本文件已升级为成熟窗口训练，训练样本来自 sample_maturity 中 PFILL_READY=1 的全部历史样本日。",
             "采用时间切分优先，样本不足时退化为行切分。",
             "若切分后标签类别不足，则进入 small_sample_mode：全量训练，跳过 valid 评估。",
-            "若整天样本只有单一标签，则跳过训练并写出 skip meta，不覆盖旧模型。",
+            "若整个成熟窗口只有单一标签，则跳过训练并写出 skip meta，不覆盖旧模型。",
             "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
         ],
@@ -623,8 +793,11 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
     meta_path.write_text(meta_text, encoding="utf-8")
     meta_dated_path.write_text(meta_text, encoding="utf-8")
 
-    print(f"[train_pfill] trade_date={trade_date}")
-    print(f"[train_pfill] trainset={trainset_path}")
+    print(f"[train_pfill] anchor_trade_date={anchor_trade_date}")
+    print(f"[train_pfill] maturity_csv={maturity_path}")
+    print(f"[train_pfill] matured_trade_dates={len(matured_trade_dates)}")
+    print(f"[train_pfill] loaded_trade_dates={loaded_trade_dates}")
+    print(f"[train_pfill] missing_trade_dates={missing_trade_dates}")
     print(f"[train_pfill] split_mode={split_mode}")
     print(f"[train_pfill] small_sample_mode={small_sample_mode}")
     print(
@@ -641,19 +814,35 @@ def train_one_trade_date(project_root: Path, trade_date: str) -> Dict[str, objec
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="训练 P_fill 学习模型")
-    ap.add_argument("--trade-date", required=True, help="训练样本交易日 YYYYMMDD")
+    ap = argparse.ArgumentParser(description="训练 P_fill 学习模型（成熟窗口版）")
+    ap.add_argument("--trade-date", required=True, help="训练窗口锚点日 YYYYMMDD")
+    ap.add_argument(
+        "--maturity-csv",
+        default="",
+        help="样本成熟度表路径；留空默认 data/market/sample_maturity_latest.csv",
+    )
+    ap.add_argument(
+        "--window-size",
+        type=int,
+        default=0,
+        help="训练窗口长度（按成熟 trade_date 个数截断）；0=使用 anchor 之前全部 PFILL_READY 样本",
+    )
     return ap.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    trade_date = norm_ymd(args.trade_date)
-    if len(trade_date) != 8:
+    anchor_trade_date = norm_ymd(args.trade_date)
+    if len(anchor_trade_date) != 8:
         raise ValueError("--trade-date 必须是 YYYYMMDD")
 
     project_root = detect_project_root()
-    train_one_trade_date(project_root, trade_date)
+    train_window_as_of(
+        project_root=project_root,
+        anchor_trade_date=anchor_trade_date,
+        maturity_csv=args.maturity_csv,
+        window_size=args.window_size,
+    )
     return 0
 
 
