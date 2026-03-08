@@ -22,8 +22,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260304",
-      "created_at_utc": "2026-03-07T19:27:13+00:00",
-      "commit_sha": "6e9316cb25aaf590644c87b382f6931cdc638302",
+      "created_at_utc": "2026-03-08T21:34:25+00:00",
+      "commit_sha": "f17108da044e1bd8387a64ef8cd7dc0f4f1358b9",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -186,7 +186,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260304",
-            "created_at_utc": "2026-03-07T19:27:12+00:00",
+            "created_at_utc": "2026-03-08T21:34:24+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -677,6 +677,18 @@
         "namechange 当前作为审计/风险辅助层接入。"
       ]
     }
+  },
+  "engine_status": {
+    "p_fill_pred_src": "model:lgbm",
+    "p_fill_model_loaded": true,
+    "p_fill_model_kind": "lgbm",
+    "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
+    "p_fill_degrade_reason": "",
+    "eret_pred_src": "model:lgbm",
+    "eret_model_loaded": true,
+    "eret_model_kind": "lgbm",
+    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
+    "eret_degrade_reason": ""
   },
   "paths": {
     "candidates": "data/decision/decision_candidates_20260304.csv",
