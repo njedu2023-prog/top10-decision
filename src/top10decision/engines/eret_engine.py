@@ -39,7 +39,7 @@ import pandas as pd
 try:
     from top10decision.models.overnight_model import overnight_model_rule
 except Exception:  # pragma: no cover
-    def overnight_model_rule(df: pd.DataFrame) -> pd.Series:
+    def overnight_model_rule(df: pd.DataFrame, regime: str = "RISK_ON") -> pd.Series:
         # 最低兜底：若规则模型导入失败，给一个很弱的零收益先验
         return pd.Series(np.zeros(len(df)), index=df.index, name="eret_rule_fallback")
 
@@ -188,6 +188,21 @@ def _predict_by_model(bundle: ERetModelBundle, df: pd.DataFrame) -> pd.Series:
     return _clip_ret_series(out)
 
 
+def _get_regime_name(df: pd.DataFrame) -> str:
+    if df is None or df.empty:
+        return "RISK_ON"
+    for col in ["regime_name", "regime"]:
+        if col in df.columns:
+            try:
+                v = df[col].dropna().astype(str).str.strip()
+                v = v[v != ""]
+                if not v.empty:
+                    return str(v.iloc[0])
+            except Exception:
+                pass
+    return "RISK_ON"
+
+
 def apply_eret_engine(
     df: pd.DataFrame,
     project_root: Optional[Path] = None,
@@ -214,8 +229,9 @@ def apply_eret_engine(
         return pd.DataFrame() if df is None else df.copy()
 
     out = df.copy()
+    regime_name = _get_regime_name(out)
 
-    rule_pred = overnight_model_rule(out)
+    rule_pred = overnight_model_rule(out, regime=regime_name)
     if not isinstance(rule_pred, pd.Series):
         rule_pred = pd.Series(np.asarray(rule_pred).reshape(-1), index=out.index, name="eret_rule")
     rule_pred = _clip_ret_series(rule_pred)
@@ -251,6 +267,7 @@ def apply_eret_engine(
     out["eret_model_feature_mode"] = str(audit.get("eret_model_feature_mode", ""))
     out["eret_pred_src"] = pred_src
     out["eret_degrade_reason"] = degrade_reason
+    out["eret_regime_used"] = regime_name
 
     return out
 
