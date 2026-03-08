@@ -4,6 +4,31 @@
 - exec_date: **20260302**
 - regime: **RISK_ON**
 - risk_budget: **1**
+- input_mode: **pred_plus_fs**
+- fs_degrade_reason: **none**
+
+## Input Status
+
+- pred_loaded: **True**
+- pred_rows: **75**
+- features_base_loaded: **True**
+- features_base_rows: **5471**
+- features_limit_loaded: **True**
+- features_limit_rows: **5471**
+- truth_close_loaded: **True**
+- truth_close_rows: **5471**
+- meta_loaded: **True**
+
+## Engine Status
+
+- p_fill_pred_src: **model:lgbm**
+- p_fill_model_loaded: **True**
+- p_fill_model_kind: **lgbm**
+- p_fill_degrade_reason: **none**
+- eret_pred_src: **model:lgbm**
+- eret_model_loaded: **True**
+- eret_model_kind: **lgbm**
+- eret_degrade_reason: **none**
 
 ## Artifacts
 
@@ -15,15 +40,15 @@
 
 ## TopN Targets
 
-| rank | ts_code | name | weight | EV |
-|---:|---|---|---:|---:|
-| 1 | 002865.SZ | 钧达股份 | 0.1 | 0.008254 |
-| 2 | 603232.SH | 格尔软件 | 0.1 | 0.007928 |
-| 3 | 001209.SZ | 洪兴股份 | 0.1 | 0.007262 |
-| 4 | 002655.SZ | 共达电声 | 0.1 | 0.007167 |
-| 5 | 002378.SZ | 章源钨业 | 0.1 | 0.007096 |
-| 6 | 600549.SH | 厦门钨业 | 0.1 | 0.007047 |
-| 7 | 002261.SZ | 拓维信息 | 0.1 | 0.006964 |
-| 8 | 002350.SZ | 北京科锐 | 0.1 | 0.006078 |
-| 9 | 002470.SZ | 金正大 | 0.1 | 0.005692 |
-| 10 | 002842.SZ | 翔鹭钨业 | 0.1 | 0.005455 |
+| rank | ts_code | name | weight | EV | P_fill | E_ret |
+|---:|---|---|---:|---:|---:|---:|
+| 1 | 000035.SZ | 中国天楹 | 0.1 | 0.044872 | 0.98 | 0.046604 |
+| 2 | 603318.SH | 水发燃气 | 0.1 | 0.010205 | 0.98 | 0.01123 |
+| 3 | 002843.SZ | 泰嘉股份 | 0.1 | 0.005002 | 0.98 | 0.00592 |
+| 4 | 002177.SZ | 御银股份 | 0.1 | 0.000033 | 0.98 | 0.00085 |
+| 5 | 603232.SH | 格尔软件 | 0.1 | -0.00026 | 0.972387 | 0.000555 |
+| 6 | 002216.SZ | 三全食品 | 0.1 | -0.005866 | 0.98 | -0.005169 |
+| 7 | 300830.SZ | 金现代 | 0.1 | -0.005967 | 0.98 | -0.005273 |
+| 8 | 688343.SH | 云天励飞-U | 0.1 | -0.006492 | 0.98 | -0.005808 |
+| 9 | 001216.SZ | 华瓷股份 | 0.1 | -0.007284 | 0.98 | -0.006617 |
+| 10 | 600108.SH | 亚盛集团 | 0.1 | -0.008405 | 0.98 | -0.00776 |
