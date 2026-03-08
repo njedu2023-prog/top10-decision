@@ -35,6 +35,10 @@ build_fill_truth.py
 - features_limit / raw 只负责给候选池股票补字段，不得反向扩池
 - EntryPriceProxy_T+1 不是 PredOpen_T+1，也不是理想成交价
 - 在分钟级真值缺失时，首版优先把 y_fill 做稳
+
+本文件已升级：
+- 不再负责内部猜 exec_date / target_date
+- 默认从 data/market/sample_maturity_latest.csv 读取正式成熟度解析结果
 """
 
 from __future__ import annotations
@@ -132,7 +136,7 @@ def normalize_bool_series(s: pd.Series) -> pd.Series:
 
 
 # =========================
-# 路径与日期
+# 路径
 # =========================
 
 @dataclass
@@ -144,6 +148,7 @@ class Paths:
     pred_latest: Path
     pred_archive: Path
     features_limit: Path
+    maturity_csv: Path
     out_csv: Path
     out_meta: Path
 
@@ -152,7 +157,11 @@ def detect_project_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def build_paths(trade_date: str, project_root: Optional[Path] = None) -> Paths:
+def build_paths(
+    trade_date: str,
+    maturity_csv: str = "",
+    project_root: Optional[Path] = None,
+) -> Paths:
     root = project_root or detect_project_root()
     market_dir = root / "data" / "market"
     raw_root = market_dir / "raw"
@@ -162,6 +171,8 @@ def build_paths(trade_date: str, project_root: Optional[Path] = None) -> Paths:
     features_limit = market_dir / f"features_limit_{trade_date}.csv"
     out_csv = market_dir / f"fill_truth_{trade_date}.csv"
     out_meta = market_dir / f"fill_truth_{trade_date}.meta.json"
+    maturity_csv_path = Path(maturity_csv) if maturity_csv else (market_dir / "sample_maturity_latest.csv")
+
     return Paths(
         project_root=root,
         market_dir=market_dir,
@@ -170,6 +181,7 @@ def build_paths(trade_date: str, project_root: Optional[Path] = None) -> Paths:
         pred_latest=pred_latest,
         pred_archive=pred_archive,
         features_limit=features_limit,
+        maturity_csv=maturity_csv_path,
         out_csv=out_csv,
         out_meta=out_meta,
     )
@@ -179,49 +191,85 @@ def snapshot_dir(raw_root: Path, ymd: str) -> Path:
     return raw_root / ymd[:4] / ymd
 
 
-def scan_available_raw_dates(raw_root: Path) -> List[str]:
-    out: List[str] = []
-    if not raw_root.exists():
-        return out
+# =========================
+# 成熟度解析结果读取
+# =========================
 
-    for year_dir in raw_root.iterdir():
-        if not year_dir.is_dir():
-            continue
-        if not (year_dir.name.isdigit() and len(year_dir.name) == 4):
-            continue
-        for day_dir in year_dir.iterdir():
-            if not day_dir.is_dir():
-                continue
-            ymd = norm_ymd(day_dir.name)
-            if len(ymd) == 8:
-                out.append(ymd)
-
-    return sorted(set(out))
+@dataclass
+class MaturityInfo:
+    trade_date: str
+    exec_date: str
+    target_date: str
+    sample_maturity: str
+    label_ready_fill: int
+    label_ready_ret: int
+    fully_ready: int
 
 
-def infer_next_date(raw_root: Path, anchor_date: str, step: int = 1) -> str:
-    dates = [d for d in scan_available_raw_dates(raw_root) if d > anchor_date]
-    if len(dates) < step:
-        return ""
-    return dates[step - 1]
+def _parse_ready_flag(x: object) -> int:
+    s = str(x or "").strip()
+    return 1 if s in {"1", "true", "True", "TRUE"} else 0
 
 
-def infer_exec_date(raw_root: Path, trade_date: str) -> str:
-    return infer_next_date(raw_root, trade_date, step=1)
+def load_maturity_info(
+    maturity_csv: Path,
+    trade_date: str,
+    exec_date_override: str = "",
+    target_date_override: str = "",
+) -> MaturityInfo:
+    if not maturity_csv.exists():
+        raise FileNotFoundError(
+            f"缺少样本成熟度解析结果：{maturity_csv}。"
+            f"请先运行 scripts/resolve_sample_maturity.py。"
+        )
 
+    df = safe_read_csv(maturity_csv)
+    if df.empty:
+        raise ValueError(f"样本成熟度文件为空：{maturity_csv}")
 
-def infer_target_date(raw_root: Path, trade_date: str, exec_date: str) -> str:
-    if exec_date:
-        return infer_next_date(raw_root, exec_date, step=1)
-    return infer_next_date(raw_root, trade_date, step=2)
+    if "trade_date" not in df.columns:
+        raise ValueError(f"样本成熟度文件缺少 trade_date 列：{maturity_csv}")
 
+    out = df.copy()
+    out["trade_date"] = out["trade_date"].map(norm_ymd)
+    hit = out[out["trade_date"] == trade_date].copy()
+    if hit.empty:
+        raise ValueError(
+            f"样本成熟度文件中找不到 trade_date={trade_date}：{maturity_csv}"
+        )
 
-def resolve_sample_maturity(exec_date: str, target_date: str) -> Tuple[str, int, int]:
-    if exec_date and target_date:
-        return "FULLY_READY", 1, 1
-    if exec_date:
-        return "PFILL_READY", 1, 0
-    return "PRED_ONLY", 0, 0
+    row = hit.iloc[-1]
+
+    exec_date = norm_ymd(exec_date_override) or norm_ymd(row.get("exec_date"))
+    target_date = norm_ymd(target_date_override) or norm_ymd(row.get("target_date"))
+    sample_maturity = str(row.get("sample_maturity") or "").strip()
+    pfill_ready = _parse_ready_flag(row.get("PFILL_READY"))
+    eret_ready = _parse_ready_flag(row.get("ERET_READY"))
+    fully_ready = _parse_ready_flag(row.get("FULLY_READY"))
+
+    if not exec_date:
+        raise ValueError(
+            f"trade_date={trade_date} 在成熟度文件中 exec_date 为空，"
+            f"说明该样本尚未具备 P_fill 真值构建条件：{maturity_csv}"
+        )
+
+    if not sample_maturity:
+        if pfill_ready and eret_ready:
+            sample_maturity = "FULLY_READY"
+        elif pfill_ready:
+            sample_maturity = "PFILL_READY"
+        else:
+            sample_maturity = "UNREADY"
+
+    return MaturityInfo(
+        trade_date=trade_date,
+        exec_date=exec_date,
+        target_date=target_date,
+        sample_maturity=sample_maturity,
+        label_ready_fill=pfill_ready,
+        label_ready_ret=eret_ready,
+        fully_ready=fully_ready,
+    )
 
 
 # =========================
@@ -456,6 +504,9 @@ def build_fill_truth(
     trade_date: str,
     exec_date: str,
     target_date: str,
+    sample_maturity: str,
+    label_ready_fill: int,
+    label_ready_ret: int,
     paths: Paths,
 ) -> Tuple[pd.DataFrame, str]:
     pred, pred_source_path = load_candidate_pool(paths, trade_date)
@@ -473,10 +524,19 @@ def build_fill_truth(
     truth = load_t1_truth(paths.raw_root, exec_date)
     t1 = merge_t1_truth(truth)
 
-    maturity, label_ready_fill, label_ready_ret = resolve_sample_maturity(exec_date, target_date)
-
     pred_base_cols = ["trade_date", "ts_code"]
-    for c in ["name", "rank", "prob", "StrengthScore", "ThemeBoost", "board", "run_id", "run_attempt", "commit_sha", "generated_at_utc"]:
+    for c in [
+        "name",
+        "rank",
+        "prob",
+        "StrengthScore",
+        "ThemeBoost",
+        "board",
+        "run_id",
+        "run_attempt",
+        "commit_sha",
+        "generated_at_utc",
+    ]:
         if c in pred.columns:
             pred_base_cols.append(c)
 
@@ -509,11 +569,11 @@ def build_fill_truth(
     ]
     out = pd.concat([out, labels], axis=1)
 
-    out["sample_maturity"] = maturity
+    out["sample_maturity"] = sample_maturity
     out["label_ready_fill"] = int(label_ready_fill)
     out["label_ready_ret"] = int(label_ready_ret)
 
-    out["label_version"] = "pfill_truth_v3_candidate_pool"
+    out["label_version"] = "pfill_truth_v4_maturity_resolved"
     out["buy_window_start"] = "09:30:00"
     out["buy_window_end"] = "10:30:00"
 
@@ -580,6 +640,7 @@ def write_meta(
             "pred_source": pred_source_path,
             "features_limit": str(paths.features_limit),
             "raw_root": str(paths.raw_root),
+            "sample_maturity_csv": str(paths.maturity_csv),
         },
         "output": str(paths.out_csv),
     }
@@ -595,12 +656,17 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--exec-date",
         default="",
-        help="T+1 执行日，格式 YYYYMMDD；留空则从 data/market/raw 自动推断最早下一快照",
+        help="T+1 执行日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
     )
     ap.add_argument(
         "--target-date",
         default="",
-        help="T+2 目标日，格式 YYYYMMDD；留空则从 data/market/raw 自动推断下一快照",
+        help="T+2 目标日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
+    )
+    ap.add_argument(
+        "--maturity-csv",
+        default="",
+        help="样本成熟度解析结果路径；留空默认 data/market/sample_maturity_latest.csv",
     )
     return ap.parse_args()
 
@@ -611,40 +677,47 @@ def main() -> int:
     if len(trade_date) != 8:
         raise ValueError("--trade-date 必须是 YYYYMMDD")
 
-    paths = build_paths(trade_date=trade_date)
+    paths = build_paths(
+        trade_date=trade_date,
+        maturity_csv=args.maturity_csv,
+    )
     paths.market_dir.mkdir(parents=True, exist_ok=True)
 
-    exec_date = norm_ymd(args.exec_date)
-    if not exec_date:
-        exec_date = infer_exec_date(paths.raw_root, trade_date)
-
-    if len(exec_date) != 8:
-        raise ValueError(
-            "无法自动推断 T+1 exec_date。请显式传入 --exec-date YYYYMMDD，"
-            "或确认 data/market/raw/{YYYY}/{YYYYMMDD}/ 已存在下一交易日快照。"
-        )
-
-    target_date = norm_ymd(args.target_date)
-    if not target_date:
-        target_date = infer_target_date(paths.raw_root, trade_date, exec_date)
-
-    if target_date and len(target_date) != 8:
-        raise ValueError("--target-date 必须是 YYYYMMDD 或留空")
+    maturity_info = load_maturity_info(
+        maturity_csv=paths.maturity_csv,
+        trade_date=trade_date,
+        exec_date_override=args.exec_date,
+        target_date_override=args.target_date,
+    )
 
     df, pred_source_path = build_fill_truth(
         trade_date=trade_date,
-        exec_date=exec_date,
-        target_date=target_date,
+        exec_date=maturity_info.exec_date,
+        target_date=maturity_info.target_date,
+        sample_maturity=maturity_info.sample_maturity,
+        label_ready_fill=maturity_info.label_ready_fill,
+        label_ready_ret=maturity_info.label_ready_ret,
         paths=paths,
     )
     df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")
-    write_meta(df, trade_date, exec_date, target_date, paths, pred_source_path)
+    write_meta(
+        df,
+        trade_date,
+        maturity_info.exec_date,
+        maturity_info.target_date,
+        paths,
+        pred_source_path,
+    )
 
     print(f"[build_fill_truth] trade_date={trade_date}")
-    print(f"[build_fill_truth] exec_date={exec_date}")
-    print(f"[build_fill_truth] target_date={target_date}")
+    print(f"[build_fill_truth] exec_date={maturity_info.exec_date}")
+    print(f"[build_fill_truth] target_date={maturity_info.target_date}")
+    print(f"[build_fill_truth] sample_maturity={maturity_info.sample_maturity}")
+    print(f"[build_fill_truth] label_ready_fill={maturity_info.label_ready_fill}")
+    print(f"[build_fill_truth] label_ready_ret={maturity_info.label_ready_ret}")
     print(f"[build_fill_truth] rows={len(df)}")
     print(f"[build_fill_truth] pred_source={pred_source_path}")
+    print(f"[build_fill_truth] maturity_csv={paths.maturity_csv}")
     print(f"[build_fill_truth] out={paths.out_csv}")
     print(f"[build_fill_truth] meta={paths.out_meta}")
     return 0
