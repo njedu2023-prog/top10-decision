@@ -20,6 +20,7 @@ top10-decision — V2 runner (Orchestrator Only)
 - 新增手动 trade_date 契约：支持 --trade-date / TRADE_DATE，并对输入表做显式过滤
 - 接入 Cost / RiskPenalty 分项归因输出，落入 decision_candidates 便于业务审查
 - 在 Decision 报告中追加 Full Candidate Pool（全候选池精简展示表）
+- TopN Targets / Full Candidate Pool 均按 EV 降序展示
 """
 
 from __future__ import annotations
@@ -423,16 +424,15 @@ def _build_report_candidate_view(
     weights_out: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    生成报告展示用的全候选池精简表，字段口径与 TopN Targets 保持一致：
-    rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty
+    生成报告展示用的候选池精简表，字段口径与 TopN Targets 保持一致：
+    ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty
 
     说明：
-    - rank 使用 routed_df 当前排序顺序（1-based）
+    - 不在这里生成 rank；rank 由后续排序后再生成
     - weight 从 weights_out 映射；未入选/非候补默认为 0
     - 若某票同时出现在 target / backup 中，取最大的 weight（当前逻辑通常不会冲突）
     """
-    base = routed_df.copy().reset_index(drop=True)
-    base["rank"] = base.index + 1
+    base = routed_df.copy()
 
     weight_view = (
         weights_out[["ts_code", "weight"]]
@@ -444,9 +444,7 @@ def _build_report_candidate_view(
     view = base.merge(weight_view, on="ts_code", how="left")
     view["weight"] = pd.to_numeric(view["weight"], errors="coerce").fillna(0.0).astype(float)
 
-    # 统一字段命名与顺序
     out = pd.DataFrame({
-        "rank": pd.to_numeric(view["rank"], errors="coerce").fillna(0).astype(int),
         "ts_code": view.get("ts_code", "").astype(str),
         "name": view.get("name", "").astype(str),
         "weight": pd.to_numeric(view.get("weight", 0.0), errors="coerce").fillna(0.0).astype(float),
@@ -456,6 +454,25 @@ def _build_report_candidate_view(
         "Cost": pd.to_numeric(view.get("cost_est", 0.0), errors="coerce").fillna(0.0).astype(float),
         "RiskPenalty": pd.to_numeric(view.get("risk_penalty", 0.0), errors="coerce").fillna(0.0).astype(float),
     })
+    return out
+
+
+def _sort_report_candidate_view(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    报告口径统一排序：
+    - EV 降序
+    - ts_code 升序作为稳定次序
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["ts_code", "name", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"])
+
+    out = df.copy()
+    out["EV"] = pd.to_numeric(out["EV"], errors="coerce").fillna(0.0).astype(float)
+    out = out.sort_values(
+        by=["EV", "ts_code"],
+        ascending=[False, True],
+        kind="mergesort",
+    ).reset_index(drop=True)
     return out
 
 
@@ -653,8 +670,17 @@ def main() -> int:
         .sort_values("target_rank")
     )
 
+    # 报告展示口径：先统一成精简表，再按 EV 降序拆成 TopN / 剩余候选
     report_pool_df = _build_report_candidate_view(routed_df, weights_out)
-    topn_report_df = report_pool_df.loc[report_pool_df["weight"] > 0].copy()
+    report_pool_df = _sort_report_candidate_view(report_pool_df)
+
+    selected_mask = pd.to_numeric(report_pool_df["weight"], errors="coerce").fillna(0.0) > 0
+
+    topn_report_df = report_pool_df.loc[selected_mask].copy().reset_index(drop=True)
+    topn_report_df["rank"] = topn_report_df.index + 1
+
+    full_candidate_report_df = report_pool_df.loc[~selected_mask].copy().reset_index(drop=True)
+    full_candidate_report_df["rank"] = full_candidate_report_df.index + len(topn_report_df) + 1
 
     lines: List[str] = []
     lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
@@ -695,7 +721,7 @@ def main() -> int:
     lines.append(f"- weights_dated: `{weights_dated_path}`\n\n")
 
     _append_candidate_markdown_table(lines, "TopN Targets", topn_report_df)
-    _append_candidate_markdown_table(lines, "Full Candidate Pool", report_pool_df)
+    _append_candidate_markdown_table(lines, "Full Candidate Pool", full_candidate_report_df)
 
     report_path = write_decision_report(exec_date, "".join(lines))
 
