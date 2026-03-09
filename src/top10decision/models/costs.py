@@ -72,6 +72,9 @@ W_EXTREME_TURNOVER = 0.005
 W_WEAK_SEAL_LOW = 0.002
 W_WEAK_SEAL_VERY_LOW = 0.004
 
+# 新增：ST / 类 ST 风险惩罚
+W_ST_LIKE = 0.020
+
 # ============================================================
 # 基础工具
 # ============================================================
@@ -112,6 +115,28 @@ def _pick_first(row: pd.Series, *candidates: str, default: Any = None) -> Any:
             v = row.get(c)
             if v is not None and not pd.isna(v):
                 return v
+    return default
+
+
+def _safe_bool(v: Any, default: bool = False) -> bool:
+    if v is None:
+        return default
+    try:
+        if pd.isna(v):
+            return default
+    except Exception:
+        pass
+
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return float(v) != 0.0
+
+    s = str(v).strip().lower()
+    if s in {"1", "true", "yes", "y", "t"}:
+        return True
+    if s in {"0", "false", "no", "n", "f", ""}:
+        return False
     return default
 
 
@@ -242,6 +267,31 @@ def _is_limit_open_risk(row: pd.Series) -> bool:
     status = _limit_status(row)
     if status in {"OPEN", "BROKEN", "WEAK"}:
         return True
+    return False
+
+
+def _is_st_like_flag(row: pd.Series) -> bool:
+    """
+    ST / 类 ST 风险识别：
+    优先读取输入字段：
+    - is_st_like
+    - is_st_like_limit
+    同时兜底读取名称里是否含 ST / *ST
+    """
+    v1 = _pick_first(row, "is_st_like", default=None)
+    if v1 is not None and not pd.isna(v1):
+        if _safe_bool(v1, default=False):
+            return True
+
+    v2 = _pick_first(row, "is_st_like_limit", default=None)
+    if v2 is not None and not pd.isna(v2):
+        if _safe_bool(v2, default=False):
+            return True
+
+    name = _safe_str(_pick_first(row, "name", "name_fs", "name_limit", default="")).upper()
+    if "ST" in name:
+        return True
+
     return False
 
 
@@ -517,6 +567,16 @@ def _risk_seal_penalty(row: pd.Series) -> float:
     return 0.0
 
 
+def _risk_st_penalty(row: pd.Series) -> float:
+    """
+    ST / 类 ST 风险惩罚。
+    当前为直接惩罚项，后续可再按 *ST / ST / 摘帽历史分层细化。
+    """
+    if _is_st_like_flag(row):
+        return W_ST_LIKE
+    return 0.0
+
+
 def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float]:
     parts = {
         "risk_regime_penalty": _risk_regime_penalty(row, regime),
@@ -528,6 +588,7 @@ def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float
         "risk_theme_penalty": _risk_theme_penalty(row),
         "risk_board_penalty": _risk_board_penalty(row),
         "risk_seal_penalty": _risk_seal_penalty(row),
+        "risk_st_penalty": _risk_st_penalty(row),
     }
     total = float(sum(parts.values()))
     parts["risk_total_penalty"] = _clip(total, 0.0, RISK_PENALTY_CAP)
@@ -559,6 +620,7 @@ def risk_breakdown_df(regime: str, df: pd.DataFrame) -> pd.DataFrame:
                 "risk_theme_penalty",
                 "risk_board_penalty",
                 "risk_seal_penalty",
+                "risk_st_penalty",
                 "risk_total_penalty",
             ]
         )
