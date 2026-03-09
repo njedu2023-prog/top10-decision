@@ -19,6 +19,7 @@ top10-decision — V2 runner (Orchestrator Only)
 - 将输入层状态与 engine 审计状态写入 report / eval，便于验收
 - 新增手动 trade_date 契约：支持 --trade-date / TRADE_DATE，并对输入表做显式过滤
 - 接入 Cost / RiskPenalty 分项归因输出，落入 decision_candidates 便于业务审查
+- 在 Decision 报告中追加 Full Candidate Pool（全候选池精简展示表）
 """
 
 from __future__ import annotations
@@ -417,6 +418,74 @@ def _attach_cost_risk_columns(
     return out
 
 
+def _build_report_candidate_view(
+    routed_df: pd.DataFrame,
+    weights_out: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    生成报告展示用的全候选池精简表，字段口径与 TopN Targets 保持一致：
+    rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty
+
+    说明：
+    - rank 使用 routed_df 当前排序顺序（1-based）
+    - weight 从 weights_out 映射；未入选/非候补默认为 0
+    - 若某票同时出现在 target / backup 中，取最大的 weight（当前逻辑通常不会冲突）
+    """
+    base = routed_df.copy().reset_index(drop=True)
+    base["rank"] = base.index + 1
+
+    weight_view = (
+        weights_out[["ts_code", "weight"]]
+        .copy()
+        .groupby("ts_code", as_index=False)["weight"]
+        .max()
+    )
+
+    view = base.merge(weight_view, on="ts_code", how="left")
+    view["weight"] = pd.to_numeric(view["weight"], errors="coerce").fillna(0.0).astype(float)
+
+    # 统一字段命名与顺序
+    out = pd.DataFrame({
+        "rank": pd.to_numeric(view["rank"], errors="coerce").fillna(0).astype(int),
+        "ts_code": view.get("ts_code", "").astype(str),
+        "name": view.get("name", "").astype(str),
+        "weight": pd.to_numeric(view.get("weight", 0.0), errors="coerce").fillna(0.0).astype(float),
+        "EV": pd.to_numeric(view.get("ev_pred", 0.0), errors="coerce").fillna(0.0).astype(float),
+        "P_fill": pd.to_numeric(view.get("p_fill_pred", 0.0), errors="coerce").fillna(0.0).astype(float),
+        "E_ret": pd.to_numeric(view.get("e_ret_pred", 0.0), errors="coerce").fillna(0.0).astype(float),
+        "Cost": pd.to_numeric(view.get("cost_est", 0.0), errors="coerce").fillna(0.0).astype(float),
+        "RiskPenalty": pd.to_numeric(view.get("risk_penalty", 0.0), errors="coerce").fillna(0.0).astype(float),
+    })
+    return out
+
+
+def _append_candidate_markdown_table(
+    lines: List[str],
+    title: str,
+    df: pd.DataFrame,
+) -> None:
+    """
+    向报告 lines 追加统一格式的候选表 markdown。
+    """
+    lines.append(f"## {title}\n\n")
+    lines.append("| rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty |\n")
+    lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|\n")
+
+    for _, r in df.iterrows():
+        lines.append(
+            f"| {int(pd.to_numeric(r.get('rank', 0), errors='coerce'))} | "
+            f"{r.get('ts_code', '')} | "
+            f"{r.get('name', '')} | "
+            f"{fmt_num(r.get('weight', 0.0), 6)} | "
+            f"{fmt_num(r.get('EV', 0.0), 6)} | "
+            f"{fmt_num(r.get('P_fill', 0.0), 6)} | "
+            f"{fmt_num(r.get('E_ret', 0.0), 6)} | "
+            f"{fmt_num(r.get('Cost', 0.0), 6)} | "
+            f"{fmt_num(r.get('RiskPenalty', 0.0), 6)} |\n"
+        )
+    lines.append("\n")
+
+
 def main() -> int:
     args = _parse_args()
     requested_trade_date = _resolve_requested_trade_date(args)
@@ -577,12 +646,15 @@ def main() -> int:
     exec_path = ensure_execution_table(exec_date=exec_date)
     learning_path = ensure_learning_table()
 
-    # decision report（内容/表结构保持原脚本逻辑，仅增加输入审计）
+    # decision report（内容/表结构保持原脚本逻辑，仅增加输入审计与全候选池表）
     top_targets = (
         weights_out[weights_out["weight"].astype(float) > 0]
         .copy()
         .sort_values("target_rank")
     )
+
+    report_pool_df = _build_report_candidate_view(routed_df, weights_out)
+    topn_report_df = report_pool_df.loc[report_pool_df["weight"] > 0].copy()
 
     lines: List[str] = []
     lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
@@ -622,21 +694,8 @@ def main() -> int:
     lines.append(f"- weights_latest: `{weights_latest_path}`\n")
     lines.append(f"- weights_dated: `{weights_dated_path}`\n\n")
 
-    lines.append("## TopN Targets\n\n")
-    lines.append("| rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty |\n")
-    lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|\n")
-    merged_targets = top_targets.merge(
-        routed_df[["ts_code", "ev_pred", "p_fill_pred", "e_ret_pred", "cost_est", "risk_penalty"]],
-        on=["ts_code", "ev_pred"],
-        how="left",
-    )
-    for _, r in merged_targets.iterrows():
-        lines.append(
-            f"| {int(r.get('target_rank', 0))} | {r.get('ts_code', '')} | {r.get('name', '')} | "
-            f"{fmt_num(r.get('weight', 0.0), 6)} | {fmt_num(r.get('ev_pred', ''), 6)} | "
-            f"{fmt_num(r.get('p_fill_pred', ''), 6)} | {fmt_num(r.get('e_ret_pred', ''), 6)} | "
-            f"{fmt_num(r.get('cost_est', ''), 6)} | {fmt_num(r.get('risk_penalty', ''), 6)} |\n"
-        )
+    _append_candidate_markdown_table(lines, "TopN Targets", topn_report_df)
+    _append_candidate_markdown_table(lines, "Full Candidate Pool", report_pool_df)
 
     report_path = write_decision_report(exec_date, "".join(lines))
 
