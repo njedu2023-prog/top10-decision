@@ -326,6 +326,36 @@ def _run_eret_engine(
     return out, audit
 
 
+def _coerce_float_series(
+    values: Any,
+    index: pd.Index,
+    default: float = 0.0,
+) -> pd.Series:
+    """
+    将标量 / Series / list 统一转成与 index 对齐的 float Series。
+    目的：
+    - 兼容旧版 costs.py 返回标量
+    - 支持新版 costs.py 返回逐股 Series
+    """
+    if isinstance(values, pd.Series):
+        out = pd.to_numeric(values, errors="coerce")
+        out = out.reindex(index)
+        return out.fillna(default).astype(float)
+
+    if isinstance(values, (list, tuple)):
+        out = pd.Series(list(values))
+        out = pd.to_numeric(out, errors="coerce")
+        out.index = index[: len(out)]
+        out = out.reindex(index)
+        return out.fillna(default).astype(float)
+
+    try:
+        scalar = float(values)
+    except Exception:
+        scalar = float(default)
+    return pd.Series(scalar, index=index, dtype=float)
+
+
 def main() -> int:
     args = _parse_args()
     requested_trade_date = _resolve_requested_trade_date(args)
@@ -383,8 +413,16 @@ def main() -> int:
         cand_snapshot["exit_date"] = norm_ymd(exit_date)
         cand_snapshot["p_fill_pred"] = 0.0
         cand_snapshot["e_ret_pred"] = 0.0
-        cand_snapshot["cost_est"] = cost_estimate_rule()
-        cand_snapshot["risk_penalty"] = risk_penalty_rule(regime_name)
+        cand_snapshot["cost_est"] = _coerce_float_series(
+            cost_estimate_rule(cand_snapshot),
+            cand_snapshot.index,
+            default=0.0,
+        )
+        cand_snapshot["risk_penalty"] = _coerce_float_series(
+            risk_penalty_rule(regime_name, cand_snapshot),
+            cand_snapshot.index,
+            default=0.0,
+        )
         cand_snapshot["ev_pred"] = 0.0
         cand_snapshot["input_mode"] = input_mode
         cand_snapshot["fs_degrade_reason"] = fs_degrade_reason
@@ -445,16 +483,24 @@ def main() -> int:
     routed_df, pfill_audit = _run_pfill_engine(routed_df)
     routed_df, eret_audit = _run_eret_engine(routed_df)
 
-    cost_est = cost_estimate_rule()
-    risk_pen = risk_penalty_rule(regime_name)
+    cost_est_series = _coerce_float_series(
+        cost_estimate_rule(routed_df),
+        routed_df.index,
+        default=0.0,
+    )
+    risk_pen_series = _coerce_float_series(
+        risk_penalty_rule(regime_name, routed_df),
+        routed_df.index,
+        default=0.0,
+    )
 
-    routed_df["cost_est"] = cost_est
-    routed_df["risk_penalty"] = risk_pen
+    routed_df["cost_est"] = cost_est_series
+    routed_df["risk_penalty"] = risk_pen_series
     routed_df["ev_pred"] = (
         pd.to_numeric(routed_df["p_fill_pred"], errors="coerce").fillna(0.0).astype(float)
         * pd.to_numeric(routed_df["e_ret_pred"], errors="coerce").fillna(0.0).astype(float)
-        - cost_est
-        - risk_pen
+        - routed_df["cost_est"]
+        - routed_df["risk_penalty"]
     )
     routed_df["input_mode"] = input_mode
     routed_df["fs_degrade_reason"] = fs_degrade_reason
@@ -535,10 +581,10 @@ def main() -> int:
     lines.append(f"- weights_dated: `{weights_dated_path}`\n\n")
 
     lines.append("## TopN Targets\n\n")
-    lines.append("| rank | ts_code | name | weight | EV | P_fill | E_ret |\n")
-    lines.append("|---:|---|---|---:|---:|---:|---:|\n")
+    lines.append("| rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty |\n")
+    lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|\n")
     merged_targets = top_targets.merge(
-        routed_df[["ts_code", "ev_pred", "p_fill_pred", "e_ret_pred"]],
+        routed_df[["ts_code", "ev_pred", "p_fill_pred", "e_ret_pred", "cost_est", "risk_penalty"]],
         on=["ts_code", "ev_pred"],
         how="left",
     )
@@ -546,7 +592,8 @@ def main() -> int:
         lines.append(
             f"| {int(r.get('target_rank', 0))} | {r.get('ts_code', '')} | {r.get('name', '')} | "
             f"{fmt_num(r.get('weight', 0.0), 6)} | {fmt_num(r.get('ev_pred', ''), 6)} | "
-            f"{fmt_num(r.get('p_fill_pred', ''), 6)} | {fmt_num(r.get('e_ret_pred', ''), 6)} |\n"
+            f"{fmt_num(r.get('p_fill_pred', ''), 6)} | {fmt_num(r.get('e_ret_pred', ''), 6)} | "
+            f"{fmt_num(r.get('cost_est', ''), 6)} | {fmt_num(r.get('risk_penalty', ''), 6)} |\n"
         )
 
     report_path = write_decision_report(exec_date, "".join(lines))
@@ -559,8 +606,12 @@ def main() -> int:
         "risk_budget": risk_budget,
         "topk": int(len(routed_df)),
         "picked": int(len(top_targets)),
-        "cost_est": cost_est,
-        "risk_penalty": risk_pen,
+        "cost_est_mean": float(pd.to_numeric(routed_df["cost_est"], errors="coerce").fillna(0.0).mean()),
+        "cost_est_min": float(pd.to_numeric(routed_df["cost_est"], errors="coerce").fillna(0.0).min()),
+        "cost_est_max": float(pd.to_numeric(routed_df["cost_est"], errors="coerce").fillna(0.0).max()),
+        "risk_penalty_mean": float(pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).mean()),
+        "risk_penalty_min": float(pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).min()),
+        "risk_penalty_max": float(pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).max()),
         "input_mode": input_mode,
         "fs_degrade_reason": fs_degrade_reason,
         "input_status": input_status,
