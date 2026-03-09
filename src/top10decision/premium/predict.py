@@ -59,6 +59,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -545,16 +546,110 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     return out
 
 
-# ========= EHX（冷启动版）=========
+# ========= EHX（优先加载训练模型，失败再回退冷启动）=========
 
-def _build_ehx_v1(df: pd.DataFrame) -> pd.DataFrame:
+def _ehx_model_path(cfg: PremiumConfig) -> Path:
+    return cfg.out_root() / "models" / "ehx_delta.joblib"
+
+
+def _load_ehx_bundle(cfg: PremiumConfig) -> Optional[dict]:
+    path = _ehx_model_path(cfg)
+    if not path.exists():
+        return None
+    try:
+        obj = joblib.load(path)
+        if not isinstance(obj, dict):
+            return None
+        model = obj.get("model")
+        feature_cols = obj.get("feature_cols")
+        if model is None or not isinstance(feature_cols, (list, tuple)) or not feature_cols:
+            return None
+        return {"model": model, "feature_cols": list(feature_cols), "path": str(path)}
+    except Exception:
+        return None
+
+
+def _build_ehx_feature_frame(df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
+    out = pd.DataFrame(index=df.index)
+    out["eret_pred_raw"] = pd.to_numeric(df.get("e_premium", pd.Series([np.nan] * len(df))), errors="coerce").fillna(0.0)
+    out["p_fill_pred"] = _num_series(df, "p_fill_pred", "p_fill_pred_final", "p_fill", "dec_p_fill", default=np.nan).fillna(0.5)
+    out["cost_total"] = _num_series(df, "cost_total", "cost", "cost_value", "cost_all", "trade_cost", default=np.nan).fillna(0.0)
+    out["risk_penalty_total"] = _num_series(df, "risk_penalty_total", "risk_penalty", "riskpenalty", "risk_penalty_score", "risk_score", default=np.nan).fillna(0.0)
+    out["ev"] = _num_series(df, "score_ev", "ev", "pred_ev", default=np.nan).fillna(0.0)
+    out["turnover_rate"] = _num_series(df, "turnover_rate", default=np.nan).fillna(0.0)
+    out["amount"] = _num_series(df, "amount", default=np.nan).fillna(0.0)
+    out["vol"] = _num_series(df, "vol", "volume", default=np.nan).fillna(0.0)
+    out["close"] = _num_series(df, "close", "close_T", default=np.nan).fillna(0.0)
+    out["pct_chg"] = _num_series(df, "pct_chg", "pct_change", default=np.nan).fillna(0.0)
+    out["amplitude"] = _num_series(df, "amplitude", "range_1d", default=np.nan).fillna(0.0)
+
+    for c in feature_cols:
+        if c in out.columns:
+            continue
+        if c in df.columns:
+            out[c] = pd.to_numeric(df[c], errors="coerce")
+        else:
+            out[c] = 0.0
+
+    out = out.reindex(columns=list(feature_cols), fill_value=0.0)
+    for c in out.columns:
+        out[c] = pd.to_numeric(out[c], errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    return out
+
+
+def _infer_conf_from_inputs(out: pd.DataFrame, eret_raw: pd.Series) -> tuple[pd.Series, pd.Series]:
+    p_fill = _num_series(out, "p_fill_pred", "p_fill_pred_final", "p_fill", "dec_p_fill", default=np.nan).fillna(0.5).clip(0.0, 1.0)
+    ev = _num_series(out, "score_ev", "ev", "pred_ev", default=np.nan).fillna(0.0)
+    cost = _num_series(out, "cost_total", "cost", "cost_value", "cost_all", "trade_cost", default=np.nan).fillna(0.0)
+    risk_pen = _num_series(out, "risk_penalty_total", "risk_penalty", "riskpenalty", "risk_penalty_score", "risk_score", default=np.nan).fillna(0.0)
+    ret_5d = _num_series(out, "ret_5d", default=np.nan).fillna(0.0)
+    vol_10d = _num_series(out, "vol_10d", default=np.nan).fillna(0.0)
+    range_1d = _num_series(out, "range_1d", default=np.nan).fillna(0.0)
+    amount_z_5d = _num_series(out, "amount_z_5d", default=np.nan).fillna(1.0)
+    close_pos_n = _num_series(out, "close_pos_n", "close_pos_10d", "close_pos_20d", default=np.nan).fillna(0.5)
+
+    amount_dev = (amount_z_5d - 1.0).abs().clip(0.0, 3.0)
+    crowded_penalty = (close_pos_n - 0.70).clip(lower=0.0)
+
+    input_cols = pd.DataFrame({
+        "eret_raw": eret_raw,
+        "p_fill": p_fill,
+        "ev": ev,
+        "cost": cost,
+        "risk_pen": risk_pen,
+        "ret_5d": ret_5d,
+        "vol_10d": vol_10d,
+        "range_1d": range_1d,
+    })
+    completeness = input_cols.notna().mean(axis=1).astype(float)
+    stability = (
+        1.0
+        - 0.45 * vol_10d.clip(lower=0.0, upper=0.25)
+        - 0.30 * range_1d.clip(lower=0.0, upper=0.20)
+        - 0.10 * amount_dev.clip(lower=0.0, upper=1.0)
+        - 0.10 * crowded_penalty.clip(lower=0.0, upper=1.0)
+    ).clip(lower=0.0, upper=1.0)
+    conf_score = (0.55 * completeness + 0.45 * stability).clip(lower=0.0, upper=1.0)
+
+    def to_conf_label(x: float) -> str:
+        if x >= 0.72:
+            return "high"
+        if x >= 0.50:
+            return "mid"
+        return "low"
+
+    conf_label = conf_score.apply(lambda x: to_conf_label(float(x)) if pd.notna(x) else "low")
+    return conf_label, conf_score.round(6)
+
+
+def _build_ehx_v1(cfg: PremiumConfig, df: pd.DataFrame) -> pd.DataFrame:
     """
-    EHX-V1（冷启动骨架版）
+    EHX-V1（优先加载训练模型，失败再回退冷启动）
     ------------------------------------------------
-    当前不是已训练的二级残差模型终版，而是：
-    - 先把 E_ret -> E_ret_plus 主链接通
-    - 保留规则冷启动修正，避免假装已有训练终版
-    - 后续 train.py / labels.py 再把这里替换成真 residual learner
+    优先逻辑：
+    - 若 outputs/premium/models/ehx_delta.joblib 存在且可读，则优先加载真 EHX 残差模型
+    - 若模型不存在 / 读取失败 / 预测失败，则自动回退到冷启动增强器
+    - 这样不会阻塞主线，同时保持训练链与推理链可衔接
 
     输出：
     - eret_pred_raw
@@ -568,6 +663,35 @@ def _build_ehx_v1(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
 
     eret_raw = pd.to_numeric(out.get("e_premium", pd.Series([np.nan] * len(out))), errors="coerce").fillna(0.0)
+
+    # 1) 优先尝试真实 EHX 残差模型
+    bundle = _load_ehx_bundle(cfg)
+    if bundle is not None:
+        try:
+            X_ehx = _build_ehx_feature_frame(out, bundle["feature_cols"])
+            delta_hat = pd.Series(bundle["model"].predict(X_ehx), index=out.index, dtype="float64")
+            delta_hat = pd.to_numeric(delta_hat, errors="coerce").fillna(0.0).clip(lower=-0.12, upper=0.12)
+            eret_plus = (eret_raw + delta_hat).clip(lower=-0.95, upper=2.0)
+            conf_label, conf_score = _infer_conf_from_inputs(out, eret_raw)
+            eps = 0.002
+            direction = pd.Series(
+                np.where(delta_hat > eps, "up", np.where(delta_hat < -eps, "down", "flat")),
+                index=out.index,
+                dtype="object",
+            )
+
+            out["eret_pred_raw"] = eret_raw
+            out["eret_plus_value"] = eret_plus
+            out["eret_plus_delta"] = delta_hat
+            out["eret_plus_direction"] = direction
+            out["eret_plus_conf"] = conf_label
+            out["eret_plus_conf_score"] = conf_score
+            out["eret_plus_src"] = "ehx:model_v1"
+            return out
+        except Exception:
+            pass
+
+    # 2) 回退：冷启动增强器
     p_prob = pd.to_numeric(out.get("p_premium", pd.Series([0.5] * len(out))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
 
     p_fill = _num_series(
@@ -849,7 +973,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         df = df.merge(feats, on="ts_code", how="left")
 
     # === 新主线：EHX 冷启动骨架 ===
-    df = _build_ehx_v1(df)
+    df = _build_ehx_v1(cfg, df)
 
     # V3 分布预测字段（中心优先围绕 eret_plus_value）
     df = _compute_quantile_returns(cfg, df)
@@ -1077,7 +1201,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "truth_T_reason": pending_truth_reason_T,
             "verify_pending": bool(verify_pending),
             "verify_reason": verify_reason,
-            "eret_plus_src": "ehx:coldstart_v1",
+            "eret_plus_src": str(df.get("eret_plus_src", pd.Series(["ehx:unknown"])) .iloc[0]) if "eret_plus_src" in df.columns and len(df) > 0 else "ehx:unknown",
             "out_top30": str(p_top),
             "out_full": str(p_full),
             "out_verify": str(p_verify),
