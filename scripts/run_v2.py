@@ -18,6 +18,7 @@ top10-decision — V2 runner (Orchestrator Only)
 - P_fill / E_ret 不再直接写死规则函数，升级为优先 engine 推理、失败自动回退规则
 - 将输入层状态与 engine 审计状态写入 report / eval，便于验收
 - 新增手动 trade_date 契约：支持 --trade-date / TRADE_DATE，并对输入表做显式过滤
+- 接入 Cost / RiskPenalty 分项归因输出，落入 decision_candidates 便于业务审查
 """
 
 from __future__ import annotations
@@ -42,7 +43,12 @@ from top10decision.strategies.score_router import score_router
 
 from top10decision.models.fill_model import fill_model_rule
 from top10decision.models.overnight_model import overnight_model_rule
-from top10decision.models.costs import cost_estimate_rule, risk_penalty_rule
+from top10decision.models.costs import (
+    cost_estimate_rule,
+    risk_penalty_rule,
+    cost_breakdown_df,
+    risk_breakdown_df,
+)
 
 from top10decision.weights.engine import WeightCaps, build_weights_with_backups
 
@@ -356,6 +362,61 @@ def _coerce_float_series(
     return pd.Series(scalar, index=index, dtype=float)
 
 
+def _attach_cost_risk_columns(
+    df: pd.DataFrame,
+    regime_name: str,
+) -> pd.DataFrame:
+    """
+    将 Cost / RiskPenalty 的分项归因与总值统一挂到候选表。
+    兼容：
+    - costs.py 提供 breakdown_df
+    - 若某些列缺失，退回总值规则函数补齐
+    """
+    out = df.copy()
+
+    # ---- Cost breakdown ----
+    try:
+        cost_parts = cost_breakdown_df(out)
+    except Exception:
+        cost_parts = pd.DataFrame(index=out.index)
+
+    if cost_parts is not None and not cost_parts.empty:
+        cost_parts = cost_parts.reindex(out.index)
+        for c in cost_parts.columns:
+            out[c] = pd.to_numeric(cost_parts[c], errors="coerce").fillna(0.0).astype(float)
+
+    if "cost_total_bp" in out.columns:
+        out["cost_est"] = pd.to_numeric(out["cost_total_bp"], errors="coerce").fillna(0.0).astype(float)
+    else:
+        out["cost_est"] = _coerce_float_series(
+            cost_estimate_rule(out),
+            out.index,
+            default=0.0,
+        )
+
+    # ---- Risk breakdown ----
+    try:
+        risk_parts = risk_breakdown_df(regime_name, out)
+    except Exception:
+        risk_parts = pd.DataFrame(index=out.index)
+
+    if risk_parts is not None and not risk_parts.empty:
+        risk_parts = risk_parts.reindex(out.index)
+        for c in risk_parts.columns:
+            out[c] = pd.to_numeric(risk_parts[c], errors="coerce").fillna(0.0).astype(float)
+
+    if "risk_total_penalty" in out.columns:
+        out["risk_penalty"] = pd.to_numeric(out["risk_total_penalty"], errors="coerce").fillna(0.0).astype(float)
+    else:
+        out["risk_penalty"] = _coerce_float_series(
+            risk_penalty_rule(regime_name, out),
+            out.index,
+            default=0.0,
+        )
+
+    return out
+
+
 def main() -> int:
     args = _parse_args()
     requested_trade_date = _resolve_requested_trade_date(args)
@@ -413,22 +474,14 @@ def main() -> int:
         cand_snapshot["exit_date"] = norm_ymd(exit_date)
         cand_snapshot["p_fill_pred"] = 0.0
         cand_snapshot["e_ret_pred"] = 0.0
-        cand_snapshot["cost_est"] = _coerce_float_series(
-            cost_estimate_rule(cand_snapshot),
-            cand_snapshot.index,
-            default=0.0,
-        )
-        cand_snapshot["risk_penalty"] = _coerce_float_series(
-            risk_penalty_rule(regime_name, cand_snapshot),
-            cand_snapshot.index,
-            default=0.0,
-        )
-        cand_snapshot["ev_pred"] = 0.0
         cand_snapshot["input_mode"] = input_mode
         cand_snapshot["fs_degrade_reason"] = fs_degrade_reason
         cand_snapshot["requested_trade_date"] = requested_trade_date
         cand_snapshot["p_fill_pred_src"] = "stop_zero"
         cand_snapshot["eret_pred_src"] = "stop_zero"
+        cand_snapshot = _attach_cost_risk_columns(cand_snapshot, regime_name=regime_name)
+        cand_snapshot["ev_pred"] = 0.0
+
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
 
         weights_df = pd.DataFrame(
@@ -483,24 +536,13 @@ def main() -> int:
     routed_df, pfill_audit = _run_pfill_engine(routed_df)
     routed_df, eret_audit = _run_eret_engine(routed_df)
 
-    cost_est_series = _coerce_float_series(
-        cost_estimate_rule(routed_df),
-        routed_df.index,
-        default=0.0,
-    )
-    risk_pen_series = _coerce_float_series(
-        risk_penalty_rule(regime_name, routed_df),
-        routed_df.index,
-        default=0.0,
-    )
+    routed_df = _attach_cost_risk_columns(routed_df, regime_name=regime_name)
 
-    routed_df["cost_est"] = cost_est_series
-    routed_df["risk_penalty"] = risk_pen_series
     routed_df["ev_pred"] = (
         pd.to_numeric(routed_df["p_fill_pred"], errors="coerce").fillna(0.0).astype(float)
         * pd.to_numeric(routed_df["e_ret_pred"], errors="coerce").fillna(0.0).astype(float)
-        - routed_df["cost_est"]
-        - routed_df["risk_penalty"]
+        - pd.to_numeric(routed_df["cost_est"], errors="coerce").fillna(0.0).astype(float)
+        - pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).astype(float)
     )
     routed_df["input_mode"] = input_mode
     routed_df["fs_degrade_reason"] = fs_degrade_reason
