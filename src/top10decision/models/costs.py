@@ -75,6 +75,10 @@ W_WEAK_SEAL_VERY_LOW = 0.004
 # 新增：ST / 类 ST 风险惩罚
 W_ST_LIKE = 0.020
 
+# 第二轮精修新增
+W_LIQUIDITY_AMOUNT = 0.006
+W_TAIL_RISK = 0.006
+
 # 精修参数：同类风险压缩上限
 EXECUTION_FRAGILITY_CAP = 0.018
 CROWDING_CAP = 0.010
@@ -264,6 +268,27 @@ def _close_price(row: pd.Series) -> float:
             "last_price",
             default=np.nan,
         ),
+        default=np.nan,
+    )
+
+
+def _tail_risk_score(row: pd.Series) -> float:
+    return _safe_float(
+        _pick_first(row, "tail_risk_score", default=np.nan),
+        default=np.nan,
+    )
+
+
+def _downside_vol(row: pd.Series) -> float:
+    return _safe_float(
+        _pick_first(row, "downside_vol", default=np.nan),
+        default=np.nan,
+    )
+
+
+def _max_drawdown_20d(row: pd.Series) -> float:
+    return _safe_float(
+        _pick_first(row, "max_drawdown_20d", default=np.nan),
         default=np.nan,
     )
 
@@ -510,7 +535,7 @@ def cost_estimate_rule(
 
 
 # ============================================================
-# RiskPenalty 模块（精修版）
+# RiskPenalty 模块（精修版第二轮）
 # ============================================================
 
 def _risk_regime_penalty(row: pd.Series, regime: str) -> float:
@@ -523,10 +548,8 @@ def _risk_regime_penalty(row: pd.Series, regime: str) -> float:
 def _risk_open_penalty(row: pd.Series) -> float:
     """
     开板/炸板基础惩罚：
-    - 旧版是固定 0.012
-    - 新版按状态平滑：
-      WEAK < OPEN/BROKEN
-      仅 open_times>0 但无状态时，给较轻惩罚
+    - WEAK < OPEN/BROKEN
+    - 仅 open_times>0 但无状态时，给较轻惩罚
     """
     status = _limit_status(row)
     ot = _open_times(row)
@@ -543,8 +566,7 @@ def _risk_open_penalty(row: pd.Series) -> float:
 def _risk_open_times_penalty(row: pd.Series) -> float:
     """
     炸板次数惩罚：
-    - 旧版从 open_times>=2 开始硬跳
-    - 新版改成更平滑：1次开始有感知，3次后接近上限
+    1次开始轻罚，2次明显，之后逐步接近上限
     """
     ot = _open_times(row)
     if np.isnan(ot) or ot <= 0:
@@ -575,7 +597,7 @@ def _risk_volatility_penalty(row: pd.Series) -> float:
 
 def _risk_liquidity_penalty(row: pd.Series) -> float:
     """
-    低流动性惩罚连续化：
+    低流动性惩罚（换手率维度）：
     - turnover 越低，风险越高
     """
     turnover = _turnover_rate(row)
@@ -585,6 +607,21 @@ def _risk_liquidity_penalty(row: pd.Series) -> float:
         return W_LOW_LIQUIDITY
     if turnover <= 6:
         return _smooth_step(turnover, 2, 6, W_LOW_LIQUIDITY, 0.0015)
+    return 0.0
+
+
+def _risk_liquidity_amount_penalty(row: pd.Series) -> float:
+    """
+    低流动性惩罚（成交额维度）：
+    - 小成交额股票更容易出现成交脆弱性
+    """
+    amount = _trade_amount(row)
+    if np.isnan(amount):
+        return 0.0
+    if amount <= 80_000_000:
+        return W_LIQUIDITY_AMOUNT
+    if amount <= 300_000_000:
+        return _smooth_step(amount, 80_000_000, 300_000_000, W_LIQUIDITY_AMOUNT, 0.001)
     return 0.0
 
 
@@ -623,14 +660,16 @@ def _risk_theme_penalty(row: pd.Series) -> float:
 
 def _risk_board_penalty(row: pd.Series) -> float:
     bucket = _board_bucket(row)
-    if bucket in ("STAR", "GROWTH"):
+    if bucket == "STAR":
         return W_GEM_STAR
+    if bucket == "GROWTH":
+        return 0.003
     return 0.0
 
 
 def _risk_seal_penalty(row: pd.Series) -> float:
     """
-    封单弱惩罚平滑化：
+    封单弱惩罚平滑化
     """
     seal = _seal_strength(row)
     if np.isnan(seal):
@@ -638,19 +677,63 @@ def _risk_seal_penalty(row: pd.Series) -> float:
     if seal <= 2_000_000:
         return W_WEAK_SEAL_VERY_LOW
     if seal <= 5_000_000:
-        return _smooth_step(seal, 2_000_000, 5_000_000, W_WEAK_SEAL_VERY_LOW, W_WEAK_SEAL_LOW)
+        return _smooth_step(
+            seal,
+            2_000_000,
+            5_000_000,
+            W_WEAK_SEAL_VERY_LOW,
+            W_WEAK_SEAL_LOW,
+        )
     if seal <= 10_000_000:
-        return _smooth_step(seal, 5_000_000, 10_000_000, W_WEAK_SEAL_LOW, 0.0)
+        return _smooth_step(
+            seal,
+            5_000_000,
+            10_000_000,
+            W_WEAK_SEAL_LOW,
+            0.0,
+        )
     return 0.0
 
 
 def _risk_st_penalty(row: pd.Series) -> float:
     """
     ST / 类 ST 风险惩罚。
-    当前为直接惩罚项，后续可再按 *ST / ST / 摘帽历史分层细化。
     """
     if _is_st_like_flag(row):
         return W_ST_LIKE
+    return 0.0
+
+
+def _risk_tail_penalty(row: pd.Series) -> float:
+    """
+    第二轮新增：尾部风险惩罚
+    优先使用 tail_risk_score；
+    若缺失，则退回 downside_vol / max_drawdown_20d 的轻量近似。
+    """
+    trs = _tail_risk_score(row)
+    if not np.isnan(trs):
+        if trs <= 1.0:
+            return 0.0
+        if trs <= 3.0:
+            return _smooth_step(trs, 1.0, 3.0, 0.0015, W_TAIL_RISK)
+        return W_TAIL_RISK
+
+    dv = _downside_vol(row)
+    if not np.isnan(dv):
+        if dv <= 3.0:
+            return 0.0
+        if dv <= 8.0:
+            return _smooth_step(dv, 3.0, 8.0, 0.001, 0.0045)
+        return 0.0045
+
+    mdd = _max_drawdown_20d(row)
+    if not np.isnan(mdd):
+        if mdd <= 8.0:
+            return 0.0
+        if mdd <= 20.0:
+            return _smooth_step(mdd, 8.0, 20.0, 0.001, 0.004)
+        return 0.004
+
     return 0.0
 
 
@@ -661,53 +744,72 @@ def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float
     risk_open_times_penalty = _risk_open_times_penalty(row)
     risk_volatility_penalty = _risk_volatility_penalty(row)
     risk_liquidity_penalty = _risk_liquidity_penalty(row)
+    risk_liquidity_amount_penalty = _risk_liquidity_amount_penalty(row)
     risk_extreme_turnover_penalty = _risk_extreme_turnover_penalty(row)
     risk_theme_penalty = _risk_theme_penalty(row)
     risk_board_penalty = _risk_board_penalty(row)
     risk_seal_penalty = _risk_seal_penalty(row)
     risk_st_penalty = _risk_st_penalty(row)
+    risk_tail_penalty = _risk_tail_penalty(row)
 
     # -------------------------
-    # 同类风险压缩：执行脆弱性
-    # 开板/炸板、炸板次数、封单弱、低流动性
+    # 第二轮精修：执行脆弱性聚合
+    # 主风险：开板 / 炸板次数 取更强者
+    # 次风险：封单弱、低换手、低成交额只做补充
     # -------------------------
+    execution_fragility_primary = max(risk_open_penalty, risk_open_times_penalty)
+    execution_fragility_support = (
+        0.60 * risk_seal_penalty
+        + 0.55 * risk_liquidity_penalty
+        + 0.45 * risk_liquidity_amount_penalty
+    )
+    execution_fragility_overlap = 0.30 * min(risk_open_penalty, risk_open_times_penalty)
+
     execution_fragility_raw = (
-        risk_open_penalty
-        + risk_open_times_penalty
-        + risk_seal_penalty
-        + risk_liquidity_penalty
+        execution_fragility_primary
+        + execution_fragility_support
+        + execution_fragility_overlap
     )
     execution_fragility_penalty = _clip(
-        execution_fragility_raw * 0.75,
+        execution_fragility_raw,
         0.0,
         EXECUTION_FRAGILITY_CAP,
     )
 
     # -------------------------
-    # 同类风险压缩：拥挤/博弈
-    # 极高换手 + 题材热度
+    # 第二轮精修：拥挤/博弈聚合
+    # 主项取更强者，副项只补一点
     # -------------------------
-    crowding_raw = risk_extreme_turnover_penalty + risk_theme_penalty
+    crowding_primary = max(risk_extreme_turnover_penalty, risk_theme_penalty)
+    crowding_secondary = 0.35 * min(risk_extreme_turnover_penalty, risk_theme_penalty)
+
+    crowding_raw = crowding_primary + crowding_secondary
     crowding_penalty = _clip(
-        crowding_raw * 0.85,
+        crowding_raw,
         0.0,
         CROWDING_CAP,
     )
 
     # -------------------------
-    # ST 与其它风险共存时，避免直接堆满
+    # ST 与其它风险共存时，避免简单堆满
     # -------------------------
     st_penalty_effective = risk_st_penalty
     if risk_st_penalty > 0:
         st_penalty_effective = min(
             risk_st_penalty,
-            max(0.012, ST_WITH_OTHERS_CAP - execution_fragility_penalty - crowding_penalty),
+            max(
+                0.012,
+                ST_WITH_OTHERS_CAP
+                - execution_fragility_penalty
+                - crowding_penalty,
+            ),
         )
 
     total = (
         risk_regime_penalty
         + execution_fragility_penalty
         + risk_volatility_penalty
+        + risk_tail_penalty
         + crowding_penalty
         + risk_board_penalty
         + st_penalty_effective
@@ -721,17 +823,26 @@ def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float
         "risk_open_times_penalty": risk_open_times_penalty,
         "risk_volatility_penalty": risk_volatility_penalty,
         "risk_liquidity_penalty": risk_liquidity_penalty,
+        "risk_liquidity_amount_penalty": risk_liquidity_amount_penalty,
         "risk_extreme_turnover_penalty": risk_extreme_turnover_penalty,
         "risk_theme_penalty": risk_theme_penalty,
         "risk_board_penalty": risk_board_penalty,
         "risk_seal_penalty": risk_seal_penalty,
         "risk_st_penalty": risk_st_penalty,
+        "risk_tail_penalty": risk_tail_penalty,
 
-        # 聚合分项（新增）
+        # 聚合分项
+        "execution_fragility_primary": execution_fragility_primary,
+        "execution_fragility_support": execution_fragility_support,
+        "execution_fragility_overlap": execution_fragility_overlap,
         "execution_fragility_raw": execution_fragility_raw,
         "execution_fragility_penalty": execution_fragility_penalty,
+
+        "crowding_primary": crowding_primary,
+        "crowding_secondary": crowding_secondary,
         "crowding_raw": crowding_raw,
         "crowding_penalty": crowding_penalty,
+
         "st_penalty_effective": st_penalty_effective,
 
         # 总值
@@ -760,13 +871,20 @@ def risk_breakdown_df(regime: str, df: pd.DataFrame) -> pd.DataFrame:
                 "risk_open_times_penalty",
                 "risk_volatility_penalty",
                 "risk_liquidity_penalty",
+                "risk_liquidity_amount_penalty",
                 "risk_extreme_turnover_penalty",
                 "risk_theme_penalty",
                 "risk_board_penalty",
                 "risk_seal_penalty",
                 "risk_st_penalty",
+                "risk_tail_penalty",
+                "execution_fragility_primary",
+                "execution_fragility_support",
+                "execution_fragility_overlap",
                 "execution_fragility_raw",
                 "execution_fragility_penalty",
+                "crowding_primary",
+                "crowding_secondary",
                 "crowding_raw",
                 "crowding_penalty",
                 "st_penalty_effective",
