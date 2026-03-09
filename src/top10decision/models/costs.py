@@ -18,7 +18,7 @@ import pandas as pd
 #
 # 说明：
 # - 当前阶段仍属于“规则增强版”，不是学习模型版
-# - 下一步需要 run_v2.py 真正逐股接线，EV 才会做实
+# - 本文件已支持“分项归因”，下一步只需 run_v2.py 接线即可落到候选表
 # ============================================================
 
 # -----------------------------
@@ -39,6 +39,20 @@ IMPACT_TURNOVER_REF = 8.0
 IMPACT_MIN_BP = 0.0
 IMPACT_MAX_BP = 18.0
 
+# 额外成本参数（bp）
+OPEN_COST_WEAK_BP = 2.0
+OPEN_COST_BROKEN_BP = 4.0
+OPEN_COST_MULTI_OPEN_MAX_BP = 6.0
+
+SEAL_WEAK_BP_LOW = 1.5
+SEAL_WEAK_BP_VERY_LOW = 3.0
+
+AMOUNT_SMALL_BP = 2.0
+AMOUNT_VERY_SMALL_BP = 4.0
+
+LOW_PRICE_BP = 1.0
+PENNY_PRICE_BP = 2.0
+
 # 风险惩罚默认值（兼容旧逻辑）
 RISK_PENALTY_OFF = 0.00
 RISK_PENALTY_ON = 0.02
@@ -55,7 +69,8 @@ W_LOW_LIQUIDITY = 0.010
 W_HOT_THEME = 0.006
 W_GEM_STAR = 0.004
 W_EXTREME_TURNOVER = 0.005
-
+W_WEAK_SEAL_LOW = 0.002
+W_WEAK_SEAL_VERY_LOW = 0.004
 
 # ============================================================
 # 基础工具
@@ -154,24 +169,6 @@ def _open_times(row: pd.Series) -> float:
     )
 
 
-def _is_limit_open_risk(row: pd.Series) -> bool:
-    """
-    开板/炸板风险代理：
-    - open_times > 0
-    - 或 seal 弱、limit 状态不强
-    """
-    ot = _open_times(row)
-    if ot > 0:
-        return True
-
-    status = _safe_str(
-        _pick_first(row, "limit_status", "涨停状态", "封板状态", default="")
-    ).upper()
-    if status in {"OPEN", "BROKEN", "WEAK"}:
-        return True
-    return False
-
-
 def _theme_heat_score(row: pd.Series) -> float:
     return _safe_float(
         _pick_first(
@@ -189,13 +186,63 @@ def _seal_strength(row: pd.Series) -> float:
     """
     封单强度代理，值越大越稳。
     """
-    seal_amount = _safe_float(
+    return _safe_float(
         _pick_first(row, "seal_amount", "封单额", default=np.nan),
         default=np.nan,
     )
-    if np.isnan(seal_amount):
-        return np.nan
-    return seal_amount
+
+
+def _trade_amount(row: pd.Series) -> float:
+    """
+    成交额代理，尽量兼容不同字段名。
+    常见单位可能是元；如果未来源表单位变化，再统一修。
+    """
+    return _safe_float(
+        _pick_first(
+            row,
+            "amount",
+            "成交额",
+            "turnover_amount",
+            "deal_amount",
+            default=np.nan,
+        ),
+        default=np.nan,
+    )
+
+
+def _close_price(row: pd.Series) -> float:
+    return _safe_float(
+        _pick_first(
+            row,
+            "close",
+            "收盘价",
+            "last_price",
+            default=np.nan,
+        ),
+        default=np.nan,
+    )
+
+
+def _limit_status(row: pd.Series) -> str:
+    return _safe_str(
+        _pick_first(row, "limit_status", "涨停状态", "封板状态", default="")
+    ).upper()
+
+
+def _is_limit_open_risk(row: pd.Series) -> bool:
+    """
+    开板/炸板风险代理：
+    - open_times > 0
+    - 或 limit_status 表示 OPEN / BROKEN / WEAK
+    """
+    ot = _open_times(row)
+    if ot > 0:
+        return True
+
+    status = _limit_status(row)
+    if status in {"OPEN", "BROKEN", "WEAK"}:
+        return True
+    return False
 
 
 def _slippage_bp_by_board(row: pd.Series) -> float:
@@ -214,30 +261,115 @@ def _slippage_bp_by_board(row: pd.Series) -> float:
 def _impact_cost_bp(row: pd.Series) -> float:
     """
     冲击成本（bp）：
-    用换手率做一个非常轻量但有分化能力的近似。
-    逻辑：
-    - 换手率过低：流动性差，成交冲击更高
-    - 换手率极高：博弈拥挤，也会有冲击/抢筹风险
+    用换手率做一个轻量但有分化能力的近似。
     """
     turnover = _turnover_rate(row)
 
     if np.isnan(turnover):
         return 1.5
 
-    # 中性区：around 8%
-    # 偏离越大，冲击越高
     gap = abs(turnover - IMPACT_TURNOVER_REF)
 
-    # 低换手更危险一点
     if turnover < 4:
         bp = 6.0 + (4.0 - turnover) * 1.5
-    # 超高换手也加冲击
     elif turnover > 18:
         bp = 4.0 + (turnover - 18.0) * 0.5
     else:
         bp = gap * 0.35
 
     return _clip(bp, IMPACT_MIN_BP, IMPACT_MAX_BP)
+
+
+def _open_cost_bp(row: pd.Series) -> float:
+    """
+    开板/炸板导致的额外交易摩擦成本。
+    """
+    status = _limit_status(row)
+    ot = _open_times(row)
+
+    bp = 0.0
+    if status == "WEAK":
+        bp += OPEN_COST_WEAK_BP
+    elif status in {"OPEN", "BROKEN"}:
+        bp += OPEN_COST_BROKEN_BP
+
+    if not np.isnan(ot) and ot > 0:
+        bp += min(OPEN_COST_MULTI_OPEN_MAX_BP, ot * 1.2)
+
+    return float(bp)
+
+
+def _seal_cost_bp(row: pd.Series) -> float:
+    """
+    封单弱，意味着买入实现成本更高。
+    """
+    seal = _seal_strength(row)
+    if np.isnan(seal):
+        return 0.0
+    if seal <= 2_000_000:
+        return SEAL_WEAK_BP_VERY_LOW
+    if seal <= 5_000_000:
+        return SEAL_WEAK_BP_LOW
+    return 0.0
+
+
+def _amount_cost_bp(row: pd.Series) -> float:
+    """
+    小成交额流动性惩罚。
+    """
+    amount = _trade_amount(row)
+    if np.isnan(amount):
+        return 0.0
+    if amount <= 30_000_000:
+        return AMOUNT_VERY_SMALL_BP
+    if amount <= 80_000_000:
+        return AMOUNT_SMALL_BP
+    return 0.0
+
+
+def _price_cost_bp(row: pd.Series) -> float:
+    """
+    低价股微观结构摩擦成本。
+    """
+    px = _close_price(row)
+    if np.isnan(px):
+        return 0.0
+    if px < 3:
+        return PENNY_PRICE_BP
+    if px < 5:
+        return LOW_PRICE_BP
+    return 0.0
+
+
+def _cost_components_bp(row: pd.Series) -> dict[str, float]:
+    base_fee_bp = BASE_FEE_BP
+    slippage_bp = _slippage_bp_by_board(row)
+    impact_bp = _impact_cost_bp(row)
+    open_bp = _open_cost_bp(row)
+    seal_bp = _seal_cost_bp(row)
+    amount_bp = _amount_cost_bp(row)
+    price_bp = _price_cost_bp(row)
+
+    total_bp = (
+        base_fee_bp
+        + slippage_bp
+        + impact_bp
+        + open_bp
+        + seal_bp
+        + amount_bp
+        + price_bp
+    )
+
+    return {
+        "cost_base_bp": float(base_fee_bp),
+        "cost_slippage_bp": float(slippage_bp),
+        "cost_impact_bp": float(impact_bp),
+        "cost_open_bp": float(open_bp),
+        "cost_seal_bp": float(seal_bp),
+        "cost_amount_bp": float(amount_bp),
+        "cost_price_bp": float(price_bp),
+        "cost_total_bp": float(total_bp),
+    }
 
 
 def _cost_from_row(row: pd.Series) -> float:
@@ -247,12 +379,41 @@ def _cost_from_row(row: pd.Series) -> float:
         EV = P_fill * E_ret - Cost - RiskPenalty
     所以这里直接返回小数，例如 0.0008 = 8bp
     """
-    base_fee_bp = BASE_FEE_BP
-    slippage_bp = _slippage_bp_by_board(row)
-    impact_bp = _impact_cost_bp(row)
+    parts = _cost_components_bp(row)
+    return _normalize_bp(parts["cost_total_bp"])
 
-    total_bp = base_fee_bp + slippage_bp + impact_bp
-    return _normalize_bp(total_bp)
+
+def cost_breakdown_row(row: pd.Series) -> dict[str, float]:
+    """
+    返回单行成本分项（小数收益口径，便于直接落表）。
+    """
+    parts_bp = _cost_components_bp(row)
+    return {k: _normalize_bp(v) for k, v in parts_bp.items()}
+
+
+def cost_breakdown_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    返回 DataFrame 级别的成本分项表。
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(
+            columns=[
+                "cost_base_bp",
+                "cost_slippage_bp",
+                "cost_impact_bp",
+                "cost_open_bp",
+                "cost_seal_bp",
+                "cost_amount_bp",
+                "cost_price_bp",
+                "cost_total_bp",
+            ]
+        )
+
+    out = df.apply(lambda r: pd.Series(_cost_components_bp(r)), axis=1)
+    # 统一转成小数收益口径
+    for c in out.columns:
+        out[c] = pd.to_numeric(out[c], errors="coerce").fillna(0.0).astype(float) / 10000.0
+    return out
 
 
 def cost_estimate_rule(
@@ -282,62 +443,127 @@ def cost_estimate_rule(
 # RiskPenalty 模块
 # ============================================================
 
-def _risk_penalty_from_row(row: pd.Series, regime: str = "RISK_ON") -> float:
-    penalty = 0.0
-
-    # 1) 大盘/制度层风险
+def _risk_regime_penalty(row: pd.Series, regime: str) -> float:
     regime_u = _safe_str(regime, default="RISK_ON").upper()
     if regime_u in ("RISK_OFF", "OFF", "DEFENSE"):
-        penalty += W_REGIME_DEFENSE
+        return W_REGIME_DEFENSE
+    return 0.0
 
-    # 2) 开板/炸板风险
+
+def _risk_open_penalty(row: pd.Series) -> float:
     if _is_limit_open_risk(row):
-        penalty += W_LIMIT_OPEN
+        return W_LIMIT_OPEN
+    return 0.0
 
-    # 3) 炸板次数高
+
+def _risk_open_times_penalty(row: pd.Series) -> float:
     ot = _open_times(row)
     if not np.isnan(ot) and ot >= 2:
-        penalty += min(W_HIGH_OPEN_TIMES, 0.003 * ot)
+        return min(W_HIGH_OPEN_TIMES, 0.003 * ot)
+    return 0.0
 
-    # 4) 波动过大
+
+def _risk_volatility_penalty(row: pd.Series) -> float:
     amp = _amp_pct(row)
     if not np.isnan(amp) and amp >= 8:
-        penalty += min(W_VOLATILITY, 0.001 * (amp - 8) + 0.003)
+        return min(W_VOLATILITY, 0.001 * (amp - 8) + 0.003)
+    return 0.0
 
-    # 5) 流动性差 / 低换手风险
+
+def _risk_liquidity_penalty(row: pd.Series) -> float:
     turnover = _turnover_rate(row)
-    if not np.isnan(turnover):
-        if turnover < 3:
-            penalty += W_LOW_LIQUIDITY
-        elif turnover < 6:
-            penalty += 0.005
+    if np.isnan(turnover):
+        return 0.0
+    if turnover < 3:
+        return W_LOW_LIQUIDITY
+    if turnover < 6:
+        return 0.005
+    return 0.0
 
-        # 极高换手也加一点拥挤惩罚
-        if turnover > 25:
-            penalty += W_EXTREME_TURNOVER
 
-    # 6) 题材过热 / 拥挤风险
+def _risk_extreme_turnover_penalty(row: pd.Series) -> float:
+    turnover = _turnover_rate(row)
+    if not np.isnan(turnover) and turnover > 25:
+        return W_EXTREME_TURNOVER
+    return 0.0
+
+
+def _risk_theme_penalty(row: pd.Series) -> float:
     theme_heat = _theme_heat_score(row)
-    if not np.isnan(theme_heat):
-        if theme_heat >= 8:
-            penalty += W_HOT_THEME
-        elif theme_heat >= 6:
-            penalty += 0.003
+    if np.isnan(theme_heat):
+        return 0.0
+    if theme_heat >= 8:
+        return W_HOT_THEME
+    if theme_heat >= 6:
+        return 0.003
+    return 0.0
 
-    # 7) 科创/创业板波动额外惩罚
+
+def _risk_board_penalty(row: pd.Series) -> float:
     bucket = _board_bucket(row)
     if bucket in ("STAR", "GROWTH"):
-        penalty += W_GEM_STAR
+        return W_GEM_STAR
+    return 0.0
 
-    # 8) 封单弱 -> 额外惩罚
-    seal_strength = _seal_strength(row)
-    if not np.isnan(seal_strength):
-        if seal_strength <= 2_000_000:
-            penalty += 0.004
-        elif seal_strength <= 5_000_000:
-            penalty += 0.002
 
-    return _clip(penalty, 0.0, RISK_PENALTY_CAP)
+def _risk_seal_penalty(row: pd.Series) -> float:
+    seal = _seal_strength(row)
+    if np.isnan(seal):
+        return 0.0
+    if seal <= 2_000_000:
+        return W_WEAK_SEAL_VERY_LOW
+    if seal <= 5_000_000:
+        return W_WEAK_SEAL_LOW
+    return 0.0
+
+
+def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float]:
+    parts = {
+        "risk_regime_penalty": _risk_regime_penalty(row, regime),
+        "risk_open_penalty": _risk_open_penalty(row),
+        "risk_open_times_penalty": _risk_open_times_penalty(row),
+        "risk_volatility_penalty": _risk_volatility_penalty(row),
+        "risk_liquidity_penalty": _risk_liquidity_penalty(row),
+        "risk_extreme_turnover_penalty": _risk_extreme_turnover_penalty(row),
+        "risk_theme_penalty": _risk_theme_penalty(row),
+        "risk_board_penalty": _risk_board_penalty(row),
+        "risk_seal_penalty": _risk_seal_penalty(row),
+    }
+    total = float(sum(parts.values()))
+    parts["risk_total_penalty"] = _clip(total, 0.0, RISK_PENALTY_CAP)
+    return parts
+
+
+def _risk_penalty_from_row(row: pd.Series, regime: str = "RISK_ON") -> float:
+    parts = _risk_components(row, regime=regime)
+    return float(parts["risk_total_penalty"])
+
+
+def risk_breakdown_row(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float]:
+    return _risk_components(row, regime=regime)
+
+
+def risk_breakdown_df(regime: str, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    返回 DataFrame 级别的风险惩罚分项表。
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(
+            columns=[
+                "risk_regime_penalty",
+                "risk_open_penalty",
+                "risk_open_times_penalty",
+                "risk_volatility_penalty",
+                "risk_liquidity_penalty",
+                "risk_extreme_turnover_penalty",
+                "risk_theme_penalty",
+                "risk_board_penalty",
+                "risk_seal_penalty",
+                "risk_total_penalty",
+            ]
+        )
+
+    return df.apply(lambda r: pd.Series(_risk_components(r, regime=regime)), axis=1)
 
 
 def risk_penalty_rule(
@@ -373,7 +599,7 @@ def risk_penalty_rule(
 
 
 # ============================================================
-# EV 辅助函数（为下一步 run_v2 接线预留）
+# EV 辅助函数
 # ============================================================
 
 def ev_rule(
