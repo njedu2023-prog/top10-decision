@@ -8,25 +8,21 @@
 
   <style>
     :root{
-      --bg: #0b1020;
-      --bg2:#111831;
-      --panel:#141c36;
-      --panel2:#0f1730;
+      --bg:#0b1020;
       --line:rgba(255,255,255,0.08);
       --text:#e8edf7;
       --muted:#9fb0d0;
-      --accent:#6ea8fe;
       --good:#18c37e;
       --bad:#ff6b6b;
-      --warn:#ffb020;
       --shadow:0 10px 30px rgba(0,0,0,0.28);
       --radius:18px;
     }
 
-    * { box-sizing: border-box; }
-    html, body { margin:0; padding:0; }
+    *{ box-sizing:border-box; }
+    html, body{ margin:0; padding:0; }
+
     body{
-      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
       background:
         radial-gradient(circle at top left, rgba(110,168,254,0.15), transparent 28%),
         radial-gradient(circle at top right, rgba(24,195,126,0.10), transparent 22%),
@@ -41,12 +37,12 @@
     }
 
     .hero{
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
       border:1px solid var(--line);
       border-radius:24px;
       padding:24px;
       box-shadow:var(--shadow);
-      backdrop-filter: blur(8px);
+      backdrop-filter:blur(8px);
     }
 
     .hero-top{
@@ -91,6 +87,7 @@
       font-weight:600;
       text-decoration:none;
       transition:0.2s ease;
+      min-width:44px;
     }
 
     .btn:hover{
@@ -99,16 +96,22 @@
       background:linear-gradient(180deg, #21305c, #182346);
     }
 
+    .btn:disabled{
+      opacity:0.45;
+      cursor:not-allowed;
+      transform:none;
+    }
+
     .grid{
       display:grid;
-      grid-template-columns: repeat(12, 1fr);
+      grid-template-columns:repeat(12, 1fr);
       gap:16px;
       margin-top:18px;
     }
 
     .card{
-      grid-column: span 12;
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      grid-column:span 12;
+      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
       border:1px solid var(--line);
       border-radius:var(--radius);
       box-shadow:var(--shadow);
@@ -121,7 +124,7 @@
 
     .meta{
       display:grid;
-      grid-template-columns: repeat(6, minmax(0,1fr));
+      grid-template-columns:repeat(6, minmax(0,1fr));
       gap:12px;
     }
 
@@ -186,13 +189,6 @@
       margin-top:10px;
     }
 
-    .content{
-      display:grid;
-      grid-template-columns: 1.1fr 2fr;
-      gap:16px;
-      align-items:start;
-    }
-
     .markdown{
       line-height:1.8;
       color:var(--text);
@@ -250,7 +246,7 @@
     table{
       width:100%;
       border-collapse:collapse;
-      min-width:860px;
+      min-width:1100px;
     }
 
     thead th{
@@ -279,7 +275,7 @@
 
     td.num, th.num{
       text-align:right;
-      font-variant-numeric: tabular-nums;
+      font-variant-numeric:tabular-nums;
     }
 
     .pos{ color:var(--good); font-weight:700; }
@@ -308,30 +304,31 @@
       text-align:center;
     }
 
-    @media (max-width: 1200px){
+    @media (max-width:1200px){
       .meta{
-        grid-template-columns: repeat(3, minmax(0,1fr));
-      }
-      .content{
-        grid-template-columns:1fr;
+        grid-template-columns:repeat(3, minmax(0,1fr));
       }
     }
 
-    @media (max-width: 720px){
+    @media (max-width:720px){
       .wrap{
         width:min(100vw - 20px, 100%);
         margin:10px auto 28px;
       }
+
       .hero{
         padding:16px;
         border-radius:18px;
       }
+
       .title{
         font-size:24px;
       }
+
       .meta{
-        grid-template-columns: repeat(2, minmax(0,1fr));
+        grid-template-columns:repeat(2, minmax(0,1fr));
       }
+
       .meta-value{
         font-size:17px;
       }
@@ -346,20 +343,20 @@
           <h1 class="title">Top10 Decision Dashboard</h1>
           <p class="subtitle">
             自动读取并渲染最新的 Decision Markdown 报告。<br />
-            页面打开即刷新，同时支持手动刷新与定时自动刷新。
+            支持刷新，并可切换查看上一份 / 下一份报告。
           </p>
         </div>
 
         <div class="toolbar">
+          <button class="btn" id="prevBtn" title="上一份">←</button>
           <button class="btn" id="refreshBtn">刷新</button>
-          <a class="btn" id="rawLink" href="#" target="_blank" rel="noopener noreferrer">打开原始 MD</a>
-          <a class="btn" id="githubLink" href="#" target="_blank" rel="noopener noreferrer">打开 GitHub 文件</a>
+          <button class="btn" id="nextBtn" title="下一份">→</button>
         </div>
       </div>
 
       <div class="status-line">
         <span class="pill" id="statusPill">初始化中</span>
-        <span id="statusText">正在定位最新报告...</span>
+        <span id="statusText">正在定位报告...</span>
       </div>
     </section>
 
@@ -371,16 +368,16 @@
       </section>
 
       <section class="card">
-        <div class="card-body content">
-          <div>
-            <h2 class="section-title">摘要</h2>
-            <div id="summaryBox" class="markdown muted">等待加载...</div>
-          </div>
+        <div class="card-body">
+          <h2 class="section-title">摘要</h2>
+          <div id="summaryBox" class="markdown muted">等待加载...</div>
+        </div>
+      </section>
 
-          <div>
-            <h2 class="section-title">报告正文</h2>
-            <div id="reportBox" class="markdown empty">等待加载...</div>
-          </div>
+      <section class="card">
+        <div class="card-body">
+          <h2 class="section-title">报告正文</h2>
+          <div id="reportBox" class="markdown empty">等待加载...</div>
         </div>
       </section>
     </div>
@@ -405,21 +402,18 @@
     const RAW_BASE =
       `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
 
-    const GH_BASE =
-      `https://github.com/${REPO.owner}/${REPO.name}/blob/${REPO.branch}`;
-
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
     const reportBox = document.getElementById("reportBox");
     const summaryBox = document.getElementById("summaryBox");
     const metaGrid = document.getElementById("metaGrid");
-    const rawLink = document.getElementById("rawLink");
-    const githubLink = document.getElementById("githubLink");
     const footerText = document.getElementById("footerText");
     const refreshBtn = document.getElementById("refreshBtn");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
 
-    let currentRawUrl = "";
-    let currentGithubUrl = "";
+    let reportFiles = [];
+    let currentIndex = 0;
     let currentFileName = "";
 
     marked.setOptions({
@@ -440,26 +434,17 @@
         .replaceAll('"', "&quot;");
     }
 
-    function formatNum(v, digits = 6) {
-      const n = Number(v);
-      if (!Number.isFinite(n)) return String(v ?? "");
-      return n.toFixed(digits);
-    }
-
-    function formatShort(v) {
-      if (v == null || v === "") return "-";
-      const n = Number(v);
-      if (!Number.isFinite(n)) return String(v);
-      if (Math.abs(n) >= 1000) return n.toLocaleString("zh-CN");
-      return Number.isInteger(n) ? String(n) : n.toFixed(6).replace(/0+$/,"").replace(/\.$/,"");
-    }
-
     function classForSigned(v) {
       const n = Number(v);
       if (!Number.isFinite(n)) return "";
       if (n > 0) return "pos";
       if (n < 0) return "neg";
       return "";
+    }
+
+    function updateNavButtons() {
+      prevBtn.disabled = currentIndex >= reportFiles.length - 1;
+      nextBtn.disabled = currentIndex <= 0;
     }
 
     async function fetchJson(url) {
@@ -478,25 +463,18 @@
       return await res.text();
     }
 
-    async function getLatestReportInfo() {
+    async function getReportFiles() {
       const files = await fetchJson(API_LIST_URL);
       const rows = Array.isArray(files) ? files : [];
 
-      const reports = rows
+      return rows
         .filter(x => x && x.type === "file" && /^decision_report_\d{8}\.md$/.test(x.name))
-        .sort((a, b) => b.name.localeCompare(a.name));
-
-      if (!reports.length) {
-        throw new Error("未找到 decision_report_YYYYMMDD.md");
-      }
-
-      const latest = reports[0];
-      return {
-        name: latest.name,
-        path: latest.path,
-        rawUrl: latest.download_url || `${RAW_BASE}/${latest.path}`,
-        githubUrl: `${GH_BASE}/${latest.path}`
-      };
+        .sort((a, b) => b.name.localeCompare(a.name))
+        .map(x => ({
+          name: x.name,
+          path: x.path,
+          rawUrl: x.download_url || `${RAW_BASE}/${x.path}`
+        }));
     }
 
     function extractSimpleFields(md) {
@@ -528,26 +506,6 @@
       const titleMatch = md.match(/^#\s*Decision Report\s*\((\d{8})\)/im);
       if (titleMatch) out.report_date = titleMatch[1];
 
-      return out;
-    }
-
-    function extractArtifacts(md) {
-      const lines = md.split(/\r?\n/);
-      const start = lines.findIndex(x => /^##\s+Artifacts/i.test(x));
-      if (start < 0) return [];
-
-      const out = [];
-      for (let i = start + 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (/^##\s+/.test(line)) break;
-        const m = line.match(/^-+\s*([^:]+):\s*`([^`]+)`/);
-        if (m) {
-          out.push({
-            key: m[1].trim(),
-            path: m[2].trim()
-          });
-        }
-      }
       return out;
     }
 
@@ -591,7 +549,7 @@
     }
 
     function renderMeta(fields, topnRows, allRows) {
-      const html = [
+      metaGrid.innerHTML = [
         buildMetaCard("报告日期", fields.report_date || "-"),
         buildMetaCard("信号日", fields.signal_date || "-"),
         buildMetaCard("执行日", fields.exec_date || "-"),
@@ -605,77 +563,59 @@
         buildMetaCard("FS 降级原因", fields.fs_degrade_reason || "none"),
         buildMetaCard("当前文件", currentFileName || "-")
       ].join("");
-
-      metaGrid.innerHTML = html;
     }
 
-    function renderSummary(md, fields, artifacts, topnTable) {
-      const top3 = (topnTable?.body || []).slice(0, 3);
+    function renderFullFieldTable(title, tableData, limitRows = null) {
+      if (!tableData || !tableData.header || !tableData.body) {
+        return `<div class="muted">未解析到 ${escapeHtml(title)}。</div>`;
+      }
 
-      const top3Html = top3.length
-        ? `
-          <div class="table-wrap" style="margin-top:12px;">
-            <table>
-              <thead>
+      const headers = tableData.header;
+      const rows = limitRows ? tableData.body.slice(0, limitRows) : tableData.body;
+
+      const numericNames = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
+
+      return `
+        <h3>${escapeHtml(title)}</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                ${headers.map(h => {
+                  const key = String(h).trim().toLowerCase();
+                  return `<th class="${numericNames.has(key) ? 'num' : ''}">${escapeHtml(h)}</th>`;
+                }).join("")}
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `
                 <tr>
-                  <th>rank</th>
-                  <th>ts_code</th>
-                  <th>name</th>
-                  <th class="num">weight</th>
-                  <th class="num">EV</th>
-                  <th class="num">P_fill</th>
-                  <th class="num">E_ret</th>
+                  ${headers.map((h, idx) => {
+                    const key = String(h).trim().toLowerCase();
+                    const val = row[idx] ?? "";
+                    const numClass = numericNames.has(key) ? "num" : "";
+                    const signClass = (key === "ev" || key === "e_ret") ? classForSigned(val) : "";
+                    return `<td class="${numClass} ${signClass}">${escapeHtml(val)}</td>`;
+                  }).join("")}
                 </tr>
-              </thead>
-              <tbody>
-                ${top3.map(r => `
-                  <tr>
-                    <td>${escapeHtml(r[0] ?? "")}</td>
-                    <td>${escapeHtml(r[1] ?? "")}</td>
-                    <td>${escapeHtml(r[2] ?? "")}</td>
-                    <td class="num">${escapeHtml(r[3] ?? "")}</td>
-                    <td class="num ${classForSigned(r[4])}">${escapeHtml(r[4] ?? "")}</td>
-                    <td class="num">${escapeHtml(r[5] ?? "")}</td>
-                    <td class="num ${classForSigned(r[6])}">${escapeHtml(r[6] ?? "")}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-        `
-        : `<div class="muted">未解析到 Top3。</div>`;
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
 
-      const artifactsHtml = artifacts.length
-        ? `
-          <ul>
-            ${artifacts.map(x => {
-              const raw = `${RAW_BASE}/${x.path}`;
-              const gh = `${GH_BASE}/${x.path}`;
-              return `<li><strong>${escapeHtml(x.key)}</strong>：
-                <a class="muted" href="${gh}" target="_blank" rel="noopener noreferrer">GitHub</a>
-                /
-                <a class="muted" href="${raw}" target="_blank" rel="noopener noreferrer">Raw</a>
-              </li>`;
-            }).join("")}
-          </ul>
-        `
-        : `<div class="muted">未解析到 artifacts。</div>`;
-
+    function renderSummary(fields, topnTable) {
       summaryBox.innerHTML = `
         <div>
-          <div class="pill ok" style="margin-bottom:10px;">最新报告已加载</div>
+          <div class="pill ok" style="margin-bottom:10px;">当前报告已加载</div>
           <p><strong>report_date：</strong>${escapeHtml(fields.report_date || "-")}</p>
           <p><strong>signal_date：</strong>${escapeHtml(fields.signal_date || "-")}</p>
           <p><strong>exec_date：</strong>${escapeHtml(fields.exec_date || "-")}</p>
           <p><strong>regime：</strong>${escapeHtml(fields.regime || "-")}</p>
           <p><strong>risk_budget：</strong>${escapeHtml(fields.risk_budget || "-")}</p>
           <p><strong>input_mode：</strong>${escapeHtml(fields.input_mode || "-")}</p>
-
-          <h3>Top3 快览</h3>
-          ${top3Html}
-
-          <h3 style="margin-top:18px;">相关产物</h3>
-          ${artifactsHtml}
+          ${renderFullFieldTable("TopN 快览", topnTable, 10)}
         </div>
       `;
     }
@@ -694,6 +634,7 @@
         );
 
         const numericNames = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
+
         table.querySelectorAll("thead th").forEach((th, idx) => {
           if (numericNames.has(headers[idx])) th.classList.add("num");
         });
@@ -703,8 +644,7 @@
             const key = headers[idx];
             if (numericNames.has(key)) td.classList.add("num");
             if (key === "ev" || key === "e_ret") {
-              const text = td.textContent.trim();
-              td.classList.add(classForSigned(text));
+              td.classList.add(classForSigned(td.textContent.trim()));
             }
           });
         });
@@ -719,41 +659,44 @@
         .replace(/^- (candidates_snapshot|execution_table|learning_table|weights_latest|weights_dated):/gm, "- **$1**:");
     }
 
-    async function loadReport() {
+    async function loadReportByIndex(index) {
       try {
-        setStatus("", "正在定位最新报告...");
+        if (!reportFiles.length) {
+          reportFiles = await getReportFiles();
+        }
+
+        if (!reportFiles.length) {
+          throw new Error("未找到 decision_report_YYYYMMDD.md");
+        }
+
+        currentIndex = Math.max(0, Math.min(index, reportFiles.length - 1));
+        updateNavButtons();
+
+        const info = reportFiles[currentIndex];
+        currentFileName = info.name;
+
+        setStatus("", `正在读取：${info.name}`);
         reportBox.className = "markdown empty";
         reportBox.innerHTML = "正在加载...";
         summaryBox.innerHTML = `<span class="muted">正在解析...</span>`;
         metaGrid.innerHTML = "";
 
-        const info = await getLatestReportInfo();
-        currentRawUrl = info.rawUrl;
-        currentGithubUrl = info.githubUrl;
-        currentFileName = info.name;
-
-        rawLink.href = currentRawUrl;
-        githubLink.href = currentGithubUrl;
-
-        setStatus("", `已定位：${info.name}，正在读取内容...`);
-
         const mdRaw = await fetchText(info.rawUrl);
         const md = preprocessMarkdown(mdRaw);
 
         const fields = extractSimpleFields(mdRaw);
-        const artifacts = extractArtifacts(mdRaw);
         const topnTable = parseMarkdownTable(mdRaw, "TopN Targets");
         const allTable = parseMarkdownTable(mdRaw, "Full Candidate Pool");
 
         renderMeta(fields, topnTable?.body?.length ?? null, allTable?.body?.length ?? null);
-        renderSummary(mdRaw, fields, artifacts, topnTable);
+        renderSummary(fields, topnTable);
 
         const html = marked.parse(md);
         reportBox.className = "markdown";
         reportBox.innerHTML = html;
         decorateTables(reportBox);
 
-        setStatus("ok", `加载成功：${info.name}`);
+        setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
         footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
       } catch (err) {
         console.error(err);
@@ -772,10 +715,18 @@
       }
     }
 
-    refreshBtn.addEventListener("click", loadReport);
+    refreshBtn.addEventListener("click", () => loadReportByIndex(currentIndex));
+    prevBtn.addEventListener("click", () => loadReportByIndex(currentIndex + 1));
+    nextBtn.addEventListener("click", () => loadReportByIndex(currentIndex - 1));
 
-    loadReport();
-    setInterval(loadReport, 5 * 60 * 1000);
+    async function init() {
+      setStatus("", "正在定位报告列表...");
+      reportFiles = await getReportFiles();
+      await loadReportByIndex(0);
+    }
+
+    init();
+    setInterval(() => loadReportByIndex(currentIndex), 5 * 60 * 1000);
   </script>
 </body>
 </html>
