@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Top10 Decision Dashboard</title>
+  <meta name="description" content="Top10 Decision 每日自动更新页面" />
+
+  <style>
+    :root{
+      --bg: #0b1020;
+      --bg2:#111831;
+      --panel:#141c36;
+      --panel2:#0f1730;
+      --line:rgba(255,255,255,0.08);
+      --text:#e8edf7;
+      --muted:#9fb0d0;
+      --accent:#6ea8fe;
+      --good:#18c37e;
+      --bad:#ff6b6b;
+      --warn:#ffb020;
+      --shadow:0 10px 30px rgba(0,0,0,0.28);
+      --radius:18px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; }
+    body{
+      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(110,168,254,0.15), transparent 28%),
+        radial-gradient(circle at top right, rgba(24,195,126,0.10), transparent 22%),
+        linear-gradient(180deg, var(--bg), #09101d 100%);
+      color:var(--text);
+      min-height:100vh;
+    }
+
+    .wrap{
+      width:min(1400px, calc(100vw - 32px));
+      margin:24px auto 48px;
+    }
+
+    .hero{
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .hero-top{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+
+    .title{
+      font-size:30px;
+      line-height:1.2;
+      font-weight:800;
+      letter-spacing:0.2px;
+      margin:0 0 8px 0;
+    }
+
+    .subtitle{
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.7;
+      margin:0;
+    }
+
+    .toolbar{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .btn{
+      appearance:none;
+      border:1px solid rgba(255,255,255,0.1);
+      background:linear-gradient(180deg, #1a2445, #141d39);
+      color:var(--text);
+      padding:10px 14px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:14px;
+      font-weight:600;
+      text-decoration:none;
+      transition:0.2s ease;
+    }
+
+    .btn:hover{
+      transform:translateY(-1px);
+      border-color:rgba(255,255,255,0.18);
+      background:linear-gradient(180deg, #21305c, #182346);
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:16px;
+      margin-top:18px;
+    }
+
+    .card{
+      grid-column: span 12;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+
+    .card-body{
+      padding:18px 20px;
+    }
+
+    .meta{
+      display:grid;
+      grid-template-columns: repeat(6, minmax(0,1fr));
+      gap:12px;
+    }
+
+    .meta-item{
+      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+      border:1px solid rgba(255,255,255,0.06);
+      border-radius:14px;
+      padding:14px;
+      min-height:84px;
+    }
+
+    .meta-label{
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:8px;
+    }
+
+    .meta-value{
+      font-size:20px;
+      font-weight:800;
+      word-break:break-word;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      background:rgba(110,168,254,0.12);
+      border:1px solid rgba(110,168,254,0.2);
+      color:#cfe0ff;
+    }
+
+    .pill.ok{
+      background:rgba(24,195,126,0.12);
+      border-color:rgba(24,195,126,0.2);
+      color:#b9f1d9;
+    }
+
+    .pill.bad{
+      background:rgba(255,107,107,0.12);
+      border-color:rgba(255,107,107,0.2);
+      color:#ffd0d0;
+    }
+
+    .section-title{
+      font-size:18px;
+      font-weight:800;
+      margin:0 0 14px 0;
+    }
+
+    .status-line{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      color:var(--muted);
+      font-size:13px;
+      margin-top:10px;
+    }
+
+    .content{
+      display:grid;
+      grid-template-columns: 1.1fr 2fr;
+      gap:16px;
+      align-items:start;
+    }
+
+    .markdown{
+      line-height:1.8;
+      color:var(--text);
+    }
+
+    .markdown h1,
+    .markdown h2,
+    .markdown h3{
+      margin:22px 0 12px;
+      line-height:1.35;
+    }
+
+    .markdown h1{ font-size:24px; }
+    .markdown h2{ font-size:20px; }
+    .markdown h3{ font-size:16px; }
+
+    .markdown p,
+    .markdown ul,
+    .markdown ol{
+      margin:10px 0;
+    }
+
+    .markdown ul{
+      padding-left:20px;
+    }
+
+    .markdown li{
+      margin:4px 0;
+    }
+
+    .markdown code{
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:8px;
+      padding:2px 6px;
+      font-size:13px;
+    }
+
+    .markdown pre{
+      background:#0a1228;
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:14px;
+      padding:14px;
+      overflow:auto;
+    }
+
+    .table-wrap{
+      width:100%;
+      overflow:auto;
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:14px;
+      background:rgba(10,18,40,0.55);
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:860px;
+    }
+
+    thead th{
+      position:sticky;
+      top:0;
+      z-index:1;
+      background:#162347;
+      color:#dce8ff;
+      text-align:left;
+      font-size:13px;
+      padding:12px 12px;
+      border-bottom:1px solid rgba(255,255,255,0.08);
+      white-space:nowrap;
+    }
+
+    tbody td{
+      padding:10px 12px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      font-size:14px;
+      white-space:nowrap;
+    }
+
+    tbody tr:hover{
+      background:rgba(255,255,255,0.03);
+    }
+
+    td.num, th.num{
+      text-align:right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pos{ color:var(--good); font-weight:700; }
+    .neg{ color:var(--bad); font-weight:700; }
+    .muted{ color:var(--muted); }
+
+    .empty,
+    .error{
+      padding:24px;
+      border:1px dashed rgba(255,255,255,0.15);
+      border-radius:16px;
+      color:var(--muted);
+      text-align:center;
+    }
+
+    .error{
+      color:#ffd4d4;
+      background:rgba(255,107,107,0.06);
+      border-color:rgba(255,107,107,0.2);
+    }
+
+    .footer{
+      margin-top:16px;
+      color:var(--muted);
+      font-size:12px;
+      text-align:center;
+    }
+
+    @media (max-width: 1200px){
+      .meta{
+        grid-template-columns: repeat(3, minmax(0,1fr));
+      }
+      .content{
+        grid-template-columns:1fr;
+      }
+    }
+
+    @media (max-width: 720px){
+      .wrap{
+        width:min(100vw - 20px, 100%);
+        margin:10px auto 28px;
+      }
+      .hero{
+        padding:16px;
+        border-radius:18px;
+      }
+      .title{
+        font-size:24px;
+      }
+      .meta{
+        grid-template-columns: repeat(2, minmax(0,1fr));
+      }
+      .meta-value{
+        font-size:17px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <h1 class="title">Top10 Decision Dashboard</h1>
+          <p class="subtitle">
+            自动读取并渲染最新的 Decision Markdown 报告。<br />
+            页面打开即刷新，同时支持手动刷新与定时自动刷新。
+          </p>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn" id="refreshBtn">刷新</button>
+          <a class="btn" id="rawLink" href="#" target="_blank" rel="noopener noreferrer">打开原始 MD</a>
+          <a class="btn" id="githubLink" href="#" target="_blank" rel="noopener noreferrer">打开 GitHub 文件</a>
+        </div>
+      </div>
+
+      <div class="status-line">
+        <span class="pill" id="statusPill">初始化中</span>
+        <span id="statusText">正在定位最新报告...</span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <div class="card-body">
+          <div class="meta" id="metaGrid"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body content">
+          <div>
+            <h2 class="section-title">摘要</h2>
+            <div id="summaryBox" class="markdown muted">等待加载...</div>
+          </div>
+
+          <div>
+            <h2 class="section-title">报告正文</h2>
+            <div id="reportBox" class="markdown empty">等待加载...</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="footer">
+      <span id="footerText">Top10 Decision · 动态页面</span>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    const REPO = {
+      owner: "njedu2023-prog",
+      name: "top10-decision",
+      branch: "main",
+      reportDir: "outputs/decision"
+    };
+
+    const API_LIST_URL =
+      `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
+
+    const RAW_BASE =
+      `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
+
+    const GH_BASE =
+      `https://github.com/${REPO.owner}/${REPO.name}/blob/${REPO.branch}`;
+
+    const statusPill = document.getElementById("statusPill");
+    const statusText = document.getElementById("statusText");
+    const reportBox = document.getElementById("reportBox");
+    const summaryBox = document.getElementById("summaryBox");
+    const metaGrid = document.getElementById("metaGrid");
+    const rawLink = document.getElementById("rawLink");
+    const githubLink = document.getElementById("githubLink");
+    const footerText = document.getElementById("footerText");
+    const refreshBtn = document.getElementById("refreshBtn");
+
+    let currentRawUrl = "";
+    let currentGithubUrl = "";
+    let currentFileName = "";
+
+    marked.setOptions({
+      gfm: true,
+      breaks: false
+    });
+
+    function setStatus(type, text) {
+      statusPill.className = `pill ${type || ""}`.trim();
+      statusText.textContent = text || "";
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function formatNum(v, digits = 6) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return String(v ?? "");
+      return n.toFixed(digits);
+    }
+
+    function formatShort(v) {
+      if (v == null || v === "") return "-";
+      const n = Number(v);
+      if (!Number.isFinite(n)) return String(v);
+      if (Math.abs(n) >= 1000) return n.toLocaleString("zh-CN");
+      return Number.isInteger(n) ? String(n) : n.toFixed(6).replace(/0+$/,"").replace(/\.$/,"");
+    }
+
+    function classForSigned(v) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return "";
+      if (n > 0) return "pos";
+      if (n < 0) return "neg";
+      return "";
+    }
+
+    async function fetchJson(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`请求失败: ${res.status} ${res.statusText}`);
+      }
+      return await res.json();
+    }
+
+    async function fetchText(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`请求失败: ${res.status} ${res.statusText}`);
+      }
+      return await res.text();
+    }
+
+    async function getLatestReportInfo() {
+      const files = await fetchJson(API_LIST_URL);
+      const rows = Array.isArray(files) ? files : [];
+
+      const reports = rows
+        .filter(x => x && x.type === "file" && /^decision_report_\d{8}\.md$/.test(x.name))
+        .sort((a, b) => b.name.localeCompare(a.name));
+
+      if (!reports.length) {
+        throw new Error("未找到 decision_report_YYYYMMDD.md");
+      }
+
+      const latest = reports[0];
+      return {
+        name: latest.name,
+        path: latest.path,
+        rawUrl: latest.download_url || `${RAW_BASE}/${latest.path}`,
+        githubUrl: `${GH_BASE}/${latest.path}`
+      };
+    }
+
+    function extractSimpleFields(md) {
+      const out = {};
+      const fields = [
+        "signal_date",
+        "exec_date",
+        "requested_trade_date",
+        "regime",
+        "risk_budget",
+        "input_mode",
+        "fs_degrade_reason",
+        "p_fill_pred_src",
+        "p_fill_model_loaded",
+        "p_fill_model_kind",
+        "p_fill_degrade_reason",
+        "eret_pred_src",
+        "eret_model_loaded",
+        "eret_model_kind",
+        "eret_degrade_reason"
+      ];
+
+      for (const key of fields) {
+        const re = new RegExp(`(?:^|\\n)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i");
+        const m = md.match(re);
+        if (m) out[key] = m[1].trim();
+      }
+
+      const titleMatch = md.match(/^#\s*Decision Report\s*\((\d{8})\)/im);
+      if (titleMatch) out.report_date = titleMatch[1];
+
+      return out;
+    }
+
+    function extractArtifacts(md) {
+      const lines = md.split(/\r?\n/);
+      const start = lines.findIndex(x => /^##\s+Artifacts/i.test(x));
+      if (start < 0) return [];
+
+      const out = [];
+      for (let i = start + 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (/^##\s+/.test(line)) break;
+        const m = line.match(/^-+\s*([^:]+):\s*`([^`]+)`/);
+        if (m) {
+          out.push({
+            key: m[1].trim(),
+            path: m[2].trim()
+          });
+        }
+      }
+      return out;
+    }
+
+    function parseMarkdownTable(md, sectionTitle) {
+      const escaped = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(
+        `##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`,
+        "i"
+      );
+      const block = md.match(re);
+      if (!block) return null;
+
+      const lines = block[1]
+        .split(/\r?\n/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .filter(s => s.startsWith("|"));
+
+      if (lines.length < 3) return null;
+
+      const header = lines[0]
+        .split("|")
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const body = lines
+        .slice(2)
+        .map(line => line.split("|").map(s => s.trim()).filter(Boolean));
+
+      return { header, body };
+    }
+
+    function buildMetaCard(label, value, extraClass = "") {
+      const val = value == null || value === "" ? "-" : String(value);
+      return `
+        <div class="meta-item">
+          <div class="meta-label">${escapeHtml(label)}</div>
+          <div class="meta-value ${extraClass}">${escapeHtml(val)}</div>
+        </div>
+      `;
+    }
+
+    function renderMeta(fields, topnRows, allRows) {
+      const html = [
+        buildMetaCard("报告日期", fields.report_date || "-"),
+        buildMetaCard("信号日", fields.signal_date || "-"),
+        buildMetaCard("执行日", fields.exec_date || "-"),
+        buildMetaCard("市场状态", fields.regime || "-"),
+        buildMetaCard("风险预算", fields.risk_budget || "-"),
+        buildMetaCard("输入模式", fields.input_mode || "-"),
+        buildMetaCard("TopN 数量", topnRows != null ? String(topnRows) : "-"),
+        buildMetaCard("候选池数量", allRows != null ? String(allRows) : "-"),
+        buildMetaCard("P_fill 来源", fields.p_fill_pred_src || "-"),
+        buildMetaCard("E_ret 来源", fields.eret_pred_src || "-"),
+        buildMetaCard("FS 降级原因", fields.fs_degrade_reason || "none"),
+        buildMetaCard("当前文件", currentFileName || "-")
+      ].join("");
+
+      metaGrid.innerHTML = html;
+    }
+
+    function renderSummary(md, fields, artifacts, topnTable) {
+      const top3 = (topnTable?.body || []).slice(0, 3);
+
+      const top3Html = top3.length
+        ? `
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>rank</th>
+                  <th>ts_code</th>
+                  <th>name</th>
+                  <th class="num">weight</th>
+                  <th class="num">EV</th>
+                  <th class="num">P_fill</th>
+                  <th class="num">E_ret</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${top3.map(r => `
+                  <tr>
+                    <td>${escapeHtml(r[0] ?? "")}</td>
+                    <td>${escapeHtml(r[1] ?? "")}</td>
+                    <td>${escapeHtml(r[2] ?? "")}</td>
+                    <td class="num">${escapeHtml(r[3] ?? "")}</td>
+                    <td class="num ${classForSigned(r[4])}">${escapeHtml(r[4] ?? "")}</td>
+                    <td class="num">${escapeHtml(r[5] ?? "")}</td>
+                    <td class="num ${classForSigned(r[6])}">${escapeHtml(r[6] ?? "")}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `
+        : `<div class="muted">未解析到 Top3。</div>`;
+
+      const artifactsHtml = artifacts.length
+        ? `
+          <ul>
+            ${artifacts.map(x => {
+              const raw = `${RAW_BASE}/${x.path}`;
+              const gh = `${GH_BASE}/${x.path}`;
+              return `<li><strong>${escapeHtml(x.key)}</strong>：
+                <a class="muted" href="${gh}" target="_blank" rel="noopener noreferrer">GitHub</a>
+                /
+                <a class="muted" href="${raw}" target="_blank" rel="noopener noreferrer">Raw</a>
+              </li>`;
+            }).join("")}
+          </ul>
+        `
+        : `<div class="muted">未解析到 artifacts。</div>`;
+
+      summaryBox.innerHTML = `
+        <div>
+          <div class="pill ok" style="margin-bottom:10px;">最新报告已加载</div>
+          <p><strong>report_date：</strong>${escapeHtml(fields.report_date || "-")}</p>
+          <p><strong>signal_date：</strong>${escapeHtml(fields.signal_date || "-")}</p>
+          <p><strong>exec_date：</strong>${escapeHtml(fields.exec_date || "-")}</p>
+          <p><strong>regime：</strong>${escapeHtml(fields.regime || "-")}</p>
+          <p><strong>risk_budget：</strong>${escapeHtml(fields.risk_budget || "-")}</p>
+          <p><strong>input_mode：</strong>${escapeHtml(fields.input_mode || "-")}</p>
+
+          <h3>Top3 快览</h3>
+          ${top3Html}
+
+          <h3 style="margin-top:18px;">相关产物</h3>
+          ${artifactsHtml}
+        </div>
+      `;
+    }
+
+    function decorateTables(root) {
+      root.querySelectorAll("table").forEach(table => {
+        if (!table.parentElement.classList.contains("table-wrap")) {
+          const wrap = document.createElement("div");
+          wrap.className = "table-wrap";
+          table.parentNode.insertBefore(wrap, table);
+          wrap.appendChild(table);
+        }
+
+        const headers = Array.from(table.querySelectorAll("thead th")).map(th =>
+          th.textContent.trim().toLowerCase()
+        );
+
+        const numericNames = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
+        table.querySelectorAll("thead th").forEach((th, idx) => {
+          if (numericNames.has(headers[idx])) th.classList.add("num");
+        });
+
+        table.querySelectorAll("tbody tr").forEach(tr => {
+          Array.from(tr.children).forEach((td, idx) => {
+            const key = headers[idx];
+            if (numericNames.has(key)) td.classList.add("num");
+            if (key === "ev" || key === "e_ret") {
+              const text = td.textContent.trim();
+              td.classList.add(classForSigned(text));
+            }
+          });
+        });
+      });
+    }
+
+    function preprocessMarkdown(md) {
+      return md
+        .replace(/^- (signal_date|exec_date|requested_trade_date|regime|risk_budget|input_mode|fs_degrade_reason):/gm, "- **$1**:")
+        .replace(/^- (pred_loaded|pred_rows|features_base_loaded|features_base_rows|features_limit_loaded|features_limit_rows|truth_close_loaded|truth_close_rows|meta_loaded):/gm, "- **$1**:")
+        .replace(/^- (p_fill_pred_src|p_fill_model_loaded|p_fill_model_kind|p_fill_degrade_reason|eret_pred_src|eret_model_loaded|eret_model_kind|eret_degrade_reason):/gm, "- **$1**:")
+        .replace(/^- (candidates_snapshot|execution_table|learning_table|weights_latest|weights_dated):/gm, "- **$1**:");
+    }
+
+    async function loadReport() {
+      try {
+        setStatus("", "正在定位最新报告...");
+        reportBox.className = "markdown empty";
+        reportBox.innerHTML = "正在加载...";
+        summaryBox.innerHTML = `<span class="muted">正在解析...</span>`;
+        metaGrid.innerHTML = "";
+
+        const info = await getLatestReportInfo();
+        currentRawUrl = info.rawUrl;
+        currentGithubUrl = info.githubUrl;
+        currentFileName = info.name;
+
+        rawLink.href = currentRawUrl;
+        githubLink.href = currentGithubUrl;
+
+        setStatus("", `已定位：${info.name}，正在读取内容...`);
+
+        const mdRaw = await fetchText(info.rawUrl);
+        const md = preprocessMarkdown(mdRaw);
+
+        const fields = extractSimpleFields(mdRaw);
+        const artifacts = extractArtifacts(mdRaw);
+        const topnTable = parseMarkdownTable(mdRaw, "TopN Targets");
+        const allTable = parseMarkdownTable(mdRaw, "Full Candidate Pool");
+
+        renderMeta(fields, topnTable?.body?.length ?? null, allTable?.body?.length ?? null);
+        renderSummary(mdRaw, fields, artifacts, topnTable);
+
+        const html = marked.parse(md);
+        reportBox.className = "markdown";
+        reportBox.innerHTML = html;
+        decorateTables(reportBox);
+
+        setStatus("ok", `加载成功：${info.name}`);
+        footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
+      } catch (err) {
+        console.error(err);
+        setStatus("bad", "加载失败");
+        reportBox.className = "markdown error";
+        reportBox.innerHTML = `
+          <strong>页面加载失败</strong><br><br>
+          ${escapeHtml(err?.message || String(err))}<br><br>
+          请检查：<br>
+          1. 仓库是否公开；<br>
+          2. outputs/decision/ 下是否已有 decision_report_YYYYMMDD.md；<br>
+          3. GitHub API 是否临时限流。
+        `;
+        summaryBox.innerHTML = `<span class="muted">暂无摘要。</span>`;
+        metaGrid.innerHTML = "";
+      }
+    }
+
+    refreshBtn.addEventListener("click", loadReport);
+
+    loadReport();
+    setInterval(loadReport, 5 * 60 * 1000);
+  </script>
+</body>
+</html>
