@@ -1,8 +1,8 @@
 trade_date: 20260313
-run_id: gh_23111346215
-commit_sha: 204a52c05b7f
+run_id: gh_23111982575
+commit_sha: 68b7bf62f241
 model_version: premium_v2
-created_at_utc: 2026-03-15T13:29:26Z
+created_at_utc: 2026-03-15T14:07:24Z
 ok: True
 target_date: 20260317
 pending: True
