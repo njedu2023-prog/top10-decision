@@ -13,7 +13,7 @@ def _first_value(df: pd.DataFrame, col: str) -> str:
     return "" if s.empty else str(s.iloc[0])
 
 
-def _fmt_num(x, nd=6) -> str:
+def _fmt_num(x, nd: int = 6) -> str:
     try:
         if pd.isna(x):
             return ""
@@ -22,51 +22,144 @@ def _fmt_num(x, nd=6) -> str:
         return "" if x is None else str(x)
 
 
+def _copy_std_cols(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    统一出报告时需要的标准字段别名，不删除原列，只补标准列。
+    """
+    out = df.copy()
+
+    if "EV" not in out.columns:
+        for c in ["ev_pred"]:
+            if c in out.columns:
+                out["EV"] = pd.to_numeric(out[c], errors="coerce")
+                break
+
+    if "RiskPenalty" not in out.columns:
+        for c in ["risk_penalty", "risk_total_penalty"]:
+            if c in out.columns:
+                out["RiskPenalty"] = pd.to_numeric(out[c], errors="coerce")
+                break
+
+    if "P_fill" not in out.columns:
+        for c in ["p_fill_pred", "p_fill_pred_final"]:
+            if c in out.columns:
+                out["P_fill"] = pd.to_numeric(out[c], errors="coerce")
+                break
+
+    if "E_ret" not in out.columns:
+        for c in ["e_ret_pred", "eret_pred", "eret_pred_final"]:
+            if c in out.columns:
+                out["E_ret"] = pd.to_numeric(out[c], errors="coerce")
+                break
+
+    if "Cost" not in out.columns:
+        for c in ["cost_est"]:
+            if c in out.columns:
+                out["Cost"] = pd.to_numeric(out[c], errors="coerce")
+                break
+
+    if "weight" not in out.columns:
+        for c in ["weight_exec"]:
+            if c in out.columns:
+                out["weight"] = pd.to_numeric(out[c], errors="coerce")
+                break
+
+    return out
+
+
+def _render_signal_table(df: pd.DataFrame) -> list[str]:
+    """
+    渲染与 TopN Targets 同结构的英文表。
+    """
+    cols = ["rank", "ts_code", "name", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"]
+
+    lines: list[str] = []
+    lines.append("<table><tr>")
+    for c in cols:
+        lines.append(f"<th>{c}</th>")
+    lines.append("</tr>")
+
+    if df is None or df.empty:
+        lines.append("<tr><td colspan='9'></td></tr></table>\n")
+        return lines
+
+    for _, r in df.iterrows():
+        lines.append("<tr>")
+        lines.append(f"<td>{'' if pd.isna(r.get('rank', '')) else r.get('rank', '')}</td>")
+        lines.append(f"<td>{'' if pd.isna(r.get('ts_code', '')) else r.get('ts_code', '')}</td>")
+        lines.append(f"<td>{'' if pd.isna(r.get('name', '')) else r.get('name', '')}</td>")
+        lines.append(f"<td>{_fmt_num(r.get('weight', ''), 6)}</td>")
+        lines.append(f"<td>{_fmt_num(r.get('EV', ''), 6)}</td>")
+        lines.append(f"<td>{_fmt_num(r.get('P_fill', ''), 6)}</td>")
+        lines.append(f"<td>{_fmt_num(r.get('E_ret', ''), 6)}</td>")
+        lines.append(f"<td>{_fmt_num(r.get('Cost', ''), 6)}</td>")
+        lines.append(f"<td>{_fmt_num(r.get('RiskPenalty', ''), 6)}</td>")
+        lines.append("</tr>")
+    lines.append("</table>\n")
+    return lines
+
+
+def _build_evrp_window(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    新增中间表窗口：
+    EV > 3%
+    RiskPenalty < 1%
+    """
+    d = _copy_std_cols(df)
+
+    if "EV" not in d.columns:
+        d["EV"] = pd.NA
+    if "RiskPenalty" not in d.columns:
+        d["RiskPenalty"] = pd.NA
+
+    d["EV"] = pd.to_numeric(d["EV"], errors="coerce")
+    d["RiskPenalty"] = pd.to_numeric(d["RiskPenalty"], errors="coerce")
+
+    window_df = d[(d["EV"] > 0.03) & (d["RiskPenalty"] < 0.01)].copy()
+
+    sort_cols = [c for c in ["EV", "rank"] if c in window_df.columns]
+    ascending = [False if c == "EV" else True for c in sort_cols]
+    if sort_cols:
+        window_df = window_df.sort_values(sort_cols, ascending=ascending, kind="stable").reset_index(drop=True)
+
+    return window_df
+
+
 def write_daily_report_human(
     merged_df: pd.DataFrame,
     out_path: str = "docs/reports/daily_latest.md",
     title: str = "Daily Decision Report (latest)",
 ) -> Path:
     """
-    ✅ 人类可读日报（目标：表格内容像你截图那样）
-    - 不出现 jq_code
-    - 表格列固定为：
-        排名 / 代码 / 股票 / Probability / 强度得分 / 题材加成 / 板块
-    - 头部保留日期信息：trade_date / target_trade_date
+    人类可读日报：
+    - 保留旧中文简版用途
+    - 新增 EV>3% & RiskPenalty<1% 中间窗口表
     """
-
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    trade_date = _first_value(merged_df, "trade_date")
-    target_trade_date = _first_value(merged_df, "target_trade_date")
+    d = _copy_std_cols(merged_df)
 
-    # 兼容字段名：Probability / StrengthScore / ThemeBoost / board / name / ts_code / rank
-    # 如果某些字段缺失，则输出为空，但不报错
-    d = merged_df.head(10).copy()
+    trade_date = _first_value(d, "trade_date")
+    target_trade_date = _first_value(d, "target_trade_date")
+    exec_date = _first_value(d, "exec_date")
+
+    topn = d.head(10).copy()
+    evrp_window = _build_evrp_window(d)
 
     lines: list[str] = []
     lines.append(f"# {title}\n\n")
     lines.append(f"- trade_date（信号生成日）: **{trade_date if trade_date else '未知'}**\n")
-    lines.append(f"- target_trade_date（执行交易日）: **{target_trade_date if target_trade_date else '未知/未填'}**\n\n")
+    lines.append(f"- target_trade_date（执行交易日）: **{target_trade_date if target_trade_date else '未知/未填'}**\n")
+    lines.append(f"- exec_date（报告执行日）: **{exec_date if exec_date else '未知/未填'}**\n\n")
 
-    # 表格（中文列名，与你截图一致）
-    lines.append("| 排名 | 代码 | 股票 | Probability | 强度得分 | 题材加成 | 板块 |\n")
-    lines.append("|---:|---|---|---:|---:|---:|---|\n")
+    lines.append("## EV>3% & RiskPenalty<1%\n\n")
+    lines.extend(_render_signal_table(evrp_window))
+    lines.append("\n")
 
-    for _, r in d.iterrows():
-        rank = r.get("rank", "")
-        ts_code = r.get("ts_code", "")
-        name = r.get("name", "")
-        board = r.get("board", "")
-
-        prob = r.get("Probability", r.get("prob", r.get("probability", "")))
-        strength = r.get("StrengthScore", r.get("strength", ""))
-        theme = r.get("ThemeBoost", r.get("theme", ""))
-
-        lines.append(
-            f"| {rank} | {ts_code} | {name} | {_fmt_num(prob, 6)} | {_fmt_num(strength, 4)} | {_fmt_num(theme, 6)} | {board} |\n"
-        )
+    lines.append("## TopN Targets\n\n")
+    lines.extend(_render_signal_table(topn))
+    lines.append("\n")
 
     out_path.write_text("".join(lines), encoding="utf-8")
     return out_path
