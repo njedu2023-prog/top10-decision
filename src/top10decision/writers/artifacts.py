@@ -26,6 +26,7 @@ from top10decision.writers.io_contract import (
 TOP_EVR_SIGNAL_LATEST = Path("docs/signals/TopEVR_latest.csv")
 TOP_EVR_SIGNAL_DATED_FMT = "docs/signals/TopEVR_{yyyymmdd}.csv"
 
+
 # =========================
 # 内部小工具：元数据
 # =========================
@@ -328,13 +329,16 @@ def build_top_evr_signal_df(
     n = len(df)
     equal_weight = 1.0 / float(n) if n > 0 else 0.0
 
-    out = pd.DataFrame()
+    # 关键修复：
+    # 先让 out 具备与 df 对齐的 index，再写标量列，
+    # 否则 trade_date / target_trade_date 会因为先写入空 DataFrame 而变成空值
+    out = pd.DataFrame(index=df.index.copy())
+    out["jq_code"] = df["ts_code"].apply(to_jq_code)
     out["trade_date"] = norm_ymd(trade_date)
     out["target_trade_date"] = norm_ymd(target_trade_date)
-    out["jq_code"] = df["ts_code"].apply(to_jq_code)
     out["target_weight"] = equal_weight
     out["risk_budget"] = float(risk_budget)
     out["regime"] = str(regime_name)
     out["reason"] = "TopEVR_EV>3pct_Risk<1pct"
 
-    return _ensure_signal_schema(out)
+    return _ensure_signal_schema(out.reset_index(drop=True))
