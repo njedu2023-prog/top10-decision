@@ -369,13 +369,6 @@
 
       <section class="card">
         <div class="card-body">
-          <h2 class="section-title">摘要</h2>
-          <div id="summaryBox" class="markdown muted">等待加载...</div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-body">
           <h2 class="section-title">报告正文</h2>
           <div id="reportBox" class="markdown empty">等待加载...</div>
         </div>
@@ -405,7 +398,6 @@
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
     const reportBox = document.getElementById("reportBox");
-    const summaryBox = document.getElementById("summaryBox");
     const metaGrid = document.getElementById("metaGrid");
     const footerText = document.getElementById("footerText");
     const refreshBtn = document.getElementById("refreshBtn");
@@ -565,61 +557,6 @@
       ].join("");
     }
 
-    function renderFullFieldTable(title, tableData, limitRows = null) {
-      if (!tableData || !tableData.header || !tableData.body) {
-        return `<div class="muted">未解析到 ${escapeHtml(title)}。</div>`;
-      }
-
-      const headers = tableData.header;
-      const rows = limitRows ? tableData.body.slice(0, limitRows) : tableData.body;
-
-      const numericNames = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
-
-      return `
-        <h3>${escapeHtml(title)}</h3>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                ${headers.map(h => {
-                  const key = String(h).trim().toLowerCase();
-                  return `<th class="${numericNames.has(key) ? 'num' : ''}">${escapeHtml(h)}</th>`;
-                }).join("")}
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map(row => `
-                <tr>
-                  ${headers.map((h, idx) => {
-                    const key = String(h).trim().toLowerCase();
-                    const val = row[idx] ?? "";
-                    const numClass = numericNames.has(key) ? "num" : "";
-                    const signClass = (key === "ev" || key === "e_ret") ? classForSigned(val) : "";
-                    return `<td class="${numClass} ${signClass}">${escapeHtml(val)}</td>`;
-                  }).join("")}
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
-
-    function renderSummary(fields, topnTable) {
-      summaryBox.innerHTML = `
-        <div>
-          <div class="pill ok" style="margin-bottom:10px;">当前报告已加载</div>
-          <p><strong>report_date：</strong>${escapeHtml(fields.report_date || "-")}</p>
-          <p><strong>signal_date：</strong>${escapeHtml(fields.signal_date || "-")}</p>
-          <p><strong>exec_date：</strong>${escapeHtml(fields.exec_date || "-")}</p>
-          <p><strong>regime：</strong>${escapeHtml(fields.regime || "-")}</p>
-          <p><strong>risk_budget：</strong>${escapeHtml(fields.risk_budget || "-")}</p>
-          <p><strong>input_mode：</strong>${escapeHtml(fields.input_mode || "-")}</p>
-          ${renderFullFieldTable("TopN 快览", topnTable, 10)}
-        </div>
-      `;
-    }
-
     function decorateTables(root) {
       root.querySelectorAll("table").forEach(table => {
         if (!table.parentElement.classList.contains("table-wrap")) {
@@ -678,7 +615,6 @@
         setStatus("", `正在读取：${info.name}`);
         reportBox.className = "markdown empty";
         reportBox.innerHTML = "正在加载...";
-        summaryBox.innerHTML = `<span class="muted">正在解析...</span>`;
         metaGrid.innerHTML = "";
 
         const mdRaw = await fetchText(info.rawUrl);
@@ -689,7 +625,6 @@
         const allTable = parseMarkdownTable(mdRaw, "Full Candidate Pool");
 
         renderMeta(fields, topnTable?.body?.length ?? null, allTable?.body?.length ?? null);
-        renderSummary(fields, topnTable);
 
         const html = marked.parse(md);
         reportBox.className = "markdown";
@@ -710,7 +645,6 @@
           2. outputs/decision/ 下是否已有 decision_report_YYYYMMDD.md；<br>
           3. GitHub API 是否临时限流。
         `;
-        summaryBox.innerHTML = `<span class="muted">暂无摘要。</span>`;
         metaGrid.innerHTML = "";
       }
     }
