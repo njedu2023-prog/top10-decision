@@ -20,6 +20,7 @@ top10-decision — V2 runner (Orchestrator Only)
 - 新增手动 trade_date 契约：支持 --trade-date / TRADE_DATE，并对输入表做显式过滤
 - 接入 Cost / RiskPenalty 分项归因输出，落入 decision_candidates 便于业务审查
 - 在 Decision 报告中追加 Full Candidate Pool（全候选池精简展示表）
+- 新增 Artifacts 下方的高 EV / 低 RiskPenalty 筛选表
 - TopN Targets / Full Candidate Pool 均按 EV 降序展示
 """
 
@@ -476,6 +477,32 @@ def _sort_report_candidate_view(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _build_high_ev_low_risk_view(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    报告中新增的中间筛选表：
+    - EV > 3%
+    - RiskPenalty < 1%
+
+    说明：
+    - 输入 df 应为已经整理并排序好的 report_pool_df
+    - 本函数只做筛选，不再二次改写排序逻辑
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["rank", "ts_code", "name", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"])
+
+    out = df.copy()
+    out["EV"] = pd.to_numeric(out["EV"], errors="coerce")
+    out["RiskPenalty"] = pd.to_numeric(out["RiskPenalty"], errors="coerce")
+
+    out = out.loc[
+        (out["EV"] > 0.03) &
+        (out["RiskPenalty"] < 0.01)
+    ].copy().reset_index(drop=True)
+
+    out["rank"] = out.index + 1
+    return out
+
+
 def _append_candidate_markdown_table(
     lines: List[str],
     title: str,
@@ -674,6 +701,9 @@ def main() -> int:
     report_pool_df = _build_report_candidate_view(routed_df, weights_out)
     report_pool_df = _sort_report_candidate_view(report_pool_df)
 
+    # 新增：插在 Artifacts 下方、TopN Targets 上方的中间筛选表
+    high_ev_low_risk_df = _build_high_ev_low_risk_view(report_pool_df)
+
     selected_mask = pd.to_numeric(report_pool_df["weight"], errors="coerce").fillna(0.0) > 0
 
     topn_report_df = report_pool_df.loc[selected_mask].copy().reset_index(drop=True)
@@ -720,6 +750,7 @@ def main() -> int:
     lines.append(f"- weights_latest: `{weights_latest_path}`\n")
     lines.append(f"- weights_dated: `{weights_dated_path}`\n\n")
 
+    _append_candidate_markdown_table(lines, "EV > 3% & RiskPenalty < 1%", high_ev_low_risk_df)
     _append_candidate_markdown_table(lines, "TopN Targets", topn_report_df)
     _append_candidate_markdown_table(lines, "Full Candidate Pool", full_candidate_report_df)
 
@@ -761,6 +792,11 @@ def main() -> int:
             "weights_latest": weights_latest_path,
             "weights_dated": weights_dated_path,
             "decision_report": report_path,
+        },
+        "report_stats": {
+            "high_ev_low_risk_rows": int(len(high_ev_low_risk_df)),
+            "topn_rows": int(len(topn_report_df)),
+            "full_candidate_rows": int(len(full_candidate_report_df)),
         },
     }
     write_eval_json(exec_date, eval_payload)
