@@ -197,6 +197,8 @@ jobs:
 
           git add docs/signals/top10_latest.csv || true
           git add docs/signals/top10_*.csv || true
+          git add docs/signals/TopEVR_latest.csv || true
+          git add docs/signals/TopEVR_*.csv || true
 
           git add docs/reports/*.md || true
           git add -A docs/reports || true
