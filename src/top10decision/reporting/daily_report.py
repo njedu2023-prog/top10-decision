@@ -3,7 +3,21 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import pandas as pd
+
+
+STD_SIGNAL_COLS = [
+    "rank",
+    "ts_code",
+    "name",
+    "weight",
+    "EV",
+    "P_fill",
+    "E_ret",
+    "Cost",
+    "RiskPenalty",
+]
 
 
 def _first_value(df: pd.DataFrame, col: str) -> str:
@@ -67,23 +81,31 @@ def _copy_std_cols(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _ensure_signal_cols(df: pd.DataFrame) -> pd.DataFrame:
+    out = _copy_std_cols(df)
+    for c in STD_SIGNAL_COLS:
+        if c not in out.columns:
+            out[c] = pd.NA
+    return out
+
+
 def _render_signal_table(df: pd.DataFrame) -> list[str]:
     """
     渲染与 TopN Targets 同结构的英文表。
     """
-    cols = ["rank", "ts_code", "name", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"]
+    d = _ensure_signal_cols(df)
 
     lines: list[str] = []
     lines.append("<table><tr>")
-    for c in cols:
+    for c in STD_SIGNAL_COLS:
         lines.append(f"<th>{c}</th>")
     lines.append("</tr>")
 
-    if df is None or df.empty:
+    if d is None or d.empty:
         lines.append("<tr><td colspan='9'></td></tr></table>\n")
         return lines
 
-    for _, r in df.iterrows():
+    for _, r in d.iterrows():
         lines.append("<tr>")
         lines.append(f"<td>{'' if pd.isna(r.get('rank', '')) else r.get('rank', '')}</td>")
         lines.append(f"<td>{'' if pd.isna(r.get('ts_code', '')) else r.get('ts_code', '')}</td>")
@@ -104,25 +126,18 @@ def _build_evrp_window(df: pd.DataFrame) -> pd.DataFrame:
     新增中间表窗口：
     EV > 3%
     RiskPenalty < 1%
-    """
-    d = _copy_std_cols(df)
 
-    if "EV" not in d.columns:
-        d["EV"] = pd.NA
-    if "RiskPenalty" not in d.columns:
-        d["RiskPenalty"] = pd.NA
+    注意：
+    这里严格保持原有候选池排序，不做重新按 EV 排序，
+    只做筛选，不改变既有价值排序逻辑。
+    """
+    d = _ensure_signal_cols(df)
 
     d["EV"] = pd.to_numeric(d["EV"], errors="coerce")
     d["RiskPenalty"] = pd.to_numeric(d["RiskPenalty"], errors="coerce")
 
     window_df = d[(d["EV"] > 0.03) & (d["RiskPenalty"] < 0.01)].copy()
-
-    sort_cols = [c for c in ["EV", "rank"] if c in window_df.columns]
-    ascending = [False if c == "EV" else True for c in sort_cols]
-    if sort_cols:
-        window_df = window_df.sort_values(sort_cols, ascending=ascending, kind="stable").reset_index(drop=True)
-
-    return window_df
+    return window_df.reset_index(drop=True)
 
 
 def write_daily_report_human(
@@ -138,7 +153,7 @@ def write_daily_report_human(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    d = _copy_std_cols(merged_df)
+    d = _ensure_signal_cols(merged_df)
 
     trade_date = _first_value(d, "trade_date")
     target_trade_date = _first_value(d, "target_trade_date")
