@@ -38,6 +38,8 @@
 - learning_table: `data/decision/decision_learning.csv`
 - weights_latest: `docs/weights/weights_latest.csv`
 - weights_dated: `docs/weights/weights_20260316.csv`
+- top_evr_latest: `docs/signals/TopEVR_latest.csv`
+- top_evr_dated: `docs/signals/TopEVR_20260313.csv`
 
 ## EV > 3% & RiskPenalty < 1%
 
