@@ -39,6 +39,13 @@
 - weights_latest: `docs/weights/weights_latest.csv`
 - weights_dated: `docs/weights/weights_20260316.csv`
 
+## EV > 3% & RiskPenalty < 1%
+
+| rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty |
+|---:|---|---|---:|---:|---:|---:|---:|---:|
+| 1 | 600121.SH | 郑州煤电 | 0.1 | 0.047659 | 0.98 | 0.053574 | 0.001174 | 0.00367 |
+| 2 | 002165.SZ | 红 宝 丽 | 0.1 | 0.04471 | 0.98 | 0.054166 | 0.001914 | 0.006459 |
+
 ## TopN Targets
 
 | rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty |
