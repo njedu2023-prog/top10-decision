@@ -5,7 +5,7 @@
 - 预测日（T）：**20260313**
 - 预测到期日（T+2）：**20260317**
 - 周期：**2 个交易日（T→T+2）**
-- 生成时间：2026-03-13T14:08:05Z
+- 生成时间：2026-03-15T13:29:26Z
 - 模型版本：**premium_v2**
 
 ## 预测表（Top30）
@@ -40,16 +40,16 @@
       <td>1</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002165.SZ</td>
-      <td>红 宝 丽</td>
-      <td>12.76</td>
-      <td>11.925</td>
-      <td>12.518</td>
-      <td>12.947</td>
-      <td>13.391</td>
-      <td>14.057</td>
+      <td>600691.SH</td>
+      <td>潞化科技</td>
+      <td>4.43</td>
+      <td>4.172</td>
+      <td>4.380</td>
+      <td>4.530</td>
+      <td>4.685</td>
+      <td>4.918</td>
       <td>1</td>
-      <td>56.17%</td>
+      <td>90.98%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -62,16 +62,16 @@
       <td>2</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002487.SZ</td>
-      <td>大金重工</td>
-      <td>80.65</td>
-      <td>75.345</td>
-      <td>79.091</td>
-      <td>81.804</td>
-      <td>84.610</td>
-      <td>88.816</td>
+      <td>002637.SZ</td>
+      <td>赞宇科技</td>
+      <td>15.87</td>
+      <td>14.904</td>
+      <td>15.645</td>
+      <td>16.181</td>
+      <td>16.736</td>
+      <td>17.568</td>
       <td>2</td>
-      <td>55.10%</td>
+      <td>80.78%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -87,13 +87,13 @@
       <td>600121.SH</td>
       <td>郑州煤电</td>
       <td>5.65</td>
-      <td>5.278</td>
-      <td>5.540</td>
-      <td>5.730</td>
-      <td>5.927</td>
-      <td>6.222</td>
+      <td>5.288</td>
+      <td>5.551</td>
+      <td>5.741</td>
+      <td>5.938</td>
+      <td>6.234</td>
       <td>3</td>
-      <td>54.91%</td>
+      <td>68.93%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -104,106 +104,106 @@
     </tr>
     <tr>
       <td>4</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>002470.SZ</td>
-      <td>金正大</td>
-      <td>3.22</td>
-      <td>3.006</td>
-      <td>3.156</td>
-      <td>3.264</td>
-      <td>3.376</td>
-      <td>3.544</td>
-      <td>4</td>
-      <td>53.19%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>5</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>002931.SZ</td>
-      <td>锋龙股份</td>
-      <td>81.58</td>
-      <td>76.126</td>
-      <td>79.911</td>
-      <td>82.652</td>
-      <td>85.487</td>
-      <td>89.737</td>
-      <td>5</td>
-      <td>51.44%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>6</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>603280.SH</td>
-      <td>南方路机</td>
-      <td>40.70</td>
-      <td>37.959</td>
-      <td>39.846</td>
-      <td>41.213</td>
-      <td>42.626</td>
-      <td>44.745</td>
-      <td>6</td>
-      <td>49.74%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>7</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>300185.SZ</td>
-      <td>通裕重工</td>
-      <td>4.21</td>
-      <td>3.925</td>
-      <td>4.120</td>
-      <td>4.261</td>
-      <td>4.407</td>
-      <td>4.626</td>
-      <td>7</td>
-      <td>48.29%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>8</td>
       <td>20260313</td>
       <td>20260317</td>
       <td>603929.SH</td>
       <td>亚翔集成</td>
       <td>140.83</td>
-      <td>130.642</td>
-      <td>137.137</td>
-      <td>141.840</td>
-      <td>146.705</td>
-      <td>153.999</td>
+      <td>131.778</td>
+      <td>138.329</td>
+      <td>143.074</td>
+      <td>147.981</td>
+      <td>155.338</td>
+      <td>4</td>
+      <td>68.06%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>002470.SZ</td>
+      <td>金正大</td>
+      <td>3.22</td>
+      <td>2.983</td>
+      <td>3.132</td>
+      <td>3.239</td>
+      <td>3.350</td>
+      <td>3.517</td>
+      <td>5</td>
+      <td>33.31%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>002950.SZ</td>
+      <td>奥美医疗</td>
+      <td>11.30</td>
+      <td>10.453</td>
+      <td>10.973</td>
+      <td>11.349</td>
+      <td>11.739</td>
+      <td>12.322</td>
+      <td>6</td>
+      <td>28.00%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>002382.SZ</td>
+      <td>蓝帆医疗</td>
+      <td>7.59</td>
+      <td>7.017</td>
+      <td>7.366</td>
+      <td>7.618</td>
+      <td>7.879</td>
+      <td>8.271</td>
+      <td>7</td>
+      <td>25.74%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
       <td>8</td>
-      <td>32.77%</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>600307.SH</td>
+      <td>酒钢宏兴</td>
+      <td>2.22</td>
+      <td>2.051</td>
+      <td>2.153</td>
+      <td>2.227</td>
+      <td>2.303</td>
+      <td>2.418</td>
+      <td>8</td>
+      <td>23.78%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -216,16 +216,16 @@
       <td>9</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002445.SZ</td>
-      <td>中南文化</td>
-      <td>4.49</td>
-      <td>4.165</td>
-      <td>4.372</td>
-      <td>4.522</td>
-      <td>4.677</td>
-      <td>4.909</td>
+      <td>000890.SZ</td>
+      <td>法尔胜</td>
+      <td>11.09</td>
+      <td>10.245</td>
+      <td>10.754</td>
+      <td>11.123</td>
+      <td>11.504</td>
+      <td>12.076</td>
       <td>9</td>
-      <td>32.39%</td>
+      <td>23.10%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -238,16 +238,16 @@
       <td>10</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603169.SH</td>
-      <td>兰石重装</td>
-      <td>12.80</td>
-      <td>11.852</td>
-      <td>12.442</td>
-      <td>12.868</td>
-      <td>13.310</td>
-      <td>13.971</td>
+      <td>001366.SZ</td>
+      <td>播恩集团</td>
+      <td>15.76</td>
+      <td>14.556</td>
+      <td>15.279</td>
+      <td>15.803</td>
+      <td>16.345</td>
+      <td>17.158</td>
       <td>10</td>
-      <td>27.01%</td>
+      <td>22.42%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -258,106 +258,18 @@
     </tr>
     <tr>
       <td>11</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>601669.SH</td>
-      <td>中国电建</td>
-      <td>7.19</td>
-      <td>6.646</td>
-      <td>6.976</td>
-      <td>7.216</td>
-      <td>7.463</td>
-      <td>7.834</td>
-      <td>11</td>
-      <td>21.51%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>12</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>600691.SH</td>
-      <td>潞化科技</td>
-      <td>4.43</td>
-      <td>4.090</td>
-      <td>4.293</td>
-      <td>4.441</td>
-      <td>4.593</td>
-      <td>4.821</td>
-      <td>12</td>
-      <td>17.74%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>13</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>600227.SH</td>
-      <td>赤天化</td>
-      <td>4.37</td>
-      <td>4.034</td>
-      <td>4.235</td>
-      <td>4.380</td>
-      <td>4.530</td>
-      <td>4.756</td>
-      <td>13</td>
-      <td>17.59%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>14</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>601611.SH</td>
-      <td>中国核建</td>
-      <td>19.21</td>
-      <td>17.692</td>
-      <td>18.572</td>
-      <td>19.209</td>
-      <td>19.868</td>
-      <td>20.855</td>
-      <td>14</td>
-      <td>10.11%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>15</td>
       <td>20260313</td>
       <td>20260317</td>
       <td>002438.SZ</td>
       <td>江苏神通</td>
       <td>19.26</td>
-      <td>17.718</td>
-      <td>18.599</td>
-      <td>19.237</td>
-      <td>19.897</td>
-      <td>20.886</td>
-      <td>15</td>
-      <td>6.58%</td>
+      <td>17.785</td>
+      <td>18.669</td>
+      <td>19.310</td>
+      <td>19.972</td>
+      <td>20.965</td>
+      <td>11</td>
+      <td>21.80%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -367,19 +279,19 @@
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
-      <td>16</td>
+      <td>12</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>000010.SZ</td>
-      <td>美丽生态</td>
-      <td>4.53</td>
-      <td>4.166</td>
-      <td>4.373</td>
-      <td>4.523</td>
-      <td>4.678</td>
-      <td>4.911</td>
-      <td>16</td>
-      <td>5.51%</td>
+      <td>603558.SH</td>
+      <td>健盛集团</td>
+      <td>12.99</td>
+      <td>11.976</td>
+      <td>12.572</td>
+      <td>13.003</td>
+      <td>13.449</td>
+      <td>14.117</td>
+      <td>12</td>
+      <td>16.29%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -389,19 +301,19 @@
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
-      <td>17</td>
+      <td>13</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>300981.SZ</td>
-      <td>中红医疗</td>
-      <td>15.77</td>
-      <td>14.500</td>
-      <td>15.221</td>
-      <td>15.743</td>
-      <td>16.283</td>
-      <td>17.092</td>
-      <td>17</td>
-      <td>4.95%</td>
+      <td>002931.SZ</td>
+      <td>锋龙股份</td>
+      <td>81.58</td>
+      <td>75.202</td>
+      <td>78.940</td>
+      <td>81.648</td>
+      <td>84.448</td>
+      <td>88.647</td>
+      <td>13</td>
+      <td>15.77%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -411,19 +323,107 @@
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
-      <td>18</td>
+      <td>14</td>
       <td>20260313</td>
       <td>20260317</td>
       <td>003027.SZ</td>
       <td>同兴科技</td>
       <td>24.52</td>
-      <td>22.540</td>
-      <td>23.661</td>
-      <td>24.472</td>
-      <td>25.312</td>
-      <td>26.570</td>
+      <td>22.587</td>
+      <td>23.710</td>
+      <td>24.523</td>
+      <td>25.364</td>
+      <td>26.625</td>
+      <td>14</td>
+      <td>13.29%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>601218.SH</td>
+      <td>吉鑫科技</td>
+      <td>6.94</td>
+      <td>6.392</td>
+      <td>6.710</td>
+      <td>6.940</td>
+      <td>7.178</td>
+      <td>7.535</td>
+      <td>15</td>
+      <td>12.91%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>603169.SH</td>
+      <td>兰石重装</td>
+      <td>12.80</td>
+      <td>11.786</td>
+      <td>12.371</td>
+      <td>12.796</td>
+      <td>13.235</td>
+      <td>13.893</td>
+      <td>16</td>
+      <td>11.75%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>601669.SH</td>
+      <td>中国电建</td>
+      <td>7.19</td>
+      <td>6.618</td>
+      <td>6.947</td>
+      <td>7.185</td>
+      <td>7.432</td>
+      <td>7.801</td>
+      <td>17</td>
+      <td>10.56%</td>
+      <td>+0.00%</td>
+      <td>0.0000</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
       <td>18</td>
-      <td>4.21%</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>002056.SZ</td>
+      <td>横店东磁</td>
+      <td>25.84</td>
+      <td>23.784</td>
+      <td>24.966</td>
+      <td>25.822</td>
+      <td>26.708</td>
+      <td>28.036</td>
+      <td>18</td>
+      <td>10.50%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -439,13 +439,13 @@
       <td>603538.SH</td>
       <td>美诺华</td>
       <td>25.37</td>
-      <td>23.316</td>
-      <td>24.475</td>
-      <td>25.315</td>
-      <td>26.183</td>
-      <td>27.485</td>
+      <td>23.351</td>
+      <td>24.511</td>
+      <td>25.352</td>
+      <td>26.222</td>
+      <td>27.525</td>
       <td>19</td>
-      <td>3.51%</td>
+      <td>10.45%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -458,16 +458,16 @@
       <td>20</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002323.SZ</td>
-      <td>雅博股份</td>
-      <td>2.54</td>
-      <td>2.334</td>
-      <td>2.450</td>
-      <td>2.534</td>
-      <td>2.621</td>
-      <td>2.752</td>
+      <td>600722.SH</td>
+      <td>金牛化工</td>
+      <td>16.94</td>
+      <td>15.590</td>
+      <td>16.365</td>
+      <td>16.926</td>
+      <td>17.507</td>
+      <td>18.377</td>
       <td>20</td>
-      <td>3.50%</td>
+      <td>10.12%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -483,13 +483,13 @@
       <td>000677.SZ</td>
       <td>恒天海龙</td>
       <td>5.02</td>
-      <td>4.614</td>
-      <td>4.843</td>
-      <td>5.009</td>
-      <td>5.181</td>
-      <td>5.438</td>
+      <td>4.620</td>
+      <td>4.849</td>
+      <td>5.016</td>
+      <td>5.188</td>
+      <td>5.446</td>
       <td>21</td>
-      <td>3.48%</td>
+      <td>9.93%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -502,16 +502,16 @@
       <td>22</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002637.SZ</td>
-      <td>赞宇科技</td>
-      <td>15.87</td>
-      <td>14.583</td>
-      <td>15.307</td>
-      <td>15.833</td>
-      <td>16.376</td>
-      <td>17.190</td>
+      <td>600726.SH</td>
+      <td>华电能源</td>
+      <td>4.27</td>
+      <td>3.929</td>
+      <td>4.124</td>
+      <td>4.266</td>
+      <td>4.412</td>
+      <td>4.631</td>
       <td>22</td>
-      <td>2.92%</td>
+      <td>9.27%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -524,16 +524,16 @@
       <td>23</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603366.SH</td>
-      <td>日出东方</td>
-      <td>10.32</td>
-      <td>9.482</td>
-      <td>9.954</td>
-      <td>10.295</td>
-      <td>10.648</td>
-      <td>11.178</td>
+      <td>002445.SZ</td>
+      <td>中南文化</td>
+      <td>4.49</td>
+      <td>4.131</td>
+      <td>4.336</td>
+      <td>4.485</td>
+      <td>4.639</td>
+      <td>4.869</td>
       <td>23</td>
-      <td>2.79%</td>
+      <td>8.84%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -546,16 +546,16 @@
       <td>24</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002543.SZ</td>
-      <td>万和电气</td>
-      <td>9.79</td>
-      <td>8.995</td>
-      <td>9.442</td>
-      <td>9.766</td>
-      <td>10.101</td>
-      <td>10.603</td>
+      <td>600227.SH</td>
+      <td>赤天化</td>
+      <td>4.37</td>
+      <td>4.020</td>
+      <td>4.219</td>
+      <td>4.364</td>
+      <td>4.514</td>
+      <td>4.738</td>
       <td>24</td>
-      <td>2.56%</td>
+      <td>8.30%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -568,16 +568,16 @@
       <td>25</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002950.SZ</td>
-      <td>奥美医疗</td>
-      <td>11.30</td>
-      <td>10.381</td>
-      <td>10.897</td>
-      <td>11.271</td>
-      <td>11.657</td>
-      <td>12.237</td>
+      <td>002969.SZ</td>
+      <td>嘉美包装</td>
+      <td>26.47</td>
+      <td>24.342</td>
+      <td>25.552</td>
+      <td>26.428</td>
+      <td>27.335</td>
+      <td>28.694</td>
       <td>25</td>
-      <td>2.15%</td>
+      <td>7.43%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -590,16 +590,16 @@
       <td>26</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603248.SH</td>
-      <td>锡华科技</td>
-      <td>28.20</td>
-      <td>25.906</td>
-      <td>27.194</td>
-      <td>28.127</td>
-      <td>29.091</td>
-      <td>30.537</td>
+      <td>603803.SH</td>
+      <td>瑞斯康达</td>
+      <td>13.75</td>
+      <td>12.644</td>
+      <td>13.272</td>
+      <td>13.728</td>
+      <td>14.198</td>
+      <td>14.904</td>
       <td>26</td>
-      <td>2.15%</td>
+      <td>7.23%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -612,16 +612,16 @@
       <td>27</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>003041.SZ</td>
-      <td>真爱美家</td>
-      <td>69.85</td>
-      <td>64.165</td>
-      <td>67.355</td>
-      <td>69.665</td>
-      <td>72.054</td>
-      <td>75.636</td>
+      <td>600683.SH</td>
+      <td>京投发展</td>
+      <td>8.76</td>
+      <td>8.055</td>
+      <td>8.455</td>
+      <td>8.745</td>
+      <td>9.045</td>
+      <td>9.495</td>
       <td>27</td>
-      <td>2.01%</td>
+      <td>7.12%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -634,16 +634,16 @@
       <td>28</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002382.SZ</td>
-      <td>蓝帆医疗</td>
-      <td>7.59</td>
-      <td>6.972</td>
-      <td>7.319</td>
-      <td>7.570</td>
-      <td>7.829</td>
-      <td>8.218</td>
+      <td>603607.SH</td>
+      <td>京华激光</td>
+      <td>24.55</td>
+      <td>22.573</td>
+      <td>23.695</td>
+      <td>24.508</td>
+      <td>25.348</td>
+      <td>26.608</td>
       <td>28</td>
-      <td>1.90%</td>
+      <td>6.92%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -656,16 +656,16 @@
       <td>29</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002903.SZ</td>
-      <td>宇环数控</td>
-      <td>31.03</td>
-      <td>28.503</td>
-      <td>29.920</td>
-      <td>30.946</td>
-      <td>32.008</td>
-      <td>33.599</td>
+      <td>603280.SH</td>
+      <td>南方路机</td>
+      <td>40.70</td>
+      <td>37.413</td>
+      <td>39.273</td>
+      <td>40.620</td>
+      <td>42.013</td>
+      <td>44.102</td>
       <td>29</td>
-      <td>1.84%</td>
+      <td>6.09%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -678,16 +678,16 @@
       <td>30</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>600722.SH</td>
-      <td>金牛化工</td>
-      <td>16.94</td>
-      <td>15.560</td>
-      <td>16.334</td>
-      <td>16.894</td>
-      <td>17.474</td>
-      <td>18.342</td>
+      <td>600232.SH</td>
+      <td>金鹰股份</td>
+      <td>8.78</td>
+      <td>8.071</td>
+      <td>8.472</td>
+      <td>8.762</td>
+      <td>9.063</td>
+      <td>9.514</td>
       <td>30</td>
-      <td>1.83%</td>
+      <td>5.95%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
@@ -729,8 +729,8 @@
       <td>1</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002165.SZ</td>
-      <td>红 宝 丽</td>
+      <td>600691.SH</td>
+      <td>潞化科技</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -745,8 +745,8 @@
       <td>2</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002487.SZ</td>
-      <td>大金重工</td>
+      <td>002637.SZ</td>
+      <td>赞宇科技</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -777,8 +777,8 @@
       <td>4</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002470.SZ</td>
-      <td>金正大</td>
+      <td>603929.SH</td>
+      <td>亚翔集成</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -793,8 +793,8 @@
       <td>5</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002931.SZ</td>
-      <td>锋龙股份</td>
+      <td>002470.SZ</td>
+      <td>金正大</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -809,8 +809,8 @@
       <td>6</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603280.SH</td>
-      <td>南方路机</td>
+      <td>002950.SZ</td>
+      <td>奥美医疗</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -825,8 +825,8 @@
       <td>7</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>300185.SZ</td>
-      <td>通裕重工</td>
+      <td>002382.SZ</td>
+      <td>蓝帆医疗</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -841,8 +841,8 @@
       <td>8</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603929.SH</td>
-      <td>亚翔集成</td>
+      <td>600307.SH</td>
+      <td>酒钢宏兴</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -857,8 +857,8 @@
       <td>9</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002445.SZ</td>
-      <td>中南文化</td>
+      <td>000890.SZ</td>
+      <td>法尔胜</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -873,8 +873,8 @@
       <td>10</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603169.SH</td>
-      <td>兰石重装</td>
+      <td>001366.SZ</td>
+      <td>播恩集团</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -887,70 +887,6 @@
     </tr>
     <tr>
       <td>11</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>601669.SH</td>
-      <td>中国电建</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>12</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>600691.SH</td>
-      <td>潞化科技</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>13</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>600227.SH</td>
-      <td>赤天化</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>14</td>
-      <td>20260313</td>
-      <td>20260317</td>
-      <td>601611.SH</td>
-      <td>中国核建</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>15</td>
       <td>20260313</td>
       <td>20260317</td>
       <td>002438.SZ</td>
@@ -966,11 +902,75 @@
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
+      <td>12</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>603558.SH</td>
+      <td>健盛集团</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>002931.SZ</td>
+      <td>锋龙股份</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>003027.SZ</td>
+      <td>同兴科技</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>20260313</td>
+      <td>20260317</td>
+      <td>601218.SH</td>
+      <td>吉鑫科技</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>&lt;NA&gt;</td>
+    </tr>
+    <tr>
       <td>16</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>000010.SZ</td>
-      <td>美丽生态</td>
+      <td>603169.SH</td>
+      <td>兰石重装</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -985,8 +985,8 @@
       <td>17</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>300981.SZ</td>
-      <td>中红医疗</td>
+      <td>601669.SH</td>
+      <td>中国电建</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1001,8 +1001,8 @@
       <td>18</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>003027.SZ</td>
-      <td>同兴科技</td>
+      <td>002056.SZ</td>
+      <td>横店东磁</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1033,8 +1033,8 @@
       <td>20</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002323.SZ</td>
-      <td>雅博股份</td>
+      <td>600722.SH</td>
+      <td>金牛化工</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1065,8 +1065,8 @@
       <td>22</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002637.SZ</td>
-      <td>赞宇科技</td>
+      <td>600726.SH</td>
+      <td>华电能源</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1081,8 +1081,8 @@
       <td>23</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603366.SH</td>
-      <td>日出东方</td>
+      <td>002445.SZ</td>
+      <td>中南文化</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1097,8 +1097,8 @@
       <td>24</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002543.SZ</td>
-      <td>万和电气</td>
+      <td>600227.SH</td>
+      <td>赤天化</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1113,8 +1113,8 @@
       <td>25</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002950.SZ</td>
-      <td>奥美医疗</td>
+      <td>002969.SZ</td>
+      <td>嘉美包装</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1129,8 +1129,8 @@
       <td>26</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>603248.SH</td>
-      <td>锡华科技</td>
+      <td>603803.SH</td>
+      <td>瑞斯康达</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1145,8 +1145,8 @@
       <td>27</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>003041.SZ</td>
-      <td>真爱美家</td>
+      <td>600683.SH</td>
+      <td>京投发展</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1161,8 +1161,8 @@
       <td>28</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002382.SZ</td>
-      <td>蓝帆医疗</td>
+      <td>603607.SH</td>
+      <td>京华激光</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1177,8 +1177,8 @@
       <td>29</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>002903.SZ</td>
-      <td>宇环数控</td>
+      <td>603280.SH</td>
+      <td>南方路机</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1193,8 +1193,8 @@
       <td>30</td>
       <td>20260313</td>
       <td>20260317</td>
-      <td>600722.SH</td>
-      <td>金牛化工</td>
+      <td>600232.SH</td>
+      <td>金鹰股份</td>
       <td>-</td>
       <td>-</td>
       <td>-</td>
@@ -1219,12 +1219,12 @@
 
 ---
 ## 审计（Factor Packs / Degrade）
-- degrade_mode: **degraded**
-- packs_used: `Pack0, Pack2`
-- packs_missing: `Pack1`
+- degrade_mode: **full**
+- packs_used: `Pack0, Pack1, Pack2`
+- packs_missing: `-`
 
 ### notes
 - 01. Pack0 baseline always on
-- 02. Pack1 disabled: market cache missing -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260313.csv
+- 02. Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260313.csv
 - 03. Pack2 enabled (soft mode, fixed)
 
