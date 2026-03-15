@@ -22,6 +22,7 @@ top10-decision — V2 runner (Orchestrator Only)
 - 在 Decision 报告中追加 Full Candidate Pool（全候选池精简展示表）
 - 新增 Artifacts 下方的高 EV / 低 RiskPenalty 筛选表
 - TopN Targets / Full Candidate Pool 均按 EV 降序展示
+- 新增 TopEVR 信号文件输出（latest + dated，可空表）
 """
 
 from __future__ import annotations
@@ -64,7 +65,9 @@ from top10decision.writers.artifacts import (
     write_candidates_snapshot,
     write_weights,
     write_signals,
+    write_top_evr_signals,
     build_signal_df_for_joinquant,
+    build_top_evr_signal_df,
 )
 from top10decision.writers.reports import write_decision_report, write_eval_json
 from top10decision.writers.io_contract import (
@@ -602,6 +605,18 @@ def main() -> int:
         )
         weights_latest_path, weights_dated_path = write_weights(weights_df, exec_date=exec_date)
 
+        top_evr_signal_df = build_top_evr_signal_df(
+            candidates_df=cand_snapshot,
+            risk_budget=risk_budget,
+            regime_name=regime_name,
+            trade_date=trade_date,
+            target_trade_date=target_trade_date,
+        )
+        top_evr_latest_path, top_evr_dated_path = write_top_evr_signals(
+            top_evr_signal_df,
+            trade_date=trade_date,
+        )
+
         report_lines: List[str] = []
         report_lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
         report_lines.append(f"**停手：{stop_note}**\n\n")
@@ -615,7 +630,17 @@ def main() -> int:
         report_lines.append(f"- truth_close_loaded: **{input_status.get('truth_close_loaded', False)}**\n")
         report_lines.append(f"- meta_loaded: **{input_status.get('meta_loaded', False)}**\n")
         report_lines.append("- p_fill_pred_src: **stop_zero**\n")
-        report_lines.append("- eret_pred_src: **stop_zero**\n")
+        report_lines.append("- eret_pred_src: **stop_zero**\n\n")
+
+        report_lines.append("## Artifacts\n\n")
+        report_lines.append(f"- candidates_snapshot: `{cand_path}`\n")
+        report_lines.append(f"- execution_table: `{exec_path}`\n")
+        report_lines.append(f"- learning_table: `{learning_path}`\n")
+        report_lines.append(f"- weights_latest: `{weights_latest_path}`\n")
+        report_lines.append(f"- weights_dated: `{weights_dated_path}`\n")
+        report_lines.append(f"- top_evr_latest: `{top_evr_latest_path}`\n")
+        report_lines.append(f"- top_evr_dated: `{top_evr_dated_path}`\n")
+
         report_path = write_decision_report(exec_date, "".join(report_lines))
 
         write_eval_json(
@@ -632,6 +657,16 @@ def main() -> int:
                 "engine_status": {
                     "p_fill_pred_src": "stop_zero",
                     "eret_pred_src": "stop_zero",
+                },
+                "paths": {
+                    "candidates": cand_path,
+                    "execution": exec_path,
+                    "learning": learning_path,
+                    "weights_latest": weights_latest_path,
+                    "weights_dated": weights_dated_path,
+                    "top_evr_latest": top_evr_latest_path,
+                    "top_evr_dated": top_evr_dated_path,
+                    "decision_report": report_path,
                 },
             },
         )
@@ -686,6 +721,19 @@ def main() -> int:
         target_trade_date=target_trade_date,
     )
     write_signals(signal_df, trade_date=trade_date)
+
+    # TopEVR：动态票数，允许空表
+    top_evr_signal_df = build_top_evr_signal_df(
+        candidates_df=routed_df,
+        risk_budget=risk_budget,
+        regime_name=regime_name,
+        trade_date=trade_date,
+        target_trade_date=target_trade_date,
+    )
+    top_evr_latest_path, top_evr_dated_path = write_top_evr_signals(
+        top_evr_signal_df,
+        trade_date=trade_date,
+    )
 
     exec_path = ensure_execution_table(exec_date=exec_date)
     learning_path = ensure_learning_table()
@@ -748,7 +796,9 @@ def main() -> int:
     lines.append(f"- execution_table: `{exec_path}`\n")
     lines.append(f"- learning_table: `{learning_path}`\n")
     lines.append(f"- weights_latest: `{weights_latest_path}`\n")
-    lines.append(f"- weights_dated: `{weights_dated_path}`\n\n")
+    lines.append(f"- weights_dated: `{weights_dated_path}`\n")
+    lines.append(f"- top_evr_latest: `{top_evr_latest_path}`\n")
+    lines.append(f"- top_evr_dated: `{top_evr_dated_path}`\n\n")
 
     _append_candidate_markdown_table(lines, "EV > 3% & RiskPenalty < 1%", high_ev_low_risk_df)
     _append_candidate_markdown_table(lines, "TopN Targets", topn_report_df)
@@ -791,6 +841,8 @@ def main() -> int:
             "learning": learning_path,
             "weights_latest": weights_latest_path,
             "weights_dated": weights_dated_path,
+            "top_evr_latest": top_evr_latest_path,
+            "top_evr_dated": top_evr_dated_path,
             "decision_report": report_path,
         },
         "report_stats": {
