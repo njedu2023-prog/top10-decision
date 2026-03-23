@@ -205,7 +205,7 @@ Decision 主线中：
 
 - `max(Open_T+1, Low_T+1)` 不成立，禁止这种伪逻辑
 - 允许定义专门的弱代理列：
-  - `entry_price_proxy_mode = "weak_daily_proxy"`
+  - `entry_price_proxy_mode = "t1_open_degrade_missing"`
   - `entry_price_proxy_t1 = Open_T+1`（仅限“开盘可买”样本）
 - 对于“开盘不可买但盘中可买”的样本，若无分钟真值，禁止伪造精细价格，宁可置空或降级
 
