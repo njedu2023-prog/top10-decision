@@ -45,11 +45,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from top10decision.configs import entry_price_proxy_config, fill_truth_config
 
 
 # =========================
@@ -154,7 +162,7 @@ class Paths:
 
 
 def detect_project_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return PROJECT_ROOT
 
 
 def build_paths(
@@ -219,95 +227,87 @@ def load_maturity_info(
 ) -> MaturityInfo:
     if not maturity_csv.exists():
         raise FileNotFoundError(
-            f"缺少样本成熟度解析结果：{maturity_csv}。"
-            f"请先运行 scripts/resolve_sample_maturity.py。"
+            f"找不到 sample_maturity 文件：{maturity_csv}；"
+            f"请先运行 resolve_sample_maturity.py"
         )
 
     df = safe_read_csv(maturity_csv)
     if df.empty:
-        raise ValueError(f"样本成熟度文件为空：{maturity_csv}")
+        raise ValueError(f"sample_maturity 文件为空：{maturity_csv}")
 
-    if "trade_date" not in df.columns:
-        raise ValueError(f"样本成熟度文件缺少 trade_date 列：{maturity_csv}")
+    trade_col = first_existing(df, ["trade_date"])
+    if trade_col is None:
+        raise ValueError(f"sample_maturity 缺少 trade_date 列：{maturity_csv}")
 
     out = df.copy()
-    out["trade_date"] = out["trade_date"].map(norm_ymd)
-    hit = out[out["trade_date"] == trade_date].copy()
+    out["trade_date"] = out[trade_col].map(norm_ymd)
+
+    hit = out[out["trade_date"] == norm_ymd(trade_date)].copy()
     if hit.empty:
         raise ValueError(
-            f"样本成熟度文件中找不到 trade_date={trade_date}：{maturity_csv}"
+            f"sample_maturity 中找不到 trade_date={trade_date} 的记录；文件={maturity_csv}"
         )
 
-    row = hit.iloc[-1]
+    row = hit.iloc[0].to_dict()
 
     exec_date = norm_ymd(exec_date_override) or norm_ymd(row.get("exec_date"))
     target_date = norm_ymd(target_date_override) or norm_ymd(row.get("target_date"))
-    sample_maturity = str(row.get("sample_maturity") or "").strip()
-    pfill_ready = _parse_ready_flag(row.get("PFILL_READY"))
-    eret_ready = _parse_ready_flag(row.get("ERET_READY"))
-    fully_ready = _parse_ready_flag(row.get("FULLY_READY"))
+    sample_maturity = str(row.get("sample_maturity", "") or "").strip()
+    label_ready_fill = _parse_ready_flag(row.get("FILL_READY", 0))
+    label_ready_ret = _parse_ready_flag(row.get("ERET_READY", 0))
+    fully_ready = _parse_ready_flag(row.get("FULLY_READY", 0))
 
     if not exec_date:
-        raise ValueError(
-            f"trade_date={trade_date} 在成熟度文件中 exec_date 为空，"
-            f"说明该样本尚未具备 P_fill 真值构建条件：{maturity_csv}"
-        )
-
-    if not sample_maturity:
-        if pfill_ready and eret_ready:
-            sample_maturity = "FULLY_READY"
-        elif pfill_ready:
-            sample_maturity = "PFILL_READY"
-        else:
-            sample_maturity = "UNREADY"
+        raise ValueError(f"sample_maturity trade_date={trade_date} 缺少 exec_date")
+    if not target_date:
+        raise ValueError(f"sample_maturity trade_date={trade_date} 缺少 target_date")
 
     return MaturityInfo(
-        trade_date=trade_date,
+        trade_date=norm_ymd(trade_date),
         exec_date=exec_date,
         target_date=target_date,
         sample_maturity=sample_maturity,
-        label_ready_fill=pfill_ready,
-        label_ready_ret=eret_ready,
+        label_ready_fill=label_ready_fill,
+        label_ready_ret=label_ready_ret,
         fully_ready=fully_ready,
     )
 
 
 # =========================
-# 候选池读取（严格以 pred_source 为准）
+# 候选池读取
 # =========================
 
 def load_candidate_pool(paths: Paths, trade_date: str) -> Tuple[pd.DataFrame, str]:
-    src_path = paths.pred_archive if paths.pred_archive.exists() else paths.pred_latest
-    if not src_path.exists():
-        raise FileNotFoundError(
-            f"找不到 pred_source 候选池：{paths.pred_archive} / {paths.pred_latest}"
-        )
+    candidates: List[Path] = []
+    if paths.pred_archive.exists():
+        candidates.append(paths.pred_archive)
+    if paths.pred_latest.exists():
+        candidates.append(paths.pred_latest)
 
-    pred = safe_read_csv(src_path)
-    if pred.empty:
-        raise ValueError(f"pred_source 候选池为空：{src_path}")
+    for path in candidates:
+        df = safe_read_csv(path)
+        if df.empty:
+            continue
+        df = ensure_ts_code(df)
 
-    pred = ensure_ts_code(pred)
-    if "trade_date" in pred.columns:
-        pred["trade_date"] = pred["trade_date"].map(norm_ymd)
-        filtered = pred[pred["trade_date"] == trade_date].copy()
-        if not filtered.empty:
-            pred = filtered
+        if "trade_date" in df.columns:
+            df["trade_date"] = df["trade_date"].map(norm_ymd)
+            hit = df[df["trade_date"] == trade_date].copy()
+            if not hit.empty:
+                return hit, str(path)
         else:
-            pred = pred.copy()
-            pred["trade_date"] = trade_date
-    else:
-        pred["trade_date"] = trade_date
+            out = df.copy()
+            out["trade_date"] = trade_date
+            return out, str(path)
 
-    if pred.empty:
-        raise ValueError(f"pred_source 在 trade_date={trade_date} 下无候选样本：{src_path}")
-
-    pred = pred.drop_duplicates(subset=["trade_date", "ts_code"]).copy()
-    return pred, str(src_path)
+    raise FileNotFoundError(
+        f"未找到 trade_date={trade_date} 的 pred_source 候选池；"
+        f"尝试过：{paths.pred_archive} / {paths.pred_latest}"
+    )
 
 
 # =========================
-# 读取 T+1 快照
+# T+1 truth 读取
 # =========================
 
 @dataclass
@@ -319,115 +319,114 @@ class T1Truth:
     suspend_d: pd.DataFrame
 
 
+def _read_snapshot_csv(base: Path, filename: str) -> pd.DataFrame:
+    path = base / filename
+    return safe_read_csv(path)
+
+
 def load_t1_truth(raw_root: Path, exec_date: str) -> T1Truth:
-    snap = snapshot_dir(raw_root, exec_date)
+    base = snapshot_dir(raw_root, exec_date)
     return T1Truth(
-        daily=safe_read_csv(snap / "daily.csv"),
-        stk_limit=safe_read_csv(snap / "stk_limit.csv"),
-        limit_list_d=safe_read_csv(snap / "limit_list_d.csv"),
-        limit_break_d=safe_read_csv(snap / "limit_break_d.csv"),
-        suspend_d=safe_read_csv(snap / "suspend_d.csv"),
+        daily=_read_snapshot_csv(base, "daily.csv"),
+        stk_limit=_read_snapshot_csv(base, "stk_limit.csv"),
+        limit_list_d=_read_snapshot_csv(base, "limit_list_d.csv"),
+        limit_break_d=_read_snapshot_csv(base, "limit_break_d.csv"),
+        suspend_d=_read_snapshot_csv(base, "suspend_d.csv"),
     )
 
 
 def prep_daily(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["ts_code"])
+        return pd.DataFrame(columns=["ts_code", "open_t1"])
     out = ensure_ts_code(df)
-    rename_map: Dict[str, str] = {}
-
-    for srcs, target in [
-        (["open", "开盘价"], "open_t1"),
-        (["high", "最高价"], "high_t1"),
-        (["low", "最低价"], "low_t1"),
-        (["close", "收盘价"], "close_t1"),
-        (["vol", "volume", "成交量"], "vol_t1"),
-        (["amount", "成交额"], "amount_t1"),
-        (["pct_chg", "涨跌幅"], "pct_chg_t1"),
-        (["trade_date", "日期"], "exec_date"),
-    ]:
-        hit = first_existing(out, srcs)
-        if hit is not None:
-            rename_map[hit] = target
-
-    out = out.rename(columns=rename_map)
-    keep = ["ts_code"] + [c for c in rename_map.values() if c in out.columns]
-    return out[keep].copy()
+    open_col = first_existing(out, ["open", "开盘价", "open_price"])
+    if open_col is None:
+        return pd.DataFrame(columns=["ts_code", "open_t1"])
+    out = out[["ts_code", open_col]].copy()
+    out = out.rename(columns={open_col: "open_t1"})
+    return out
 
 
 def prep_stk_limit(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["ts_code"])
+        return pd.DataFrame(columns=["ts_code", "up_limit_t1", "down_limit_t1"])
     out = ensure_ts_code(df)
-    rename_map: Dict[str, str] = {}
+    up_col = first_existing(out, ["up_limit", "涨停价"])
+    down_col = first_existing(out, ["down_limit", "跌停价"])
+    keep = ["ts_code"]
+    if up_col is not None:
+        keep.append(up_col)
+    if down_col is not None:
+        keep.append(down_col)
+    out = out[keep].copy()
+    ren = {}
+    if up_col is not None:
+        ren[up_col] = "up_limit_t1"
+    if down_col is not None:
+        ren[down_col] = "down_limit_t1"
+    out = out.rename(columns=ren)
+    return out
 
-    for srcs, target in [
-        (["up_limit", "涨停价"], "up_limit_t1"),
-        (["down_limit", "跌停价"], "down_limit_t1"),
-    ]:
-        hit = first_existing(out, srcs)
-        if hit is not None:
-            rename_map[hit] = target
 
-    out = out.rename(columns=rename_map)
-    keep = ["ts_code"] + [c for c in rename_map.values() if c in out.columns]
-    return out[keep].copy()
+def _pick_open_times_col(df: pd.DataFrame) -> Optional[str]:
+    return first_existing(
+        df,
+        [
+            "open_times",
+            "open_num",
+            "open_count",
+            "炸板次数",
+            "开板次数",
+        ],
+    )
 
 
 def prep_limit_list(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["ts_code"])
+        return pd.DataFrame(columns=["ts_code", "open_times_t1"])
     out = ensure_ts_code(df)
-    rename_map: Dict[str, str] = {}
-
-    for srcs, target in [
-        (["limit_type"], "limit_type_t1"),
-        (["open_times"], "open_times_t1"),
-        (["first_seal_time"], "first_seal_time_t1"),
-        (["last_seal_time"], "last_seal_time_t1"),
-        (["seal_amount"], "seal_amount_t1"),
-    ]:
-        hit = first_existing(out, srcs)
-        if hit is not None:
-            rename_map[hit] = target
-
-    out = out.rename(columns=rename_map)
-    keep = ["ts_code"] + [c for c in rename_map.values() if c in out.columns]
-    return out[keep].copy()
+    col = _pick_open_times_col(out)
+    if col is None:
+        return pd.DataFrame(columns=["ts_code", "open_times_t1"])
+    out = out[["ts_code", col]].copy()
+    out = out.rename(columns={col: "open_times_t1"})
+    return out
 
 
 def prep_limit_break(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame(columns=["ts_code"])
+        return pd.DataFrame(columns=["ts_code", "break_open_times_t1"])
     out = ensure_ts_code(df)
-    rename_map: Dict[str, str] = {}
-
-    for srcs, target in [
-        (["open_times"], "break_open_times_t1"),
-        (["limit_times"], "limit_times_t1"),
-        (["latest", "last_price"], "break_latest_t1"),
-    ]:
-        hit = first_existing(out, srcs)
-        if hit is not None:
-            rename_map[hit] = target
-
-    out = out.rename(columns=rename_map)
-    keep = ["ts_code"] + [c for c in rename_map.values() if c in out.columns]
-    return out[keep].copy()
+    col = _pick_open_times_col(out)
+    if col is None:
+        return pd.DataFrame(columns=["ts_code", "break_open_times_t1"])
+    out = out[["ts_code", col]].copy()
+    out = out.rename(columns={col: "break_open_times_t1"})
+    return out
 
 
 def prep_suspend(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=["ts_code", "is_suspended_t1"])
-    out = ensure_ts_code(df)
-    status_col = first_existing(out, ["suspend_type", "suspend_reason", "is_suspended", "status"])
-    if status_col is None:
-        out["is_suspended_t1"] = True
-        return out[["ts_code", "is_suspended_t1"]].copy()
 
-    flag = normalize_bool_series(out[status_col])
-    out["is_suspended_t1"] = flag.fillna(True)
-    return out[["ts_code", "is_suspended_t1"]].copy()
+    out = ensure_ts_code(df)
+
+    status_col = first_existing(
+        out,
+        [
+            "is_suspended",
+            "suspend_type",
+            "suspend",
+            "停牌标记",
+            "停牌",
+        ],
+    )
+    if status_col is None:
+        return pd.DataFrame(columns=["ts_code", "is_suspended_t1"])
+
+    x = out[["ts_code", status_col]].copy()
+    x["is_suspended_t1"] = normalize_bool_series(x[status_col]).fillna(False)
+    return x[["ts_code", "is_suspended_t1"]].copy()
 
 
 def merge_t1_truth(truth: T1Truth) -> pd.DataFrame:
@@ -476,7 +475,7 @@ def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
 
     if pd.notna(open_t1):
         if pd.isna(up_limit_t1) or abs(open_t1 - up_limit_t1) >= 1e-8:
-            return 1, "strong_open_tradable", float(open_t1), "open_t1"
+            return 1, "strong_open_tradable", float(open_t1), entry_price_proxy_config.mode_default
 
     has_break = (
         (pd.notna(open_times_t1) and open_times_t1 > 0)
@@ -484,7 +483,7 @@ def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
     )
     if has_break:
         if pd.notna(open_t1):
-            return 1, "weak_intraday_break_without_minbar", float(open_t1), "weak_daily_proxy"
+            return 1, "weak_intraday_break_without_minbar", float(open_t1), entry_price_proxy_config.mode_fallback
         return 1, "weak_intraday_break_without_price", None, ""
 
     if is_limit_up_dead(row):
@@ -574,8 +573,8 @@ def build_fill_truth(
     out["label_ready_ret"] = int(label_ready_ret)
 
     out["label_version"] = "pfill_truth_v4_maturity_resolved"
-    out["buy_window_start"] = "09:30:00"
-    out["buy_window_end"] = "10:30:00"
+    out["buy_window_start"] = fill_truth_config.buy_window_start
+    out["buy_window_end"] = fill_truth_config.buy_window_end
 
     front = [
         "trade_date",
@@ -624,22 +623,19 @@ def write_meta(
         "rows": int(len(df)),
         "sample_maturity": (
             df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict()
-            if "sample_maturity" in df.columns
-            else {}
+            if "sample_maturity" in df.columns else {}
         ),
         "label_ready_fill": int(df["label_ready_fill"].fillna(0).sum()) if "label_ready_fill" in df.columns else 0,
         "label_ready_ret": int(df["label_ready_ret"].fillna(0).sum()) if "label_ready_ret" in df.columns else 0,
-        "y_fill_1": int((df["y_fill"] == 1).sum()) if "y_fill" in df.columns else 0,
-        "y_fill_0": int((df["y_fill"] == 0).sum()) if "y_fill" in df.columns else 0,
+        "y_fill_rate": float(df["y_fill"].mean()) if "y_fill" in df.columns and len(df) > 0 else None,
         "quality_counts": (
             df["fill_label_quality"].astype(str).value_counts(dropna=False).to_dict()
-            if "fill_label_quality" in df.columns
-            else {}
+            if "fill_label_quality" in df.columns else {}
         ),
         "source": {
             "pred_source": pred_source_path,
             "features_limit": str(paths.features_limit),
-            "raw_root": str(paths.raw_root),
+            "raw_exec_snapshot": str(snapshot_dir(paths.raw_root, exec_date)),
             "sample_maturity_csv": str(paths.maturity_csv),
         },
         "output": str(paths.out_csv),
@@ -650,40 +646,28 @@ def write_meta(
     )
 
 
+# =========================
+# CLI
+# =========================
+
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="构建 P_fill 标签层 fill_truth_{trade_date}.csv")
+    ap = argparse.ArgumentParser(description="Build fill_truth_{trade_date}.csv")
     ap.add_argument("--trade-date", required=True, help="T 日，格式 YYYYMMDD")
-    ap.add_argument(
-        "--exec-date",
-        default="",
-        help="T+1 执行日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
-    )
-    ap.add_argument(
-        "--target-date",
-        default="",
-        help="T+2 目标日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
-    )
-    ap.add_argument(
-        "--maturity-csv",
-        default="",
-        help="样本成熟度解析结果路径；留空默认 data/market/sample_maturity_latest.csv",
-    )
+    ap.add_argument("--exec-date", default="", help="可选覆盖 T+1 日期；默认从 sample_maturity 读取")
+    ap.add_argument("--target-date", default="", help="可选覆盖 T+2 日期；默认从 sample_maturity 读取")
+    ap.add_argument("--maturity-csv", default="", help="sample_maturity_latest.csv 路径")
     return ap.parse_args()
 
 
-def main() -> int:
+def main() -> None:
     args = parse_args()
     trade_date = norm_ymd(args.trade_date)
-    if len(trade_date) != 8:
-        raise ValueError("--trade-date 必须是 YYYYMMDD")
+    if not trade_date:
+        raise ValueError("trade_date 不能为空")
 
-    paths = build_paths(
-        trade_date=trade_date,
-        maturity_csv=args.maturity_csv,
-    )
-    paths.market_dir.mkdir(parents=True, exist_ok=True)
+    paths = build_paths(trade_date=trade_date, maturity_csv=args.maturity_csv)
 
-    maturity_info = load_maturity_info(
+    maturity = load_maturity_info(
         maturity_csv=paths.maturity_csv,
         trade_date=trade_date,
         exec_date_override=args.exec_date,
@@ -691,37 +675,41 @@ def main() -> int:
     )
 
     df, pred_source_path = build_fill_truth(
-        trade_date=trade_date,
-        exec_date=maturity_info.exec_date,
-        target_date=maturity_info.target_date,
-        sample_maturity=maturity_info.sample_maturity,
-        label_ready_fill=maturity_info.label_ready_fill,
-        label_ready_ret=maturity_info.label_ready_ret,
+        trade_date=maturity.trade_date,
+        exec_date=maturity.exec_date,
+        target_date=maturity.target_date,
+        sample_maturity=maturity.sample_maturity,
+        label_ready_fill=maturity.label_ready_fill,
+        label_ready_ret=maturity.label_ready_ret,
         paths=paths,
     )
+
+    paths.market_dir.mkdir(parents=True, exist_ok=True)
     df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")
     write_meta(
-        df,
-        trade_date,
-        maturity_info.exec_date,
-        maturity_info.target_date,
-        paths,
-        pred_source_path,
+        df=df,
+        trade_date=maturity.trade_date,
+        exec_date=maturity.exec_date,
+        target_date=maturity.target_date,
+        paths=paths,
+        pred_source_path=pred_source_path,
     )
 
-    print(f"[build_fill_truth] trade_date={trade_date}")
-    print(f"[build_fill_truth] exec_date={maturity_info.exec_date}")
-    print(f"[build_fill_truth] target_date={maturity_info.target_date}")
-    print(f"[build_fill_truth] sample_maturity={maturity_info.sample_maturity}")
-    print(f"[build_fill_truth] label_ready_fill={maturity_info.label_ready_fill}")
-    print(f"[build_fill_truth] label_ready_ret={maturity_info.label_ready_ret}")
-    print(f"[build_fill_truth] rows={len(df)}")
-    print(f"[build_fill_truth] pred_source={pred_source_path}")
-    print(f"[build_fill_truth] maturity_csv={paths.maturity_csv}")
-    print(f"[build_fill_truth] out={paths.out_csv}")
-    print(f"[build_fill_truth] meta={paths.out_meta}")
-    return 0
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "trade_date": maturity.trade_date,
+                "exec_date": maturity.exec_date,
+                "target_date": maturity.target_date,
+                "rows": int(len(df)),
+                "out_csv": str(paths.out_csv),
+                "out_meta": str(paths.out_meta),
+            },
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
