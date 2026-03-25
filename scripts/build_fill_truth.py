@@ -248,14 +248,19 @@ def load_maturity_info(
             f"sample_maturity 中找不到 trade_date={trade_date} 的记录；文件={maturity_csv}"
         )
 
+    fill_ready_col = first_existing(hit, ["PFILL_READY", "FILL_READY"])
+    eret_ready_col = first_existing(hit, ["ERET_READY"])
+    fully_ready_col = first_existing(hit, ["FULLY_READY"])
+
     row = hit.iloc[0].to_dict()
 
     exec_date = norm_ymd(exec_date_override) or norm_ymd(row.get("exec_date"))
     target_date = norm_ymd(target_date_override) or norm_ymd(row.get("target_date"))
     sample_maturity = str(row.get("sample_maturity", "") or "").strip()
-    label_ready_fill = _parse_ready_flag(row.get("FILL_READY", 0))
-    label_ready_ret = _parse_ready_flag(row.get("ERET_READY", 0))
-    fully_ready = _parse_ready_flag(row.get("FULLY_READY", 0))
+
+    label_ready_fill = _parse_ready_flag(row.get(fill_ready_col, 0)) if fill_ready_col else 0
+    label_ready_ret = _parse_ready_flag(row.get(eret_ready_col, 0)) if eret_ready_col else 0
+    fully_ready = _parse_ready_flag(row.get(fully_ready_col, 0)) if fully_ready_col else 0
 
     if not exec_date:
         raise ValueError(f"sample_maturity trade_date={trade_date} 缺少 exec_date")
@@ -541,7 +546,6 @@ def build_fill_truth(
 
     out = pred[pred_base_cols].drop_duplicates(subset=["trade_date", "ts_code"]).copy()
 
-    # 用 features_limit 仅补充候选池股票的字段，不得扩池
     feat = feat.drop_duplicates(subset=["trade_date", "ts_code"]).copy()
     feat_cols_to_add = [
         c for c in feat.columns
@@ -554,7 +558,6 @@ def build_fill_truth(
             how="left",
         )
 
-    # T+1 truth 同样只给候选池补字段，不扩池
     out = out.merge(t1, on="ts_code", how="left")
     out["exec_date"] = exec_date
     out["target_date"] = target_date
