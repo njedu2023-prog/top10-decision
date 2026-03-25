@@ -246,7 +246,7 @@ jobs:
   pfill_learning:
     needs: decision
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout latest main
@@ -486,6 +486,30 @@ jobs:
             echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Sync pred source snapshot for E_ret trade_date
+        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        env:
+          TRADE_DATE: ${{ steps.resolve_eret_learning_td.outputs.trade_date }}
+          A_TOP10_OWNER: njedu2023-prog
+          A_TOP10_REPO: a-top10
+          A_TOP10_BRANCH: main
+        run: |
+          set -e
+
+          if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
+            echo "[sync-pred-eret] invalid trade_date=${TRADE_DATE}"
+            exit 1
+          fi
+
+          FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
+          RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
+          echo "[sync-pred-eret] TOP10_PRED_URL=${RAW_URL}"
+
+          TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
+
+          echo "[sync-pred-eret] archive tree:"
+          find data/pred -maxdepth 3 -type f | sort || true
+
       - name: Build fill truth for E_ret trade_date
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
@@ -531,7 +555,11 @@ jobs:
 
           mkdir -p .git/info
           grep -qxF "__pycache__/" .git/info/exclude 2>/dev/null || echo "__pycache__/" >> .git/info/exclude
-          grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
+          grep -qxF "*.pyc" .git.info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
+
+          git add data/pred/pred_source_latest.csv || true
+          git add data/pred/archive/*.csv || true
+          git add -A data/pred/archive || true
 
           git add data/market/sample_maturity_candidates.csv || true
           git add data/market/sample_maturity_*.csv || true
