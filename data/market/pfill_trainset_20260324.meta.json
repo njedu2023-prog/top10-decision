@@ -6,8 +6,8 @@
     "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260324.csv",
     "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260324.csv",
     "fill_truth": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260324.csv",
-    "prior_mode": "latest_pred_source",
-    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/pred_source_latest.csv"
+    "prior_mode": "dated_pred_source_archive",
+    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260324.csv"
   },
   "output": "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260324.csv",
   "input_rows": {
