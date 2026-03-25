@@ -486,6 +486,12 @@ jobs:
             echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Build fill truth for E_ret trade_date
+        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        run: |
+          set -e
+          python scripts/build_fill_truth.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+
       - name: Build E_ret truth
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
