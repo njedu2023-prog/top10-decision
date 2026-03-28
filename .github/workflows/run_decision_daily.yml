@@ -297,21 +297,21 @@ jobs:
             CURRENT_RUN_DATE="${TRADE_DATE_INPUT}"
           else
             CURRENT_RUN_DATE="$(python - <<'PY'
-          from pathlib import Path
-          import re
+from pathlib import Path
+import re
 
-          raw_root = Path("data/market/raw")
-          raw_dates = []
+raw_root = Path("data/market/raw")
+raw_dates = []
 
-          if raw_root.exists():
-              for p in raw_root.rglob("*"):
-                  if p.is_dir() and re.fullmatch(r"\d{8}", p.name):
-                      raw_dates.append(p.name)
+if raw_root.exists():
+    for p in raw_root.rglob("*"):
+        if p.is_dir() and re.fullmatch(r"\d{8}", p.name):
+            raw_dates.append(p.name)
 
-          raw_dates = sorted(set(raw_dates))
-          print(raw_dates[-1] if raw_dates else "")
-          PY
-          )"
+raw_dates = sorted(set(raw_dates))
+print(raw_dates[-1] if raw_dates else "")
+PY
+)"
           fi
 
           if echo "${CURRENT_RUN_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
@@ -330,47 +330,47 @@ jobs:
           set -e
 
           python - <<'PY'
-          from pathlib import Path
-          import csv
-          import re
+from pathlib import Path
+import csv
+import re
 
-          out_path = Path("data/market/sample_maturity_candidates.csv")
-          out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path = Path("data/market/sample_maturity_candidates.csv")
+out_path.parent.mkdir(parents=True, exist_ok=True)
 
-          candidates = set()
+candidates = set()
 
-          market_dir = Path("data/market")
-          for p in market_dir.glob("features_limit_*.csv"):
-              m = re.fullmatch(r"features_limit_(\d{8})\.csv", p.name)
-              if m:
-                  candidates.add(m.group(1))
+market_dir = Path("data/market")
+for p in market_dir.glob("features_limit_*.csv"):
+    m = re.fullmatch(r"features_limit_(\d{8})\.csv", p.name)
+    if m:
+        candidates.add(m.group(1))
 
-          pred_archive = Path("data/pred/archive")
-          if pred_archive.exists():
-              for p in pred_archive.rglob("*.csv"):
-                  m = re.search(r"(\d{8})", p.name)
-                  if m:
-                      candidates.add(m.group(1))
+pred_archive = Path("data/pred/archive")
+if pred_archive.exists():
+    for p in pred_archive.rglob("*.csv"):
+        m = re.search(r"(\d{8})", p.name)
+        if m:
+            candidates.add(m.group(1))
 
-          rows = sorted(candidates)
+rows = sorted(candidates)
 
-          with out_path.open("w", encoding="utf-8-sig", newline="") as f:
-              writer = csv.DictWriter(
-                  f,
-                  fieldnames=["trade_date", "candidate_type"],
-              )
-              writer.writeheader()
-              for td in rows:
-                  writer.writerow(
-                      {
-                          "trade_date": td,
-                          "candidate_type": "PFILL_ERET",
-                      }
-                  )
+with out_path.open("w", encoding="utf-8-sig", newline="") as f:
+    writer = csv.DictWriter(
+        f,
+        fieldnames=["trade_date", "candidate_type"],
+    )
+    writer.writeheader()
+    for td in rows:
+        writer.writerow(
+            {
+                "trade_date": td,
+                "candidate_type": "PFILL_ERET",
+            }
+        )
 
-          print(f"[learning] candidate trade_dates={len(rows)}")
-          print(f"[learning] candidate file={out_path}")
-          PY
+print(f"[learning] candidate trade_dates={len(rows)}")
+print(f"[learning] candidate file={out_path}")
+PY
 
           cat data/market/sample_maturity_candidates.csv || true
 
@@ -390,52 +390,129 @@ jobs:
           echo "[learning] resolved sample maturity:"
           cat data/market/sample_maturity_latest.csv || true
 
-      - name: Resolve matured trade_date for P_fill learning
+      - name: Resolve P_fill learning target (missing-first, safe fallback)
         id: resolve_pfill_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
 
-          TD="$(python - <<'PY'
-          from pathlib import Path
-          import csv
+          python - <<'PY'
+from pathlib import Path
+import csv
+import json
+import os
 
-          path = Path("data/market/sample_maturity_latest.csv")
-          if not path.exists():
-              print("")
-              raise SystemExit(0)
+maturity_path = Path("data/market/sample_maturity_latest.csv")
+meta_path = Path("models/pfill_meta.json")
 
-          rows = []
-          with path.open("r", encoding="utf-8-sig", newline="") as f:
-              reader = csv.DictReader(f)
-              for row in reader:
-                  td = (row.get("trade_date") or "").strip()
-                  pfill_ready = (row.get("PFILL_READY") or "").strip()
-                  if td and pfill_ready == "1":
-                      rows.append(td)
+ready_dates = []
+if maturity_path.exists():
+    with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            td = (row.get("trade_date") or "").strip()
+            ready = (row.get("PFILL_READY") or "").strip()
+            if td and ready == "1":
+                ready_dates.append(td)
 
-          rows = sorted(set(rows))
-          print(rows[-1] if rows else "")
-          PY
-          )"
+ready_dates = sorted(set(ready_dates))
 
-          if echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            echo "[learning] resolved matured P_fill trade_date=${TD}"
-            echo "trade_date=${TD}" >> "$GITHUB_OUTPUT"
+missing_dates = []
+if meta_path.exists():
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        missing_dates = sorted(set((meta.get("missing_trade_dates") or [])))
+    except Exception:
+        missing_dates = []
+
+preferred_missing = ""
+repairable_missing = [td for td in missing_dates if td in ready_dates]
+if repairable_missing:
+    preferred_missing = repairable_missing[-1]
+
+latest_ready = ready_dates[-1] if ready_dates else ""
+
+gh_out = os.environ["GITHUB_OUTPUT"]
+with open(gh_out, "a", encoding="utf-8") as f:
+    f.write(f"preferred_missing_trade_date={preferred_missing}\n")
+    f.write(f"latest_ready_trade_date={latest_ready}\n")
+    f.write(f"has_any_ready={'true' if latest_ready else 'false'}\n")
+
+print(f"[pfill-resolve] preferred_missing_trade_date={preferred_missing}")
+print(f"[pfill-resolve] latest_ready_trade_date={latest_ready}")
+PY
+
+      - name: Select P_fill learning trade_date
+        id: select_pfill_learning_td
+        if: steps.resolve_pfill_learning_td.outputs.has_any_ready == 'true'
+        env:
+          PREFERRED_MISSING_TD: ${{ steps.resolve_pfill_learning_td.outputs.preferred_missing_trade_date }}
+          LATEST_READY_TD: ${{ steps.resolve_pfill_learning_td.outputs.latest_ready_trade_date }}
+          A_TOP10_OWNER: njedu2023-prog
+          A_TOP10_REPO: a-top10
+          A_TOP10_BRANCH: main
+        run: |
+          set -e
+
+          pick_td=""
+          pick_reason=""
+          pick_url=""
+
+          choose_candidate() {
+            local TD="$1"
+            local REASON="$2"
+
+            if [ -z "${TD}" ]; then
+              return 1
+            fi
+
+            if ! echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
+              return 1
+            fi
+
+            local LOCAL_ARCHIVE="data/pred/archive/pred_source_${TD}.csv"
+            local FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TD}.csv"
+            local RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
+
+            if [ -f "${LOCAL_ARCHIVE}" ]; then
+              pick_td="${TD}"
+              pick_reason="${REASON}_local_archive"
+              pick_url="${RAW_URL}"
+              return 0
+            fi
+
+            if curl -fsI "${RAW_URL}" >/dev/null 2>&1; then
+              pick_td="${TD}"
+              pick_reason="${REASON}_remote_available"
+              pick_url="${RAW_URL}"
+              return 0
+            fi
+
+            return 1
+          }
+
+          choose_candidate "${PREFERRED_MISSING_TD}" "missing_backfill" || \
+          choose_candidate "${LATEST_READY_TD}" "latest_ready" || true
+
+          if [ -n "${pick_td}" ]; then
+            echo "[pfill-select] trade_date=${pick_td} reason=${pick_reason}"
+            echo "trade_date=${pick_td}" >> "$GITHUB_OUTPUT"
+            echo "trade_reason=${pick_reason}" >> "$GITHUB_OUTPUT"
+            echo "pred_url=${pick_url}" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=true" >> "$GITHUB_OUTPUT"
           else
-            echo "[learning] no PFILL_READY trade_date found; skip P_fill learning"
+            echo "[pfill-select] no usable trade_date found"
             echo "trade_date=" >> "$GITHUB_OUTPUT"
+            echo "trade_reason=" >> "$GITHUB_OUTPUT"
+            echo "pred_url=" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Sync pred source snapshot for P_fill trade_date
-        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_pfill_learning_td.outputs.has_trade_date == 'true'
         env:
-          TRADE_DATE: ${{ steps.resolve_pfill_learning_td.outputs.trade_date }}
-          A_TOP10_OWNER: njedu2023-prog
-          A_TOP10_REPO: a-top10
-          A_TOP10_BRANCH: main
+          TRADE_DATE: ${{ steps.select_pfill_learning_td.outputs.trade_date }}
+          TOP10_PRED_URL: ${{ steps.select_pfill_learning_td.outputs.pred_url }}
         run: |
           set -e
 
@@ -444,79 +521,155 @@ jobs:
             exit 1
           fi
 
-          FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
-          RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
-          echo "[sync-pred-pfill] TOP10_PRED_URL=${RAW_URL}"
+          echo "[sync-pred-pfill] trade_date=${TRADE_DATE}"
+          echo "[sync-pred-pfill] TOP10_PRED_URL=${TOP10_PRED_URL}"
 
-          TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
+          TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${TOP10_PRED_URL}" python scripts/sync_pred_source.py
 
           echo "[sync-pred-pfill] archive tree:"
           find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Build fill truth
-        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/build_fill_truth.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
+          python scripts/build_fill_truth.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
 
       - name: Build P_fill trainset
-        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/build_pfill_trainset.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
+          python scripts/build_pfill_trainset.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
 
       - name: Train P_fill models
-        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
+          python scripts/train_pfill.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
 
-      - name: Resolve matured trade_date for E_ret learning
+      - name: Resolve E_ret learning target (missing-first, safe fallback)
         id: resolve_eret_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
 
-          TD="$(python - <<'PY'
-          from pathlib import Path
-          import csv
+          python - <<'PY'
+from pathlib import Path
+import csv
+import json
+import os
 
-          path = Path("data/market/sample_maturity_latest.csv")
-          if not path.exists():
-              print("")
-              raise SystemExit(0)
+maturity_path = Path("data/market/sample_maturity_latest.csv")
+meta_path = Path("models/eret_meta.json")
 
-          rows = []
-          with path.open("r", encoding="utf-8-sig", newline="") as f:
-              reader = csv.DictReader(f)
-              for row in reader:
-                  td = (row.get("trade_date") or "").strip()
-                  eret_ready = (row.get("ERET_READY") or "").strip()
-                  if td and eret_ready == "1":
-                      rows.append(td)
+ready_dates = []
+if maturity_path.exists():
+    with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            td = (row.get("trade_date") or "").strip()
+            ready = (row.get("ERET_READY") or "").strip()
+            if td and ready == "1":
+                ready_dates.append(td)
 
-          rows = sorted(set(rows))
-          print(rows[-1] if rows else "")
-          PY
-          )"
+ready_dates = sorted(set(ready_dates))
 
-          if echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            echo "[learning] resolved matured E_ret trade_date=${TD}"
-            echo "trade_date=${TD}" >> "$GITHUB_OUTPUT"
+missing_dates = []
+if meta_path.exists():
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        missing_dates = sorted(set((meta.get("missing_trade_dates") or [])))
+    except Exception:
+        missing_dates = []
+
+preferred_missing = ""
+repairable_missing = [td for td in missing_dates if td in ready_dates]
+if repairable_missing:
+    preferred_missing = repairable_missing[-1]
+
+latest_ready = ready_dates[-1] if ready_dates else ""
+
+gh_out = os.environ["GITHUB_OUTPUT"]
+with open(gh_out, "a", encoding="utf-8") as f:
+    f.write(f"preferred_missing_trade_date={preferred_missing}\n")
+    f.write(f"latest_ready_trade_date={latest_ready}\n")
+    f.write(f"has_any_ready={'true' if latest_ready else 'false'}\n")
+
+print(f"[eret-resolve] preferred_missing_trade_date={preferred_missing}")
+print(f"[eret-resolve] latest_ready_trade_date={latest_ready}")
+PY
+
+      - name: Select E_ret learning trade_date
+        id: select_eret_learning_td
+        if: steps.resolve_eret_learning_td.outputs.has_any_ready == 'true'
+        env:
+          PREFERRED_MISSING_TD: ${{ steps.resolve_eret_learning_td.outputs.preferred_missing_trade_date }}
+          LATEST_READY_TD: ${{ steps.resolve_eret_learning_td.outputs.latest_ready_trade_date }}
+          A_TOP10_OWNER: njedu2023-prog
+          A_TOP10_REPO: a-top10
+          A_TOP10_BRANCH: main
+        run: |
+          set -e
+
+          pick_td=""
+          pick_reason=""
+          pick_url=""
+
+          choose_candidate() {
+            local TD="$1"
+            local REASON="$2"
+
+            if [ -z "${TD}" ]; then
+              return 1
+            fi
+
+            if ! echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
+              return 1
+            fi
+
+            local LOCAL_ARCHIVE="data/pred/archive/pred_source_${TD}.csv"
+            local FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TD}.csv"
+            local RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
+
+            if [ -f "${LOCAL_ARCHIVE}" ]; then
+              pick_td="${TD}"
+              pick_reason="${REASON}_local_archive"
+              pick_url="${RAW_URL}"
+              return 0
+            fi
+
+            if curl -fsI "${RAW_URL}" >/dev/null 2>&1; then
+              pick_td="${TD}"
+              pick_reason="${REASON}_remote_available"
+              pick_url="${RAW_URL}"
+              return 0
+            fi
+
+            return 1
+          }
+
+          choose_candidate "${PREFERRED_MISSING_TD}" "missing_backfill" || \
+          choose_candidate "${LATEST_READY_TD}" "latest_ready" || true
+
+          if [ -n "${pick_td}" ]; then
+            echo "[eret-select] trade_date=${pick_td} reason=${pick_reason}"
+            echo "trade_date=${pick_td}" >> "$GITHUB_OUTPUT"
+            echo "trade_reason=${pick_reason}" >> "$GITHUB_OUTPUT"
+            echo "pred_url=${pick_url}" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=true" >> "$GITHUB_OUTPUT"
           else
-            echo "[learning] no ERET_READY trade_date found; skip E_ret learning"
+            echo "[eret-select] no usable trade_date found"
             echo "trade_date=" >> "$GITHUB_OUTPUT"
+            echo "trade_reason=" >> "$GITHUB_OUTPUT"
+            echo "pred_url=" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Sync pred source snapshot for E_ret trade_date
-        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
         env:
-          TRADE_DATE: ${{ steps.resolve_eret_learning_td.outputs.trade_date }}
-          A_TOP10_OWNER: njedu2023-prog
-          A_TOP10_REPO: a-top10
-          A_TOP10_BRANCH: main
+          TRADE_DATE: ${{ steps.select_eret_learning_td.outputs.trade_date }}
+          TOP10_PRED_URL: ${{ steps.select_eret_learning_td.outputs.pred_url }}
         run: |
           set -e
 
@@ -525,45 +678,46 @@ jobs:
             exit 1
           fi
 
-          FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
-          RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
-          echo "[sync-pred-eret] TOP10_PRED_URL=${RAW_URL}"
+          echo "[sync-pred-eret] trade_date=${TRADE_DATE}"
+          echo "[sync-pred-eret] TOP10_PRED_URL=${TOP10_PRED_URL}"
 
-          TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
+          TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${TOP10_PRED_URL}" python scripts/sync_pred_source.py
 
           echo "[sync-pred-eret] archive tree:"
           find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Build fill truth for E_ret trade_date
-        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/build_fill_truth.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+          python scripts/build_fill_truth.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
 
       - name: Build E_ret truth
-        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/build_eret_truth.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+          python scripts/build_eret_truth.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
 
       - name: Build E_ret trainset
-        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/build_eret_trainset.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+          python scripts/build_eret_trainset.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
 
       - name: Train E_ret models
-        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+          python scripts/train_eret.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
 
       - name: Show learning artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
-          echo "[learning] pfill_trade_date=${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
-          echo "[learning] eret_trade_date=${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+          echo "[learning] pfill_trade_date=${{ steps.select_pfill_learning_td.outputs.trade_date }}"
+          echo "[learning] pfill_reason=${{ steps.select_pfill_learning_td.outputs.trade_reason }}"
+          echo "[learning] eret_trade_date=${{ steps.select_eret_learning_td.outputs.trade_date }}"
+          echo "[learning] eret_reason=${{ steps.select_eret_learning_td.outputs.trade_reason }}"
           ls -lah data/market || true
           ls -lah models || true
 
