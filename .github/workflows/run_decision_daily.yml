@@ -58,7 +58,6 @@ jobs:
         run: |
           set -e
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
-            echo "[sync-pred] manual trade_date=${TRADE_DATE}"
             if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
               echo "[sync-pred] invalid trade_date: ${TRADE_DATE} (expect YYYYMMDD)"
               exit 1
@@ -70,10 +69,6 @@ jobs:
             RAW_URL="https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv"
             TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
           fi
-          echo "[sync-pred] snapshot saved -> data/pred/pred_source_latest.csv"
-          head -n 3 data/pred/pred_source_latest.csv || true
-          wc -l data/pred/pred_source_latest.csv || true
-          find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Sync market raw snapshots
         env:
@@ -89,8 +84,6 @@ jobs:
           else
             python scripts/sync_market_raw.py
           fi
-          find data/market/raw -maxdepth 3 -type d | sort || true
-          find data/market/raw -maxdepth 3 -type f | sort || true
 
       - name: Build market FS
         env:
@@ -102,7 +95,6 @@ jobs:
           else
             python scripts/build_market_fs.py
           fi
-          ls -lah data/market || true
 
       - name: Run decision pipeline (V2 orchestrator)
         env:
@@ -119,67 +111,6 @@ jobs:
         run: |
           set -e
           python scripts/validate_io_contract.py
-
-      - name: Commit & push outputs (safe)
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
-          find . -type f -name "*.pyc" -delete || true
-          mkdir -p .git/info
-          grep -qxF "__pycache__/" .git/info/exclude 2>/dev/null || echo "__pycache__/" >> .git/info/exclude
-          grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
-          git add data/pred/pred_source_latest.csv || true
-          git add data/pred/archive/*.csv || true
-          git add -A data/pred/archive || true
-          git add data/pred/pred_top10_latest.csv || true
-          git add data/pred/pred_top10_*.csv || true
-          git add -A data/market/raw || true
-          git add data/market/features_base_*.csv || true
-          git add data/market/features_limit_*.csv || true
-          git add data/market/truth_close_*.csv || true
-          git add data/market/_meta_*.json || true
-          git add docs/weights/weights_latest.csv || true
-          git add docs/weights/weights_*.csv || true
-          git add outputs/decision/* || true
-          git add outputs/decision/**/*.md || true
-          git add outputs/decision/**/*.json || true
-          git add data/decision/decision_candidates_*.csv || true
-          git add data/decision/decision_execution_*.csv || true
-          git add data/decision/decision_learning.csv || true
-          git add docs/signals/top10_latest.csv || true
-          git add docs/signals/top10_*.csv || true
-          git add docs/signals/TopEVR_latest.csv || true
-          git add docs/signals/TopEVR_*.csv || true
-          git add docs/reports/*.md || true
-          git add -A docs/reports || true
-          echo "[git] status after add:"
-          git status --porcelain || true
-          if git diff --cached --quiet; then
-            echo "[push] no staged changes"
-            exit 0
-          fi
-          git commit -m "auto: sync market raw, build fs, update decision outputs"
-          if [ -n "$(git status --porcelain)" ]; then
-            git reset --hard HEAD
-          fi
-          pushed=0
-          for attempt in 1 2 3; do
-            git fetch origin main
-            if git rebase origin/main; then
-              if git push origin HEAD:main; then
-                pushed=1
-                break
-              fi
-            else
-              git rebase --abort || true
-            fi
-            sleep 2
-          done
-          if [ "${pushed}" != "1" ]; then
-            exit 1
-          fi
 
   pfill_learning:
     needs: decision
@@ -228,21 +159,7 @@ jobs:
           if [ -n "${TRADE_DATE_INPUT}" ]; then
             CURRENT_RUN_DATE="${TRADE_DATE_INPUT}"
           else
-            cat > /tmp/resolve_current_run_date.py <<'PY'
-            from pathlib import Path
-            import re
-
-            raw_root = Path("data/market/raw")
-            raw_dates = sorted(
-                {
-                    p.name
-                    for p in raw_root.rglob("*")
-                    if p.is_dir() and re.fullmatch(r"\d{8}", p.name)
-                }
-            )
-            print(raw_dates[-1] if raw_dates else "")
-            PY
-            CURRENT_RUN_DATE="$(python /tmp/resolve_current_run_date.py)"
+            CURRENT_RUN_DATE="$(find data/market/raw -type d -regextype posix-extended -regex '.*/[0-9]{8}$' -printf '%f\n' 2>/dev/null | sort | tail -n 1)"
           fi
           if echo "${CURRENT_RUN_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
             echo "current_run_date=${CURRENT_RUN_DATE}" >> "$GITHUB_OUTPUT"
@@ -255,7 +172,6 @@ jobs:
       - name: Build candidate trade_date list for maturity resolver
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
-          set -e
           cat > /tmp/build_candidate_trade_dates.py <<'PY'
           from pathlib import Path
           import csv
@@ -298,13 +214,11 @@ jobs:
         run: |
           set -e
           python scripts/resolve_sample_maturity.py             --current-run-date "${{ steps.resolve_current_run_date.outputs.current_run_date }}"             --raw-root "data/market/raw"             --trade-dates-file "data/market/sample_maturity_candidates.csv"             --trade-date-column "trade_date"             --output-csv "data/market/sample_maturity_latest.csv"             --output-json "data/market/sample_maturity_latest.json"
-          cat data/market/sample_maturity_latest.csv || true
 
       - name: Resolve P_fill learning target (missing-first, safe fallback)
         id: resolve_pfill_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
-          set -e
           cat > /tmp/resolve_pfill_learning_td.py <<'PY'
           from pathlib import Path
           import csv
@@ -413,35 +327,24 @@ jobs:
           TOP10_PRED_URL: ${{ steps.select_pfill_learning_td.outputs.pred_url }}
         run: |
           set -e
-          if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            exit 1
-          fi
           TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${TOP10_PRED_URL}" python scripts/sync_pred_source.py
-          find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Build fill truth
         if: steps.select_pfill_learning_td.outputs.has_trade_date == 'true'
-        run: |
-          set -e
-          python scripts/build_fill_truth.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
+        run: python scripts/build_fill_truth.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
 
       - name: Build P_fill trainset
         if: steps.select_pfill_learning_td.outputs.has_trade_date == 'true'
-        run: |
-          set -e
-          python scripts/build_pfill_trainset.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
+        run: python scripts/build_pfill_trainset.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
 
       - name: Train P_fill models
         if: steps.select_pfill_learning_td.outputs.has_trade_date == 'true'
-        run: |
-          set -e
-          python scripts/train_pfill.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
+        run: python scripts/train_pfill.py --trade-date "${{ steps.select_pfill_learning_td.outputs.trade_date }}"
 
       - name: Resolve E_ret learning target (missing-first, safe fallback)
         id: resolve_eret_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
-          set -e
           cat > /tmp/resolve_eret_learning_td.py <<'PY'
           from pathlib import Path
           import csv
@@ -550,99 +453,20 @@ jobs:
           TOP10_PRED_URL: ${{ steps.select_eret_learning_td.outputs.pred_url }}
         run: |
           set -e
-          if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            exit 1
-          fi
           TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${TOP10_PRED_URL}" python scripts/sync_pred_source.py
-          find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Build fill truth for E_ret trade_date
         if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
-        run: |
-          set -e
-          python scripts/build_fill_truth.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
+        run: python scripts/build_fill_truth.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
 
       - name: Build E_ret truth
         if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
-        run: |
-          set -e
-          python scripts/build_eret_truth.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
+        run: python scripts/build_eret_truth.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
 
       - name: Build E_ret trainset
         if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
-        run: |
-          set -e
-          python scripts/build_eret_trainset.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
+        run: python scripts/build_eret_trainset.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
 
       - name: Train E_ret models
         if: steps.select_eret_learning_td.outputs.has_trade_date == 'true'
-        run: |
-          set -e
-          python scripts/train_eret.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
-
-      - name: Show learning artifacts
-        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
-        run: |
-          set -e
-          echo "[learning] pfill_trade_date=${{ steps.select_pfill_learning_td.outputs.trade_date }}"
-          echo "[learning] pfill_reason=${{ steps.select_pfill_learning_td.outputs.trade_reason }}"
-          echo "[learning] eret_trade_date=${{ steps.select_eret_learning_td.outputs.trade_date }}"
-          echo "[learning] eret_reason=${{ steps.select_eret_learning_td.outputs.trade_reason }}"
-          ls -lah data/market || true
-          ls -lah models || true
-
-      - name: Commit learning artifacts
-        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
-          find . -type f -name "*.pyc" -delete || true
-          mkdir -p .git/info
-          grep -qxF "__pycache__/" .git/info/exclude 2>/dev/null || echo "__pycache__/" >> .git/info/exclude
-          grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
-          git add data/pred/pred_source_latest.csv || true
-          git add data/pred/archive/*.csv || true
-          git add -A data/pred/archive || true
-          git add data/market/sample_maturity_candidates.csv || true
-          git add data/market/sample_maturity_*.csv || true
-          git add data/market/sample_maturity_*.json || true
-          git add data/market/fill_truth_*.csv || true
-          git add data/market/fill_truth_*.meta.json || true
-          git add data/market/pfill_trainset_*.csv || true
-          git add data/market/pfill_trainset_*.meta.json || true
-          git add data/market/eret_truth_*.csv || true
-          git add data/market/eret_truth_*.meta.json || true
-          git add data/market/eret_trainset_*.csv || true
-          git add data/market/eret_trainset_*.meta.json || true
-          git add models/pfill_*.joblib || true
-          git add models/pfill_*.json || true
-          git add models/eret_*.joblib || true
-          git add models/eret_*.json || true
-          echo "[git-learning] status after add:"
-          git status --porcelain || true
-          if git diff --cached --quiet; then
-            echo "[push-learning] no staged changes"
-            exit 0
-          fi
-          git commit -m "auto: resolve sample maturity and update pfill + eret learning artifacts"
-          if [ -n "$(git status --porcelain)" ]; then
-            git reset --hard HEAD
-          fi
-          pushed=0
-          for attempt in 1 2 3; do
-            git fetch origin main
-            if git rebase origin/main; then
-              if git push origin HEAD:main; then
-                pushed=1
-                break
-              fi
-            else
-              git rebase --abort || true
-            fi
-            sleep 2
-          done
-          if [ "${pushed}" != "1" ]; then
-            exit 1
-          fi
+        run: python scripts/train_eret.py --trade-date "${{ steps.select_eret_learning_td.outputs.trade_date }}"
