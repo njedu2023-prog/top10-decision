@@ -42,7 +42,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> $GITHUB_ENV
+        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> "$GITHUB_ENV"
 
       - name: Ensure output dirs
         run: |
@@ -275,7 +275,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> $GITHUB_ENV
+        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> "$GITHUB_ENV"
 
       - name: Ensure learning dirs
         run: |
@@ -296,7 +296,8 @@ jobs:
           if [ -n "${TRADE_DATE_INPUT}" ]; then
             CURRENT_RUN_DATE="${TRADE_DATE_INPUT}"
           else
-            CURRENT_RUN_DATE="$(python - <<'PY'
+            CURRENT_RUN_DATE="$(
+              python - <<'PY'
 from pathlib import Path
 import re
 
@@ -311,7 +312,7 @@ if raw_root.exists():
 raw_dates = sorted(set(raw_dates))
 print(raw_dates[-1] if raw_dates else "")
 PY
-)"
+            )"
           fi
 
           if echo "${CURRENT_RUN_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
@@ -350,7 +351,7 @@ if pred_archive.exists():
     for p in pred_archive.rglob("*.csv"):
         m = re.search(r"(\d{8})", p.name)
         if m:
-            candidates.add(m.group(1))
+          candidates.add(m.group(1))
 
 rows = sorted(candidates)
 
