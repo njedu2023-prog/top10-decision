@@ -297,21 +297,21 @@ jobs:
             CURRENT_RUN_DATE="${TRADE_DATE_INPUT}"
           else
             CURRENT_RUN_DATE="$(
-              python - <<'PY'
-from pathlib import Path
-import re
-
-raw_root = Path("data/market/raw")
-raw_dates = []
-
-if raw_root.exists():
-    for p in raw_root.rglob("*"):
-        if p.is_dir() and re.fullmatch(r"\d{8}", p.name):
-            raw_dates.append(p.name)
-
-raw_dates = sorted(set(raw_dates))
-print(raw_dates[-1] if raw_dates else "")
-PY
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          
+          raw_root = Path("data/market/raw")
+          raw_dates = []
+          
+          if raw_root.exists():
+          for p in raw_root.rglob("*"):
+          if p.is_dir() and re.fullmatch(r"\d{8}", p.name):
+          raw_dates.append(p.name)
+          
+          raw_dates = sorted(set(raw_dates))
+          print(raw_dates[-1] if raw_dates else "")
+          PY
             )"
           fi
 
@@ -331,47 +331,47 @@ PY
           set -e
 
           python - <<'PY'
-from pathlib import Path
-import csv
-import re
-
-out_path = Path("data/market/sample_maturity_candidates.csv")
-out_path.parent.mkdir(parents=True, exist_ok=True)
-
-candidates = set()
-
-market_dir = Path("data/market")
-for p in market_dir.glob("features_limit_*.csv"):
-    m = re.fullmatch(r"features_limit_(\d{8})\.csv", p.name)
-    if m:
-        candidates.add(m.group(1))
-
-pred_archive = Path("data/pred/archive")
-if pred_archive.exists():
-    for p in pred_archive.rglob("*.csv"):
-        m = re.search(r"(\d{8})", p.name)
-        if m:
+          from pathlib import Path
+          import csv
+          import re
+          
+          out_path = Path("data/market/sample_maturity_candidates.csv")
+          out_path.parent.mkdir(parents=True, exist_ok=True)
+          
+          candidates = set()
+          
+          market_dir = Path("data/market")
+          for p in market_dir.glob("features_limit_*.csv"):
+          m = re.fullmatch(r"features_limit_(\d{8})\.csv", p.name)
+          if m:
           candidates.add(m.group(1))
-
-rows = sorted(candidates)
-
-with out_path.open("w", encoding="utf-8-sig", newline="") as f:
-    writer = csv.DictWriter(
-        f,
-        fieldnames=["trade_date", "candidate_type"],
-    )
-    writer.writeheader()
-    for td in rows:
-        writer.writerow(
-            {
-                "trade_date": td,
-                "candidate_type": "PFILL_ERET",
-            }
-        )
-
-print(f"[learning] candidate trade_dates={len(rows)}")
-print(f"[learning] candidate file={out_path}")
-PY
+          
+          pred_archive = Path("data/pred/archive")
+          if pred_archive.exists():
+          for p in pred_archive.rglob("*.csv"):
+          m = re.search(r"(\d{8})", p.name)
+          if m:
+          candidates.add(m.group(1))
+          
+          rows = sorted(candidates)
+          
+          with out_path.open("w", encoding="utf-8-sig", newline="") as f:
+          writer = csv.DictWriter(
+          f,
+          fieldnames=["trade_date", "candidate_type"],
+          )
+          writer.writeheader()
+          for td in rows:
+          writer.writerow(
+          {
+          "trade_date": td,
+          "candidate_type": "PFILL_ERET",
+          }
+          )
+          
+          print(f"[learning] candidate trade_dates={len(rows)}")
+          print(f"[learning] candidate file={out_path}")
+          PY
 
           cat data/market/sample_maturity_candidates.csv || true
 
@@ -398,50 +398,50 @@ PY
           set -e
 
           python - <<'PY'
-from pathlib import Path
-import csv
-import json
-import os
-
-maturity_path = Path("data/market/sample_maturity_latest.csv")
-meta_path = Path("models/pfill_meta.json")
-
-ready_dates = []
-if maturity_path.exists():
-    with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            td = (row.get("trade_date") or "").strip()
-            ready = (row.get("PFILL_READY") or "").strip()
-            if td and ready == "1":
-                ready_dates.append(td)
-
-ready_dates = sorted(set(ready_dates))
-
-missing_dates = []
-if meta_path.exists():
-    try:
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        missing_dates = sorted(set((meta.get("missing_trade_dates") or [])))
-    except Exception:
-        missing_dates = []
-
-preferred_missing = ""
-repairable_missing = [td for td in missing_dates if td in ready_dates]
-if repairable_missing:
-    preferred_missing = repairable_missing[-1]
-
-latest_ready = ready_dates[-1] if ready_dates else ""
-
-gh_out = os.environ["GITHUB_OUTPUT"]
-with open(gh_out, "a", encoding="utf-8") as f:
-    f.write(f"preferred_missing_trade_date={preferred_missing}\n")
-    f.write(f"latest_ready_trade_date={latest_ready}\n")
-    f.write(f"has_any_ready={'true' if latest_ready else 'false'}\n")
-
-print(f"[pfill-resolve] preferred_missing_trade_date={preferred_missing}")
-print(f"[pfill-resolve] latest_ready_trade_date={latest_ready}")
-PY
+          from pathlib import Path
+          import csv
+          import json
+          import os
+          
+          maturity_path = Path("data/market/sample_maturity_latest.csv")
+          meta_path = Path("models/pfill_meta.json")
+          
+          ready_dates = []
+          if maturity_path.exists():
+          with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
+          reader = csv.DictReader(f)
+          for row in reader:
+          td = (row.get("trade_date") or "").strip()
+          ready = (row.get("PFILL_READY") or "").strip()
+          if td and ready == "1":
+          ready_dates.append(td)
+          
+          ready_dates = sorted(set(ready_dates))
+          
+          missing_dates = []
+          if meta_path.exists():
+          try:
+          meta = json.loads(meta_path.read_text(encoding="utf-8"))
+          missing_dates = sorted(set((meta.get("missing_trade_dates") or [])))
+          except Exception:
+          missing_dates = []
+          
+          preferred_missing = ""
+          repairable_missing = [td for td in missing_dates if td in ready_dates]
+          if repairable_missing:
+          preferred_missing = repairable_missing[-1]
+          
+          latest_ready = ready_dates[-1] if ready_dates else ""
+          
+          gh_out = os.environ["GITHUB_OUTPUT"]
+          with open(gh_out, "a", encoding="utf-8") as f:
+          f.write(f"preferred_missing_trade_date={preferred_missing}\n")
+          f.write(f"latest_ready_trade_date={latest_ready}\n")
+          f.write(f"has_any_ready={'true' if latest_ready else 'false'}\n")
+          
+          print(f"[pfill-resolve] preferred_missing_trade_date={preferred_missing}")
+          print(f"[pfill-resolve] latest_ready_trade_date={latest_ready}")
+          PY
 
       - name: Select P_fill learning trade_date
         id: select_pfill_learning_td
@@ -555,50 +555,50 @@ PY
           set -e
 
           python - <<'PY'
-from pathlib import Path
-import csv
-import json
-import os
-
-maturity_path = Path("data/market/sample_maturity_latest.csv")
-meta_path = Path("models/eret_meta.json")
-
-ready_dates = []
-if maturity_path.exists():
-    with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            td = (row.get("trade_date") or "").strip()
-            ready = (row.get("ERET_READY") or "").strip()
-            if td and ready == "1":
-                ready_dates.append(td)
-
-ready_dates = sorted(set(ready_dates))
-
-missing_dates = []
-if meta_path.exists():
-    try:
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        missing_dates = sorted(set((meta.get("missing_trade_dates") or [])))
-    except Exception:
-        missing_dates = []
-
-preferred_missing = ""
-repairable_missing = [td for td in missing_dates if td in ready_dates]
-if repairable_missing:
-    preferred_missing = repairable_missing[-1]
-
-latest_ready = ready_dates[-1] if ready_dates else ""
-
-gh_out = os.environ["GITHUB_OUTPUT"]
-with open(gh_out, "a", encoding="utf-8") as f:
-    f.write(f"preferred_missing_trade_date={preferred_missing}\n")
-    f.write(f"latest_ready_trade_date={latest_ready}\n")
-    f.write(f"has_any_ready={'true' if latest_ready else 'false'}\n")
-
-print(f"[eret-resolve] preferred_missing_trade_date={preferred_missing}")
-print(f"[eret-resolve] latest_ready_trade_date={latest_ready}")
-PY
+          from pathlib import Path
+          import csv
+          import json
+          import os
+          
+          maturity_path = Path("data/market/sample_maturity_latest.csv")
+          meta_path = Path("models/eret_meta.json")
+          
+          ready_dates = []
+          if maturity_path.exists():
+          with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
+          reader = csv.DictReader(f)
+          for row in reader:
+          td = (row.get("trade_date") or "").strip()
+          ready = (row.get("ERET_READY") or "").strip()
+          if td and ready == "1":
+          ready_dates.append(td)
+          
+          ready_dates = sorted(set(ready_dates))
+          
+          missing_dates = []
+          if meta_path.exists():
+          try:
+          meta = json.loads(meta_path.read_text(encoding="utf-8"))
+          missing_dates = sorted(set((meta.get("missing_trade_dates") or [])))
+          except Exception:
+          missing_dates = []
+          
+          preferred_missing = ""
+          repairable_missing = [td for td in missing_dates if td in ready_dates]
+          if repairable_missing:
+          preferred_missing = repairable_missing[-1]
+          
+          latest_ready = ready_dates[-1] if ready_dates else ""
+          
+          gh_out = os.environ["GITHUB_OUTPUT"]
+          with open(gh_out, "a", encoding="utf-8") as f:
+          f.write(f"preferred_missing_trade_date={preferred_missing}\n")
+          f.write(f"latest_ready_trade_date={latest_ready}\n")
+          f.write(f"has_any_ready={'true' if latest_ready else 'false'}\n")
+          
+          print(f"[eret-resolve] preferred_missing_trade_date={preferred_missing}")
+          print(f"[eret-resolve] latest_ready_trade_date={latest_ready}")
+          PY
 
       - name: Select E_ret learning trade_date
         id: select_eret_learning_td
