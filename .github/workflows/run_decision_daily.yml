@@ -399,23 +399,38 @@ jobs:
           TD="$(python - <<'PY'
           from pathlib import Path
           import csv
+          import json
 
-          path = Path("data/market/sample_maturity_latest.csv")
-          if not path.exists():
+          maturity_path = Path("data/market/sample_maturity_latest.csv")
+          meta_path = Path("models/pfill_meta.json")
+
+          if not maturity_path.exists():
               print("")
               raise SystemExit(0)
 
-          rows = []
-          with path.open("r", encoding="utf-8-sig", newline="") as f:
+          ready_dates = []
+          with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
               reader = csv.DictReader(f)
               for row in reader:
                   td = (row.get("trade_date") or "").strip()
                   pfill_ready = (row.get("PFILL_READY") or "").strip()
                   if td and pfill_ready == "1":
-                      rows.append(td)
+                      ready_dates.append(td)
+          ready_dates = sorted(set(ready_dates))
 
-          rows = sorted(set(rows))
-          print(rows[-1] if rows else "")
+          missing_dates = []
+          if meta_path.exists():
+              try:
+                  meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                  missing_dates = sorted(set(meta.get("window", {}).get("missing_trade_dates", []) or []))
+              except Exception:
+                  missing_dates = []
+
+          repairable_missing = [td for td in missing_dates if td in ready_dates]
+          if repairable_missing:
+              print(repairable_missing[-1])
+          else:
+              print(ready_dates[-1] if ready_dates else "")
           PY
           )"
 
@@ -480,23 +495,38 @@ jobs:
           TD="$(python - <<'PY'
           from pathlib import Path
           import csv
+          import json
 
-          path = Path("data/market/sample_maturity_latest.csv")
-          if not path.exists():
+          maturity_path = Path("data/market/sample_maturity_latest.csv")
+          meta_path = Path("models/eret_meta.json")
+
+          if not maturity_path.exists():
               print("")
               raise SystemExit(0)
 
-          rows = []
-          with path.open("r", encoding="utf-8-sig", newline="") as f:
+          ready_dates = []
+          with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
               reader = csv.DictReader(f)
               for row in reader:
                   td = (row.get("trade_date") or "").strip()
                   eret_ready = (row.get("ERET_READY") or "").strip()
                   if td and eret_ready == "1":
-                      rows.append(td)
+                      ready_dates.append(td)
+          ready_dates = sorted(set(ready_dates))
 
-          rows = sorted(set(rows))
-          print(rows[-1] if rows else "")
+          missing_dates = []
+          if meta_path.exists():
+              try:
+                  meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                  missing_dates = sorted(set(meta.get("window", {}).get("missing_trade_dates", []) or []))
+              except Exception:
+                  missing_dates = []
+
+          repairable_missing = [td for td in missing_dates if td in ready_dates]
+          if repairable_missing:
+              print(repairable_missing[-1])
+          else:
+              print(ready_dates[-1] if ready_dates else "")
           PY
           )"
 
