@@ -1,5 +1,5 @@
 {
-  "current_run_date": "20260325",
+  "current_run_date": "20260330",
   "raw_root": "data/market/raw",
   "count": 22,
   "rows": [
@@ -160,35 +160,35 @@
       "trade_date": "20260324",
       "exec_date": "20260325",
       "target_date": "20260326",
-      "sample_maturity": "PFILL_READY",
+      "sample_maturity": "FULLY_READY",
       "PFILL_READY": 1,
-      "ERET_READY": 0,
-      "FULLY_READY": 0
+      "ERET_READY": 1,
+      "FULLY_READY": 1
     },
     {
       "trade_date": "20260325",
       "exec_date": "20260326",
       "target_date": "20260327",
-      "sample_maturity": "UNREADY",
-      "PFILL_READY": 0,
-      "ERET_READY": 0,
-      "FULLY_READY": 0
+      "sample_maturity": "FULLY_READY",
+      "PFILL_READY": 1,
+      "ERET_READY": 1,
+      "FULLY_READY": 1
     },
     {
       "trade_date": "20260326",
       "exec_date": "20260327",
       "target_date": "20260330",
-      "sample_maturity": "UNREADY",
-      "PFILL_READY": 0,
-      "ERET_READY": 0,
-      "FULLY_READY": 0
+      "sample_maturity": "FULLY_READY",
+      "PFILL_READY": 1,
+      "ERET_READY": 1,
+      "FULLY_READY": 1
     },
     {
       "trade_date": "20260327",
       "exec_date": "20260330",
       "target_date": "",
-      "sample_maturity": "UNREADY",
-      "PFILL_READY": 0,
+      "sample_maturity": "PFILL_READY",
+      "PFILL_READY": 1,
       "ERET_READY": 0,
       "FULLY_READY": 0
     },

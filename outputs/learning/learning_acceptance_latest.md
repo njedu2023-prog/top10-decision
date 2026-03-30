@@ -1,44 +1,44 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-03-30T17:53:07+00:00
-- current_run_date: 20260325
+- generated_at_utc: 2026-03-30T17:59:07+00:00
+- current_run_date: 20260330
 - overall_pass: PASS
 
 ## P_fill
 
-- anchor_trade_date: 20260324
+- anchor_trade_date: 20260327
 - status: trained
-- loaded_trade_dates: 18
+- loaded_trade_dates: 21
 - missing_trade_dates: 0
-- previous_anchor_trade_date: 20260323
+- previous_anchor_trade_date: 20260326
 - acceptance_pass: PASS
 
 | 指标 | 当前 | 对比上次 |
 |---|---:|---|
-| lr_auc | 0.744856 | worse (-0.181070) |
-| lr_logloss | 0.351876 | improved (-0.952773) |
-| lr_brier | 0.104043 | improved (-0.233438) |
-| lgbm_auc | 0.818930 | worse (-0.144033) |
-| lgbm_logloss | 0.204998 | worse (+0.057342) |
-| lgbm_brier | 0.037420 | improved (-0.010721) |
+| lr_auc | 0.714286 | worse (-0.137566) |
+| lr_logloss | 0.180540 | improved (-0.236687) |
+| lr_brier | 0.053569 | improved (-0.079850) |
+| lgbm_auc | 0.675325 | worse (-0.102453) |
+| lgbm_logloss | 0.200486 | improved (-0.176628) |
+| lgbm_brier | 0.040363 | improved (-0.058483) |
 
 ## E_ret
 
-- anchor_trade_date: 20260323
+- anchor_trade_date: 20260326
 - status: trained
-- loaded_trade_dates: 17
+- loaded_trade_dates: 20
 - missing_trade_dates: 0
-- previous_anchor_trade_date: 20260320
+- previous_anchor_trade_date: 20260325
 - acceptance_pass: PASS
 
 | 指标 | 当前 | 对比上次 |
 |---|---:|---|
-| lr_mae | 0.052749 | worse (+0.009063) |
-| lr_rmse | 0.069768 | worse (+0.012977) |
-| lr_corr | 0.499329 | improved (+0.581684) |
-| lr_directional_acc | 0.666667 | improved (+0.074074) |
-| lgbm_mae | 0.065689 | worse (+0.019941) |
-| lgbm_rmse | 0.083621 | worse (+0.022651) |
-| lgbm_corr | 0.235698 | improved (+0.421534) |
-| lgbm_directional_acc | 0.481481 | worse (-0.185185) |
+| lr_mae | 0.071770 | worse (+0.030053) |
+| lr_rmse | 0.092111 | worse (+0.038287) |
+| lr_corr | 0.501009 | improved (+0.063212) |
+| lr_directional_acc | 0.638889 | improved (+0.013889) |
+| lgbm_mae | 0.085717 | worse (+0.035297) |
+| lgbm_rmse | 0.104302 | worse (+0.040866) |
+| lgbm_corr | 0.125175 | worse (-0.030221) |
+| lgbm_directional_acc | 0.500000 | improved (+0.012500) |
 
