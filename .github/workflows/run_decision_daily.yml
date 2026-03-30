@@ -713,6 +713,183 @@ jobs:
           for path in sorted({p for p in model_files}):
               print(path.as_posix())
           PY
+
+      - name: Build learning acceptance artifacts
+        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
+        run: |
+          set -e
+          mkdir -p outputs/learning
+
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from datetime import datetime, timezone
+
+          out_dir = Path("outputs/learning")
+          models_dir = Path("models")
+
+          def utc_now_iso() -> str:
+              return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+          def load_json(path: Path):
+              if not path.exists():
+                  return None
+              return json.loads(path.read_text(encoding="utf-8"))
+
+          def pick_previous_meta(prefix: str, current_anchor: str):
+              candidates = []
+              for path in models_dir.glob(f"{prefix}_meta_*.json"):
+                  suffix = path.stem.split("_")[-1]
+                  if len(suffix) == 8 and suffix.isdigit() and suffix < current_anchor:
+                      candidates.append((suffix, path))
+              if not candidates:
+                  return None, None
+              prev_anchor, prev_path = sorted(candidates)[-1]
+              return prev_anchor, load_json(prev_path)
+
+          def delta(curr, prev, higher_is_better=True):
+              if curr is None or prev is None:
+                  return None
+              d = curr - prev
+              if higher_is_better:
+                  trend = "improved" if d > 0 else ("worse" if d < 0 else "flat")
+              else:
+                  trend = "improved" if d < 0 else ("worse" if d > 0 else "flat")
+              return {"delta": d, "trend": trend}
+
+          pfill = load_json(models_dir / "pfill_meta.json") or {}
+          eret = load_json(models_dir / "eret_meta.json") or {}
+
+          pfill_anchor = str(pfill.get("anchor_trade_date", ""))
+          eret_anchor = str(eret.get("anchor_trade_date", ""))
+
+          pfill_prev_anchor, pfill_prev = pick_previous_meta("pfill", pfill_anchor) if pfill_anchor else (None, None)
+          eret_prev_anchor, eret_prev = pick_previous_meta("eret", eret_anchor) if eret_anchor else (None, None)
+
+          def get_window(meta):
+              return (meta or {}).get("window", {}) or {}
+
+          def get_metrics(meta):
+              return (meta or {}).get("metrics_valid", {}) or {}
+
+          pfill_window = get_window(pfill)
+          eret_window = get_window(eret)
+          pfill_prev_metrics = get_metrics(pfill_prev)
+          eret_prev_metrics = get_metrics(eret_prev)
+          pfill_metrics = get_metrics(pfill)
+          eret_metrics = get_metrics(eret)
+
+          acceptance = {
+              "generated_at_utc": utc_now_iso(),
+              "current_run_date": "${{ steps.resolve_current_run_date.outputs.current_run_date }}",
+              "pfill": {
+                  "anchor_trade_date": pfill_anchor,
+                  "status": pfill.get("status", ""),
+                  "loaded_trade_dates": len(pfill_window.get("loaded_trade_dates", []) or []),
+                  "missing_trade_dates": len(pfill_window.get("missing_trade_dates", []) or []),
+                  "previous_anchor_trade_date": pfill_prev_anchor or "",
+                  "metrics_valid": pfill_metrics,
+                  "compare_to_previous": {
+                      "lr_auc": delta((pfill_metrics.get("lr") or {}).get("auc"), (pfill_prev_metrics.get("lr") or {}).get("auc"), True),
+                      "lr_logloss": delta((pfill_metrics.get("lr") or {}).get("logloss"), (pfill_prev_metrics.get("lr") or {}).get("logloss"), False),
+                      "lr_brier": delta((pfill_metrics.get("lr") or {}).get("brier"), (pfill_prev_metrics.get("lr") or {}).get("brier"), False),
+                      "lgbm_auc": delta((pfill_metrics.get("lgbm") or {}).get("auc"), (pfill_prev_metrics.get("lgbm") or {}).get("auc"), True),
+                      "lgbm_logloss": delta((pfill_metrics.get("lgbm") or {}).get("logloss"), (pfill_prev_metrics.get("lgbm") or {}).get("logloss"), False),
+                      "lgbm_brier": delta((pfill_metrics.get("lgbm") or {}).get("brier"), (pfill_prev_metrics.get("lgbm") or {}).get("brier"), False),
+                  },
+                  "acceptance_pass": bool(pfill_anchor) and (pfill.get("status") == "trained") and len(pfill_window.get("missing_trade_dates", []) or []) == 0,
+              },
+              "eret": {
+                  "anchor_trade_date": eret_anchor,
+                  "status": eret.get("status", ""),
+                  "loaded_trade_dates": len(eret_window.get("loaded_trade_dates", []) or []),
+                  "missing_trade_dates": len(eret_window.get("missing_trade_dates", []) or []),
+                  "previous_anchor_trade_date": eret_prev_anchor or "",
+                  "metrics_valid": eret_metrics,
+                  "compare_to_previous": {
+                      "lr_mae": delta((eret_metrics.get("lr") or {}).get("mae"), (eret_prev_metrics.get("lr") or {}).get("mae"), False),
+                      "lr_rmse": delta((eret_metrics.get("lr") or {}).get("rmse"), (eret_prev_metrics.get("lr") or {}).get("rmse"), False),
+                      "lr_corr": delta((eret_metrics.get("lr") or {}).get("corr"), (eret_prev_metrics.get("lr") or {}).get("corr"), True),
+                      "lr_directional_acc": delta((eret_metrics.get("lr") or {}).get("directional_acc"), (eret_prev_metrics.get("lr") or {}).get("directional_acc"), True),
+                      "lgbm_mae": delta((eret_metrics.get("lgbm") or {}).get("mae"), (eret_prev_metrics.get("lgbm") or {}).get("mae"), False),
+                      "lgbm_rmse": delta((eret_metrics.get("lgbm") or {}).get("rmse"), (eret_prev_metrics.get("lgbm") or {}).get("rmse"), False),
+                      "lgbm_corr": delta((eret_metrics.get("lgbm") or {}).get("corr"), (eret_prev_metrics.get("lgbm") or {}).get("corr"), True),
+                      "lgbm_directional_acc": delta((eret_metrics.get("lgbm") or {}).get("directional_acc"), (eret_prev_metrics.get("lgbm") or {}).get("directional_acc"), True),
+                  },
+                  "acceptance_pass": bool(eret_anchor) and (eret.get("status") == "trained") and len(eret_window.get("missing_trade_dates", []) or []) == 0,
+              },
+          }
+          acceptance["overall_pass"] = bool(acceptance["pfill"]["acceptance_pass"] and acceptance["eret"]["acceptance_pass"])
+
+          json_path = out_dir / "learning_acceptance_latest.json"
+          md_path = out_dir / "learning_acceptance_latest.md"
+          json_path.write_text(json.dumps(acceptance, ensure_ascii=False, indent=2), encoding="utf-8")
+
+          def fmt(v):
+              if v is None:
+                  return ""
+              if isinstance(v, float):
+                  return f"{v:.6f}"
+              return str(v)
+
+          def fmt_delta(obj):
+              if not obj:
+                  return ""
+              return f"{obj['trend']} ({obj['delta']:+.6f})"
+
+          lines = []
+          lines.append("# Learning Acceptance Latest")
+          lines.append("")
+          lines.append(f"- generated_at_utc: {acceptance['generated_at_utc']}")
+          lines.append(f"- current_run_date: {acceptance['current_run_date']}")
+          lines.append(f"- overall_pass: {'PASS' if acceptance['overall_pass'] else 'FAIL'}")
+          lines.append("")
+          lines.append("## P_fill")
+          lines.append("")
+          lines.append(f"- anchor_trade_date: {acceptance['pfill']['anchor_trade_date']}")
+          lines.append(f"- status: {acceptance['pfill']['status']}")
+          lines.append(f"- loaded_trade_dates: {acceptance['pfill']['loaded_trade_dates']}")
+          lines.append(f"- missing_trade_dates: {acceptance['pfill']['missing_trade_dates']}")
+          lines.append(f"- previous_anchor_trade_date: {acceptance['pfill']['previous_anchor_trade_date']}")
+          lines.append(f"- acceptance_pass: {'PASS' if acceptance['pfill']['acceptance_pass'] else 'FAIL'}")
+          lines.append("")
+          lines.append("| 指标 | 当前 | 对比上次 |")
+          lines.append("|---|---:|---|")
+          for model_name, metric_name in [
+              ("lr", "auc"), ("lr", "logloss"), ("lr", "brier"),
+              ("lgbm", "auc"), ("lgbm", "logloss"), ("lgbm", "brier"),
+          ]:
+              key = f"{model_name}_{metric_name}"
+              curr = (pfill_metrics.get(model_name) or {}).get(metric_name)
+              cmp_obj = acceptance['pfill']['compare_to_previous'].get(key)
+              lines.append(f"| {key} | {fmt(curr)} | {fmt_delta(cmp_obj)} |")
+          lines.append("")
+          lines.append("## E_ret")
+          lines.append("")
+          lines.append(f"- anchor_trade_date: {acceptance['eret']['anchor_trade_date']}")
+          lines.append(f"- status: {acceptance['eret']['status']}")
+          lines.append(f"- loaded_trade_dates: {acceptance['eret']['loaded_trade_dates']}")
+          lines.append(f"- missing_trade_dates: {acceptance['eret']['missing_trade_dates']}")
+          lines.append(f"- previous_anchor_trade_date: {acceptance['eret']['previous_anchor_trade_date']}")
+          lines.append(f"- acceptance_pass: {'PASS' if acceptance['eret']['acceptance_pass'] else 'FAIL'}")
+          lines.append("")
+          lines.append("| 指标 | 当前 | 对比上次 |")
+          lines.append("|---|---:|---|")
+          for model_name, metric_name in [
+              ("lr", "mae"), ("lr", "rmse"), ("lr", "corr"), ("lr", "directional_acc"),
+              ("lgbm", "mae"), ("lgbm", "rmse"), ("lgbm", "corr"), ("lgbm", "directional_acc"),
+          ]:
+              key = f"{model_name}_{metric_name}"
+              curr = (eret_metrics.get(model_name) or {}).get(metric_name)
+              cmp_obj = acceptance['eret']['compare_to_previous'].get(key)
+              lines.append(f"| {key} | {fmt(curr)} | {fmt_delta(cmp_obj)} |")
+          lines.append("")
+          md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          print(f"[learning-acceptance] json={json_path.as_posix()}")
+          print(f"[learning-acceptance] md={md_path.as_posix()}")
+          print(f"[learning-acceptance] overall_pass={acceptance['overall_pass']}")
+          PY
       - name: Commit learning artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
@@ -744,6 +921,9 @@ jobs:
           git add data/market/eret_truth_*.meta.json || true
           git add data/market/eret_trainset_*.csv || true
           git add data/market/eret_trainset_*.meta.json || true
+
+          git add outputs/learning/learning_acceptance_latest.md || true
+          git add outputs/learning/learning_acceptance_latest.json || true
 
           git add models/pfill_*.joblib || true
           git add models/pfill_*.json || true
