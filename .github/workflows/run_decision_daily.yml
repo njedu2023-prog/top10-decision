@@ -42,7 +42,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> $GITHUB_ENV
+        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> "$GITHUB_ENV"
 
       - name: Ensure output dirs
         run: |
@@ -204,7 +204,7 @@ jobs:
           git add -A docs/reports || true
 
           echo "[git] status after add:"
-          git status --porcelain || true
+          git status --porcelain | sed -n '1,200p' || true
 
           if git diff --cached --quiet; then
             echo "[push] no staged changes"
@@ -214,7 +214,7 @@ jobs:
           git commit -m "auto: sync market raw, build fs, update decision outputs"
 
           echo "[git] status after commit:"
-          git status --porcelain || true
+          git status --porcelain | sed -n '1,50p' || true
 
           if [ -n "$(git status --porcelain)" ]; then
             echo "[push] worktree dirty after commit; reset to HEAD before rebase"
@@ -275,7 +275,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> $GITHUB_ENV
+        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> "$GITHUB_ENV"
 
       - name: Ensure learning dirs
         run: |
@@ -427,7 +427,6 @@ jobs:
                   missing_dates = []
 
           repairable_missing = [td for td in missing_dates if td in ready_dates]
-
           print(ready_dates[-1] if ready_dates else "")
           PY
           )"
@@ -556,7 +555,6 @@ jobs:
                   missing_dates = []
 
           repairable_missing = [td for td in missing_dates if td in ready_dates]
-
           print(ready_dates[-1] if ready_dates else "")
           PY
           )"
@@ -654,14 +652,55 @@ jobs:
           set -e
           python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
 
-      - name: Show learning artifacts
+      - name: Show learning artifacts (focused)
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
           echo "[learning] pfill_trade_date=${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
           echo "[learning] eret_trade_date=${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
-          ls -lah data/market || true
-          ls -lah models || true
+
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          for name in ["pfill_meta.json", "eret_meta.json"]:
+              path = Path("models") / name
+              print(f"[learning] meta_exists {name}={path.exists()}")
+              if not path.exists():
+                  continue
+              try:
+                  meta = json.loads(path.read_text(encoding="utf-8"))
+                  window = meta.get("window", {}) or {}
+                  print(
+                      f"[learning] {name} anchor={meta.get('anchor_trade_date','')} "
+                      f"status={meta.get('status','')} "
+                      f"loaded={len(window.get('loaded_trade_dates',[]) or [])} "
+                      f"missing={len(window.get('missing_trade_dates',[]) or [])}"
+                  )
+              except Exception as e:
+                  print(f"[learning] {name} parse_error={e}")
+          PY
+
+          echo "[learning] recent market artifacts:"
+          find data/market -maxdepth 1 -type f \(
+            -name 'sample_maturity_*' -o \
+            -name 'fill_truth_*.csv' -o \
+            -name 'fill_truth_*.meta.json' -o \
+            -name 'pfill_trainset_*.csv' -o \
+            -name 'pfill_trainset_*.meta.json' -o \
+            -name 'eret_truth_*.csv' -o \
+            -name 'eret_truth_*.meta.json' -o \
+            -name 'eret_trainset_*.csv' -o \
+            -name 'eret_trainset_*.meta.json'
+          \) | sort | tail -n 120 || true
+
+          echo "[learning] model artifacts:"
+          find models -maxdepth 1 -type f \(
+            -name 'pfill_*.joblib' -o \
+            -name 'pfill_*.json' -o \
+            -name 'eret_*.joblib' -o \
+            -name 'eret_*.json'
+          \) | sort || true
 
       - name: Commit learning artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
@@ -701,7 +740,7 @@ jobs:
           git add models/eret_*.json || true
 
           echo "[git-learning] status after add:"
-          git status --porcelain || true
+          git status --porcelain | sed -n '1,200p' || true
 
           if git diff --cached --quiet; then
             echo "[push-learning] no staged changes"
@@ -710,8 +749,11 @@ jobs:
 
           git commit -m "auto: resolve sample maturity and update pfill + eret learning artifacts"
 
+          echo "[git-learning] last commit:"
+          git log -1 --stat --oneline || true
+
           echo "[git-learning] status after commit:"
-          git status --porcelain || true
+          git status --porcelain | sed -n '1,50p' || true
 
           if [ -n "$(git status --porcelain)" ]; then
             echo "[push-learning] worktree dirty after commit; reset to HEAD before rebase"
