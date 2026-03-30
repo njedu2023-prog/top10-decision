@@ -674,34 +674,45 @@ jobs:
                   print(
                       f"[learning] {name} anchor={meta.get('anchor_trade_date','')} "
                       f"status={meta.get('status','')} "
-                      f"loaded={len(window.get('loaded_trade_dates',[]) or [])} "
-                      f"missing={len(window.get('missing_trade_dates',[]) or [])}"
+                      f"loaded={len(window.get('loaded_trade_dates', []) or [])} "
+                      f"missing={len(window.get('missing_trade_dates', []) or [])}"
                   )
               except Exception as e:
                   print(f"[learning] {name} parse_error={e}")
+
+          print("[learning] recent market artifacts:")
+          market_patterns = [
+              "sample_maturity_*",
+              "fill_truth_*.csv",
+              "fill_truth_*.meta.json",
+              "pfill_trainset_*.csv",
+              "pfill_trainset_*.meta.json",
+              "eret_truth_*.csv",
+              "eret_truth_*.meta.json",
+              "eret_trainset_*.csv",
+              "eret_trainset_*.meta.json",
+          ]
+          market_files = []
+          market_dir = Path("data/market")
+          for pattern in market_patterns:
+              market_files.extend(market_dir.glob(pattern))
+          for path in sorted({p for p in market_files})[-120:]:
+              print(path.as_posix())
+
+          print("[learning] model artifacts:")
+          model_patterns = [
+              "pfill_*.joblib",
+              "pfill_*.json",
+              "eret_*.joblib",
+              "eret_*.json",
+          ]
+          model_files = []
+          models_dir = Path("models")
+          for pattern in model_patterns:
+              model_files.extend(models_dir.glob(pattern))
+          for path in sorted({p for p in model_files}):
+              print(path.as_posix())
           PY
-
-          echo "[learning] recent market artifacts:"
-          find data/market -maxdepth 1 -type f \(
-            -name 'sample_maturity_*' -o \
-            -name 'fill_truth_*.csv' -o \
-            -name 'fill_truth_*.meta.json' -o \
-            -name 'pfill_trainset_*.csv' -o \
-            -name 'pfill_trainset_*.meta.json' -o \
-            -name 'eret_truth_*.csv' -o \
-            -name 'eret_truth_*.meta.json' -o \
-            -name 'eret_trainset_*.csv' -o \
-            -name 'eret_trainset_*.meta.json'
-          \) | sort | tail -n 120 || true
-
-          echo "[learning] model artifacts:"
-          find models -maxdepth 1 -type f \(
-            -name 'pfill_*.joblib' -o \
-            -name 'pfill_*.json' -o \
-            -name 'eret_*.joblib' -o \
-            -name 'eret_*.json'
-          \) | sort || true
-
       - name: Commit learning artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
