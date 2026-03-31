@@ -23,6 +23,7 @@ eret_engine.py
 当前版本：
 - v2：按 eret_meta.json 的训练态 feature contract 对齐线上推理输入
 - 若 models/eret_lr.joblib 或 models/eret_lgbm.joblib 存在，则优先走学习模型
+- 当前默认优先级已调整为：LR > LGBM > rule
 - 学习模型输出做合理裁剪，避免极端离群值直接污染 EV
 """
 
@@ -181,33 +182,68 @@ def _resolve_category_like_cols(meta: Dict[str, Any]) -> list[str]:
     return out
 
 
+def _build_model_missing_audit(meta_path: Optional[Path]) -> Dict[str, Any]:
+    return {
+        "eret_model_loaded": False,
+        "eret_model_kind": "",
+        "eret_model_path": "",
+        "eret_model_feature_mode": "",
+        "eret_model_meta_path": str(meta_path) if meta_path else "",
+        "eret_model_expected_n_features": 0,
+        "eret_model_expected_categorical_cols": "",
+        "eret_model_expected_numeric_feature_count": 0,
+        "eret_model_category_like_cols_detected": "",
+        "eret_model_degrade_reason": "model_missing_use_rule",
+    }
+
+
+def _build_model_load_failed_audit(
+    chosen: Path,
+    meta_path: Optional[Path],
+    feature_cols: list[str],
+    categorical_cols: list[str],
+    numeric_cols: list[str],
+    category_like_cols_detected: list[str],
+    err: Exception,
+) -> Dict[str, Any]:
+    return {
+        "eret_model_loaded": False,
+        "eret_model_kind": "",
+        "eret_model_path": str(chosen),
+        "eret_model_feature_mode": "",
+        "eret_model_meta_path": str(meta_path) if meta_path else "",
+        "eret_model_expected_n_features": len(feature_cols),
+        "eret_model_expected_categorical_cols": "|".join(categorical_cols),
+        "eret_model_expected_numeric_feature_count": len(numeric_cols),
+        "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+        "eret_model_degrade_reason": f"model_load_failed:{type(err).__name__}:{_safe_errmsg(err)}",
+    }
+
+
 def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[ERetModelBundle], Dict[str, Any]]:
     root = project_root or _detect_project_root()
 
-    lgbm_path = _existing_model_path(root, ["eret_lgbm.joblib"])
+    # 关键修改：
+    # 线上优先级从 LGBM > LR 改为 LR > LGBM
     lr_path = _existing_model_path(root, ["eret_lr.joblib"])
+    lgbm_path = _existing_model_path(root, ["eret_lgbm.joblib"])
     meta_path = _existing_meta_path(root, ["eret_meta.json"])
 
-    chosen = lgbm_path or lr_path
-    if chosen is None:
-        return None, {
-            "eret_model_loaded": False,
-            "eret_model_kind": "",
-            "eret_model_path": "",
-            "eret_model_feature_mode": "",
-            "eret_model_meta_path": str(meta_path) if meta_path else "",
-            "eret_model_expected_n_features": 0,
-            "eret_model_expected_categorical_cols": "",
-            "eret_model_expected_numeric_feature_count": 0,
-            "eret_model_category_like_cols_detected": "",
-            "eret_model_degrade_reason": "model_missing_use_rule",
-        }
+    candidates: list[Path] = []
+    if lr_path is not None:
+        candidates.append(lr_path)
+    if lgbm_path is not None:
+        candidates.append(lgbm_path)
+
+    if not candidates:
+        return None, _build_model_missing_audit(meta_path)
 
     meta: Dict[str, Any] = {}
     feature_cols: list[str] = []
     categorical_cols: list[str] = []
     numeric_cols: list[str] = []
     category_like_cols_detected: list[str] = []
+
     if meta_path is not None:
         meta = _load_eret_meta(meta_path)
         feature_cols = _resolve_feature_cols(meta)
@@ -215,45 +251,53 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
         numeric_cols = _resolve_numeric_cols(meta, feature_cols, categorical_cols)
         category_like_cols_detected = _resolve_category_like_cols(meta)
 
-    try:
-        model = joblib.load(chosen)
-        model_kind = "lgbm" if "lgbm" in chosen.name.lower() else "lr"
-        feature_mode = "meta_feature_contract" if feature_cols else "pipeline_auto"
-        return ERetModelBundle(
-            model=model,
-            model_kind=model_kind,
-            model_path=str(chosen),
-            feature_mode=feature_mode,
-            meta_path=str(meta_path) if meta_path else "",
-            feature_cols=feature_cols,
-            categorical_cols=categorical_cols,
-            numeric_cols=numeric_cols,
-            category_like_cols_detected=category_like_cols_detected,
-        ), {
-            "eret_model_loaded": True,
-            "eret_model_kind": model_kind,
-            "eret_model_path": str(chosen),
-            "eret_model_feature_mode": feature_mode,
-            "eret_model_meta_path": str(meta_path) if meta_path else "",
-            "eret_model_expected_n_features": len(feature_cols),
-            "eret_model_expected_categorical_cols": "|".join(categorical_cols),
-            "eret_model_expected_numeric_feature_count": len(numeric_cols),
-            "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
-            "eret_model_degrade_reason": "",
-        }
-    except Exception as e:
-        return None, {
-            "eret_model_loaded": False,
-            "eret_model_kind": "",
-            "eret_model_path": str(chosen),
-            "eret_model_feature_mode": "",
-            "eret_model_meta_path": str(meta_path) if meta_path else "",
-            "eret_model_expected_n_features": len(feature_cols),
-            "eret_model_expected_categorical_cols": "|".join(categorical_cols),
-            "eret_model_expected_numeric_feature_count": len(numeric_cols),
-            "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
-            "eret_model_degrade_reason": f"model_load_failed:{type(e).__name__}:{_safe_errmsg(e)}",
-        }
+    last_err: Optional[Exception] = None
+    last_path: Optional[Path] = None
+
+    for chosen in candidates:
+        try:
+            model = joblib.load(chosen)
+            model_kind = "lgbm" if "lgbm" in chosen.name.lower() else "lr"
+            feature_mode = "meta_feature_contract" if feature_cols else "pipeline_auto"
+            return ERetModelBundle(
+                model=model,
+                model_kind=model_kind,
+                model_path=str(chosen),
+                feature_mode=feature_mode,
+                meta_path=str(meta_path) if meta_path else "",
+                feature_cols=feature_cols,
+                categorical_cols=categorical_cols,
+                numeric_cols=numeric_cols,
+                category_like_cols_detected=category_like_cols_detected,
+            ), {
+                "eret_model_loaded": True,
+                "eret_model_kind": model_kind,
+                "eret_model_path": str(chosen),
+                "eret_model_feature_mode": feature_mode,
+                "eret_model_meta_path": str(meta_path) if meta_path else "",
+                "eret_model_expected_n_features": len(feature_cols),
+                "eret_model_expected_categorical_cols": "|".join(categorical_cols),
+                "eret_model_expected_numeric_feature_count": len(numeric_cols),
+                "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+                "eret_model_degrade_reason": "",
+            }
+        except Exception as e:
+            last_err = e
+            last_path = chosen
+            continue
+
+    if last_path is None or last_err is None:
+        return None, _build_model_missing_audit(meta_path)
+
+    return None, _build_model_load_failed_audit(
+        chosen=last_path,
+        meta_path=meta_path,
+        feature_cols=feature_cols,
+        categorical_cols=categorical_cols,
+        numeric_cols=numeric_cols,
+        category_like_cols_detected=category_like_cols_detected,
+        err=last_err,
+    )
 
 
 LEAKAGE_COLS = {
