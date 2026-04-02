@@ -423,6 +423,50 @@ def _attach_cost_risk_columns(
     return out
 
 
+def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    EV 聚合升级 V1：
+    - 保留原始 ev_base = p_fill * e_ret - cost - risk
+    - 对低 P_fill 增加软/硬惩罚，强化执行约束
+    - 对高 risk_penalty 增加额外惩罚，强化高脆弱票压制
+    - 保持最终主排序字段仍为 ev_pred，兼容现有下游
+    """
+    out = df.copy()
+
+    p_fill = pd.to_numeric(out.get("p_fill_pred", 0.0), errors="coerce").fillna(0.0).astype(float)
+    e_ret = pd.to_numeric(out.get("e_ret_pred", 0.0), errors="coerce").fillna(0.0).astype(float)
+    cost_est = pd.to_numeric(out.get("cost_est", 0.0), errors="coerce").fillna(0.0).astype(float)
+    risk_penalty = pd.to_numeric(out.get("risk_penalty", 0.0), errors="coerce").fillna(0.0).astype(float)
+
+    ev_base = p_fill * e_ret - cost_est - risk_penalty
+
+    # 低 P_fill 执行约束：高位区弱惩罚，低位区明显加罚
+    pfill_penalty_soft = (0.95 - p_fill).clip(lower=0.0) * 0.06
+    pfill_penalty_hard = (0.85 - p_fill).clip(lower=0.0) * 0.12
+    pfill_penalty_extra = pfill_penalty_soft + pfill_penalty_hard
+
+    # 高风险额外惩罚：允许低风险线性通过，但对高风险区更陡
+    risk_penalty_extra = (
+        (risk_penalty - 0.010).clip(lower=0.0) * 0.80
+        + (risk_penalty - 0.020).clip(lower=0.0) * 1.20
+    )
+
+    ev_penalty_total_extra = pfill_penalty_extra + risk_penalty_extra
+    ev_final = ev_base - ev_penalty_total_extra
+
+    out["ev_base"] = ev_base.astype(float)
+    out["pfill_penalty_soft"] = pfill_penalty_soft.astype(float)
+    out["pfill_penalty_hard"] = pfill_penalty_hard.astype(float)
+    out["pfill_penalty_extra"] = pfill_penalty_extra.astype(float)
+    out["risk_penalty_extra"] = risk_penalty_extra.astype(float)
+    out["ev_penalty_total_extra"] = ev_penalty_total_extra.astype(float)
+    out["ev_final"] = ev_final.astype(float)
+    out["ev_formula_version"] = "v1_exec_aware"
+    out["ev_pred"] = out["ev_final"]
+
+    return out
+
+
 def _build_report_candidate_view(
     routed_df: pd.DataFrame,
     weights_out: pd.DataFrame,
@@ -596,6 +640,14 @@ def main() -> int:
         cand_snapshot["p_fill_pred_src"] = "stop_zero"
         cand_snapshot["eret_pred_src"] = "stop_zero"
         cand_snapshot = _attach_cost_risk_columns(cand_snapshot, regime_name=regime_name)
+        cand_snapshot["ev_base"] = 0.0
+        cand_snapshot["pfill_penalty_soft"] = 0.0
+        cand_snapshot["pfill_penalty_hard"] = 0.0
+        cand_snapshot["pfill_penalty_extra"] = 0.0
+        cand_snapshot["risk_penalty_extra"] = 0.0
+        cand_snapshot["ev_penalty_total_extra"] = 0.0
+        cand_snapshot["ev_final"] = 0.0
+        cand_snapshot["ev_formula_version"] = "v1_exec_aware_stop_zero"
         cand_snapshot["ev_pred"] = 0.0
 
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
@@ -685,13 +737,7 @@ def main() -> int:
     routed_df, eret_audit = _run_eret_engine(routed_df)
 
     routed_df = _attach_cost_risk_columns(routed_df, regime_name=regime_name)
-
-    routed_df["ev_pred"] = (
-        pd.to_numeric(routed_df["p_fill_pred"], errors="coerce").fillna(0.0).astype(float)
-        * pd.to_numeric(routed_df["e_ret_pred"], errors="coerce").fillna(0.0).astype(float)
-        - pd.to_numeric(routed_df["cost_est"], errors="coerce").fillna(0.0).astype(float)
-        - pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).astype(float)
-    )
+    routed_df = _apply_ev_upgrade_v1(routed_df)
     routed_df["input_mode"] = input_mode
     routed_df["fs_degrade_reason"] = fs_degrade_reason
 
@@ -849,6 +895,13 @@ def main() -> int:
             "high_ev_low_risk_rows": int(len(high_ev_low_risk_df)),
             "topn_rows": int(len(topn_report_df)),
             "full_candidate_rows": int(len(full_candidate_report_df)),
+        },
+        "ev_formula_version": str(_safe_first_value(routed_df, "ev_formula_version", "v1_exec_aware")),
+        "ev_stats": {
+            "ev_base_mean": float(pd.to_numeric(routed_df.get("ev_base", 0.0), errors="coerce").fillna(0.0).mean()),
+            "ev_pred_mean": float(pd.to_numeric(routed_df.get("ev_pred", 0.0), errors="coerce").fillna(0.0).mean()),
+            "pfill_penalty_extra_mean": float(pd.to_numeric(routed_df.get("pfill_penalty_extra", 0.0), errors="coerce").fillna(0.0).mean()),
+            "risk_penalty_extra_mean": float(pd.to_numeric(routed_df.get("risk_penalty_extra", 0.0), errors="coerce").fillna(0.0).mean()),
         },
     }
     write_eval_json(exec_date, eval_payload)
