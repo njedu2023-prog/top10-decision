@@ -23,6 +23,7 @@ top10-decision — V2 runner (Orchestrator Only)
 - 新增 Artifacts 下方的高 EV / 低 RiskPenalty 筛选表
 - TopN Targets / Full Candidate Pool 均按 EV 降序展示
 - 新增 TopEVR 信号文件输出（latest + dated，可空表）
+- V1 聚合升级：增强 P_fill / RiskPenalty 在 EV 中的话语权，并输出 EV 审计字段
 """
 
 from __future__ import annotations
@@ -423,46 +424,63 @@ def _attach_cost_risk_columns(
     return out
 
 
+def _safe_numeric_col(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
+    if col in df.columns:
+        return pd.to_numeric(df[col], errors="coerce").fillna(default).astype(float)
+    return pd.Series(default, index=df.index, dtype=float)
+
+
 def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
     """
-    EV 聚合升级 V1：
-    - 保留原始 ev_base = p_fill * e_ret - cost - risk
-    - 对低 P_fill 增加软/硬惩罚，强化执行约束
-    - 对高 risk_penalty 增加额外惩罚，强化高脆弱票压制
-    - 保持最终主排序字段仍为 ev_pred，兼容现有下游
+    EV 聚合升级 V1.1：
+    - 保留 EV 主干：P_fill * E_ret - Cost - RiskPenalty
+    - 相比 V1，调轻 P_fill extra，避免头部 EV 被压得过薄
+    - 相比 V1，略增强 Risk extra，让执行脆弱性 / 拥挤度 / 流动性更多承担约束
+    - 保留审计列，并继续使用 ev_pred 作为最终排序字段
     """
     out = df.copy()
 
-    p_fill = pd.to_numeric(out.get("p_fill_pred", 0.0), errors="coerce").fillna(0.0).astype(float)
-    e_ret = pd.to_numeric(out.get("e_ret_pred", 0.0), errors="coerce").fillna(0.0).astype(float)
-    cost_est = pd.to_numeric(out.get("cost_est", 0.0), errors="coerce").fillna(0.0).astype(float)
-    risk_penalty = pd.to_numeric(out.get("risk_penalty", 0.0), errors="coerce").fillna(0.0).astype(float)
+    p_fill = _safe_numeric_col(out, "p_fill_pred", 0.0).clip(lower=0.0, upper=1.0)
+    e_ret = _safe_numeric_col(out, "e_ret_pred", 0.0)
+    cost_est = _safe_numeric_col(out, "cost_est", 0.0).clip(lower=0.0)
+    risk_penalty = _safe_numeric_col(out, "risk_penalty", 0.0).clip(lower=0.0)
 
-    ev_base = p_fill * e_ret - cost_est - risk_penalty
-
-    # 低 P_fill 执行约束：高位区弱惩罚，低位区明显加罚
-    pfill_penalty_soft = (0.95 - p_fill).clip(lower=0.0) * 0.06
-    pfill_penalty_hard = (0.85 - p_fill).clip(lower=0.0) * 0.12
-    pfill_penalty_extra = pfill_penalty_soft + pfill_penalty_hard
-
-    # 高风险额外惩罚：允许低风险线性通过，但对高风险区更陡
-    risk_penalty_extra = (
-        (risk_penalty - 0.010).clip(lower=0.0) * 0.80
-        + (risk_penalty - 0.020).clip(lower=0.0) * 1.20
+    exec_fragility_penalty = _safe_numeric_col(out, "execution_fragility_penalty", 0.0).clip(lower=0.0)
+    crowding_penalty = _safe_numeric_col(out, "crowding_penalty", 0.0).clip(lower=0.0)
+    liquidity_penalty = (
+        _safe_numeric_col(out, "risk_liquidity_penalty", 0.0).clip(lower=0.0)
+        + _safe_numeric_col(out, "risk_liquidity_amount_penalty", 0.0).clip(lower=0.0)
     )
 
-    ev_penalty_total_extra = pfill_penalty_extra + risk_penalty_extra
-    ev_final = ev_base - ev_penalty_total_extra
+    out["ev_base"] = (p_fill * e_ret - cost_est - risk_penalty).astype(float)
 
-    out["ev_base"] = ev_base.astype(float)
-    out["pfill_penalty_soft"] = pfill_penalty_soft.astype(float)
-    out["pfill_penalty_hard"] = pfill_penalty_hard.astype(float)
-    out["pfill_penalty_extra"] = pfill_penalty_extra.astype(float)
-    out["risk_penalty_extra"] = risk_penalty_extra.astype(float)
-    out["ev_penalty_total_extra"] = ev_penalty_total_extra.astype(float)
-    out["ev_final"] = ev_final.astype(float)
-    out["ev_formula_version"] = "v1_exec_aware"
-    out["ev_pred"] = out["ev_final"]
+    # ---- P_fill extra penalty (V1.1: smoother than V1) ----
+    # 软惩罚：低于 0.94 开始；硬惩罚：低于 0.82 再加速，但斜率明显低于 V1
+    pfill_gap_soft = (0.94 - p_fill).clip(lower=0.0)
+    pfill_gap_hard = (0.82 - p_fill).clip(lower=0.0)
+    out["pfill_penalty_soft"] = (pfill_gap_soft * 0.028).astype(float)
+    out["pfill_penalty_hard"] = (pfill_gap_hard * 0.070).astype(float)
+    out["pfill_penalty_extra"] = (out["pfill_penalty_soft"] + out["pfill_penalty_hard"]).astype(float)
+
+    # ---- Risk extra penalty (V1.1: slightly stronger than V1) ----
+    # 对高基础风险做轻微阶梯放大，并提升 execution_fragility / crowding / liquidity 的参与度
+    risk_base_extra = (
+        (risk_penalty - 0.0075).clip(lower=0.0) * 0.45
+        + (risk_penalty - 0.0150).clip(lower=0.0) * 0.25
+    )
+    fragility_extra = exec_fragility_penalty * 0.85
+    crowding_extra = crowding_penalty * 0.45
+    liquidity_extra = liquidity_penalty * 0.35
+    out["risk_penalty_extra"] = (
+        risk_base_extra + fragility_extra + crowding_extra + liquidity_extra
+    ).astype(float)
+
+    out["ev_penalty_total_extra"] = (
+        out["pfill_penalty_extra"] + out["risk_penalty_extra"]
+    ).astype(float)
+    out["ev_final"] = (out["ev_base"] - out["ev_penalty_total_extra"]).astype(float)
+    out["ev_formula_version"] = "v1_1_exec_aware"
+    out["ev_pred"] = out["ev_final"].astype(float)
 
     return out
 
@@ -647,7 +665,7 @@ def main() -> int:
         cand_snapshot["risk_penalty_extra"] = 0.0
         cand_snapshot["ev_penalty_total_extra"] = 0.0
         cand_snapshot["ev_final"] = 0.0
-        cand_snapshot["ev_formula_version"] = "v1_exec_aware_stop_zero"
+        cand_snapshot["ev_formula_version"] = "v1_1_exec_aware_stop_zero"
         cand_snapshot["ev_pred"] = 0.0
 
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
@@ -866,6 +884,11 @@ def main() -> int:
         "risk_penalty_mean": float(pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).mean()),
         "risk_penalty_min": float(pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).min()),
         "risk_penalty_max": float(pd.to_numeric(routed_df["risk_penalty"], errors="coerce").fillna(0.0).max()),
+        "ev_base_mean": float(pd.to_numeric(routed_df["ev_base"], errors="coerce").fillna(0.0).mean()),
+        "ev_final_mean": float(pd.to_numeric(routed_df["ev_final"], errors="coerce").fillna(0.0).mean()),
+        "pfill_penalty_extra_mean": float(pd.to_numeric(routed_df["pfill_penalty_extra"], errors="coerce").fillna(0.0).mean()),
+        "risk_penalty_extra_mean": float(pd.to_numeric(routed_df["risk_penalty_extra"], errors="coerce").fillna(0.0).mean()),
+        "ev_formula_version": str(_safe_first_value(routed_df, "ev_formula_version", "v1_1_exec_aware")),
         "input_mode": input_mode,
         "fs_degrade_reason": fs_degrade_reason,
         "input_status": input_status,
@@ -895,13 +918,6 @@ def main() -> int:
             "high_ev_low_risk_rows": int(len(high_ev_low_risk_df)),
             "topn_rows": int(len(topn_report_df)),
             "full_candidate_rows": int(len(full_candidate_report_df)),
-        },
-        "ev_formula_version": str(_safe_first_value(routed_df, "ev_formula_version", "v1_exec_aware")),
-        "ev_stats": {
-            "ev_base_mean": float(pd.to_numeric(routed_df.get("ev_base", 0.0), errors="coerce").fillna(0.0).mean()),
-            "ev_pred_mean": float(pd.to_numeric(routed_df.get("ev_pred", 0.0), errors="coerce").fillna(0.0).mean()),
-            "pfill_penalty_extra_mean": float(pd.to_numeric(routed_df.get("pfill_penalty_extra", 0.0), errors="coerce").fillna(0.0).mean()),
-            "risk_penalty_extra_mean": float(pd.to_numeric(routed_df.get("risk_penalty_extra", 0.0), errors="coerce").fillna(0.0).mean()),
         },
     }
     write_eval_json(exec_date, eval_payload)
