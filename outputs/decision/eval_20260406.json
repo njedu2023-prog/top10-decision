@@ -6,15 +6,15 @@
   "risk_budget": 1.0,
   "topk": 36,
   "picked": 10,
-  "cost_est_mean": 0.001604522361111111,
+  "cost_est_mean": 0.0016045223611111108,
   "cost_est_min": 0.0011105245,
   "cost_est_max": 0.002951315,
   "risk_penalty_mean": 0.009432514187083331,
   "risk_penalty_min": 0.0027,
   "risk_penalty_max": 0.022608766666666665,
-  "ev_base_mean": -0.04622843581639487,
-  "ev_final_mean": -0.05954245201784489,
-  "pfill_penalty_extra_mean": 0.0018120384063898434,
+  "ev_base_mean": -0.05882411738378871,
+  "ev_final_mean": -0.07261029468046339,
+  "pfill_penalty_extra_mean": 0.0022841995016145023,
   "risk_penalty_extra_mean": 0.011501977795060184,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
@@ -32,8 +32,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260403",
-      "created_at_utc": "2026-04-03T14:06:29+00:00",
-      "commit_sha": "a2ace6692b39570f598d675d7ba79e98de3b58db",
+      "created_at_utc": "2026-04-06T14:15:10+00:00",
+      "commit_sha": "24eccc6581f5c3a0656bb4dfc5a636feac9d4720",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.947368,
@@ -176,7 +176,7 @@
         "namechange": {
           "path": "data/market/raw/2026/20260403/namechange.csv",
           "loaded": true,
-          "rows": 15,
+          "rows": 16,
           "columns": [
             "ts_code",
             "name_change_name",
@@ -190,7 +190,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260403",
-            "created_at_utc": "2026-04-03T14:06:28+00:00",
+            "created_at_utc": "2026-04-06T14:15:10+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -205,7 +205,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260403",
-              "generated_at_bj": "2026-04-03 18:40:55",
+              "generated_at_bj": "2026-04-06 18:54:52",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -297,7 +297,7 @@
                     "fields": "ts_code,name,start_date,end_date,change_reason"
                   },
                   "status": "ok",
-                  "rows": 15,
+                  "rows": 16,
                   "error": null
                 },
                 {
@@ -457,7 +457,7 @@
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260403/namechange.csv",
                 "latest_path": "data/market/raw/latest/namechange.csv",
-                "bytes": 627
+                "bytes": 659
               },
               {
                 "name": "stk_limit",
@@ -705,7 +705,7 @@
     "decision_report": "outputs/decision/decision_report_20260406.md"
   },
   "report_stats": {
-    "high_ev_low_risk_rows": 1,
+    "high_ev_low_risk_rows": 0,
     "topn_rows": 10,
     "full_candidate_rows": 26
   }
