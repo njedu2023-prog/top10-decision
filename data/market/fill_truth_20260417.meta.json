@@ -1,13 +1,13 @@
 {
   "trade_date": "20260417",
   "exec_date": "20260420",
-  "target_date": "nan",
+  "target_date": "20260421",
   "rows": 71,
   "sample_maturity": {
-    "PFILL_READY": 71
+    "FULLY_READY": 71
   },
   "label_ready_fill": 71,
-  "label_ready_ret": 0,
+  "label_ready_ret": 71,
   "y_fill_rate": 0.9436619718309859,
   "quality_counts": {
     "strong_open_tradable": 67,
