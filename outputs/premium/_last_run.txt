@@ -1,10 +1,10 @@
-trade_date: 20260417
-run_id: gh_24729432393
-commit_sha: 0f3035c61d67
+trade_date: 20260420
+run_id: gh_24785578368
+commit_sha: cc59802b434a
 model_version: premium_v2
-created_at_utc: 2026-04-21T14:55:32Z
+created_at_utc: 2026-04-22T14:59:21Z
 ok: True
-target_date: 20260421
+target_date: 20260422
 pending: True
 pending_reason: missing_TUSHARE_TOKEN|fallback_business_day
 truth_T_ok: True
@@ -12,14 +12,14 @@ truth_T_reason: ok
 verify_pending: False
 verify_reason: ok
 eret_plus_src: ehx:coldstart_v1
-out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260417.csv
-out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260417.csv
-out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260417.csv
-report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260417.md
+out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260420.csv
+out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260420.csv
+out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260420.csv
+report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260420.md
 degrade_mode: full
 packs_used: ['Pack0', 'Pack1', 'Pack2']
 packs_missing: []
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260417.csv', 'Pack2 enabled (soft mode, fixed)']
+notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260420.csv', 'Pack2 enabled (soft mode, fixed)']
 extra_prefix: factor
