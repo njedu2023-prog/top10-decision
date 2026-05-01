@@ -12,8 +12,8 @@
   "risk_penalty_mean": 0.0086076280078692,
   "risk_penalty_min": 0.0027,
   "risk_penalty_max": 0.022298379759999997,
-  "ev_base_mean": -0.10988194264536497,
-  "ev_final_mean": -0.12175563713994468,
+  "ev_base_mean": -0.052665706189328816,
+  "ev_final_mean": -0.06453940068390854,
   "pfill_penalty_extra_mean": 0.0009275990750881341,
   "risk_penalty_extra_mean": 0.01094609541949156,
   "ev_formula_version": "v1_1_exec_aware",
@@ -32,8 +32,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260430",
-      "created_at_utc": "2026-05-01T13:55:22+00:00",
-      "commit_sha": "df1ce0b653199214fb7f3d095a78c51c5bcdb94c",
+      "created_at_utc": "2026-05-01T14:07:40+00:00",
+      "commit_sha": "d4273aca98d1ea1adafa691dc62cccb94d05ce6f",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -196,7 +196,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260430",
-            "created_at_utc": "2026-05-01T13:55:22+00:00",
+            "created_at_utc": "2026-05-01T14:07:39+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
