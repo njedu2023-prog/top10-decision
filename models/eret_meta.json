@@ -1,18 +1,18 @@
 {
-  "train_time_utc": "2026-05-01T15:01:55+00:00",
-  "anchor_trade_date": "20260424",
+  "train_time_utc": "2026-05-01T15:13:34+00:00",
+  "anchor_trade_date": "20260423",
   "status": "trained",
   "skip_reason": "",
   "target_column": "realized_ret_t1_to_t2",
-  "split_mode": "time_holdout:20260424",
+  "split_mode": "time_holdout:20260423",
   "small_sample_mode": false,
   "model_paths": {
     "lr": "/home/runner/work/top10-decision/top10-decision/models/eret_lr.joblib",
     "lgbm": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
-    "lr_dated": "/home/runner/work/top10-decision/top10-decision/models/eret_lr_20260424.joblib",
-    "lgbm_dated": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm_20260424.joblib"
+    "lr_dated": "/home/runner/work/top10-decision/top10-decision/models/eret_lr_20260423.joblib",
+    "lgbm_dated": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm_20260423.joblib"
   },
-  "meta_path_dated": "/home/runner/work/top10-decision/top10-decision/models/eret_meta_20260424.json",
+  "meta_path_dated": "/home/runner/work/top10-decision/top10-decision/models/eret_meta_20260423.json",
   "model_backend": {
     "lr": "sklearn.ElasticNet",
     "lgbm": "lightgbm.LGBMRegressor"
@@ -58,8 +58,7 @@
       "20260420",
       "20260421",
       "20260422",
-      "20260423",
-      "20260424"
+      "20260423"
     ],
     "loaded_trade_dates": [
       "20260227",
@@ -98,8 +97,7 @@
       "20260420",
       "20260421",
       "20260422",
-      "20260423",
-      "20260424"
+      "20260423"
     ],
     "missing_trade_dates": [
       "20260407",
@@ -142,13 +140,12 @@
       "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260420.csv",
       "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260421.csv",
       "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260422.csv",
-      "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260423.csv",
-      "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260424.csv"
+      "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260423.csv"
     ],
-    "n_matured_dates": 40,
-    "n_loaded_dates": 38,
+    "n_matured_dates": 39,
+    "n_loaded_dates": 37,
     "window_start": "20260227",
-    "window_end": "20260424",
+    "window_end": "20260423",
     "train_dates": [
       "20260227",
       "20260302",
@@ -185,30 +182,29 @@
       "20260417",
       "20260420",
       "20260421",
-      "20260422",
-      "20260423"
+      "20260422"
     ],
     "valid_dates": [
-      "20260424"
+      "20260423"
     ]
   },
   "rows": {
-    "raw_all": 1720,
-    "ready_only": 1720,
-    "train": 1664,
-    "valid": 56
+    "raw_all": 1664,
+    "ready_only": 1664,
+    "train": 1615,
+    "valid": 49
   },
   "eret_truth_ready_only": true,
   "sample_maturity_distribution": {
-    "FULLY_READY": 1489,
+    "FULLY_READY": 1433,
     "PFILL_READY": 231
   },
   "target_distribution": {
-    "mean": 0.006719635842558506,
+    "mean": 0.006965103227015633,
     "median": -0.001516082159506,
     "min": -0.2931406074887209,
     "max": 0.2887820512820513,
-    "positive_rate": 0.48953488372093024
+    "positive_rate": 0.4891826923076923
   },
   "features": {
     "feature_contract_version": "online_safe_v1",
@@ -435,9 +431,9 @@
     "filtered_feature_count_due_to_contract": 51
   },
   "missing_ratio": {
-    "rank": 0.031395,
+    "rank": 0.032452,
     "symbol": 0.0,
-    "board": 0.021512,
+    "board": 0.022236,
     "area": 0.0,
     "market": 0.0,
     "list_date": 0.0,
@@ -455,7 +451,7 @@
     "amount": 0.0,
     "turnover_rate": 0.0,
     "turnover_rate_f": 0.0,
-    "volume_ratio": 0.000581,
+    "volume_ratio": 0.000601,
     "amihud_illiquidity": 0.0,
     "volatility_5d": 1.0,
     "volatility_10d": 1.0,
@@ -468,35 +464,35 @@
     "float_mv": 1.0,
     "pe_ttm": 1.0,
     "pb": 1.0,
-    "north_money_market": 0.020349,
-    "south_money_market": 0.020349,
-    "hgt_market": 0.020349,
-    "sgt_market": 0.020349,
+    "north_money_market": 0.021034,
+    "south_money_market": 0.021034,
+    "hgt_market": 0.021034,
+    "sgt_market": 0.021034,
     "market_regime": 1.0,
-    "hot_boards_score": 0.397093,
-    "board_crowding_rank": 0.397093,
-    "is_hot_board": 0.021512,
-    "board_rank": 0.397093,
-    "board_limit_up_count": 0.397093,
-    "is_st_like": 0.021512,
-    "top_list_net_buy": 0.618605,
-    "top_net_rate": 0.618605,
-    "amount_rate": 0.618605,
-    "float_values": 0.618605,
-    "abnormal_volume": 0.618605,
+    "hot_boards_score": 0.394231,
+    "board_crowding_rank": 0.394231,
+    "is_hot_board": 0.022236,
+    "board_rank": 0.394231,
+    "board_limit_up_count": 0.394231,
+    "is_st_like": 0.022236,
+    "top_list_net_buy": 0.61899,
+    "top_net_rate": 0.61899,
+    "amount_rate": 0.61899,
+    "float_values": 0.61899,
+    "abnormal_volume": 0.61899,
     "has_namechange_record": 0.0,
-    "latest_change_reason": 0.997674,
+    "latest_change_reason": 0.997596,
     "ret_2d": 1.0,
     "ret_5d": 1.0,
     "ret_10d": 1.0,
     "bid_ask_proxy": 1.0,
     "spread_proxy": 1.0,
-    "limit_type": 0.021512,
-    "open_times": 0.021512,
-    "fd_amount": 0.026163,
-    "seal_amount": 0.026163,
-    "first_seal_time": 0.021512,
-    "last_seal_time": 0.026163,
+    "limit_type": 0.022236,
+    "open_times": 0.022236,
+    "fd_amount": 0.027043,
+    "seal_amount": 0.027043,
+    "first_seal_time": 0.022236,
+    "last_seal_time": 0.027043,
     "open_times_break": 1.0,
     "fd_amount_break": 1.0,
     "seal_amount_break": 1.0,
@@ -507,23 +503,23 @@
     "is_limit_up": 0.0,
     "break_count_proxy": 0.0,
     "limit_up_strength": 0.0,
-    "prior_board": 0.031395,
-    "prior_prob_prior": 0.073256
+    "prior_board": 0.032452,
+    "prior_prob_prior": 0.075721
   },
   "metrics_valid": {
     "lr": {
-      "mae": 0.05429557741694329,
-      "rmse": 0.07348175506918217,
-      "r2": 0.045608838322962586,
-      "corr": 0.2599529302796226,
-      "directional_acc": 0.5357142857142857
+      "mae": 0.053678303885114374,
+      "rmse": 0.07771618417057648,
+      "r2": 0.035602934480949644,
+      "corr": 0.1957147541024055,
+      "directional_acc": 0.7142857142857143
     },
     "lgbm": {
-      "mae": 0.05483608983953076,
-      "rmse": 0.07396743546631596,
-      "r2": 0.0329509769438765,
-      "corr": 0.24510859621140546,
-      "directional_acc": 0.5714285714285714
+      "mae": 0.060357933799330826,
+      "rmse": 0.0871014257623186,
+      "r2": -0.21138856756210012,
+      "corr": -0.19871486175227673,
+      "directional_acc": 0.42857142857142855
     }
   },
   "notes": [
