@@ -6,7 +6,7 @@ validate_io_contract.py
 
 目标：锁死 top10-decision 的 IO 契约（路径/命名/字段不允许悄悄改变）
 
-✅ 修复点（2026-03-01）：
+核心契约：
 - signals 的 dated 文件命名使用 trade_date：
   docs/signals/top10_{trade_date}.csv
 - candidates_snapshot 命名使用 signal_date（本系统 signal_date == trade_date）：
@@ -17,11 +17,10 @@ validate_io_contract.py
   outputs/decision/eval_{exec_date}.json
   data/decision/decision_execution_{exec_date}.csv
 
-检查内容（P0 必须）：
-- 产物文件存在（latest + dated）
-- 关键 CSV 必要列存在（允许额外列）
-- eval/report 与 exec_date 对齐（最小一致性）
-- ✅ P1：learning_table 结构锁死（字段升级后仍要强校验）
+本版修复：
+- 允许 top10_latest.csv 为空表。
+- 空 signal 表示“本轮没有正 EV 标的，不交易”，不是 IO 失败。
+- 空 signal 时，trade_date 不再从 signal 行推导，而从 eval_{exec_date}.json 的 signal_date 推导。
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 import pandas as pd
 
@@ -98,7 +97,7 @@ def _norm_ymd(v) -> str:
 
 
 def _first_ymd_from_col(df: pd.DataFrame, col: str) -> str:
-    if col not in df.columns:
+    if df is None or df.empty or col not in df.columns:
         return ""
     s = df[col].dropna()
     if s.empty:
@@ -106,74 +105,61 @@ def _first_ymd_from_col(df: pd.DataFrame, col: str) -> str:
     return _norm_ymd(s.iloc[0])
 
 
+def _read_eval_payload(exec_date: str) -> tuple[Optional[Path], dict]:
+    if not exec_date or len(exec_date) != 8:
+        return None, {}
+    eval_json = Path(f"outputs/decision/eval_{exec_date}.json")
+    if not eval_json.exists():
+        return eval_json, {}
+    try:
+        payload = json.loads(eval_json.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return eval_json, {}
+        return eval_json, payload
+    except Exception:
+        return eval_json, {}
+
+
 def _get_learning_required_cols() -> List[str]:
     """
-    ✅ P1：learning_table 的字段不允许漂移。
+    P1：learning_table 的字段不允许漂移。
     优先从 writers.filesystem 导入 LEARNING_COLUMNS（最稳），导入失败再用兜底。
     """
+    must = [
+        "signal_date",
+        "exec_date",
+        "exit_date",
+        "ts_code",
+        "jq_code",
+        "name",
+        "weight_exec",
+        "filled_flag",
+        "fill_rate_real",
+        "buy_price",
+        "sell_price",
+        "ret_exec",
+        "p_fill_pred",
+        "e_ret_pred",
+        "cost_est",
+        "risk_penalty",
+        "ev_pred",
+        "e_ret_real",
+        "ev_real",
+        "regime",
+        "risk_budget",
+        "version",
+        "generated_at_bjt",
+        "commit_sha",
+    ]
+
     try:
         from top10decision.writers.filesystem import LEARNING_COLUMNS  # type: ignore
-        # 这里不要求“全列都必须出现”，但至少要包含其中的关键列
-        # 为避免未来扩展导致 validate 过于严格，我们取一个“必须集合”
-        must = [
-            "signal_date",
-            "exec_date",
-            "exit_date",
-            "ts_code",
-            "jq_code",
-            "name",
-            "weight_exec",
-            "filled_flag",
-            "fill_rate_real",
-            "buy_price",
-            "sell_price",
-            "ret_exec",
-            "p_fill_pred",
-            "e_ret_pred",
-            "cost_est",
-            "risk_penalty",
-            "ev_pred",
-            "e_ret_real",
-            "ev_real",
-            "regime",
-            "risk_budget",
-            "version",
-            "generated_at_bjt",
-            "commit_sha",
-        ]
-        # 如果 LEARNING_COLUMNS 里缺了 must 里的任何一个，说明 filesystem 与 validate 不一致，应立即失败
         miss_in_schema = [c for c in must if c not in LEARNING_COLUMNS]
         if miss_in_schema:
             _fail(f"writers.filesystem.LEARNING_COLUMNS 缺少关键字段：{miss_in_schema}（请先修复 schema 定义）")
         return must
     except Exception:
-        # 兜底：按我们当前 P1 约定的 must 集合
-        return [
-            "signal_date",
-            "exec_date",
-            "exit_date",
-            "ts_code",
-            "jq_code",
-            "name",
-            "weight_exec",
-            "filled_flag",
-            "fill_rate_real",
-            "buy_price",
-            "sell_price",
-            "ret_exec",
-            "p_fill_pred",
-            "e_ret_pred",
-            "cost_est",
-            "risk_penalty",
-            "ev_pred",
-            "e_ret_real",
-            "ev_real",
-            "regime",
-            "risk_budget",
-            "version",
-            "generated_at_bjt",
-            "commit_sha",
-        ]
+        return must
 
 
 # =========================
@@ -212,14 +198,41 @@ def main() -> int:
         "decision_learning.csv",
     )
 
-    # ---- 关键日期：trade_date 来自 signals_latest；exec_date 来自 weights_latest
-    trade_date = _first_ymd_from_col(sig_df, "trade_date")
+    # ---- exec_date 优先从 weights_latest 推导
     exec_date = _first_ymd_from_col(w_df, "exec_date")
-
-    if not trade_date or len(trade_date) != 8:
-        _fail(f"无法从 signals_latest.csv 推导 trade_date（得到：{trade_date}）")
     if not exec_date or len(exec_date) != 8:
         _fail(f"无法从 weights_latest.csv 推导 exec_date（得到：{exec_date}）")
+
+    # ---- 读取 eval，用于空 signal 时回推 signal_date/trade_date
+    eval_json, payload = _read_eval_payload(exec_date)
+
+    # ---- trade_date 推导：
+    # 1) 非空 signal：从 signals_latest.trade_date 读取
+    # 2) 空 signal：从 eval_{exec_date}.json 的 signal_date 读取
+    # 3) 再兜底：从 eval paths/candidates 文件名中尝试读取，不成功则失败
+    signal_empty = bool(sig_df.empty)
+    trade_date = _first_ymd_from_col(sig_df, "trade_date")
+
+    if signal_empty:
+        _ok("signals_latest.csv 是空信号表：判定为 NO_TRADE_EMPTY_SIGNAL 合法状态")
+        if payload:
+            trade_date = _norm_ymd(payload.get("signal_date", ""))
+            if not trade_date:
+                trade_date = _norm_ymd(payload.get("trade_date", ""))
+        if not trade_date and payload:
+            paths = payload.get("paths", {})
+            if isinstance(paths, dict):
+                cand_path = str(paths.get("candidates", ""))
+                # expected: data/decision/decision_candidates_YYYYMMDD.csv
+                stem = Path(cand_path).stem if cand_path else ""
+                maybe = stem.split("_")[-1] if stem else ""
+                trade_date = _norm_ymd(maybe)
+    else:
+        if not trade_date:
+            _fail(f"signals_latest.csv 非空但无法推导 trade_date（得到：{trade_date}）")
+
+    if not trade_date or len(trade_date) != 8:
+        _fail(f"无法推导 trade_date：signal_empty={signal_empty}, signal_trade_date={_first_ymd_from_col(sig_df, 'trade_date')}, eval_signal_date={payload.get('signal_date') if payload else ''}")
 
     _ok(f"推导日期：trade_date={trade_date} exec_date={exec_date}")
 
@@ -232,6 +245,8 @@ def main() -> int:
         ["trade_date", "target_trade_date", "jq_code", "target_weight", "risk_budget", "regime", "reason"],
         f"signals_dated(top10_{trade_date}.csv)",
     )
+    if signal_empty and sig_dated_df.empty:
+        _ok(f"signals_dated(top10_{trade_date}.csv) 也是空信号表：NO_TRADE_EMPTY_SIGNAL_PASS")
 
     # ---- candidates_snapshot 用 trade_date（signal_date）
     candidates_snapshot = Path(f"data/decision/decision_candidates_{trade_date}.csv")
@@ -272,6 +287,11 @@ def main() -> int:
     else:
         _ok("eval.exec_date 与 exec_date 一致")
 
+    if _norm_ymd(payload.get("signal_date", "")) != trade_date:
+        _warn(f"eval.signal_date 与推导 trade_date 不一致：payload={payload.get('signal_date')} trade_date={trade_date}")
+    else:
+        _ok("eval.signal_date 与 trade_date 一致")
+
     if "paths" not in payload or not isinstance(payload["paths"], dict):
         _fail("eval JSON 缺少 paths 字段或格式不对")
     _ok("eval JSON 结构验收通过")
@@ -284,7 +304,10 @@ def main() -> int:
         _fail("outputs/decision 目录为空（不应发生）")
     _ok("outputs/decision 目录非空")
 
-    print(f"[CONTRACT][PASS] IO 契约验收通过：trade_date={trade_date} exec_date={exec_date}")
+    if signal_empty:
+        print(f"[CONTRACT][PASS] IO 契约验收通过：trade_date={trade_date} exec_date={exec_date} status=NO_TRADE_EMPTY_SIGNAL_PASS")
+    else:
+        print(f"[CONTRACT][PASS] IO 契约验收通过：trade_date={trade_date} exec_date={exec_date}")
     return 0
 
 
