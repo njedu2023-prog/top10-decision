@@ -15,40 +15,31 @@ train_eret.py
     models/eret_lgbm_{anchor_trade_date}.joblib
     models/eret_meta_{anchor_trade_date}.json
 
-当前策略：
-- 主模型 1：ElasticNet（线性基线）
-- 主模型 2：LightGBM Regressor（若环境缺失则降级为 HistGradientBoostingRegressor）
-- 只训练 label_ready_ret=1 且 eret_sample_eligible=1 的成熟样本
-- 优先使用成熟窗口的时间切分：
-    最后一个样本 trade_date 做 valid，其余做 train
-- 若窗口样本不足，再退化为行切分
-- 若切分后 train / valid 任一边样本过少，则进入 small_sample_mode：
-  使用全量样本训练，跳过稳定评估，但不断链
-
-新增规则：
-- 训练入口参数 --trade-date 不再表示“只训练这一天”
-  而是表示“训练窗口锚点日 / as_of_date”
-- 实际训练样本来自：
-    data/market/sample_maturity_latest.csv
-  中满足：
-    trade_date <= anchor_trade_date
-    ERET_READY = 1
-  的全部成熟样本日
-- 若整个成熟窗口可训练样本不足（默认 < min_train_rows），
-  则不报错退出，而是：
-  1) 跳过训练
-  2) 写出 eret_meta / eret_meta_{anchor_trade_date}.json
-  3) 记录 skip_reason=insufficient_rows_skip_train
-  4) 不覆盖已有模型文件
+本版关键修复：
+- E_ret 训练特征合同必须与线上 decision 推理可获得字段一致。
+- 严禁未来真值、标签字段、训练权重、审计字段、T+1/T+2 真值字段进入 feature_cols。
+- 重点剔除本次事故暴露出的危险字段：
+    close_t2.1
+    open_t1
+    sample_weight
+    is_cold_start
+    feature_coverage_score
+    prior_strength_score
+    prior_theme_boost
+    prior_seal_amount
+    prior_open_times
+    prior_turnover_rate
+- 目的：降低线上推理缺失率，避免 LR / ElasticNet 在大面积缺失特征上整体负向外推。
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -108,9 +99,7 @@ def to_float_series(s: pd.Series) -> pd.Series:
 def load_maturity_table(project_root: Path, maturity_csv: str = "") -> Tuple[pd.DataFrame, Path]:
     path = Path(maturity_csv) if maturity_csv else (project_root / "data" / "market" / "sample_maturity_latest.csv")
     if not path.exists():
-        raise FileNotFoundError(
-            f"缺少样本成熟度表：{path}。请先运行 scripts/resolve_sample_maturity.py"
-        )
+        raise FileNotFoundError(f"缺少样本成熟度表：{path}。请先运行 scripts/resolve_sample_maturity.py")
 
     df = safe_read_csv(path)
     if df.empty:
@@ -158,9 +147,9 @@ def load_one_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame
     df = df.copy()
     if "trade_date" in df.columns:
         df["trade_date"] = df["trade_date"].map(norm_ymd)
-        df = df[df["trade_date"] == trade_date].copy() if not df.empty else df
-        if df.empty:
-            df = safe_read_csv(path)
+        filtered = df[df["trade_date"] == trade_date].copy()
+        if not filtered.empty:
+            df = filtered
     if "trade_date" not in df.columns:
         df["trade_date"] = trade_date
     else:
@@ -189,9 +178,7 @@ def load_window_trainsets(
             missing_dates.append(td)
 
     if not dfs:
-        raise FileNotFoundError(
-            "成熟窗口内没有任何可用的 eret_trainset_*.csv。"
-        )
+        raise FileNotFoundError("成熟窗口内没有任何可用的 eret_trainset_*.csv。")
 
     out = pd.concat(dfs, axis=0, ignore_index=True)
     if out.empty:
@@ -204,15 +191,11 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
 
     if "label_ready_ret" in out.columns:
-        out["label_ready_ret"] = (
-            pd.to_numeric(out["label_ready_ret"], errors="coerce").fillna(0).astype(int)
-        )
+        out["label_ready_ret"] = pd.to_numeric(out["label_ready_ret"], errors="coerce").fillna(0).astype(int)
         out = out[out["label_ready_ret"] == 1].copy()
 
     if "eret_sample_eligible" in out.columns:
-        out["eret_sample_eligible"] = (
-            pd.to_numeric(out["eret_sample_eligible"], errors="coerce").fillna(0).astype(int)
-        )
+        out["eret_sample_eligible"] = pd.to_numeric(out["eret_sample_eligible"], errors="coerce").fillna(0).astype(int)
         out = out[out["eret_sample_eligible"] == 1].copy()
 
     if "realized_ret_t1_to_t2" not in out.columns:
@@ -227,6 +210,7 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     if "trade_date" in out.columns:
         out["trade_date"] = out["trade_date"].map(norm_ymd)
 
+    # sample_weight 只允许作为训练权重，不允许进入 feature_cols。
     if "sample_weight" in out.columns:
         out["sample_weight"] = pd.to_numeric(out["sample_weight"], errors="coerce").fillna(1.0).clip(lower=0.2)
     else:
@@ -243,19 +227,6 @@ def split_train_valid(
     min_train_rows: int = 24,
     min_valid_rows: int = 8,
 ) -> Tuple[pd.DataFrame, Optional[pd.DataFrame], str, bool]:
-    """
-    返回：
-    - train_df
-    - valid_df（small_sample_mode 时为 None）
-    - split_mode
-    - small_sample_mode
-
-    优先按 trade_date 时间切分：
-    - 若至少有 3 个不同 trade_date：最后一个日期做 valid，其余做 train
-    - 否则：按行切分 80/20
-    - 若切分后 train / valid 任何一边样本过少，则进入 small_sample_mode：
-      使用全量样本训练，跳过验证评估
-    """
     if "trade_date" in df.columns:
         dates = sorted({norm_ymd(x) for x in df["trade_date"].dropna().tolist() if norm_ymd(x)})
         if len(dates) >= 3:
@@ -283,11 +254,14 @@ def split_train_valid(
 # =========================================================
 # 特征选择
 # =========================================================
+
+# 未来真值 / 标签 / 交易执行真值 / 审计字段，绝不允许进入线上推理特征合同。
 LEAKAGE_COLS = {
     # 目标与其等价列
     "realized_ret_t1_to_t2",
     "premium_ret_t1_to_t2",
-    # 未来真值 / 直接泄露收益计算的列
+
+    # T+2 未来真值
     "target_date",
     "exit_date",
     "exit_price_t2_close",
@@ -298,12 +272,21 @@ LEAKAGE_COLS = {
     "vol_t2",
     "amount_t2",
     "pct_chg_t2",
-    # 入口真值与直接桥接列
+
+    # T+1 真值 / 执行真值：T 日收盘后线上不可稳定获得
     "exec_date",
     "entry_date",
+    "open_t1",
+    "high_t1",
+    "low_t1",
+    "close_t1",
+    "vol_t1",
+    "amount_t1",
+    "pct_chg_t1",
     "entry_price_t1",
     "entry_price_proxy_t1",
     "entry_price_proxy_mode",
+
     # 标签审计 / 时间成熟 / 非特征标记
     "sample_maturity",
     "label_ready_fill",
@@ -315,6 +298,12 @@ LEAKAGE_COLS = {
     "dataset_split",
     "eret_truth_version",
     "return_holding_mode",
+
+    # 训练权重 / 覆盖度 / 冷启动审计字段：可用于训练治理，不可作为线上推理特征
+    "sample_weight",
+    "is_cold_start",
+    "feature_coverage_score",
+
     # 明显无学习意义的过程列
     "buy_window_start",
     "buy_window_end",
@@ -322,25 +311,107 @@ LEAKAGE_COLS = {
 
 ID_COLS = {
     "trade_date",
+    "verify_date",
+    "target_trade_date",
+    "signal_date",
     "ts_code",
     "name",
+    "name_fs",
+    "name_limit",
     "trainset_trade_date",
+    "run_id",
+    "run_attempt",
+    "commit_sha",
+    "generated_at_utc",
+    "generated_at_bjt",
+}
+
+# 当前线上 decision 输入中并不稳定存在的 prior_* 字段。
+# 这些字段如果留在 feature_cols，会导致线上大面积填补，从而让 LR 发生整体外推。
+ONLINE_UNAVAILABLE_COLS = {
+    "prior_strength_score",
+    "prior_theme_boost",
+    "prior_seal_amount",
+    "prior_open_times",
+    "prior_turnover_rate",
+    "prior_volume_ratio",
+    "prior_limit_up_strength",
+    "prior_board_rank",
+    "prior_board_limit_up_count",
+    "prior_prob",
+    "prior_probability",
 }
 
 NON_FEATURE_PREFIXES = ("Unnamed:",)
 MISSING_FLAG_SUFFIX = "__is_missing"
 
 
+def _strip_duplicate_suffix(col: str) -> str:
+    """
+    pandas merge 后可能产生 close_t2.1 / xxx.1。
+    如果 base 字段是泄露字段，也必须剔除。
+    """
+    s = str(col).strip()
+    return re.sub(r"\.\d+$", "", s)
+
+
+def _is_forbidden_feature_col(col: object) -> bool:
+    s = str(col).strip()
+    base = _strip_duplicate_suffix(s)
+    low = s.lower()
+    base_low = base.lower()
+
+    if not s:
+        return True
+    if any(s.startswith(p) for p in NON_FEATURE_PREFIXES):
+        return True
+    if s.endswith(MISSING_FLAG_SUFFIX):
+        return True
+
+    forbidden_exact = {c.lower() for c in (LEAKAGE_COLS | ID_COLS | ONLINE_UNAVAILABLE_COLS)}
+    if low in forbidden_exact or base_low in forbidden_exact:
+        return True
+
+    # 兜底：任何 T+2 字段或 merge 出来的 T+2 重复列都不能进特征。
+    if re.search(r"(^|_)t2(\.|_|$)", low) or re.search(r"(^|_)t2(\.|_|$)", base_low):
+        return True
+
+    # 兜底：T+1 真实行情/成交字段不能进 T 日收盘后的线上推理。
+    t1_truth_prefixes = (
+        "open_t1",
+        "high_t1",
+        "low_t1",
+        "close_t1",
+        "vol_t1",
+        "amount_t1",
+        "pct_chg_t1",
+        "entry_price_t1",
+        "entry_price_proxy_t1",
+    )
+    if low.startswith(t1_truth_prefixes) or base_low.startswith(t1_truth_prefixes):
+        return True
+
+    return False
+
+
 def select_feature_columns(df: pd.DataFrame) -> List[str]:
     cols: List[str] = []
+    filtered: List[str] = []
+
     for c in df.columns:
-        if c in LEAKAGE_COLS or c in ID_COLS:
+        if _is_forbidden_feature_col(c):
+            filtered.append(str(c))
             continue
-        if any(str(c).startswith(p) for p in NON_FEATURE_PREFIXES):
-            continue
-        cols.append(c)
+        cols.append(str(c))
+
     if not cols:
         raise ValueError("未找到可训练特征列")
+
+    print(f"[train_eret] feature_contract=online_safe_v1")
+    print(f"[train_eret] selected_features={len(cols)} filtered_features={len(filtered)}")
+    if filtered:
+        print(f"[train_eret] filtered_feature_sample={'|'.join(filtered[:30])}")
+
     return cols
 
 
@@ -353,6 +424,11 @@ def split_feature_types(df: pd.DataFrame, feature_cols: List[str]) -> Tuple[List
         else:
             cat_cols.append(c)
     return num_cols, cat_cols
+
+
+def detect_category_like_cols(feature_cols: List[str]) -> List[str]:
+    hints = {"symbol", "board", "area", "market", "market_regime", "latest_change_reason", "limit_type", "prior_board"}
+    return [c for c in feature_cols if c in hints]
 
 
 # =========================================================
@@ -618,6 +694,10 @@ def build_skip_meta(
             "n_numeric": 0,
             "n_categorical": 0,
             "feature_cols": [],
+            "numeric_cols": [],
+            "categorical_cols": [],
+            "feature_contract_version": "online_safe_v1",
+            "filtered_feature_cols_due_to_contract": [],
         },
         "missing_ratio": {},
         "metrics_valid": {
@@ -629,6 +709,7 @@ def build_skip_meta(
             "原因：成熟窗口可训练样本不足时，跳过训练但不断链。",
             "不会覆盖已有 latest 模型文件。",
             "本文件已升级为成熟窗口训练，不再限定单日训练。",
+            "E_ret feature contract 已升级为 online_safe_v1。",
         ],
     }
 
@@ -662,9 +743,7 @@ def train_window_as_of(
         window_size=window_size,
     )
     if not matured_trade_dates:
-        raise ValueError(
-            f"在 sample_maturity 中找不到 trade_date <= {anchor_trade_date} 且 ERET_READY=1 的成熟样本日"
-        )
+        raise ValueError(f"在 sample_maturity 中找不到 trade_date <= {anchor_trade_date} 且 ERET_READY=1 的成熟样本日")
 
     raw_df, loaded_trade_dates, missing_trade_dates, loaded_trainset_paths = load_window_trainsets(
         project_root=project_root,
@@ -704,6 +783,11 @@ def train_window_as_of(
 
     feature_cols = select_feature_columns(df)
     num_cols, cat_cols = split_feature_types(df, feature_cols)
+    category_like_cols = detect_category_like_cols(feature_cols)
+
+    filtered_feature_cols_due_to_contract = [
+        str(c) for c in df.columns if _is_forbidden_feature_col(c)
+    ]
 
     # LR / ElasticNet
     lr_pipe = build_lr_pipeline(num_cols, cat_cols)
@@ -716,7 +800,10 @@ def train_window_as_of(
 
     if valid_df is not None:
         lr_valid_pred = lr_pipe.predict(valid_df[feature_cols])
-        lr_metrics = evaluate_regression(valid_df["realized_ret_t1_to_t2"].astype(float).values, np.asarray(lr_valid_pred, dtype=float))
+        lr_metrics = evaluate_regression(
+            valid_df["realized_ret_t1_to_t2"].astype(float).values,
+            np.asarray(lr_valid_pred, dtype=float),
+        )
     else:
         lr_metrics = empty_metrics("small_sample_mode_skip_valid")
 
@@ -724,7 +811,10 @@ def train_window_as_of(
     if valid_df is not None:
         gbm_model, x_valid_gbm = fit_gbm_with_valid(train_df, valid_df, feature_cols)
         gbm_valid_pred = gbm_model.predict(x_valid_gbm)
-        gbm_metrics = evaluate_regression(valid_df["realized_ret_t1_to_t2"].astype(float).values, np.asarray(gbm_valid_pred, dtype=float))
+        gbm_metrics = evaluate_regression(
+            valid_df["realized_ret_t1_to_t2"].astype(float).values,
+            np.asarray(gbm_valid_pred, dtype=float),
+        )
     else:
         gbm_model = fit_gbm_train_only(train_df, feature_cols)
         gbm_metrics = empty_metrics("small_sample_mode_skip_valid")
@@ -807,10 +897,16 @@ def train_window_as_of(
             "positive_rate": float((target_s > 0).mean()) if target_s.notna().any() else None,
         },
         "features": {
+            "feature_contract_version": "online_safe_v1",
             "n_total": int(len(feature_cols)),
             "n_numeric": int(len(num_cols)),
             "n_categorical": int(len(cat_cols)),
             "feature_cols": feature_cols,
+            "numeric_cols": num_cols,
+            "categorical_cols": cat_cols,
+            "category_like_cols_detected": category_like_cols,
+            "filtered_feature_cols_due_to_contract": filtered_feature_cols_due_to_contract,
+            "filtered_feature_count_due_to_contract": int(len(filtered_feature_cols_due_to_contract)),
         },
         "missing_ratio": missing_ratio,
         "metrics_valid": {
@@ -823,7 +919,8 @@ def train_window_as_of(
             "采用时间切分优先，样本不足时退化为行切分。",
             "若切分后样本太少，则进入 small_sample_mode：全量训练，跳过 valid 评估。",
             "若整个成熟窗口样本不足，则跳过训练并写出 skip meta，不覆盖旧模型。",
-            "泄露列（T+2 真值列 / 目标列 / 买卖真值桥列 / 审计列）已从特征中剔除。",
+            "E_ret feature contract 已升级为 online_safe_v1。",
+            "未来真值列、T+1/T+2 真值列、sample_weight、冷启动/覆盖度审计列、线上不稳定 prior_* 列已从特征中剔除。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
         ],
     }
@@ -839,11 +936,10 @@ def train_window_as_of(
     print(f"[train_eret] missing_trade_dates={missing_trade_dates}")
     print(f"[train_eret] split_mode={split_mode}")
     print(f"[train_eret] small_sample_mode={small_sample_mode}")
-    print(
-        f"[train_eret] rows_raw={len(raw_df)} ready={len(df)} "
-        f"train={len(train_df)} valid={len(valid_df) if valid_df is not None else 0}"
-    )
+    print(f"[train_eret] rows_raw={len(raw_df)} ready={len(df)} train={len(train_df)} valid={len(valid_df) if valid_df is not None else 0}")
+    print(f"[train_eret] feature_contract=online_safe_v1")
     print(f"[train_eret] features_total={len(feature_cols)}")
+    print(f"[train_eret] filtered_features_due_to_contract={len(filtered_feature_cols_due_to_contract)}")
     print(f"[train_eret] lr_rmse={lr_metrics.get('rmse')} gbm_rmse={gbm_metrics.get('rmse')}")
     print(f"[train_eret] out_lr={lr_path}")
     print(f"[train_eret] out_lgbm={gbm_path}")
@@ -855,29 +951,10 @@ def train_window_as_of(
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="训练 E_ret 学习模型（成熟窗口版）")
     ap.add_argument("--trade-date", required=True, help="训练窗口锚点日 YYYYMMDD")
-    ap.add_argument(
-        "--maturity-csv",
-        default="",
-        help="样本成熟度表路径；留空默认 data/market/sample_maturity_latest.csv",
-    )
-    ap.add_argument(
-        "--window-size",
-        type=int,
-        default=0,
-        help="训练窗口长度（按成熟 trade_date 个数截断）；0=使用 anchor 之前全部 ERET_READY 样本",
-    )
-    ap.add_argument(
-        "--min-train-rows",
-        type=int,
-        default=24,
-        help="最少训练样本数；不足则 skip，不覆盖旧模型",
-    )
-    ap.add_argument(
-        "--min-valid-rows",
-        type=int,
-        default=8,
-        help="最少验证样本数；不足则进入 small_sample_mode",
-    )
+    ap.add_argument("--maturity-csv", default="", help="样本成熟度表路径；留空默认 data/market/sample_maturity_latest.csv")
+    ap.add_argument("--window-size", type=int, default=0, help="训练窗口长度（按成熟 trade_date 个数截断）；0=使用 anchor 之前全部 ERET_READY 样本")
+    ap.add_argument("--min-train-rows", type=int, default=24, help="最少训练样本数；不足则 skip，不覆盖旧模型")
+    ap.add_argument("--min-valid-rows", type=int, default=8, help="最少验证样本数；不足则进入 small_sample_mode")
     return ap.parse_args()
 
 
