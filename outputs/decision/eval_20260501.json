@@ -6,15 +6,15 @@
   "risk_budget": 1.0,
   "topk": 79,
   "picked": 10,
-  "cost_est_mean": 0.0015972621708860758,
+  "cost_est_mean": 0.0015972621708860762,
   "cost_est_min": 0.00111162,
   "cost_est_max": 0.00283824,
   "risk_penalty_mean": 0.0086076280078692,
   "risk_penalty_min": 0.0027,
   "risk_penalty_max": 0.022298379759999997,
-  "ev_base_mean": -0.09223929304518681,
-  "ev_final_mean": -0.103900196050027,
-  "pfill_penalty_extra_mean": 0.0007148075853486363,
+  "ev_base_mean": -0.10988194264536497,
+  "ev_final_mean": -0.12175563713994468,
+  "pfill_penalty_extra_mean": 0.0009275990750881341,
   "risk_penalty_extra_mean": 0.01094609541949156,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
@@ -32,8 +32,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260430",
-      "created_at_utc": "2026-04-30T15:20:53+00:00",
-      "commit_sha": "70326cb748f03c887bf288e6ba1ad27f6eb82660",
+      "created_at_utc": "2026-05-01T12:39:29+00:00",
+      "commit_sha": "17f070ebe92dfaddcb10dd3033ef91639259b3ae",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -196,7 +196,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260430",
-            "created_at_utc": "2026-04-30T15:20:52+00:00",
+            "created_at_utc": "2026-05-01T12:39:28+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -211,7 +211,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260430",
-              "generated_at_bj": "2026-04-30 19:26:14",
+              "generated_at_bj": "2026-05-01 19:04:31",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -391,7 +391,7 @@
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260430/daily_basic.csv",
                 "latest_path": "data/market/raw/latest/daily_basic.csv",
-                "bytes": 277179
+                "bytes": 277181
               },
               {
                 "name": "hot_boards",
@@ -487,7 +487,7 @@
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260430/stock_basic.csv",
                 "latest_path": "data/market/raw/latest/stock_basic.csv",
-                "bytes": 359891
+                "bytes": 359793
               },
               {
                 "name": "top_list",

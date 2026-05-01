@@ -1,6 +1,6 @@
 {
   "trade_date": "20260430",
-  "created_at_utc": "2026-04-30T15:20:52+00:00",
+  "created_at_utc": "2026-05-01T12:39:28+00:00",
   "source_repo": {
     "owner": "njedu2023-prog",
     "repo": "a-share-top3-data",
@@ -15,7 +15,7 @@
   "upstream_meta": {
     "requested_trade_date": null,
     "resolved_trade_date": "20260430",
-    "generated_at_bj": "2026-04-30 19:26:14",
+    "generated_at_bj": "2026-05-01 19:04:31",
     "jobs": [
       {
         "key": "limit_list_d",
@@ -195,7 +195,7 @@
       "error": "",
       "dated_path": "data/market/raw/2026/20260430/daily_basic.csv",
       "latest_path": "data/market/raw/latest/daily_basic.csv",
-      "bytes": 277179
+      "bytes": 277181
     },
     {
       "name": "hot_boards",
@@ -291,7 +291,7 @@
       "error": "",
       "dated_path": "data/market/raw/2026/20260430/stock_basic.csv",
       "latest_path": "data/market/raw/latest/stock_basic.csv",
-      "bytes": 359891
+      "bytes": 359793
     },
     {
       "name": "top_list",
