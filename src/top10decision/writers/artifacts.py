@@ -48,20 +48,105 @@ def _ensure_explain_cols(df: pd.DataFrame) -> pd.DataFrame:
     """
     candidates_snapshot 强契约：
     解释字段缺失必须补齐。
-    这里不做任何“计算”，只补默认值，防止 silent 退化。
+    这里不做任何“重新计算”，只补默认值，防止 silent 退化。
+
+    本版新增：
+    - 强制保留 / 补齐 P_fill 与 E_ret 诊断字段。
+    - 目的不是改变排序，而是让 decision_candidates_YYYYMMDD.csv 能直接审计：
+      1) raw 是否全负
+      2) clip 是否命中
+      3) 特征缺失比例是否异常
+      4) P_fill 是否触顶
     """
     out = df.copy()
+
     defaults = {
         # 日期链路（如缺就空）
         "signal_date": "",
         "exec_date": "",
         "exit_date": "",
-        # 预测与解释
+
+        # 预测与解释：旧主字段
         "p_fill_pred": 0.0,
         "e_ret_pred": 0.0,
         "cost_est": 0.0,
         "risk_penalty": 0.0,
         "ev_pred": 0.0,
+
+        # P_fill 诊断字段：只补齐，不重新计算
+        "p_fill_pred_raw": "",
+        "p_fill_pred_model": "",
+        "p_fill_pred_final": "",
+        "p_fill_cap_hit": "",
+        "p_fill_clip_hit": "",
+        "p_fill_clip_direction": "",
+        "p_fill_cap_hit_rate": "",
+
+        # E_ret raw / final 诊断字段：只补齐，不重新计算
+        "eret_pred_raw": "",
+        "e_ret_pred_raw": "",
+        "eret_pred_model_raw": "",
+        "eret_pred_model": "",
+        "eret_pred_model_clipped": "",
+        "eret_pred_final": "",
+        "eret_pred": "",
+        "eret_pred_rule": "",
+
+        # E_ret clip 诊断字段
+        "eret_clip_hit": "",
+        "e_ret_clip_hit": "",
+        "eret_clip_direction": "",
+        "e_ret_clip_direction": "",
+        "eret_clip_lower_hit": "",
+        "eret_clip_upper_hit": "",
+        "eret_clip_hit_count": "",
+        "eret_clip_hit_rate": "",
+
+        # E_ret 特征对齐 / 缺失诊断字段
+        "eret_model_loaded": "",
+        "eret_model_kind": "",
+        "eret_model_path": "",
+        "eret_model_feature_mode": "",
+        "eret_model_meta_path": "",
+        "eret_model_expected_n_features": "",
+        "eret_model_actual_n_features": "",
+        "eret_missing_feature_count": "",
+        "eret_missing_feature_sample": "",
+        "eret_unexpected_feature_count": "",
+        "eret_unexpected_feature_sample": "",
+        "eret_expected_categorical_cols": "",
+        "eret_expected_numeric_feature_count": "",
+        "eret_model_category_like_cols_detected": "",
+        "eret_categorical_feature_count_online": "",
+        "eret_categorical_feature_sample_online": "",
+        "eret_numeric_feature_count_online": "",
+        "eret_online_dtypes_sample": "",
+        "eret_feature_missing_cell_count": "",
+        "eret_feature_missing_cell_ratio": "",
+        "e_ret_feature_missing_ratio": "",
+        "eret_feature_rows_with_missing_count": "",
+        "eret_feature_row_missing_ratio_mean": "",
+        "eret_feature_column_missing_ratio_max": "",
+
+        # E_ret 分布诊断字段
+        "eret_raw_min": "",
+        "eret_raw_max": "",
+        "eret_raw_mean": "",
+        "eret_raw_std": "",
+        "eret_final_min": "",
+        "eret_final_max": "",
+        "eret_final_mean": "",
+        "eret_final_std": "",
+        "eret_negative_count": "",
+        "eret_negative_rate": "",
+        "eret_positive_count": "",
+        "eret_positive_rate": "",
+
+        # E_ret 来源字段
+        "eret_pred_src": "",
+        "eret_degrade_reason": "",
+        "eret_regime_used": "",
+
         # 闭环需要但允许空
         "weight_exec": "",
         "regime": "",
@@ -70,6 +155,7 @@ def _ensure_explain_cols(df: pd.DataFrame) -> pd.DataFrame:
         "generated_at_bjt": _generated_at_bjt(),
         "commit_sha": _commit_sha(),
     }
+
     for c, v in defaults.items():
         if c not in out.columns:
             out[c] = v
@@ -86,7 +172,7 @@ def _ensure_explain_cols(df: pd.DataFrame) -> pd.DataFrame:
 def _empty_signal_df() -> pd.DataFrame:
     """
     返回聚宽信号的空表骨架。
-    允许 TopEVR 在 0 行时也能稳定写 latest / dated，避免交易端读空崩掉。
+    允许 TopEVR 在 0 行时也能稳定写 latest / dated，避免交易端读文件时报错。
     """
     return pd.DataFrame(
         columns=[
@@ -211,10 +297,10 @@ def write_candidates_snapshot(cand_df: pd.DataFrame, signal_date: str) -> str:
     candidates IO 契约：
     - data/decision/decision_candidates_YYYYMMDD.csv
 
-    强烈建议（P1）：
+    强契约：
     - 保证解释字段齐全（p_fill_pred/e_ret_pred/cost_est/risk_penalty/ev_pred）
+    - 保证 E_ret / P_fill 诊断字段齐全，便于定位 raw、clip、missing、cap 等问题
     - 写入审计元数据（commit_sha/generated_at/version）
-    - 未来 merge 聚宽反馈时，至少能定位“哪一次运行写的这份候选快照”
     """
     if cand_df is None or cand_df.empty:
         raise RuntimeError("write_candidates_snapshot: cand_df 为空，拒绝写 candidates_snapshot。")
@@ -311,8 +397,7 @@ def build_top_evr_signal_df(
     df["risk_penalty"] = pd.to_numeric(df["risk_penalty"], errors="coerce")
 
     df = df[
-        (df["ev_pred"] > float(ev_threshold)) &
-        (df["risk_penalty"] < float(risk_threshold))
+        (df["ev_pred"] > float(ev_threshold)) & (df["risk_penalty"] < float(risk_threshold))
     ].copy()
 
     if df.empty:
