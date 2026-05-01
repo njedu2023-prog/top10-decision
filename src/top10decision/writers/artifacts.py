@@ -172,7 +172,11 @@ def _ensure_explain_cols(df: pd.DataFrame) -> pd.DataFrame:
 def _empty_signal_df() -> pd.DataFrame:
     """
     返回聚宽信号的空表骨架。
-    允许 TopEVR 在 0 行时也能稳定写 latest / dated，避免交易端读文件时报错。
+    允许 top10 / TopEVR 在 0 行时也能稳定写 latest / dated。
+    语义：
+    - 空表不是异常；
+    - 空表表示本轮没有满足执行条件的正 EV 标的；
+    - 保留完整表头，避免交易端读文件时报错。
     """
     return pd.DataFrame(
         columns=[
@@ -229,20 +233,26 @@ def write_signals(latest_df: pd.DataFrame, trade_date: str) -> None:
     signals IO 契约：
     - docs/signals/top10_latest.csv
     - docs/signals/top10_YYYYMMDD.csv
-    """
-    if latest_df is None or latest_df.empty:
-        raise RuntimeError("write_signals: latest_df 为空，拒绝写 signals（避免用空信号覆盖 latest）。")
 
-    # 最小字段保护（保持 joinquant 契约稳定）
-    ensure_cols(latest_df, ["jq_code", "target_weight", "trade_date", "target_trade_date"])
+    关键修复：
+    - 旧逻辑拒绝空 latest_df，目的是防止 silent 退化。
+    - 但现在 weights 层已经有正 EV 执行闸门：
+      当全池 EV <= 0 时，空 signal 是正确的“今日不交易”状态。
+    - 因此这里允许空表写出，但必须保留完整 schema。
+    """
+    out = _ensure_signal_schema(latest_df)
+
+    # 非空时仍做最小字段保护；空表由 _ensure_signal_schema 保证表头。
+    if not out.empty:
+        ensure_cols(out, ["jq_code", "target_weight", "trade_date", "target_trade_date"])
 
     # 写 latest
-    write_latest_signal(latest_df, out_path=str(SIGNAL_LATEST))
+    write_latest_signal(out, out_path=str(SIGNAL_LATEST))
 
     # 写 dated（按参数 trade_date 决定文件名）
     td = norm_ymd(trade_date)
     if td:
-        write_latest_signal(latest_df, out_path=SIGNAL_DATED_FMT.format(yyyymmdd=td))
+        write_latest_signal(out, out_path=SIGNAL_DATED_FMT.format(yyyymmdd=td))
 
 
 def write_top_evr_signals(latest_df: pd.DataFrame, trade_date: str) -> Tuple[str, str]:
@@ -340,6 +350,15 @@ def build_signal_df_for_joinquant(
 
     df = weights_df.copy()
     df = df[df["weight"].astype(float) > 0].copy()
+
+    if df.empty:
+        out = _empty_signal_df()
+        out["trade_date"] = norm_ymd(trade_date)
+        out["target_trade_date"] = norm_ymd(target_trade_date)
+        out["risk_budget"] = float(risk_budget)
+        out["regime"] = str(regime_name)
+        out["reason"] = "NO_TRADE_NO_POSITIVE_EV"
+        return _ensure_signal_schema(out)
 
     df["jq_code"] = df["ts_code"].apply(to_jq_code)
     df["trade_date"] = norm_ymd(trade_date)
