@@ -21,10 +21,11 @@ eret_engine.py
   5) 落盘输出
 
 当前版本：
-- v2：按 eret_meta.json 的训练态 feature contract 对齐线上推理输入
+- v3：保留原主链与上下游字段不变，仅强化 E_ret 线上推理诊断
+- 按 eret_meta.json 的训练态 feature contract 对齐线上推理输入
 - 若 models/eret_lr.joblib 或 models/eret_lgbm.joblib 存在，则优先走学习模型
-- 当前默认优先级已调整为：LR > LGBM > rule
-- 学习模型输出做合理裁剪，避免极端离群值直接污染 EV
+- 当前默认优先级：LR > LGBM > rule
+- 同时输出 raw / clipped / final，便于定位 E_ret 全负与 -0.30 下限命中问题
 """
 
 from __future__ import annotations
@@ -61,8 +62,24 @@ def _detect_project_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def _to_numeric_ret_series(s: pd.Series) -> pd.Series:
+    return pd.to_numeric(s, errors="coerce").fillna(0.0)
+
+
 def _clip_ret_series(s: pd.Series) -> pd.Series:
-    return pd.to_numeric(s, errors="coerce").fillna(0.0).clip(lower=PRED_MIN, upper=PRED_MAX)
+    return _to_numeric_ret_series(s).clip(lower=PRED_MIN, upper=PRED_MAX)
+
+
+def _clip_direction(raw: pd.Series, clipped: pd.Series) -> pd.Series:
+    raw_num = _to_numeric_ret_series(raw)
+    clipped_num = _to_numeric_ret_series(clipped)
+
+    direction = pd.Series("", index=raw_num.index, dtype="object")
+    direction = direction.mask(raw_num < PRED_MIN, "lower")
+    direction = direction.mask(raw_num > PRED_MAX, "upper")
+    direction = direction.mask((raw_num >= PRED_MIN) & (raw_num <= PRED_MAX), "")
+    direction = direction.where(clipped_num.notna(), "")
+    return direction
 
 
 def _existing_model_path(root: Path, candidates: list[str]) -> Optional[Path]:
@@ -223,8 +240,7 @@ def _build_model_load_failed_audit(
 def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[ERetModelBundle], Dict[str, Any]]:
     root = project_root or _detect_project_root()
 
-    # 关键修改：
-    # 线上优先级从 LGBM > LR 改为 LR > LGBM
+    # 线上优先级：LR > LGBM > rule
     lr_path = _existing_model_path(root, ["eret_lr.joblib"])
     lgbm_path = _existing_model_path(root, ["eret_lgbm.joblib"])
     meta_path = _existing_meta_path(root, ["eret_meta.json"])
@@ -334,6 +350,8 @@ LEAKAGE_COLS = {
     "e_ret_pred",
     "eret_pred",
     "eret_pred_raw",
+    "eret_pred_model_raw",
+    "eret_pred_model_clipped",
     "eret_pred_rule",
     "eret_pred_final",
 }
@@ -402,6 +420,10 @@ def _normalize_feature_frame(x: pd.DataFrame, categorical_cols: list[str], numer
 
 def _build_feature_frame(df: pd.DataFrame, bundle: ERetModelBundle) -> pd.DataFrame:
     if bundle.feature_cols:
+        # 严格按照训练 meta 的 feature_cols 构造线上输入：
+        # 1) 列集合固定
+        # 2) 列顺序固定
+        # 3) 缺失列先置 NaN，后续审计后再统一填 0
         x = pd.DataFrame(index=df.index)
         for col in bundle.feature_cols:
             if col in df.columns:
@@ -427,6 +449,13 @@ def _summarize_alignment(df: pd.DataFrame, bundle: ERetModelBundle, x: pd.DataFr
     unexpected_cols = [c for c in incoming_cols if c not in expected_set]
     numeric_cols = [c for c in x.columns if pd.api.types.is_numeric_dtype(x[c])]
 
+    total_cells = int(x.shape[0] * x.shape[1])
+    missing_cells = int(x.isna().sum().sum())
+    missing_ratio = float(missing_cells / total_cells) if total_cells > 0 else 0.0
+    rows_with_missing = int(x.isna().any(axis=1).sum()) if len(x) else 0
+    row_missing_ratio_mean = float(x.isna().mean(axis=1).mean()) if len(x) else 0.0
+    column_missing_ratio_max = float(x.isna().mean(axis=0).max()) if x.shape[1] else 0.0
+
     return {
         "expected_n_features": len(expected),
         "actual_n_features": int(x.shape[1]),
@@ -438,18 +467,37 @@ def _summarize_alignment(df: pd.DataFrame, bundle: ERetModelBundle, x: pd.DataFr
         "categorical_feature_sample_online": "|".join(bundle.categorical_cols[:8]),
         "numeric_feature_count_online": len(numeric_cols),
         "online_dtypes_sample": "|".join(f"{c}:{x[c].dtype}" for c in list(x.columns)[:8]),
+        "feature_missing_cell_count": missing_cells,
+        "feature_missing_cell_ratio": missing_ratio,
+        "feature_rows_with_missing_count": rows_with_missing,
+        "feature_row_missing_ratio_mean": row_missing_ratio_mean,
+        "feature_column_missing_ratio_max": column_missing_ratio_max,
     }
 
 
-def _predict_by_model(bundle: ERetModelBundle, df: pd.DataFrame) -> Tuple[pd.Series, Dict[str, Any]]:
+def _prepare_model_input(x: pd.DataFrame) -> pd.DataFrame:
+    # LR / ElasticNet 不接受 NaN。这里在完成缺失审计之后再填 0，
+    # 既保证主链不因单日缺字段中断，又能通过审计字段定位缺失来源。
+    return x.replace([np.inf, -np.inf], np.nan).fillna(0.0).astype(float)
+
+
+def _predict_by_model(bundle: ERetModelBundle, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, Dict[str, Any]]:
     x = _build_feature_frame(df, bundle)
     audit = _summarize_alignment(df=df, bundle=bundle, x=x)
-    pred = bundle.model.predict(x)
+    x_model = _prepare_model_input(x)
+
+    pred = bundle.model.predict(x_model)
     if isinstance(pred, pd.Series):
-        out = pred.copy()
+        raw = pd.to_numeric(pred.copy(), errors="coerce").fillna(0.0)
+        raw.index = df.index
+        raw.name = "eret_pred_model_raw"
     else:
-        out = pd.Series(np.asarray(pred).reshape(-1), index=df.index, name="eret_pred_model")
-    return _clip_ret_series(out), audit
+        raw = pd.Series(np.asarray(pred).reshape(-1), index=df.index, name="eret_pred_model_raw")
+
+    raw = pd.to_numeric(raw, errors="coerce").fillna(0.0)
+    clipped = _clip_ret_series(raw)
+    clipped.name = "eret_pred_model"
+    return raw, clipped, audit
 
 
 def _get_regime_name(df: pd.DataFrame) -> str:
@@ -480,10 +528,12 @@ def apply_eret_engine(
     rule_pred = overnight_model_rule(out, regime=regime_name)
     if not isinstance(rule_pred, pd.Series):
         rule_pred = pd.Series(np.asarray(rule_pred).reshape(-1), index=out.index, name="eret_rule")
-    rule_pred = _clip_ret_series(rule_pred)
+    rule_pred_raw = _to_numeric_ret_series(rule_pred)
+    rule_pred = _clip_ret_series(rule_pred_raw)
 
     bundle, audit = _resolve_eret_model(project_root=project_root)
 
+    model_pred_raw = pd.Series([np.nan] * len(out), index=out.index, name="eret_pred_model_raw")
     model_pred = pd.Series([np.nan] * len(out), index=out.index, name="eret_pred_model")
     pred_src = "rule"
     degrade_reason = str(audit.get("eret_model_degrade_reason", "") or "")
@@ -498,26 +548,53 @@ def apply_eret_engine(
         "categorical_feature_sample_online": "",
         "numeric_feature_count_online": 0,
         "online_dtypes_sample": "",
+        "feature_missing_cell_count": 0,
+        "feature_missing_cell_ratio": 0.0,
+        "feature_rows_with_missing_count": 0,
+        "feature_row_missing_ratio_mean": 0.0,
+        "feature_column_missing_ratio_max": 0.0,
     }
 
     if bundle is not None:
         try:
-            model_pred, predict_audit = _predict_by_model(bundle, out)
+            model_pred_raw, model_pred, predict_audit = _predict_by_model(bundle, out)
             pred_src = f"model:{bundle.model_kind}"
             degrade_reason = ""
         except Exception as e:
             pred_src = "rule"
             degrade_reason = f"model_predict_failed:{type(e).__name__}:{_safe_errmsg(e)}"
 
+    final_raw = pd.to_numeric(model_pred_raw, errors="coerce")
+    final_raw = final_raw.where(final_raw.notna(), rule_pred_raw)
+    final_raw = _to_numeric_ret_series(final_raw)
+
     final_pred = pd.to_numeric(model_pred, errors="coerce")
     final_pred = final_pred.where(final_pred.notna(), rule_pred)
     final_pred = _clip_ret_series(final_pred)
 
+    clip_hit = (final_raw < PRED_MIN) | (final_raw > PRED_MAX)
+    clip_direction = _clip_direction(final_raw, final_pred)
+
     out["eret_pred_rule"] = rule_pred
+    out["eret_pred_rule_raw"] = rule_pred_raw
+    out["eret_pred_model_raw"] = pd.to_numeric(model_pred_raw, errors="coerce")
+    out["eret_pred_model_clipped"] = pd.to_numeric(model_pred, errors="coerce")
+    # 兼容旧字段语义：eret_pred_model 仍表示参与 final 的模型值（裁剪后）。
     out["eret_pred_model"] = pd.to_numeric(model_pred, errors="coerce")
+
+    # 新增诊断字段：raw / clipped / final 分离。
+    out["eret_pred_raw"] = final_raw
+    out["e_ret_pred_raw"] = final_raw
     out["eret_pred_final"] = final_pred
     out["eret_pred"] = final_pred
     out["e_ret_pred"] = final_pred
+
+    out["eret_clip_hit"] = clip_hit.astype(int)
+    out["e_ret_clip_hit"] = clip_hit.astype(int)
+    out["eret_clip_direction"] = clip_direction
+    out["e_ret_clip_direction"] = clip_direction
+    out["eret_clip_lower_hit"] = (final_raw < PRED_MIN).astype(int)
+    out["eret_clip_upper_hit"] = (final_raw > PRED_MAX).astype(int)
 
     out["eret_model_loaded"] = bool(audit.get("eret_model_loaded", False))
     out["eret_model_kind"] = str(audit.get("eret_model_kind", ""))
@@ -538,6 +615,29 @@ def apply_eret_engine(
     out["eret_categorical_feature_sample_online"] = str(predict_audit.get("categorical_feature_sample_online", ""))
     out["eret_numeric_feature_count_online"] = int(predict_audit.get("numeric_feature_count_online", 0) or 0)
     out["eret_online_dtypes_sample"] = str(predict_audit.get("online_dtypes_sample", ""))
+
+    out["eret_feature_missing_cell_count"] = int(predict_audit.get("feature_missing_cell_count", 0) or 0)
+    out["eret_feature_missing_cell_ratio"] = float(predict_audit.get("feature_missing_cell_ratio", 0.0) or 0.0)
+    out["e_ret_feature_missing_ratio"] = float(predict_audit.get("feature_missing_cell_ratio", 0.0) or 0.0)
+    out["eret_feature_rows_with_missing_count"] = int(predict_audit.get("feature_rows_with_missing_count", 0) or 0)
+    out["eret_feature_row_missing_ratio_mean"] = float(predict_audit.get("feature_row_missing_ratio_mean", 0.0) or 0.0)
+    out["eret_feature_column_missing_ratio_max"] = float(predict_audit.get("feature_column_missing_ratio_max", 0.0) or 0.0)
+
+    # 全局分布审计：重复写入每一行，便于后续 candidates / weights / report 任一层直接读取。
+    out["eret_raw_min"] = float(final_raw.min()) if len(final_raw) else 0.0
+    out["eret_raw_max"] = float(final_raw.max()) if len(final_raw) else 0.0
+    out["eret_raw_mean"] = float(final_raw.mean()) if len(final_raw) else 0.0
+    out["eret_raw_std"] = float(final_raw.std(ddof=0)) if len(final_raw) else 0.0
+    out["eret_final_min"] = float(final_pred.min()) if len(final_pred) else 0.0
+    out["eret_final_max"] = float(final_pred.max()) if len(final_pred) else 0.0
+    out["eret_final_mean"] = float(final_pred.mean()) if len(final_pred) else 0.0
+    out["eret_final_std"] = float(final_pred.std(ddof=0)) if len(final_pred) else 0.0
+    out["eret_clip_hit_count"] = int(clip_hit.sum())
+    out["eret_clip_hit_rate"] = float(clip_hit.mean()) if len(clip_hit) else 0.0
+    out["eret_negative_count"] = int((final_pred < 0).sum())
+    out["eret_negative_rate"] = float((final_pred < 0).mean()) if len(final_pred) else 0.0
+    out["eret_positive_count"] = int((final_pred > 0).sum())
+    out["eret_positive_rate"] = float((final_pred > 0).mean()) if len(final_pred) else 0.0
 
     out["eret_pred_src"] = pred_src
     out["eret_degrade_reason"] = degrade_reason
