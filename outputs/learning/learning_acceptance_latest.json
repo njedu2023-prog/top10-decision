@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-01T14:49:51+00:00",
+  "generated_at_utc": "2026-05-01T15:01:55+00:00",
   "current_run_date": "20260428",
   "pfill": {
     "anchor_trade_date": "20260427",
@@ -9,9 +9,9 @@
     "previous_anchor_trade_date": "20260424",
     "metrics_valid": {
       "lr": {
-        "auc": 0.8412698412698413,
-        "logloss": 0.286980290782694,
-        "brier": 0.09128144986996575
+        "auc": 0.8333333333333333,
+        "logloss": 0.2875452384826869,
+        "brier": 0.09144536185694595
       },
       "lgbm": {
         "auc": 0.6111111111111112,
@@ -21,15 +21,15 @@
     },
     "compare_to_previous": {
       "lr_auc": {
-        "delta": -0.062238930659983205,
+        "delta": -0.07017543859649122,
         "trend": "worse"
       },
       "lr_logloss": {
-        "delta": 0.07940623097538443,
+        "delta": 0.07997117867537737,
         "trend": "worse"
       },
       "lr_brier": {
-        "delta": 0.0290805795845422,
+        "delta": 0.029244491571522396,
         "trend": "worse"
       },
       "lgbm_auc": {

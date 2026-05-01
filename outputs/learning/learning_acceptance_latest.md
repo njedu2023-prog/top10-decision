@@ -1,6 +1,6 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-05-01T14:49:51+00:00
+- generated_at_utc: 2026-05-01T15:01:55+00:00
 - current_run_date: 20260428
 - overall_pass: FAIL
 
@@ -15,9 +15,9 @@
 
 | 指标 | 当前 | 对比上次 |
 |---|---:|---|
-| lr_auc | 0.841270 | worse (-0.062239) |
-| lr_logloss | 0.286980 | worse (+0.079406) |
-| lr_brier | 0.091281 | worse (+0.029081) |
+| lr_auc | 0.833333 | worse (-0.070175) |
+| lr_logloss | 0.287545 | worse (+0.079971) |
+| lr_brier | 0.091445 | worse (+0.029244) |
 | lgbm_auc | 0.611111 | worse (-0.134503) |
 | lgbm_logloss | 0.209871 | worse (+0.066517) |
 | lgbm_brier | 0.038893 | worse (+0.015427) |
