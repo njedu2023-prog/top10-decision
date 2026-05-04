@@ -1,6 +1,6 @@
 {
   "trade_date": "20260430",
-  "created_at_utc": "2026-05-01T15:41:13+00:00",
+  "created_at_utc": "2026-05-04T15:18:32+00:00",
   "source_repo": {
     "owner": "njedu2023-prog",
     "repo": "a-share-top3-data",
@@ -15,7 +15,7 @@
   "upstream_meta": {
     "requested_trade_date": null,
     "resolved_trade_date": "20260430",
-    "generated_at_bj": "2026-05-01 19:04:31",
+    "generated_at_bj": "2026-05-04 19:46:35",
     "jobs": [
       {
         "key": "limit_list_d",
