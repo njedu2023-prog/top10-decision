@@ -1,27 +1,27 @@
-# TopN Targets / Final Rank Top10 验证统计摘要
+# TopN Targets / Final Weights Top10 验证统计摘要
 
-- 数据源：data/decision/decision_candidates_YYYYMMDD.csv::final_rank_top10
-- 生成时间：2026-05-04T15:41:13
-- 历史累计样本总数：389
-- 上涨数量：264
-- 上涨率：67.87%
-- 涨停数量：115
-- 涨停率：29.56%
-- 下跌数量：124
-- 下跌率：31.88%
-- 平盘数量：1
-- 平盘率：0.26%
-- 平均涨跌幅：3.19%
-- 中位涨跌幅：2.23%
+- 数据源：docs/weights/weights_YYYYMMDD.csv::target_rank_then_backup_rank
+- 生成时间：2026-05-04T16:17:18
+- 历史累计样本总数：400
+- 上涨数量：241
+- 上涨率：60.25%
+- 涨停数量：109
+- 涨停率：27.25%
+- 下跌数量：156
+- 下跌率：39.00%
+- 平盘数量：3
+- 平盘率：0.75%
+- 平均涨跌幅：2.26%
+- 中位涨跌幅：1.31%
 - 最大涨幅：20.02%
 - 最大跌幅：-13.65%
 
 ## EV / RiskPenalty 相关性
 
-- corr_EV_return：None
-- corr_RiskPenalty_return：None
-- corr_EV_up：None
-- corr_RiskPenalty_down：None
-- 样本说明：缺 EV 或 RiskPenalty 字段
+- corr_EV_return：0.046962
+- corr_RiskPenalty_return：-0.002972
+- corr_EV_up：0.036797
+- corr_RiskPenalty_down：-0.036657
+- 样本说明：样本>=300，可作为较稳定评估依据
 
-已生成 final_rank_top10 后验验证统计。
+已生成 weights 最终排序 TopN 后验验证统计。
