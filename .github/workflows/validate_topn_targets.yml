@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "运行模式：backfill=全历史回放；incremental=最近窗口增量验证"
+        description: "运行模式：backfill=全历史回放；incremental=兼容旧增量验证"
         required: true
         default: "backfill"
         type: choice
@@ -12,19 +12,19 @@ on:
           - backfill
           - incremental
       start_date:
-        description: "历史回放起始 D 日，可空，例如 20260301"
+        description: "历史回放起始日期，可空，例如 20260301"
         required: false
         default: ""
       end_date:
-        description: "历史回放结束 D 日，可空，例如 20260504"
+        description: "历史回放结束日期，可空，例如 20260504"
         required: false
         default: ""
       d_date:
-        description: "指定单个 D 日验证，可空，例如 20260506"
+        description: "兼容旧 incremental 的指定 D 日验证，可空，例如 20260506"
         required: false
         default: ""
       lookback_days:
-        description: "incremental 模式回看自然日窗口"
+        description: "兼容旧 incremental 的回看自然日窗口"
         required: false
         default: "30"
       topn:
@@ -34,11 +34,15 @@ on:
 
   schedule:
     # 北京时间 23:02 = UTC 15:02
-    # 用于每日晚间验证最近成熟的 TopN Targets，尽量等待上游行情/快照落库完成
+    # 每日重算 docs/weights 最终排序后验验证，保证页面统计口径稳定。
     - cron: "2 15 * * 1-5"
 
 permissions:
   contents: write
+
+concurrency:
+  group: validate-topn-targets-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate-topn-targets:
@@ -64,21 +68,27 @@ jobs:
         run: |
           pwd
           ls -la
-          echo "Decision files:"
-          ls -la data/decision || true
+          echo "Weights files:"
+          ls -la docs/weights || true
           echo "Validation dir:"
           ls -la outputs/validation || true
+          echo "Validation scripts:"
+          ls -la scripts/backfill_topn_targets_validation.py scripts/validate_topn_targets.py || true
 
       - name: Run TopN Targets validation
         env:
-          MODE: ${{ github.event.inputs.mode || 'incremental' }}
+          # 关键修复：
+          # schedule 没有 github.event.inputs，必须默认 backfill。
+          # 当前主线是 docs/weights/weights_YYYYMMDD.csv 最终排序验证，
+          # 不能再让定时任务默认走旧 incremental validate_topn_targets.py。
+          MODE: ${{ github.event.inputs.mode || 'backfill' }}
           START_DATE: ${{ github.event.inputs.start_date || '' }}
           END_DATE: ${{ github.event.inputs.end_date || '' }}
           D_DATE: ${{ github.event.inputs.d_date || '' }}
           LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '30' }}
           TOPN: ${{ github.event.inputs.topn || '10' }}
         run: |
-          set -e
+          set -euo pipefail
 
           echo "MODE=${MODE}"
           echo "START_DATE=${START_DATE}"
@@ -87,7 +97,13 @@ jobs:
           echo "LOOKBACK_DAYS=${LOOKBACK_DAYS}"
           echo "TOPN=${TOPN}"
 
-          if [ "${MODE}" = "backfill" ]; then
+          if [ "${MODE}" = "incremental" ]; then
+            echo "[WARN] incremental is kept only for compatibility with the old TopN Targets validator."
+            CMD="python scripts/validate_topn_targets.py --topn ${TOPN} --lookback-days ${LOOKBACK_DAYS}"
+            if [ -n "${D_DATE}" ]; then
+              CMD="${CMD} --d-date ${D_DATE}"
+            fi
+          else
             CMD="python scripts/backfill_topn_targets_validation.py --topn ${TOPN}"
             if [ -n "${START_DATE}" ]; then
               CMD="${CMD} --start-date ${START_DATE}"
@@ -95,16 +111,10 @@ jobs:
             if [ -n "${END_DATE}" ]; then
               CMD="${CMD} --end-date ${END_DATE}"
             fi
-            echo "Running: ${CMD}"
-            eval "${CMD}"
-          else
-            CMD="python scripts/validate_topn_targets.py --topn ${TOPN} --lookback-days ${LOOKBACK_DAYS}"
-            if [ -n "${D_DATE}" ]; then
-              CMD="${CMD} --d-date ${D_DATE}"
-            fi
-            echo "Running: ${CMD}"
-            eval "${CMD}"
           fi
+
+          echo "Running: ${CMD}"
+          eval "${CMD}"
 
       - name: Show generated validation outputs
         run: |
@@ -117,6 +127,8 @@ jobs:
 
       - name: Commit validation outputs
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -124,7 +136,19 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "No validation output changes to commit."
+            exit 0
+          fi
+
+          git commit -m "[validation] update TopN weights validation outputs"
+
+          # 避免连续 workflow / Pages 触发导致 push 冲突：
+          # 提交前先 rebase 远端 main，再推送；若仍失败，重试一次。
+          git pull --rebase origin main
+
+          if git push origin HEAD:main; then
+            echo "Validation outputs pushed."
           else
-            git commit -m "[validation] update TopN Targets validation outputs"
-            git push
+            echo "[WARN] first push failed, retry after rebase..."
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
