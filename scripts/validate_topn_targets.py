@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-TopN Targets 历史回放/增量验证脚本 V3.1
+TopN Targets / final_rank_top10 验证脚本 V3
 
-核心修正：
-- 验证名单优先读取 outputs/decision/decision_report_YYYYMMDD.md 的 TopN Targets。
-- 如果 TopN Targets 缺失或为空，自动 fallback 到 Full Candidate Pool 前 N 名。
-- fallback 时排序严格保持报告 Full Candidate Pool 的原始顺序，不使用 a-top10 页面或外部原始 rank。
-- D 日 = report 中 signal_date；T 日 = report 中 exec_date。
-- 保留原报告字段，并追加 D/T 验证字段。
-- 每次运行重算历史输出，天然幂等。
+核心口径：
+- 验证对象改为 top10-decision 报告中的最终总排序前 10。
+- 主来源：outputs/decision/decision_report_YYYYMMDD.md 的 Full Candidate Pool。
+- 从 Full Candidate Pool 按 rank 升序取前 topn，命名为 final_rank_top10。
+- 不再依赖 TopN Targets 是否为空；TopN Targets 与 EV>3% 表为空不影响验证。
+- D 日 = report 中 signal_date。
+- T 日 = report 中 exec_date。
+- 验证表排序严格保持 Full Candidate Pool 的 rank 顺序。
 
 运行：
     python scripts/validate_topn_targets.py
-    python scripts/validate_topn_targets.py --start-date 20260320 --end-date 20260504
-    python scripts/validate_topn_targets.py --topn 10 --force
+    python scripts/validate_topn_targets.py --start-date 20260320 --end-date 20260506
+    python scripts/validate_topn_targets.py --topn 10
 """
 
 from __future__ import annotations
@@ -56,9 +57,9 @@ CLOSE_COLUMNS = ["close", "close_price", "收盘", "收盘价", "last_close"]
 PCT_COLUMNS = ["pct_chg", "pct_change", "change_pct", "涨跌幅"]
 UP_LIMIT_COLUMNS = ["up_limit", "limit_up", "涨停价"]
 DOWN_LIMIT_COLUMNS = ["down_limit", "limit_down", "跌停价"]
+
 EV_COLUMNS = ["EV", "ev"]
 RISK_COLUMNS = ["RiskPenalty", "risk_penalty"]
-RANK_COLUMNS = ["TopN_rank", "rank", "decision_rank", "EV_rank", "final_rank"]
 
 MARKET_SEARCH_DIRS = [
     REPO_ROOT / "data" / "market",
@@ -123,7 +124,7 @@ def parse_float(value) -> Optional[float]:
     except Exception:
         pass
     s = str(value).strip().replace("%", "").replace(",", "")
-    if not s or s.lower() in {"nan", "none", "null", "n/a", "--"}:
+    if not s:
         return None
     try:
         return float(s)
@@ -132,43 +133,13 @@ def parse_float(value) -> Optional[float]:
 
 
 def find_first_col(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
-    lower_map = {str(c).strip().lower(): c for c in df.columns}
+    lower_map = {str(c).lower(): c for c in df.columns}
     for c in candidates:
         if c in df.columns:
             return c
-        lc = c.strip().lower()
+        lc = c.lower()
         if lc in lower_map:
             return lower_map[lc]
-    return None
-
-
-def first_float_from_row(row: pd.Series, cols: Sequence[str]) -> Optional[float]:
-    lower_map = {str(c).strip().lower(): c for c in row.index}
-    for c in cols:
-        if c in row.index:
-            v = parse_float(row.get(c))
-            if v is not None:
-                return v
-        lc = c.strip().lower()
-        if lc in lower_map:
-            v = parse_float(row.get(lower_map[lc]))
-            if v is not None:
-                return v
-    return None
-
-
-def first_str_from_row(row: pd.Series, cols: Sequence[str]) -> Optional[str]:
-    lower_map = {str(c).strip().lower(): c for c in row.index}
-    for c in cols:
-        if c in row.index and pd.notna(row.get(c)):
-            s = str(row.get(c)).strip()
-            if s:
-                return s
-        lc = c.strip().lower()
-        if lc in lower_map and pd.notna(row.get(lower_map[lc])):
-            s = str(row.get(lower_map[lc])).strip()
-            if s:
-                return s
     return None
 
 
@@ -195,8 +166,7 @@ def discover_csv_files() -> List[Path]:
             if rp in seen:
                 continue
             seen.add(rp)
-            normalized = str(p).replace("\\", "/")
-            if "/outputs/validation/" in normalized or normalized.endswith("outputs/validation"):
+            if "outputs/validation" in str(p).replace("\\", "/"):
                 continue
             out.append(p)
     return out
@@ -214,132 +184,153 @@ def list_report_files() -> List[Tuple[str, Path]]:
 
 
 def parse_report_meta(text: str) -> Dict[str, str]:
+    """兼容 '- signal_date: **20260430**' 这类 Markdown 元数据。"""
     meta: Dict[str, str] = {}
     for key in ["signal_date", "exec_date", "requested_trade_date"]:
-        m = re.search(rf"(?m)^\s*{re.escape(key)}\s*:\s*([^\s]+)\s*$", text)
+        m = re.search(rf"(?m)^\s*(?:[-*+]\s*)?{re.escape(key)}\s*:\s*(.+?)\s*$", text)
         if m:
-            meta[key] = m.group(1).strip()
+            val = m.group(1).strip()
+            val = re.sub(r"^\*+|\*+$", "", val).strip()
+            meta[key] = val
     return meta
 
 
-def _section_span(text: str, section_title: str) -> Optional[str]:
-    """返回指定章节标题后、下一个标题前的文本。兼容无 # 的报告标题。"""
-    title_re = re.compile(rf"(?m)^\s*(?:#+\s*)?{re.escape(section_title)}\s*$")
-    m = title_re.search(text)
+def extract_markdown_section(text: str, section_title: str) -> Optional[str]:
+    """提取指定二级标题下、下一个二级标题前的文本。"""
+    pattern = re.compile(
+        rf"(?ms)^##\s+{re.escape(section_title)}\s*$\n(?P<body>.*?)(?=^##\s+|\Z)"
+    )
+    m = pattern.search(text)
     if not m:
         return None
-    start = m.end()
-    next_title = re.search(r"(?m)^\s*(?:#{1,6}\s+)?[A-Za-z0-9_\-\u4e00-\u9fa5].*\s*$", text[start:])
-    # 上面的 next_title 过宽，优先使用更稳的 HTML/Markdown 表格截断；此处只作为兜底。
-    return text[start:]
+    return m.group("body")
 
 
-def extract_section_table_text(text: str, section_title: str) -> Optional[str]:
-    """
-    提取某个章节标题后的第一张表。
-    兼容：
-    1) HTML table: <table>...</table>
-    2) Markdown pipe table: | a | b |\n|---|---|...
-    """
-    title_re = re.compile(rf"(?m)^\s*(?:#+\s*)?{re.escape(section_title)}\s*$")
-    m = title_re.search(text)
-    if not m:
-        return None
-
-    tail = text[m.end():]
-
-    html_m = re.search(r"(?is)<table\b.*?</table>", tail)
-    md_m = re.search(r"(?m)(^\s*\|.+\|\s*$\n^\s*\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$\n(?:^\s*\|.*\|\s*$\n?)+)", tail)
-
-    candidates: List[Tuple[int, str]] = []
-    if html_m:
-        candidates.append((html_m.start(), html_m.group(0)))
-    if md_m:
-        candidates.append((md_m.start(), md_m.group(1)))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda x: x[0])
-    return candidates[0][1]
-
-
-def parse_table(table_text: Optional[str]) -> pd.DataFrame:
-    if not table_text:
-        return pd.DataFrame()
-    s = table_text.strip()
-    if not s:
-        return pd.DataFrame()
-    if "<table" in s.lower():
-        try:
-            dfs = pd.read_html(s)
-            if dfs:
-                return dfs[0]
-        except Exception as exc:
-            print(f"[WARN] 解析 HTML table 失败: {exc}", file=sys.stderr)
+def parse_markdown_table(section: str) -> pd.DataFrame:
+    """解析标准 Markdown 管道表。空表返回空 DataFrame。"""
+    if not section:
         return pd.DataFrame()
 
-    # Markdown pipe table fallback
+    lines = [ln.strip() for ln in section.splitlines() if ln.strip().startswith("|")]
+    if len(lines) < 2:
+        return pd.DataFrame()
+
+    header = [c.strip() for c in lines[0].strip("|").split("|")]
+    rows: List[List[str]] = []
+
+    for ln in lines[2:]:
+        cells = [c.strip() for c in ln.strip("|").split("|")]
+        if len(cells) < len(header):
+            cells += [""] * (len(header) - len(cells))
+        elif len(cells) > len(header):
+            cells = cells[: len(header)]
+        if any(c != "" for c in cells):
+            rows.append(cells)
+
+    if not rows:
+        return pd.DataFrame(columns=header)
+
+    df = pd.DataFrame(rows, columns=header)
+    for col in df.columns:
+        if col in ["rank", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def extract_section_table_html(text: str, section_title: str) -> Optional[str]:
+    pattern = re.compile(
+        rf"(?ms)^\s*(?:##\s+)?{re.escape(section_title)}\s*$\s*(<table>.*?</table>)"
+    )
+    m = pattern.search(text)
+    if m:
+        return m.group(1)
+    return None
+
+
+def parse_html_table(table_html: str) -> pd.DataFrame:
     try:
-        lines = [ln.strip() for ln in s.splitlines() if ln.strip().startswith("|")]
-        if len(lines) < 2:
-            return pd.DataFrame()
-        header = [x.strip() for x in lines[0].strip("|").split("|")]
-        data_lines = lines[2:]
-        rows = []
-        for ln in data_lines:
-            parts = [x.strip() for x in ln.strip("|").split("|")]
-            if len(parts) < len(header):
-                parts += [""] * (len(header) - len(parts))
-            rows.append(parts[: len(header)])
-        return pd.DataFrame(rows, columns=header)
+        dfs = pd.read_html(table_html)
+        if dfs:
+            return dfs[0]
     except Exception as exc:
-        print(f"[WARN] 解析 Markdown table 失败: {exc}", file=sys.stderr)
-        return pd.DataFrame()
+        print(f"[WARN] 解析 HTML table 失败: {exc}", file=sys.stderr)
+    return pd.DataFrame()
 
 
-def _table_has_real_rows(df: pd.DataFrame) -> bool:
-    if df is None or df.empty:
-        return False
-    code_col = find_first_col(df, CODE_COLUMNS)
-    if code_col:
-        return df[code_col].astype(str).str.strip().ne("").any()
-    # 没有代码列时，至少要求有非空行；后面会再被 code_col 校验拦截。
-    return len(df.dropna(how="all")) > 0
+def read_table_from_section(text: str, section_title: str) -> pd.DataFrame:
+    """同时兼容 Markdown table 与 HTML table。"""
+    section = extract_markdown_section(text, section_title)
+    if section:
+        df = parse_markdown_table(section)
+        if not df.empty:
+            return df
+
+    table_html = extract_section_table_html(text, section_title)
+    if table_html:
+        return parse_html_table(table_html)
+
+    if section:
+        # 有标题但表为空时返回带表头的空表。
+        return parse_markdown_table(section)
+    return pd.DataFrame()
 
 
-def read_topn_from_report(report_path: Path, topn: int) -> Tuple[pd.DataFrame, Dict[str, str], str]:
+def read_final_rank_top10_from_report(report_path: Path, topn: int) -> Tuple[pd.DataFrame, Dict[str, str], str]:
     text = report_path.read_text(encoding="utf-8", errors="ignore")
     meta = parse_report_meta(text)
 
-    source = "TopN Targets"
-    table_text = extract_section_table_text(text, "TopN Targets")
-    df = parse_table(table_text)
+    df = read_table_from_section(text, "Full Candidate Pool")
+    source = "final_rank_top10"
 
-    # 关键修复：TopN Targets 为空时，直接取 Full Candidate Pool 的最终总排序前 topn。
-    if not _table_has_real_rows(df):
-        table_text = extract_section_table_text(text, "Full Candidate Pool")
-        fallback_df = parse_table(table_text)
-        if _table_has_real_rows(fallback_df):
-            df = fallback_df
-            source = "Full Candidate Pool fallback"
-        else:
-            return pd.DataFrame(), meta, "TopN Targets empty and Full Candidate Pool empty"
+    if df.empty:
+        return pd.DataFrame(), meta, "Full Candidate Pool empty or missing"
+
+    rank_col = find_first_col(df, ["rank", "Rank", "排名"])
+    if rank_col:
+        df[rank_col] = pd.to_numeric(df[rank_col], errors="coerce")
+        df = df.sort_values(rank_col, ascending=True, na_position="last")
 
     df = df.head(topn).copy()
 
     if "TopN_rank" not in df.columns:
-        rank_col = find_first_col(df, RANK_COLUMNS)
         if rank_col:
             df["TopN_rank"] = pd.to_numeric(df[rank_col], errors="coerce")
         else:
             df["TopN_rank"] = range(1, len(df) + 1)
 
-    # fallback 后 TopN_rank 必须是验证名单顺序，不允许被原 candidate rank 搞乱。
-    if source == "Full Candidate Pool fallback":
-        df["TopN_rank"] = range(1, len(df) + 1)
-
     df["validation_source"] = source
     df["report_file"] = report_path.name
     return df, meta, "ok"
+
+
+def first_float_from_row(row: pd.Series, cols: Sequence[str]) -> Optional[float]:
+    lower_map = {str(c).lower(): c for c in row.index}
+    for c in cols:
+        if c in row.index:
+            v = parse_float(row.get(c))
+            if v is not None:
+                return v
+        lc = c.lower()
+        if lc in lower_map:
+            v = parse_float(row.get(lower_map[lc]))
+            if v is not None:
+                return v
+    return None
+
+
+def first_str_from_row(row: pd.Series, cols: Sequence[str]) -> Optional[str]:
+    lower_map = {str(c).lower(): c for c in row.index}
+    for c in cols:
+        if c in row.index and pd.notna(row.get(c)):
+            s = str(row.get(c)).strip()
+            if s:
+                return s
+        lc = c.lower()
+        if lc in lower_map and pd.notna(row.get(lower_map[lc])):
+            s = str(row.get(lower_map[lc])).strip()
+            if s:
+                return s
+    return None
 
 
 class MarketStore:
@@ -385,11 +376,13 @@ class MarketStore:
 
         return None
 
-    def validate_stock(self, ts_code: str, d_date: str, t_date: str) -> MarketLookupResult:
+    def validate_stock(self, ts_code: str, d_date: str, t_date: str, report_row: pd.Series) -> MarketLookupResult:
         d_row = self.get_row(ts_code, d_date)
         t_row = self.get_row(ts_code, t_date)
 
-        d_close = first_float_from_row(d_row, CLOSE_COLUMNS) if d_row is not None else None
+        d_close = None
+        if d_row is not None:
+            d_close = first_float_from_row(d_row, CLOSE_COLUMNS)
 
         if t_row is None:
             return MarketLookupResult(
@@ -472,21 +465,14 @@ def classify_result(ret: Optional[float], up_limit_hit: bool, down_limit_hit: bo
     return "平盘"
 
 
-def build_rows_from_report(
-    report_date: str,
-    report_path: Path,
-    market: MarketStore,
-    topn: int,
-    start_date: Optional[str],
-    end_date: Optional[str],
-) -> List[Dict]:
-    top_df, meta, note = read_topn_from_report(report_path, topn=topn)
+def build_rows_from_report(report_date: str, report_path: Path, market: MarketStore, topn: int, start_date: Optional[str], end_date: Optional[str]) -> List[Dict]:
+    top_df, meta, note = read_final_rank_top10_from_report(report_path, topn=topn)
 
-    signal_date = norm_date(meta.get("signal_date")) or norm_date(report_date)
+    signal_date = norm_date(meta.get("signal_date"))
     exec_date = norm_date(meta.get("exec_date"))
 
     if not signal_date or not exec_date:
-        print(f"[SKIP] {report_path.name}: 缺 signal_date 或 exec_date")
+        print(f"[SKIP] {report_path.name}: 缺 signal_date 或 exec_date | meta={meta}")
         return []
 
     if start_date and signal_date < start_date:
@@ -500,24 +486,23 @@ def build_rows_from_report(
 
     code_col = find_first_col(top_df, CODE_COLUMNS)
     if not code_col:
-        print(f"[SKIP] {report_path.name}: 验证表缺 ts_code/code/symbol 字段")
+        print(f"[SKIP] {report_path.name}: final_rank_top10 缺 ts_code")
         return []
 
     rows: List[Dict] = []
+
     for _, row in top_df.iterrows():
         ts_code = str(row.get(code_col, "")).strip()
         if not ts_code:
             continue
 
-        lookup = market.validate_stock(ts_code, signal_date, exec_date)
+        lookup = market.validate_stock(ts_code, signal_date, exec_date, row)
         ret = lookup.t_return_pct
         up_hit, down_hit, limit_note = detect_limit_hit(ret, lookup.t_close, lookup.up_limit, lookup.down_limit)
         result = classify_result(ret, up_hit, down_hit)
 
         base = row.to_dict()
         name = first_str_from_row(row, NAME_COLUMNS) or lookup.name or ""
-        source = str(row.get("validation_source", ""))
-        source_note = "source=decision_report_full_candidate_pool_fallback" if "fallback" in source else "source=decision_report_topn_targets"
 
         base.update({
             "D_trade_date": signal_date,
@@ -534,18 +519,17 @@ def build_rows_from_report(
             "T_limit_hit": bool(up_hit),
             "T_down_limit_hit": bool(down_hit),
             "validation_status": lookup.status,
-            "validation_note": ";".join(x for x in [lookup.note, limit_note, source_note] if x),
+            "validation_note": ";".join(x for x in [lookup.note, limit_note, "source=decision_report_full_candidate_pool_top10"] if x),
         })
         rows.append(base)
 
-    print(f"[OK] report={report_path.name} D={signal_date} T={exec_date} source={top_df['validation_source'].iloc[0] if 'validation_source' in top_df.columns and len(top_df) else ''} rows={len(rows)}")
+    print(f"[OK] report={report_path.name} D={signal_date} T={exec_date} source=final_rank_top10 rows={len(rows)}")
     return rows
 
 
 def summarize(history: pd.DataFrame) -> Dict:
     verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
     total = int(len(verified))
-    source = "outputs/decision/decision_report_YYYYMMDD.md::TopN Targets; empty fallback Full Candidate Pool top10"
 
     if total == 0:
         return {
@@ -563,7 +547,7 @@ def summarize(history: pd.DataFrame) -> Dict:
             "median_return_pct": None,
             "max_return_pct": None,
             "min_return_pct": None,
-            "source": source,
+            "source": "outputs/decision/decision_report_YYYYMMDD.md::final_rank_top10",
             "conclusion": "暂无已验证样本",
         }
 
@@ -591,7 +575,7 @@ def summarize(history: pd.DataFrame) -> Dict:
         "median_return_pct": round(float(ret.median()), 4) if ret.notna().any() else None,
         "max_return_pct": round(float(ret.max()), 4) if ret.notna().any() else None,
         "min_return_pct": round(float(ret.min()), 4) if ret.notna().any() else None,
-        "source": source,
+        "source": "outputs/decision/decision_report_YYYYMMDD.md::final_rank_top10",
         "conclusion": "已生成 top10-decision 最终总排序 Top10 后验验证统计",
     }
 
@@ -664,7 +648,9 @@ def group_by_rank(history: pd.DataFrame) -> pd.DataFrame:
         ("Top6-10", lambda x: (x >= 6) & (x <= 10)),
     ]
 
-    rows = [metrics_row(label, verified[func(verified["rank_num"])]) for label, func in buckets]
+    rows = []
+    for label, func in buckets:
+        rows.append(metrics_row(label, verified[func(verified["rank_num"])]))
     return pd.DataFrame(rows, columns=cols)
 
 
@@ -816,14 +802,7 @@ def df_to_html(df: pd.DataFrame, max_rows: int = 50) -> str:
     return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
 
 
-def render_html(
-    summary: Dict,
-    latest: pd.DataFrame,
-    by_date: pd.DataFrame,
-    by_rank: pd.DataFrame,
-    by_ev_risk: pd.DataFrame,
-    history: pd.DataFrame,
-) -> None:
+def render_html(summary: Dict, latest: pd.DataFrame, by_date: pd.DataFrame, by_rank: pd.DataFrame, by_ev_risk: pd.DataFrame, history: pd.DataFrame) -> None:
     latest_title = ""
     if not latest.empty:
         latest_title = f"D：{latest['D_trade_date_fmt'].iloc[0]} → T：{latest['T_trade_date_fmt'].iloc[0]}"
@@ -833,7 +812,7 @@ def render_html(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>top10-decision 最终总排序 Top10 验证系统</title>
+  <title>TopN Targets 验证系统</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #24292f; }}
     h1, h2 {{ border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }}
@@ -867,13 +846,13 @@ def render_html(
   </div>
 
   <h2>最新一期最终总排序 Top10 验证明细</h2>
-  <div class="note">验证名单优先来自 TopN Targets；若 TopN Targets 不足或为空，则从 Full Candidate Pool 按报告最终总排序补足前 10。严禁使用 a-top10 页面或 decision_candidates 原始 rank。</div>
+  <div class="note">验证名单来自 outputs/decision/decision_report_YYYYMMDD.md 的 Full Candidate Pool，按 rank 升序取前 10，命名为 final_rank_top10。</div>
   <div class="table-wrap">{df_to_html(latest, max_rows=30)}</div>
 
   <h2>按 D 日统计</h2>
   <div class="table-wrap">{df_to_html(by_date, max_rows=150)}</div>
 
-  <h2>TopN 排名有效性统计</h2>
+  <h2>最终总排序 Rank 有效性统计</h2>
   <div class="table-wrap">{df_to_html(by_rank, max_rows=20)}</div>
 
   <h2>EV × RiskPenalty 分层统计</h2>
@@ -946,17 +925,17 @@ def run_backfill(start_date: Optional[str], end_date: Optional[str], topn: int, 
     history = pd.DataFrame(rows)
     save_outputs(history)
 
-    print(f"[DONE] source=decision_report_final_rank_top10 history_rows={len(history)}")
+    print(f"[DONE] source=decision_report_full_candidate_pool_top10 history_rows={len(history)}")
     print(f"[DONE] wrote: {HISTORY_CSV}")
     print(f"[DONE] wrote: {HTML_PATH}")
     return history
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Backfill top10-decision final-rank Top10 validation history.")
+    parser = argparse.ArgumentParser(description="Backfill top10-decision final rank Top10 validation history.")
     parser.add_argument("--start-date", default=None, help="起始 D 日，格式 YYYYMMDD 或 YYYY-MM-DD")
     parser.add_argument("--end-date", default=None, help="结束 D 日，格式 YYYYMMDD 或 YYYY-MM-DD")
-    parser.add_argument("--topn", type=int, default=10, help="默认 TopN 数量")
+    parser.add_argument("--topn", type=int, default=10, help="默认最终总排序 TopN 数量")
     parser.add_argument("--force", action="store_true", help="保留参数：当前实现每次重算历史输出，天然幂等")
     args = parser.parse_args()
 
