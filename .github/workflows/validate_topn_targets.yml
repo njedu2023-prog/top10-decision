@@ -33,9 +33,9 @@ on:
         default: "10"
 
   schedule:
-    # 北京时间 17:40 = UTC 09:40
-    # 用于每日收盘后验证最近成熟的 TopN Targets
-    - cron: "58 15 * * 1-5"
+    # 北京时间 23:02 = UTC 15:02
+    # 用于每日晚间验证最近成熟的 TopN Targets，尽量等待上游行情/快照落库完成
+    - cron: "2 15 * * 1-5"
 
 permissions:
   contents: write
