@@ -581,17 +581,72 @@ def build_rows_from_weights(weight_file_date: str, weight_path: Path, market: Ma
     return rows
 
 
+
+def _verified(history: pd.DataFrame) -> pd.DataFrame:
+    if history is None or history.empty or "validation_status" not in history.columns:
+        return pd.DataFrame()
+    return history[history["validation_status"] == "已验证"].copy()
+
+
+def _ret_series(df: pd.DataFrame) -> pd.Series:
+    if df is None or df.empty or "T_return_pct" not in df.columns:
+        return pd.Series(dtype=float)
+    return pd.to_numeric(df["T_return_pct"], errors="coerce")
+
+
+def _limit_up_count(df: pd.DataFrame) -> int:
+    if df is None or df.empty or "T_limit_hit" not in df.columns:
+        return 0
+    return int(df["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum())
+
+
+def _safe_mean(s: pd.Series) -> Optional[float]:
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if s.empty:
+        return None
+    return round(float(s.mean()), 4)
+
+
+def _safe_median(s: pd.Series) -> Optional[float]:
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if s.empty:
+        return None
+    return round(float(s.median()), 4)
+
+
+def _safe_max(s: pd.Series) -> Optional[float]:
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if s.empty:
+        return None
+    return round(float(s.max()), 4)
+
+
+def _safe_min(s: pd.Series) -> Optional[float]:
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if s.empty:
+        return None
+    return round(float(s.min()), 4)
+
+
+def _rate(count: int, total: int) -> Optional[float]:
+    return round(count / total * 100.0, 4) if total else None
+
+
 def summarize(history: pd.DataFrame) -> Dict:
-    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
+    """核心摘要：只围绕预测后的真实涨跌比率与幅度。"""
+    verified = _verified(history)
+    raw_samples = int(len(history)) if history is not None and not history.empty else 0
     total = int(len(verified))
     base = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "source": SOURCE_LABEL,
+        "raw_samples": raw_samples,
+        "verified_samples": total,
+        "unverified_samples": max(raw_samples - total, 0),
     }
     if total == 0:
         base.update(
             {
-                "verified_samples": 0,
                 "up_count": 0,
                 "up_rate": None,
                 "limit_up_count": 0,
@@ -604,36 +659,47 @@ def summarize(history: pd.DataFrame) -> Dict:
                 "median_return_pct": None,
                 "max_return_pct": None,
                 "min_return_pct": None,
-                "conclusion": "暂无已验证样本；若 history 有行但 verified=0，请检查 T 日行情是否存在。",
+                "avg_gain_pct": None,
+                "avg_loss_pct": None,
+                "gain_loss_ratio": None,
+                "conclusion": "暂无已验证样本；请优先检查 T 日行情是否存在。",
             }
         )
         return base
 
-    ret = pd.to_numeric(verified["T_return_pct"], errors="coerce")
-    up_count = int((ret > 0.05).sum())
-    down_count = int((ret < -0.05).sum())
-    flat_count = int(((ret >= -0.05) & (ret <= 0.05)).sum())
-    limit_up_count = int(verified["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum())
-
-    def rate(x: int) -> float:
-        return round(x / total * 100.0, 4) if total else None
+    ret = _ret_series(verified)
+    up_mask = ret > 0.05
+    down_mask = ret < -0.05
+    flat_mask = (ret >= -0.05) & (ret <= 0.05)
+    up_count = int(up_mask.sum())
+    down_count = int(down_mask.sum())
+    flat_count = int(flat_mask.sum())
+    limit_up_count = _limit_up_count(verified)
+    avg_gain = _safe_mean(ret[ret > 0.05])
+    avg_loss = _safe_mean(ret[ret < -0.05])
+    if avg_gain is not None and avg_loss is not None and avg_loss != 0:
+        gain_loss_ratio = round(abs(avg_gain / avg_loss), 4)
+    else:
+        gain_loss_ratio = None
 
     base.update(
         {
-            "verified_samples": total,
             "up_count": up_count,
-            "up_rate": rate(up_count),
+            "up_rate": _rate(up_count, total),
             "limit_up_count": limit_up_count,
-            "limit_up_rate": rate(limit_up_count),
+            "limit_up_rate": _rate(limit_up_count, total),
             "down_count": down_count,
-            "down_rate": rate(down_count),
+            "down_rate": _rate(down_count, total),
             "flat_count": flat_count,
-            "flat_rate": rate(flat_count),
-            "mean_return_pct": round(float(ret.mean()), 4) if ret.notna().any() else None,
-            "median_return_pct": round(float(ret.median()), 4) if ret.notna().any() else None,
-            "max_return_pct": round(float(ret.max()), 4) if ret.notna().any() else None,
-            "min_return_pct": round(float(ret.min()), 4) if ret.notna().any() else None,
-            "conclusion": "已生成 weights 最终排序 TopN 后验验证统计。",
+            "flat_rate": _rate(flat_count, total),
+            "mean_return_pct": _safe_mean(ret),
+            "median_return_pct": _safe_median(ret),
+            "max_return_pct": _safe_max(ret),
+            "min_return_pct": _safe_min(ret),
+            "avg_gain_pct": avg_gain,
+            "avg_loss_pct": avg_loss,
+            "gain_loss_ratio": gain_loss_ratio,
+            "conclusion": "已生成基于 docs/weights 最终排序的后验验证统计；核心看真实上涨率、涨停率、平均/中位涨跌幅、最大涨跌幅。",
         }
     )
     return base
@@ -650,69 +716,131 @@ def fmt_pct(v) -> str:
         return str(v)
 
 
+def fmt_num(v) -> str:
+    if v is None:
+        return "N/A"
+    try:
+        if isinstance(v, float) and math.isnan(v):
+            return "N/A"
+        return f"{float(v):.4f}"
+    except Exception:
+        return str(v)
+
+
+def metrics_row(label: str, g: pd.DataFrame) -> Dict:
+    n = len(g)
+    ret = _ret_series(g)
+    up = int((ret > 0.05).sum()) if n else 0
+    down = int((ret < -0.05).sum()) if n else 0
+    limit_up = _limit_up_count(g) if n else 0
+    return {
+        "分组": label,
+        "样本数": n,
+        "上涨数": up,
+        "上涨率": _rate(up, n),
+        "下跌数": down,
+        "下跌率": _rate(down, n),
+        "涨停数": limit_up,
+        "涨停率": _rate(limit_up, n),
+        "平均涨跌幅": _safe_mean(ret),
+        "中位涨跌幅": _safe_median(ret),
+        "最大涨幅": _safe_max(ret),
+        "最大跌幅": _safe_min(ret),
+    }
+
+
 def group_by_date(history: pd.DataFrame) -> pd.DataFrame:
-    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
-    cols = ["D_trade_date", "T_trade_date", "TopN数量", "上涨数", "上涨率", "涨停数", "涨停率", "平均涨跌幅", "中位涨跌幅"]
-    if verified.empty:
+    cols = [
+        "D_trade_date", "T_trade_date", "原始TopN数量", "已验证数量", "未验证数量",
+        "上涨数", "上涨率", "下跌数", "下跌率", "涨停数", "涨停率",
+        "平均涨跌幅", "中位涨跌幅", "最大涨幅", "最大跌幅",
+    ]
+    if history is None or history.empty:
         return pd.DataFrame(columns=cols)
-    verified["ret_num"] = pd.to_numeric(verified["T_return_pct"], errors="coerce")
     rows = []
-    for (d, t), g in verified.groupby(["D_trade_date", "T_trade_date"], dropna=False):
+    for (d, t), g_all in history.groupby(["D_trade_date", "T_trade_date"], dropna=False):
+        g = _verified(g_all)
+        n_all = len(g_all)
         n = len(g)
-        up = int((g["ret_num"] > 0.05).sum())
-        limit_up = int(g["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum())
+        ret = _ret_series(g)
+        up = int((ret > 0.05).sum()) if n else 0
+        down = int((ret < -0.05).sum()) if n else 0
+        limit_up = _limit_up_count(g) if n else 0
         rows.append(
             {
                 "D_trade_date": d,
                 "T_trade_date": t,
-                "TopN数量": n,
+                "原始TopN数量": n_all,
+                "已验证数量": n,
+                "未验证数量": max(n_all - n, 0),
                 "上涨数": up,
-                "上涨率": round(up / n * 100, 4) if n else None,
+                "上涨率": _rate(up, n),
+                "下跌数": down,
+                "下跌率": _rate(down, n),
                 "涨停数": limit_up,
-                "涨停率": round(limit_up / n * 100, 4) if n else None,
-                "平均涨跌幅": round(float(g["ret_num"].mean()), 4) if n else None,
-                "中位涨跌幅": round(float(g["ret_num"].median()), 4) if n else None,
+                "涨停率": _rate(limit_up, n),
+                "平均涨跌幅": _safe_mean(ret),
+                "中位涨跌幅": _safe_median(ret),
+                "最大涨幅": _safe_max(ret),
+                "最大跌幅": _safe_min(ret),
             }
         )
     return pd.DataFrame(rows, columns=cols).sort_values(["D_trade_date", "T_trade_date"])
 
 
-def metrics_row(label: str, g: pd.DataFrame) -> Dict:
-    n = len(g)
-    if n == 0:
-        return {"排名层级": label, "样本数": 0, "上涨率": None, "涨停率": None, "平均涨跌幅": None, "中位涨跌幅": None}
-    ret = pd.to_numeric(g["T_return_pct"], errors="coerce")
-    up = int((ret > 0.05).sum())
-    limit_up = int(g["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum())
-    return {
-        "排名层级": label,
-        "样本数": n,
-        "上涨率": round(up / n * 100, 4),
-        "涨停率": round(limit_up / n * 100, 4),
-        "平均涨跌幅": round(float(ret.mean()), 4) if ret.notna().any() else None,
-        "中位涨跌幅": round(float(ret.median()), 4) if ret.notna().any() else None,
-    }
-
-
 def group_by_rank(history: pd.DataFrame) -> pd.DataFrame:
-    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
-    cols = ["排名层级", "样本数", "上涨率", "涨停率", "平均涨跌幅", "中位涨跌幅"]
+    verified = _verified(history)
+    cols = ["分组", "样本数", "上涨数", "上涨率", "下跌数", "下跌率", "涨停数", "涨停率", "平均涨跌幅", "中位涨跌幅", "最大涨幅", "最大跌幅"]
     if verified.empty or "TopN_rank" not in verified.columns:
         return pd.DataFrame(columns=cols)
     verified["rank_num"] = pd.to_numeric(verified["TopN_rank"], errors="coerce")
     buckets = [
         ("Top1", lambda x: x == 1),
         ("Top1-2", lambda x: (x >= 1) & (x <= 2)),
-        ("Top1-3", lambda x: (x >= 1) & (x <= 3)),
         ("Top1-4", lambda x: (x >= 1) & (x <= 4)),
-        ("Top1-5", lambda x: (x >= 1) & (x <= 5)),
+        ("Top1-10", lambda x: (x >= 1) & (x <= 10)),
         ("Top6-10", lambda x: (x >= 6) & (x <= 10)),
     ]
     return pd.DataFrame([metrics_row(label, verified[func(verified["rank_num"])]) for label, func in buckets], columns=cols)
 
 
+def group_by_source_rank(history: pd.DataFrame) -> pd.DataFrame:
+    verified = _verified(history)
+    cols = ["分组", "样本数", "上涨数", "上涨率", "下跌数", "下跌率", "涨停数", "涨停率", "平均涨跌幅", "中位涨跌幅", "最大涨幅", "最大跌幅"]
+    if verified.empty or "source_rank_type" not in verified.columns:
+        return pd.DataFrame(columns=cols)
+    rows = []
+    for label, g in verified.groupby("source_rank_type", dropna=False):
+        rows.append(metrics_row(str(label), g))
+    return pd.DataFrame(rows, columns=cols)
+
+
+def group_by_return_bucket(history: pd.DataFrame) -> pd.DataFrame:
+    verified = _verified(history)
+    cols = ["真实涨跌幅区间", "样本数", "占比"]
+    if verified.empty:
+        return pd.DataFrame(columns=cols)
+    ret = _ret_series(verified)
+    buckets = [
+        ("≤ -10%", ret <= -10),
+        ("-10% ~ -5%", (ret > -10) & (ret <= -5)),
+        ("-5% ~ 0%", (ret > -5) & (ret < -0.05)),
+        ("平盘附近", (ret >= -0.05) & (ret <= 0.05)),
+        ("0% ~ 3%", (ret > 0.05) & (ret <= 3)),
+        ("3% ~ 7%", (ret > 3) & (ret <= 7)),
+        ("7% ~ 10%", (ret > 7) & (ret < 9.85)),
+        ("≥ 9.85% / 涨停附近", ret >= 9.85),
+    ]
+    total = len(ret.dropna())
+    rows = []
+    for label, mask in buckets:
+        n = int(mask.sum())
+        rows.append({"真实涨跌幅区间": label, "样本数": n, "占比": _rate(n, total)})
+    return pd.DataFrame(rows, columns=cols)
+
+
 def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
-    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
+    verified = _verified(history)
     cols = ["组合", "EV范围", "RiskPenalty范围", "样本数", "上涨率", "涨停率", "平均涨跌幅", "中位涨跌幅", "结论"]
     if verified.empty:
         return pd.DataFrame(columns=cols)
@@ -754,13 +882,13 @@ def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
     verified["_risk_group"] = verified["_risk_num"].map(lambda v: bucket(v, risk_q1, risk_q2, "Risk"))
 
     conclusion_map = {
-        "高EV + 低Risk": "最优候选池",
-        "高EV + 中Risk": "可观察",
-        "高EV + 高Risk": "高收益高波动",
-        "中EV + 低Risk": "稳健但弹性不足",
+        "高EV + 低Risk": "优先观察：理论收益强且风险低",
+        "高EV + 中Risk": "可观察：收益强但需看承接",
+        "高EV + 高Risk": "高波动：可能大涨也可能回撤",
+        "中EV + 低Risk": "稳健但弹性一般",
         "中EV + 中Risk": "中性",
         "中EV + 高Risk": "风险偏高",
-        "低EV + 低Risk": "防守型但弹性不足",
+        "低EV + 低Risk": "防守但收益弱",
         "低EV + 中Risk": "弱解释力",
         "低EV + 高Risk": "应弱化或剔除",
     }
@@ -770,9 +898,9 @@ def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
         for rg in ["低Risk", "中Risk", "高Risk"]:
             g = verified[(verified["_ev_group"] == eg) & (verified["_risk_group"] == rg)]
             n = len(g)
-            ret = pd.to_numeric(g["T_return_pct"], errors="coerce") if n else pd.Series(dtype=float)
+            ret = _ret_series(g) if n else pd.Series(dtype=float)
             up = int((ret > 0.05).sum()) if n else 0
-            limit_up = int(g["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum()) if n else 0
+            limit_up = _limit_up_count(g) if n else 0
             combo = f"{eg} + {rg}"
             rows.append(
                 {
@@ -780,10 +908,10 @@ def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
                     "EV范围": range_label(eg, ev_q1, ev_q2),
                     "RiskPenalty范围": range_label(rg, risk_q1, risk_q2),
                     "样本数": n,
-                    "上涨率": round(up / n * 100, 4) if n else None,
-                    "涨停率": round(limit_up / n * 100, 4) if n else None,
-                    "平均涨跌幅": round(float(ret.mean()), 4) if n and ret.notna().any() else None,
-                    "中位涨跌幅": round(float(ret.median()), 4) if n and ret.notna().any() else None,
+                    "上涨率": _rate(up, n),
+                    "涨停率": _rate(limit_up, n),
+                    "平均涨跌幅": _safe_mean(ret),
+                    "中位涨跌幅": _safe_median(ret),
                     "结论": conclusion_map.get(combo, ""),
                 }
             )
@@ -791,7 +919,7 @@ def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
 
 
 def correlation_summary(history: pd.DataFrame) -> Dict:
-    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
+    verified = _verified(history)
     out = {
         "corr_EV_return": None,
         "corr_RiskPenalty_return": None,
@@ -852,21 +980,23 @@ def correlation_summary(history: pd.DataFrame) -> Dict:
 
 def write_summary_md(summary: Dict, corr: Dict) -> None:
     lines = [
-        "# TopN Targets / Final Weights Top10 验证统计摘要",
+        "# top10-decision 最终 weights Top10 后验验证摘要",
         "",
         f"- 数据源：{summary.get('source', '')}",
         f"- 生成时间：{summary.get('generated_at', '')}",
-        f"- 历史累计样本总数：{summary.get('verified_samples', 0)}",
+        f"- 原始预测样本数：{summary.get('raw_samples', 0)}",
+        f"- 已验证样本数：{summary.get('verified_samples', 0)}",
+        f"- 未验证样本数：{summary.get('unverified_samples', 0)}",
         f"- 上涨数量：{summary.get('up_count', 0)}",
         f"- 上涨率：{fmt_pct(summary.get('up_rate'))}",
         f"- 涨停数量：{summary.get('limit_up_count', 0)}",
         f"- 涨停率：{fmt_pct(summary.get('limit_up_rate'))}",
         f"- 下跌数量：{summary.get('down_count', 0)}",
         f"- 下跌率：{fmt_pct(summary.get('down_rate'))}",
-        f"- 平盘数量：{summary.get('flat_count', 0)}",
-        f"- 平盘率：{fmt_pct(summary.get('flat_rate'))}",
         f"- 平均涨跌幅：{fmt_pct(summary.get('mean_return_pct'))}",
         f"- 中位涨跌幅：{fmt_pct(summary.get('median_return_pct'))}",
+        f"- 平均上涨幅度：{fmt_pct(summary.get('avg_gain_pct'))}",
+        f"- 平均下跌幅度：{fmt_pct(summary.get('avg_loss_pct'))}",
         f"- 最大涨幅：{fmt_pct(summary.get('max_return_pct'))}",
         f"- 最大跌幅：{fmt_pct(summary.get('min_return_pct'))}",
         "",
@@ -884,108 +1014,151 @@ def write_summary_md(summary: Dict, corr: Dict) -> None:
     SUMMARY_MD.write_text("\n".join(lines), encoding="utf-8")
 
 
-def df_to_html(df: pd.DataFrame, max_rows: int = 50) -> str:
+def _format_cell(col: str, val) -> str:
+    if pd.isna(val):
+        return ""
+    pct_cols = {"上涨率", "涨停率", "下跌率", "平盘率", "平均涨跌幅", "中位涨跌幅", "最大涨幅", "最大跌幅", "占比"}
+    if col in pct_cols or col == "T_return_pct":
+        try:
+            f = float(val)
+            sign = "+" if col == "T_return_pct" and f > 0 else ""
+            return f"{sign}{f:.2f}%"
+        except Exception:
+            return html.escape(str(val))
+    if col in {"D_close", "T_close", "weight", "ev_pred", "ev_final", "risk_penalty", "RiskPenalty", "source_rank_value"}:
+        try:
+            return f"{float(val):.4f}"
+        except Exception:
+            return html.escape(str(val))
+    return html.escape(str(val))
+
+
+def df_to_html(df: pd.DataFrame, max_rows: int = 50, columns: Optional[Sequence[str]] = None) -> str:
     if df is None or df.empty:
         return "<p>暂无数据</p>"
     show = df.head(max_rows).copy()
-    priority = [
-        "TopN_rank", "source_rank_type", "source_rank_value", "target_rank", "backup_rank", "weight",
-        "D_trade_date_fmt", "T_trade_date_fmt", "validation_pair",
-        "ts_code", "ts_code_norm", "name", "name_norm", "ev_pred", "ev_final", "risk_penalty", "RiskPenalty",
-        "D_close", "T_close", "T_return_pct", "T_result", "T_limit_hit", "validation_status", "validation_note",
-        "validation_source", "weights_file", "candidate_aug_file",
-    ]
-    cols = [c for c in priority if c in show.columns] + [c for c in show.columns if c not in priority]
-    show = show[cols[:60]]
-
-    def fmt_cell(col: str, val) -> str:
-        if pd.isna(val):
-            return ""
-        if col == "T_return_pct":
-            try:
-                f = float(val)
-                sign = "+" if f > 0 else ""
-                return f"{sign}{f:.2f}%"
-            except Exception:
-                return html.escape(str(val))
-        if col in {"上涨率", "涨停率", "下跌率", "平盘率", "平均涨跌幅", "中位涨跌幅"}:
-            try:
-                return f"{float(val):.2f}%"
-            except Exception:
-                return html.escape(str(val))
-        return html.escape(str(val))
-
+    if columns:
+        cols = [c for c in columns if c in show.columns]
+        show = show[cols]
     header = "".join(f"<th>{html.escape(str(c))}</th>" for c in show.columns)
     rows = []
     for _, r in show.iterrows():
-        rows.append("<tr>" + "".join(f"<td>{fmt_cell(c, r[c])}</td>" for c in show.columns) + "</tr>")
+        rows.append("<tr>" + "".join(f"<td>{_format_cell(c, r[c])}</td>" for c in show.columns) + "</tr>")
     return f"<div class='table-wrap'><table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
 
 
-def render_html(summary: Dict, corr: Dict, latest: pd.DataFrame, by_date: pd.DataFrame, by_rank: pd.DataFrame, by_ev_risk: pd.DataFrame, history: pd.DataFrame) -> None:
+def _metric_card(label: str, value: str, cls: str = "") -> str:
+    return f"<div class='card {cls}'><div class='label'>{html.escape(label)}</div><div class='value'>{html.escape(value)}</div></div>"
+
+
+def render_html(
+    summary: Dict,
+    corr: Dict,
+    latest: pd.DataFrame,
+    by_date: pd.DataFrame,
+    by_rank: pd.DataFrame,
+    by_source_rank: pd.DataFrame,
+    by_return_bucket: pd.DataFrame,
+    by_ev_risk: pd.DataFrame,
+    history: pd.DataFrame,
+) -> None:
     latest_title = ""
     if not latest.empty and "D_trade_date_fmt" in latest.columns and "T_trade_date_fmt" in latest.columns:
         latest_title = f"D：{latest['D_trade_date_fmt'].iloc[0]} → T：{latest['T_trade_date_fmt'].iloc[0]}"
+
+    latest_cols = [
+        "TopN_rank", "source_rank_type", "source_rank_value", "target_rank", "backup_rank",
+        "ts_code", "ts_code_norm", "name", "name_norm", "weight", "ev_pred",
+        "D_close", "T_close", "T_return_pct", "T_result", "T_limit_hit", "validation_status", "validation_note",
+    ]
+    history_cols = [
+        "D_trade_date", "T_trade_date", "TopN_rank", "source_rank_type", "ts_code_norm", "name_norm",
+        "weight", "ev_pred", "D_close", "T_close", "T_return_pct", "T_result", "validation_status", "validation_note",
+    ]
+
+    cards = "".join(
+        [
+            _metric_card("已验证样本", str(summary.get("verified_samples", 0))),
+            _metric_card("上涨率", fmt_pct(summary.get("up_rate")), "good"),
+            _metric_card("涨停率", fmt_pct(summary.get("limit_up_rate")), "good"),
+            _metric_card("下跌率", fmt_pct(summary.get("down_rate")), "bad"),
+            _metric_card("平均涨跌幅", fmt_pct(summary.get("mean_return_pct"))),
+            _metric_card("中位涨跌幅", fmt_pct(summary.get("median_return_pct"))),
+            _metric_card("平均上涨幅度", fmt_pct(summary.get("avg_gain_pct"))),
+            _metric_card("平均下跌幅度", fmt_pct(summary.get("avg_loss_pct"))),
+            _metric_card("最大涨幅", fmt_pct(summary.get("max_return_pct"))),
+            _metric_card("最大跌幅", fmt_pct(summary.get("min_return_pct"))),
+        ]
+    )
 
     html_text = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>top10-decision 最终 weights Top10 验证系统</title>
+<title>top10-decision 最终 weights Top10 后验验证</title>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #24292f; }}
-h1 {{ font-size: 32px; margin-bottom: 8px; }}
-h2 {{ margin-top: 28px; border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }}
-.meta {{ color: #57606a; font-weight: 600; }}
-.cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 20px 0; }}
-.card {{ border: 1px solid #d0d7de; border-radius: 8px; padding: 14px; background: #f6f8fa; }}
+h1 {{ font-size: 30px; margin-bottom: 8px; }}
+h2 {{ margin-top: 30px; border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }}
+.meta {{ color: #57606a; font-weight: 600; line-height: 1.7; }}
+.notice {{ border-left: 5px solid #0969da; background: #ddf4ff; padding: 12px 14px; margin: 16px 0; line-height: 1.7; }}
+.cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 12px; margin: 18px 0; }}
+.card {{ border: 1px solid #d0d7de; border-radius: 10px; padding: 14px; background: #f6f8fa; }}
+.card.good {{ background:#dafbe1; }}
+.card.bad {{ background:#ffebe9; }}
 .card .label {{ color:#57606a; font-weight:700; }}
 .card .value {{ font-size:24px; font-weight:800; margin-top:6px; }}
 .table-wrap {{ overflow-x:auto; margin-top: 12px; }}
 table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
 th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; white-space: nowrap; }}
-th {{ background: #f6f8fa; }}
-.note {{ color:#57606a; line-height: 1.6; }}
+th {{ background: #f6f8fa; position: sticky; top: 0; }}
+.note {{ color:#57606a; line-height: 1.65; }}
+.small {{ font-size: 12px; color:#57606a; }}
 </style>
 </head>
 <body>
-<h1>top10-decision 最终 weights Top10 验证系统</h1>
-<p class="meta">数据源：{html.escape(str(summary.get('source', '')))}；生成时间：{html.escape(str(summary.get('generated_at', '')))}；最新验证：{html.escape(latest_title)}</p>
-
-<h2>累计统计</h2>
-<div class="cards">
-  <div class="card"><div class="label">历史累计样本总数</div><div class="value">{summary.get('verified_samples', 0)}</div></div>
-  <div class="card"><div class="label">上涨率</div><div class="value">{fmt_pct(summary.get('up_rate'))}</div></div>
-  <div class="card"><div class="label">涨停率</div><div class="value">{fmt_pct(summary.get('limit_up_rate'))}</div></div>
-  <div class="card"><div class="label">下跌率</div><div class="value">{fmt_pct(summary.get('down_rate'))}</div></div>
-  <div class="card"><div class="label">平盘率</div><div class="value">{fmt_pct(summary.get('flat_rate'))}</div></div>
-  <div class="card"><div class="label">平均涨跌幅</div><div class="value">{fmt_pct(summary.get('mean_return_pct'))}</div></div>
-  <div class="card"><div class="label">中位涨跌幅</div><div class="value">{fmt_pct(summary.get('median_return_pct'))}</div></div>
+<h1>top10-decision 最终 weights Top10 后验验证</h1>
+<p class="meta">数据源：{html.escape(str(summary.get('source', '')))}<br/>生成时间：{html.escape(str(summary.get('generated_at', '')))}；最新验证：{html.escape(latest_title)}</p>
+<div class="notice">
+<strong>核心验证问题：</strong>预测排序之后，真实 T 日到底上涨多少、下跌多少、涨停多少。<br/>
+<strong>排序口径：</strong>先取 docs/weights/weights_YYYYMMDD.csv 的 target_rank；不足 TopN 时用 backup_rank 补足。decision_candidates 只作为 EV/RiskPenalty 补充源，不作为主排序源。
 </div>
 
-<h2>最新一期最终 weights Top10 验证明细</h2>
-<p class="note">验证名单来自 docs/weights/weights_YYYYMMDD.csv：先取 target_rank，不足 TopN 时用 backup_rank 补足；不再读取 decision_report 展示表，也不再用 decision_candidates 的 rank 作为主排序。</p>
-{df_to_html(latest, max_rows=20)}
+<h2>一、累计真实涨跌表现</h2>
+<div class="cards">{cards}</div>
+<p class="small">原始预测样本：{summary.get('raw_samples', 0)}；已验证：{summary.get('verified_samples', 0)}；未验证：{summary.get('unverified_samples', 0)}。统计分母默认使用“已验证样本”。</p>
 
-<h2>按 D/T 日统计</h2>
-{df_to_html(by_date, max_rows=80)}
+<h2>二、真实涨跌幅分布</h2>
+<p class="note">用于判断系统不只是“涨跌方向”是否有效，还要看真实收益幅度是否足够覆盖交易成本和风险。</p>
+{df_to_html(by_return_bucket, max_rows=20)}
 
-<h2>TopN 排名有效性统计</h2>
+<h2>三、Top1 / Top2 / Top4 / Top10 真实有效性</h2>
+<p class="note">这是后续决定只买 Top1、Top2、Top4 还是 Top10 的核心依据。</p>
 {df_to_html(by_rank, max_rows=20)}
 
-<h2>EV / RiskPenalty 相关性</h2>
+<h2>四、target_rank 与 backup_rank 分组对比</h2>
+<p class="note">target_rank 代表真正目标排序；backup_rank 代表补充/备选排序，二者必须分开看。</p>
+{df_to_html(by_source_rank, max_rows=20)}
+
+<h2>五、按 D/T 日统计</h2>
+{df_to_html(by_date, max_rows=120)}
+
+<h2>六、最新一期验证明细</h2>
+{df_to_html(latest, max_rows=20, columns=latest_cols)}
+
+<h2>七、EV / RiskPenalty 解释力</h2>
 <div class="cards">
-  <div class="card"><div class="label">corr_EV_return</div><div class="value">{corr.get('corr_EV_return')}</div></div>
-  <div class="card"><div class="label">corr_RiskPenalty_return</div><div class="value">{corr.get('corr_RiskPenalty_return')}</div></div>
-  <div class="card"><div class="label">corr_EV_up</div><div class="value">{corr.get('corr_EV_up')}</div></div>
-  <div class="card"><div class="label">corr_RiskPenalty_down</div><div class="value">{corr.get('corr_RiskPenalty_down')}</div></div>
+  {_metric_card('corr_EV_return', str(corr.get('corr_EV_return')))}
+  {_metric_card('corr_RiskPenalty_return', str(corr.get('corr_RiskPenalty_return')))}
+  {_metric_card('corr_EV_up', str(corr.get('corr_EV_up')))}
+  {_metric_card('corr_RiskPenalty_down', str(corr.get('corr_RiskPenalty_down')))}
 </div>
 <p class="note">样本说明：{html.escape(str(corr.get('sample_note', '')))}</p>
 {df_to_html(by_ev_risk, max_rows=20)}
 
-<h2>历史明细预览</h2>
-{df_to_html(history, max_rows=100)}
+<h2>八、历史明细预览</h2>
+{df_to_html(history, max_rows=100, columns=history_cols)}
 </body>
 </html>
 """
@@ -1013,12 +1186,15 @@ def write_outputs(history: pd.DataFrame, topn: int) -> None:
 
     by_date = group_by_date(history)
     by_rank = group_by_rank(history)
+    by_source_rank = group_by_source_rank(history)
+    by_return_bucket = group_by_return_bucket(history)
     by_ev_risk = group_by_ev_risk(history)
 
     by_date.to_csv(BY_DATE_CSV, index=False, encoding="utf-8-sig")
     by_rank.to_csv(BY_RANK_CSV, index=False, encoding="utf-8-sig")
     by_ev_risk.to_csv(BY_EV_RISK_CSV, index=False, encoding="utf-8-sig")
-    render_html(summary, corr, latest, by_date, by_rank, by_ev_risk, history)
+    # 兼容旧 workflow 输出列表，不强制新增文件名；页面直接渲染分布与 target/backup 分组。
+    render_html(summary, corr, latest, by_date, by_rank, by_source_rank, by_return_bucket, by_ev_risk, history)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
