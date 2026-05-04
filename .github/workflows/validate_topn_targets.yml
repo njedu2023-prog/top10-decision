@@ -35,7 +35,7 @@ on:
   schedule:
     # 北京时间 17:40 = UTC 09:40
     # 用于每日收盘后验证最近成熟的 TopN Targets
-    - cron: "40 9 * * 1-5"
+    - cron: "58 15 * * 1-5"
 
 permissions:
   contents: write
