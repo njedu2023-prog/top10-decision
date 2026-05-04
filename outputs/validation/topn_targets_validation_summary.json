@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-05-04T13:07:34",
+  "verified_samples": 269,
+  "up_count": 185,
+  "up_rate": 68.7732,
+  "limit_up_count": 83,
+  "limit_up_rate": 30.855,
+  "down_count": 82,
+  "down_rate": 30.4833,
+  "flat_count": 2,
+  "flat_rate": 0.7435,
+  "mean_return_pct": 3.3464,
+  "median_return_pct": 2.2423,
+  "max_return_pct": 29.994,
+  "min_return_pct": -10.0196,
+  "conclusion": "已生成 TopN Targets 历史后验验证统计"
+}
