@@ -1,30 +1,29 @@
 # -*- coding: utf-8 -*-
 """
-TopN Targets / Final Rank Top10 验证脚本｜最终收口版
+TopN Targets / Final Weights Top10 后验验证脚本｜weights 源最终版
 
 核心口径：
-1. 原需求：TopN Targets 每日预测名单做 D -> T 后验验证；
-2. 若 TopN Targets 表为空，则在“总表”中取前 10 名；
-3. 工程实现上，“总表”的真实数据源不是 markdown 展示表，而是：
-      data/decision/decision_candidates_YYYYMMDD.csv
-4. 因此本脚本最终采用：
-      - report 只用于读取 signal_date / exec_date 元信息；
-      - candidates CSV 用于读取最终总排序；
-      - 按 rank 升序优先；若无 rank，则按 EV 降序；
-      - 取前 topn，标记 validation_source = final_rank_top10_from_candidates；
-5. D 日 = signal_date；
-6. T 日 = exec_date；
-7. T 日涨跌验证严格按 D_close -> T_close 计算；
-8. 缺行情、停牌、字段缺失不静默填 0，全部标注 validation_status / validation_note；
-9. 每次运行重算历史输出，天然幂等。
+1. 本脚本验证 top10-decision 计算引擎最终输出给下游/页面/信号链的排序结果。
+2. 最终排序源固定为 docs/weights/weights_YYYYMMDD.csv，而不是：
+   - outputs/decision/decision_report_YYYYMMDD.md 展示表；
+   - data/decision/decision_candidates_YYYYMMDD.csv 候选计算明细表。
+3. weights 文件排序规则：
+   - 优先读取 target_rank 非空记录，按 target_rank 升序；
+   - 若 target_rank 数量不足 topn，则继续读取 backup_rank 非空记录，按 backup_rank 升序补足；
+   - 最终形成 TopN_rank = 1..topn；
+   - 标记 validation_source = weights_target_then_backup。
+4. D 日 / T 日口径：
+   - T 日优先取 weights 文件中的 exec_date；若缺失则取文件名 weights_YYYYMMDD；
+   - D 日优先从 outputs/decision/decision_report_T日.md 中解析 signal_date；
+   - 若 report 缺失或解析失败，则尝试读取同文件中的 requested_trade_date；
+   - 最后兜底为 weights 文件名日期，但会在 validation_note 中标注。
+5. T 日真实涨跌验证严格按 D_close -> T_close 计算。
+6. 缺行情、停牌、字段缺失不静默填 0，全部标注 validation_status / validation_note。
+7. 每次运行重算历史输出，天然幂等。
 
 建议运行：
-    python scripts/validate_topn_targets.py
-    python scripts/validate_topn_targets.py --start-date 20260301 --end-date 20260506
-    python scripts/validate_topn_targets.py --topn 10
-
-兼容：
-    也可复制为 scripts/backfill_topn_targets_validation.py 使用。
+python scripts/backfill_topn_targets_validation.py --topn 10 --start-date 20260302 --end-date 20260428
+python scripts/backfill_topn_targets_validation.py --topn 10
 """
 
 from __future__ import annotations
@@ -44,9 +43,9 @@ import pandas as pd
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-
 REPORT_DIR = REPO_ROOT / "outputs" / "decision"
-DECISION_DIR = REPO_ROOT / "data" / "decision"
+WEIGHTS_DIR = REPO_ROOT / "docs" / "weights"
+DECISION_DIR = REPO_ROOT / "data" / "decision"  # 只作为 EV/Risk 补充源，不作为排序源
 OUTPUT_DIR = REPO_ROOT / "outputs" / "validation"
 DOCS_DIR = REPO_ROOT / "docs"
 
@@ -59,8 +58,9 @@ BY_RANK_CSV = OUTPUT_DIR / "topn_targets_validation_by_rank.csv"
 BY_EV_RISK_CSV = OUTPUT_DIR / "topn_targets_validation_by_ev_risk.csv"
 HTML_PATH = DOCS_DIR / "topn_targets_validation.html"
 
+WEIGHTS_PATTERN = re.compile(r"weights_(\d{8})\.csv$")
 REPORT_PATTERN = re.compile(r"decision_report_(\d{8})\.md$")
-CANDIDATES_PATTERN = re.compile(r"decision_candidates_(\d{8})\.csv$")
+CANDIDATES_IN_TEXT_PATTERN = re.compile(r"decision_candidates_(\d{8})\.csv")
 
 DATE_COLUMNS = ["trade_date", "date", "交易日期", "日期"]
 CODE_COLUMNS = ["ts_code", "code", "symbol", "股票代码", "证券代码"]
@@ -70,9 +70,8 @@ PCT_COLUMNS = ["pct_chg", "pct_change", "change_pct", "涨跌幅"]
 UP_LIMIT_COLUMNS = ["up_limit", "limit_up", "涨停价"]
 DOWN_LIMIT_COLUMNS = ["down_limit", "limit_down", "跌停价"]
 
-EV_COLUMNS = ["EV", "ev"]
-RISK_COLUMNS = ["RiskPenalty", "risk_penalty"]
-RANK_COLUMNS = ["rank", "TopN_rank", "decision_rank", "EV_rank", "ev_rank"]
+EV_COLUMNS = ["ev_pred", "EV", "ev", "ev_final", "EV_pred"]
+RISK_COLUMNS = ["risk_penalty", "RiskPenalty", "risk_total_penalty"]
 
 MARKET_SEARCH_DIRS = [
     REPO_ROOT / "data" / "market",
@@ -82,6 +81,9 @@ MARKET_SEARCH_DIRS = [
     REPO_ROOT / "data" / "decision",
     REPO_ROOT / "data",
 ]
+
+SOURCE_LABEL = "docs/weights/weights_YYYYMMDD.csv::target_rank_then_backup_rank"
+VALIDATION_SOURCE = "weights_target_then_backup"
 
 
 @dataclass
@@ -110,11 +112,10 @@ def norm_date(value) -> Optional[str]:
             return None
     except Exception:
         pass
-    s = str(value).strip()
+    s = str(value).strip().replace("\ufeff", "")
     if not s:
         return None
-    s = re.sub(r"^\*+|\*+$", "", s)
-    s = s.replace("`", "")
+    s = re.sub(r"^\*+|\*+$", "", s).replace("`", "")
     if re.fullmatch(r"\d{8}\.0", s):
         s = s[:8]
     digits = re.sub(r"\D", "", s)
@@ -147,10 +148,11 @@ def parse_float(value) -> Optional[float]:
         return None
 
 
-def find_first_col(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
-    lower_map = {str(c).lower(): c for c in df.columns}
+def find_first_col(df_or_row, candidates: Sequence[str]) -> Optional[str]:
+    cols = list(df_or_row.columns) if hasattr(df_or_row, "columns") else list(df_or_row.index)
+    lower_map = {str(c).lower(): c for c in cols}
     for c in candidates:
-        if c in df.columns:
+        if c in cols:
             return c
         lc = c.lower()
         if lc in lower_map:
@@ -162,7 +164,7 @@ def safe_read_csv(path: Path) -> Optional[pd.DataFrame]:
     try:
         if not path.exists() or path.stat().st_size == 0:
             return None
-        return pd.read_csv(path)
+        return pd.read_csv(path, encoding="utf-8-sig")
     except pd.errors.EmptyDataError:
         return None
     except Exception as exc:
@@ -170,120 +172,196 @@ def safe_read_csv(path: Path) -> Optional[pd.DataFrame]:
         return None
 
 
-def parse_report_meta(text: str) -> Dict[str, str]:
-    """
-    兼容：
-      signal_date: 20260430
-      - signal_date: **20260430**
-      - signal_date: `20260430`
-    """
+def parse_report_meta(text: str, report_path: Optional[Path] = None) -> Dict[str, str]:
+    """兼容 Markdown 列表与加粗写法：- signal_date: **20260430**"""
     meta: Dict[str, str] = {}
-    for key in ["signal_date", "exec_date", "requested_trade_date"]:
-        m = re.search(
-            rf"(?m)^\s*(?:[-*+]\s*)?{re.escape(key)}\s*:\s*(.+?)\s*$",
-            text,
-        )
+    for key in ["signal_date", "exec_date", "requested_trade_date", "target_trade_date"]:
+        m = re.search(rf"(?m)^\s*(?:[-*+]\s*)?{re.escape(key)}\s*:\s*(.+?)\s*$", text)
         if m:
             val = m.group(1).strip()
-            val = re.sub(r"^\*+|\*+$", "", val)
-            val = val.replace("`", "").strip()
-            meta[key] = val
+            val = re.sub(r"^\*+|\*+$", "", val).replace("`", "").strip()
+            nd = norm_date(val)
+            if nd:
+                meta[key] = nd
+
+    if "signal_date" not in meta:
+        m = CANDIDATES_IN_TEXT_PATTERN.search(text)
+        if m:
+            meta["signal_date"] = m.group(1)
+
+    if report_path is not None and "exec_date" not in meta:
+        m = REPORT_PATTERN.search(report_path.name)
+        if m:
+            meta["exec_date"] = m.group(1)
+
     return meta
 
 
-def list_report_files() -> List[Tuple[str, Path]]:
+def list_weight_files() -> List[Tuple[str, Path]]:
     files: List[Tuple[str, Path]] = []
-    if not REPORT_DIR.exists():
+    if not WEIGHTS_DIR.exists():
         return files
-    for p in sorted(REPORT_DIR.glob("decision_report_*.md")):
-        m = REPORT_PATTERN.search(p.name)
+    for p in sorted(WEIGHTS_DIR.glob("weights_*.csv")):
+        if p.name == "weights_latest.csv":
+            continue
+        m = WEIGHTS_PATTERN.search(p.name)
         if m:
             files.append((m.group(1), p))
     return files
 
 
-def candidate_path_for_signal_date(signal_date: str) -> Path:
-    return DECISION_DIR / f"decision_candidates_{signal_date}.csv"
+def report_path_for_exec_date(exec_date: str) -> Path:
+    return REPORT_DIR / f"decision_report_{exec_date}.md"
 
 
-def fallback_candidate_paths(report_date: str) -> List[Path]:
-    paths = [
-        DECISION_DIR / f"decision_candidates_{report_date}.csv",
-    ]
-    if DECISION_DIR.exists():
-        for p in sorted(DECISION_DIR.glob("decision_candidates_*.csv")):
-            if p not in paths:
-                paths.append(p)
-    return paths
+def resolve_signal_and_exec_date(weight_file_date: str, weights_df: pd.DataFrame) -> Tuple[str, str, str]:
+    """返回 signal_date, exec_date, note。"""
+    note_parts: List[str] = []
+
+    exec_date = None
+    if "exec_date" in weights_df.columns and not weights_df.empty:
+        exec_date = norm_date(weights_df["exec_date"].dropna().iloc[0]) if not weights_df["exec_date"].dropna().empty else None
+    exec_date = exec_date or weight_file_date
+
+    signal_date = None
+    report_path = report_path_for_exec_date(exec_date)
+    if report_path.exists():
+        text = report_path.read_text(encoding="utf-8", errors="ignore")
+        meta = parse_report_meta(text, report_path=report_path)
+        signal_date = norm_date(meta.get("signal_date")) or norm_date(meta.get("requested_trade_date"))
+        if not signal_date:
+            note_parts.append(f"report存在但未解析到signal_date:{report_path.name}")
+    else:
+        note_parts.append(f"缺report:{report_path.name}")
+
+    if not signal_date:
+        # 最后兜底：如果 weights 里有 trade_date / requested_trade_date 等字段，尝试读取。
+        for c in ["signal_date", "trade_date", "requested_trade_date", "target_trade_date"]:
+            if c in weights_df.columns and not weights_df.empty:
+                vals = weights_df[c].dropna()
+                if not vals.empty:
+                    signal_date = norm_date(vals.iloc[0])
+                    if signal_date:
+                        note_parts.append(f"signal_date由weights.{c}兜底")
+                        break
+
+    if not signal_date:
+        signal_date = weight_file_date
+        note_parts.append("signal_date兜底为weights文件日期，需人工复核D/T口径")
+
+    return signal_date, exec_date, ";".join(note_parts)
 
 
-def read_final_rank_top10_from_candidates(
-    report_date: str,
-    signal_date: str,
-    report_path: Path,
-    topn: int,
-) -> Tuple[pd.DataFrame, str]:
-    """
-    最终需求口径：
-    TopN Targets 为空时，取总表前10。
-    工程实现：总表 = decision_candidates_YYYYMMDD.csv 的最终排序结果。
-    优先用 signal_date 对应 candidates；不存在时再尝试 report_date 或其它候选文件。
-    """
-    paths = [candidate_path_for_signal_date(signal_date)]
-    for p in fallback_candidate_paths(report_date):
-        if p not in paths:
-            paths.append(p)
-
-    chosen: Optional[Path] = None
-    df: Optional[pd.DataFrame] = None
-
-    for p in paths:
-        tmp = safe_read_csv(p)
-        if tmp is not None and not tmp.empty:
-            chosen = p
-            df = tmp
-            break
-
-    if df is None or df.empty or chosen is None:
-        return pd.DataFrame(), f"missing candidates csv for signal_date={signal_date}, report_date={report_date}"
+def read_final_topn_from_weights(weight_file_date: str, weight_path: Path, topn: int) -> Tuple[pd.DataFrame, str, str, str]:
+    df = safe_read_csv(weight_path)
+    if df is None or df.empty:
+        return pd.DataFrame(), weight_file_date, weight_file_date, f"missing or empty weights csv: {weight_path}"
 
     code_col = find_first_col(df, CODE_COLUMNS)
     if not code_col:
-        return pd.DataFrame(), f"candidates missing ts_code/code column: {chosen}"
+        return pd.DataFrame(), weight_file_date, weight_file_date, f"weights missing ts_code/code column: {weight_path}"
 
-    rank_col = find_first_col(df, RANK_COLUMNS)
-    ev_col = find_first_col(df, EV_COLUMNS)
+    signal_date, exec_date, date_note = resolve_signal_and_exec_date(weight_file_date, df)
 
     work = df.copy()
+    for c in ["target_rank", "backup_rank", "weight", "ev_pred"]:
+        if c in work.columns:
+            work[c] = pd.to_numeric(work[c], errors="coerce")
 
-    if rank_col:
-        work["_final_rank_sort"] = pd.to_numeric(work[rank_col], errors="coerce")
-        work = work.sort_values("_final_rank_sort", ascending=True, na_position="last")
-    elif ev_col:
-        work["_ev_sort"] = pd.to_numeric(work[ev_col], errors="coerce")
-        work = work.sort_values("_ev_sort", ascending=False, na_position="last")
-    else:
-        work["_fallback_order"] = range(1, len(work) + 1)
+    selected_parts: List[pd.DataFrame] = []
 
-    top = work.head(topn).copy()
+    if "target_rank" in work.columns:
+        targets = work[work["target_rank"].notna()].copy()
+        if not targets.empty:
+            targets["_rank_sort"] = targets["target_rank"]
+            targets["_source_rank_type"] = "target_rank"
+            targets = targets.sort_values("_rank_sort", ascending=True, na_position="last")
+            selected_parts.append(targets)
 
-    if "TopN_rank" not in top.columns:
-        if rank_col:
-            top["TopN_rank"] = pd.to_numeric(top[rank_col], errors="coerce")
-            if top["TopN_rank"].isna().all():
-                top["TopN_rank"] = range(1, len(top) + 1)
+    selected_codes = set()
+    if selected_parts:
+        selected_codes = set(selected_parts[0][code_col].astype(str).str.strip())
+
+    if "backup_rank" in work.columns:
+        backups = work[work["backup_rank"].notna()].copy()
+        if selected_codes:
+            backups = backups[~backups[code_col].astype(str).str.strip().isin(selected_codes)]
+        if not backups.empty:
+            backups["_rank_sort"] = backups["backup_rank"]
+            backups["_source_rank_type"] = "backup_rank"
+            backups = backups.sort_values("_rank_sort", ascending=True, na_position="last")
+            selected_parts.append(backups)
+
+    if not selected_parts:
+        # 极端兜底：没有 target_rank / backup_rank，则按 ev_pred 降序。
+        ev_col = find_first_col(work, EV_COLUMNS)
+        if ev_col:
+            work["_rank_sort"] = -pd.to_numeric(work[ev_col], errors="coerce")
+            work["_source_rank_type"] = "ev_pred_fallback"
+            selected_parts.append(work.sort_values("_rank_sort", ascending=True, na_position="last"))
         else:
-            top["TopN_rank"] = range(1, len(top) + 1)
+            work["_rank_sort"] = range(1, len(work) + 1)
+            work["_source_rank_type"] = "file_order_fallback"
+            selected_parts.append(work)
 
-    top["validation_source"] = "final_rank_top10_from_candidates"
-    top["report_file"] = report_path.name
-    top["candidate_file"] = str(chosen.relative_to(REPO_ROOT))
+    top = pd.concat(selected_parts, ignore_index=True).head(topn).copy()
+    if top.empty:
+        return pd.DataFrame(), signal_date, exec_date, f"no rows selected from weights: {weight_path}"
 
-    for c in ["_final_rank_sort", "_ev_sort", "_fallback_order"]:
+    top["TopN_rank"] = range(1, len(top) + 1)
+    top["validation_source"] = VALIDATION_SOURCE
+    top["weights_file"] = str(weight_path.relative_to(REPO_ROOT))
+    top["weights_file_date"] = weight_file_date
+    top["source_rank_type"] = top.get("_source_rank_type", "")
+    top["source_rank_value"] = top.get("_rank_sort", "")
+
+    for c in ["_rank_sort", "_source_rank_type"]:
         if c in top.columns:
             top = top.drop(columns=[c])
 
-    return top, "ok"
+    return top, signal_date, exec_date, date_note or "ok"
+
+
+def candidate_path_candidates(signal_date: str, exec_date: str) -> List[Path]:
+    paths = [
+        DECISION_DIR / f"decision_candidates_{signal_date}.csv",
+        DECISION_DIR / f"decision_candidates_{exec_date}.csv",
+    ]
+    out: List[Path] = []
+    for p in paths:
+        if p not in out:
+            out.append(p)
+    return out
+
+
+def augment_ev_risk_from_candidates(top_df: pd.DataFrame, signal_date: str, exec_date: str) -> pd.DataFrame:
+    """排序源仍是 weights；这里只补充 RiskPenalty 等解释字段。"""
+    if top_df.empty:
+        return top_df
+    code_col = find_first_col(top_df, CODE_COLUMNS)
+    if not code_col:
+        return top_df
+
+    for p in candidate_path_candidates(signal_date, exec_date):
+        cdf = safe_read_csv(p)
+        if cdf is None or cdf.empty:
+            continue
+        c_code = find_first_col(cdf, CODE_COLUMNS)
+        if not c_code:
+            continue
+        keep_cols = [c_code]
+        for c in ["risk_penalty", "RiskPenalty", "risk_total_penalty", "ev_final", "ev_pred", "EV", "ev", "p_fill_pred", "e_ret_pred", "eret_pred", "cost_est"]:
+            if c in cdf.columns and c not in keep_cols:
+                keep_cols.append(c)
+        right = cdf[keep_cols].copy()
+        right["_merge_code"] = right[c_code].astype(str).str.strip()
+        left = top_df.copy()
+        left["_merge_code"] = left[code_col].astype(str).str.strip()
+        merged = left.merge(right.drop(columns=[c_code]), on="_merge_code", how="left", suffixes=("", "_candidate"))
+        merged = merged.drop(columns=["_merge_code"])
+        merged["candidate_aug_file"] = str(p.relative_to(REPO_ROOT))
+        return merged
+    return top_df
 
 
 def discover_csv_files() -> List[Path]:
@@ -293,44 +371,32 @@ def discover_csv_files() -> List[Path]:
         if not base.exists():
             continue
         for p in base.rglob("*.csv"):
+            normalized = str(p).replace("\\", "/")
+            if "outputs/validation" in normalized:
+                continue
+            if "/docs/weights/" in normalized:
+                continue
             rp = p.resolve()
             if rp in seen:
                 continue
             seen.add(rp)
-            normalized = str(p).replace("\\", "/")
-            if "outputs/validation" in normalized:
-                continue
             out.append(p)
     return out
 
 
 def first_float_from_row(row: pd.Series, cols: Sequence[str]) -> Optional[float]:
-    lower_map = {str(c).lower(): c for c in row.index}
-    for c in cols:
-        if c in row.index:
-            v = parse_float(row.get(c))
-            if v is not None:
-                return v
-        lc = c.lower()
-        if lc in lower_map:
-            v = parse_float(row.get(lower_map[lc]))
-            if v is not None:
-                return v
+    col = find_first_col(row, cols)
+    if col:
+        return parse_float(row.get(col))
     return None
 
 
 def first_str_from_row(row: pd.Series, cols: Sequence[str]) -> Optional[str]:
-    lower_map = {str(c).lower(): c for c in row.index}
-    for c in cols:
-        if c in row.index and pd.notna(row.get(c)):
-            s = str(row.get(c)).strip()
-            if s:
-                return s
-        lc = c.lower()
-        if lc in lower_map and pd.notna(row.get(lower_map[lc])):
-            s = str(row.get(lower_map[lc])).strip()
-            if s:
-                return s
+    col = find_first_col(row, cols)
+    if col and pd.notna(row.get(col)):
+        s = str(row.get(col)).strip()
+        if s:
+            return s
     return None
 
 
@@ -350,22 +416,16 @@ class MarketStore:
         if not ts_code or not trade_date:
             return None
 
-        ordered = sorted(
-            self.csv_files,
-            key=lambda p: (0 if trade_date in p.name else 1, len(str(p))),
-        )
-
+        ordered = sorted(self.csv_files, key=lambda p: (0 if trade_date in p.name else 1, len(str(p))))
         for path in ordered:
             df = self._load(path)
             if df is None or df.empty:
                 continue
-
             dcol = find_first_col(df, DATE_COLUMNS)
             ccol = find_first_col(df, CODE_COLUMNS)
             close_col = find_first_col(df, CLOSE_COLUMNS)
             if not dcol or not ccol or not close_col:
                 continue
-
             try:
                 dates = df[dcol].map(norm_date)
                 codes = df[ccol].astype(str).str.strip()
@@ -374,16 +434,13 @@ class MarketStore:
                     return df.loc[mask].iloc[0]
             except Exception:
                 continue
-
         return None
 
     def validate_stock(self, ts_code: str, d_date: str, t_date: str) -> MarketLookupResult:
         d_row = self.get_row(ts_code, d_date)
         t_row = self.get_row(ts_code, t_date)
 
-        d_close = None
-        if d_row is not None:
-            d_close = first_float_from_row(d_row, CLOSE_COLUMNS)
+        d_close = first_float_from_row(d_row, CLOSE_COLUMNS) if d_row is not None else None
 
         if t_row is None:
             return MarketLookupResult(
@@ -399,11 +456,7 @@ class MarketStore:
         name = first_str_from_row(t_row, NAME_COLUMNS)
 
         if t_close is None:
-            return MarketLookupResult(
-                status="缺行情",
-                note="找到 T 日记录但缺少 T_close",
-                d_close=d_close,
-            )
+            return MarketLookupResult(status="缺行情", note="找到 T 日记录但缺少 T_close", d_close=d_close)
 
         if d_close is None or d_close == 0:
             if pct is not None:
@@ -418,12 +471,7 @@ class MarketStore:
                     down_limit=down_limit,
                     name=name,
                 )
-            return MarketLookupResult(
-                status="缺行情",
-                note="缺 D_close，无法计算涨跌幅",
-                d_close=d_close,
-                t_close=t_close,
-            )
+            return MarketLookupResult(status="缺行情", note="缺 D_close，无法计算涨跌幅", d_close=d_close, t_close=t_close)
 
         ret = (t_close / d_close - 1.0) * 100.0
         return MarketLookupResult(
@@ -439,16 +487,10 @@ class MarketStore:
         )
 
 
-def detect_limit_hit(
-    ret: Optional[float],
-    close_price: Optional[float],
-    up_limit: Optional[float],
-    down_limit: Optional[float],
-) -> Tuple[bool, bool, str]:
+def detect_limit_hit(ret: Optional[float], close_price: Optional[float], up_limit: Optional[float], down_limit: Optional[float]) -> Tuple[bool, bool, str]:
     note = ""
     up_hit = False
     down_hit = False
-
     if close_price is not None and up_limit is not None and up_limit > 0:
         up_hit = close_price >= up_limit * 0.999
     elif ret is not None:
@@ -480,46 +522,26 @@ def classify_result(ret: Optional[float], up_limit_hit: bool, down_limit_hit: bo
     return "平盘"
 
 
-def build_rows_from_report(
-    report_date: str,
-    report_path: Path,
-    market: MarketStore,
-    topn: int,
-    start_date: Optional[str],
-    end_date: Optional[str],
-) -> List[Dict]:
-    text = report_path.read_text(encoding="utf-8", errors="ignore")
-    meta = parse_report_meta(text)
+def build_rows_from_weights(weight_file_date: str, weight_path: Path, market: MarketStore, topn: int, start_date: Optional[str], end_date: Optional[str]) -> List[Dict]:
+    top_df, signal_date, exec_date, read_note = read_final_topn_from_weights(weight_file_date, weight_path, topn)
 
-    signal_date = norm_date(meta.get("signal_date")) or report_date
-    exec_date = norm_date(meta.get("exec_date"))
-
-    if not exec_date:
-        print(f"[SKIP] {report_path.name}: 缺 exec_date")
+    if start_date and exec_date < start_date:
+        return []
+    if end_date and exec_date > end_date:
         return []
 
-    if start_date and signal_date < start_date:
-        return []
-    if end_date and signal_date > end_date:
-        return []
-
-    top_df, read_note = read_final_rank_top10_from_candidates(
-        report_date=report_date,
-        signal_date=signal_date,
-        report_path=report_path,
-        topn=topn,
-    )
     if top_df.empty:
-        print(f"[SKIP] {report_path.name}: {read_note}")
+        print(f"[SKIP] {weight_path.name}: {read_note}")
         return []
+
+    top_df = augment_ev_risk_from_candidates(top_df, signal_date, exec_date)
 
     code_col = find_first_col(top_df, CODE_COLUMNS)
     if not code_col:
-        print(f"[SKIP] {report_path.name}: final rank top10 缺 ts_code")
+        print(f"[SKIP] {weight_path.name}: selected weights topn 缺 ts_code")
         return []
 
     rows: List[Dict] = []
-
     for _, row in top_df.iterrows():
         ts_code = str(row.get(code_col, "")).strip()
         if not ts_code:
@@ -527,16 +549,12 @@ def build_rows_from_report(
 
         lookup = market.validate_stock(ts_code, signal_date, exec_date)
         ret = lookup.t_return_pct
-        up_hit, down_hit, limit_note = detect_limit_hit(
-            ret,
-            lookup.t_close,
-            lookup.up_limit,
-            lookup.down_limit,
-        )
+        up_hit, down_hit, limit_note = detect_limit_hit(ret, lookup.t_close, lookup.up_limit, lookup.down_limit)
         result = classify_result(ret, up_hit, down_hit)
 
         base = row.to_dict()
         name = first_str_from_row(row, NAME_COLUMNS) or lookup.name or ""
+        note_parts = [lookup.note, limit_note, read_note if read_note != "ok" else "", f"source={VALIDATION_SOURCE}"]
 
         base.update(
             {
@@ -554,83 +572,71 @@ def build_rows_from_report(
                 "T_limit_hit": bool(up_hit),
                 "T_down_limit_hit": bool(down_hit),
                 "validation_status": lookup.status,
-                "validation_note": ";".join(
-                    x
-                    for x in [
-                        lookup.note,
-                        limit_note,
-                        "source=final_rank_top10_from_candidates",
-                    ]
-                    if x
-                ),
+                "validation_note": ";".join(x for x in note_parts if x),
             }
         )
         rows.append(base)
 
-    print(
-        f"[OK] report={report_path.name} D={signal_date} T={exec_date} "
-        f"rows={len(rows)} source=final_rank_top10_from_candidates"
-    )
+    print(f"[OK] weights={weight_path.name} D={signal_date} T={exec_date} rows={len(rows)} source={VALIDATION_SOURCE}")
     return rows
 
 
 def summarize(history: pd.DataFrame) -> Dict:
-    verified = (
-        history[history.get("validation_status", "") == "已验证"].copy()
-        if not history.empty
-        else pd.DataFrame()
-    )
+    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
     total = int(len(verified))
-
+    base = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "source": SOURCE_LABEL,
+    }
     if total == 0:
-        return {
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "verified_samples": 0,
-            "up_count": 0,
-            "up_rate": None,
-            "limit_up_count": 0,
-            "limit_up_rate": None,
-            "down_count": 0,
-            "down_rate": None,
-            "flat_count": 0,
-            "flat_rate": None,
-            "mean_return_pct": None,
-            "median_return_pct": None,
-            "max_return_pct": None,
-            "min_return_pct": None,
-            "source": "data/decision/decision_candidates_YYYYMMDD.csv::final_rank_top10",
-            "conclusion": "暂无已验证样本；若 history 有行但 verified=0，请检查 T 日行情是否存在。",
-        }
+        base.update(
+            {
+                "verified_samples": 0,
+                "up_count": 0,
+                "up_rate": None,
+                "limit_up_count": 0,
+                "limit_up_rate": None,
+                "down_count": 0,
+                "down_rate": None,
+                "flat_count": 0,
+                "flat_rate": None,
+                "mean_return_pct": None,
+                "median_return_pct": None,
+                "max_return_pct": None,
+                "min_return_pct": None,
+                "conclusion": "暂无已验证样本；若 history 有行但 verified=0，请检查 T 日行情是否存在。",
+            }
+        )
+        return base
 
     ret = pd.to_numeric(verified["T_return_pct"], errors="coerce")
     up_count = int((ret > 0.05).sum())
     down_count = int((ret < -0.05).sum())
     flat_count = int(((ret >= -0.05) & (ret <= 0.05)).sum())
-    limit_up_count = int(
-        verified["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum()
-    )
+    limit_up_count = int(verified["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum())
 
     def rate(x: int) -> float:
         return round(x / total * 100.0, 4) if total else None
 
-    return {
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "verified_samples": total,
-        "up_count": up_count,
-        "up_rate": rate(up_count),
-        "limit_up_count": limit_up_count,
-        "limit_up_rate": rate(limit_up_count),
-        "down_count": down_count,
-        "down_rate": rate(down_count),
-        "flat_count": flat_count,
-        "flat_rate": rate(flat_count),
-        "mean_return_pct": round(float(ret.mean()), 4) if ret.notna().any() else None,
-        "median_return_pct": round(float(ret.median()), 4) if ret.notna().any() else None,
-        "max_return_pct": round(float(ret.max()), 4) if ret.notna().any() else None,
-        "min_return_pct": round(float(ret.min()), 4) if ret.notna().any() else None,
-        "source": "data/decision/decision_candidates_YYYYMMDD.csv::final_rank_top10",
-        "conclusion": "已生成 final_rank_top10 后验验证统计。",
-    }
+    base.update(
+        {
+            "verified_samples": total,
+            "up_count": up_count,
+            "up_rate": rate(up_count),
+            "limit_up_count": limit_up_count,
+            "limit_up_rate": rate(limit_up_count),
+            "down_count": down_count,
+            "down_rate": rate(down_count),
+            "flat_count": flat_count,
+            "flat_rate": rate(flat_count),
+            "mean_return_pct": round(float(ret.mean()), 4) if ret.notna().any() else None,
+            "median_return_pct": round(float(ret.median()), 4) if ret.notna().any() else None,
+            "max_return_pct": round(float(ret.max()), 4) if ret.notna().any() else None,
+            "min_return_pct": round(float(ret.min()), 4) if ret.notna().any() else None,
+            "conclusion": "已生成 weights 最终排序 TopN 后验验证统计。",
+        }
+    )
+    return base
 
 
 def fmt_pct(v) -> str:
@@ -645,25 +651,10 @@ def fmt_pct(v) -> str:
 
 
 def group_by_date(history: pd.DataFrame) -> pd.DataFrame:
-    verified = (
-        history[history.get("validation_status", "") == "已验证"].copy()
-        if not history.empty
-        else pd.DataFrame()
-    )
-    cols = [
-        "D_trade_date",
-        "T_trade_date",
-        "TopN数量",
-        "上涨数",
-        "上涨率",
-        "涨停数",
-        "涨停率",
-        "平均涨跌幅",
-        "中位涨跌幅",
-    ]
+    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
+    cols = ["D_trade_date", "T_trade_date", "TopN数量", "上涨数", "上涨率", "涨停数", "涨停率", "平均涨跌幅", "中位涨跌幅"]
     if verified.empty:
         return pd.DataFrame(columns=cols)
-
     verified["ret_num"] = pd.to_numeric(verified["T_return_pct"], errors="coerce")
     rows = []
     for (d, t), g in verified.groupby(["D_trade_date", "T_trade_date"], dropna=False):
@@ -683,21 +674,13 @@ def group_by_date(history: pd.DataFrame) -> pd.DataFrame:
                 "中位涨跌幅": round(float(g["ret_num"].median()), 4) if n else None,
             }
         )
-    return pd.DataFrame(rows, columns=cols).sort_values("D_trade_date")
+    return pd.DataFrame(rows, columns=cols).sort_values(["D_trade_date", "T_trade_date"])
 
 
 def metrics_row(label: str, g: pd.DataFrame) -> Dict:
     n = len(g)
     if n == 0:
-        return {
-            "排名层级": label,
-            "样本数": 0,
-            "上涨率": None,
-            "涨停率": None,
-            "平均涨跌幅": None,
-            "中位涨跌幅": None,
-        }
-
+        return {"排名层级": label, "样本数": 0, "上涨率": None, "涨停率": None, "平均涨跌幅": None, "中位涨跌幅": None}
     ret = pd.to_numeric(g["T_return_pct"], errors="coerce")
     up = int((ret > 0.05).sum())
     limit_up = int(g["T_limit_hit"].astype(str).str.lower().isin(["true", "1"]).sum())
@@ -712,15 +695,10 @@ def metrics_row(label: str, g: pd.DataFrame) -> Dict:
 
 
 def group_by_rank(history: pd.DataFrame) -> pd.DataFrame:
-    verified = (
-        history[history.get("validation_status", "") == "已验证"].copy()
-        if not history.empty
-        else pd.DataFrame()
-    )
+    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
     cols = ["排名层级", "样本数", "上涨率", "涨停率", "平均涨跌幅", "中位涨跌幅"]
     if verified.empty or "TopN_rank" not in verified.columns:
         return pd.DataFrame(columns=cols)
-
     verified["rank_num"] = pd.to_numeric(verified["TopN_rank"], errors="coerce")
     buckets = [
         ("Top1", lambda x: x == 1),
@@ -730,48 +708,25 @@ def group_by_rank(history: pd.DataFrame) -> pd.DataFrame:
         ("Top1-5", lambda x: (x >= 1) & (x <= 5)),
         ("Top6-10", lambda x: (x >= 6) & (x <= 10)),
     ]
-
-    rows = []
-    for label, func in buckets:
-        rows.append(metrics_row(label, verified[func(verified["rank_num"])]))
-    return pd.DataFrame(rows, columns=cols)
-
-
-def range_label(group: str, q1: float, q2: float) -> str:
-    if group.startswith("低"):
-        return f"≤ {q1:.6g}"
-    if group.startswith("中"):
-        return f"{q1:.6g} ~ {q2:.6g}"
-    return f"> {q2:.6g}"
+    return pd.DataFrame([metrics_row(label, verified[func(verified["rank_num"])]) for label, func in buckets], columns=cols)
 
 
 def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
-    verified = (
-        history[history.get("validation_status", "") == "已验证"].copy()
-        if not history.empty
-        else pd.DataFrame()
-    )
-    cols = [
-        "组合",
-        "EV范围",
-        "RiskPenalty范围",
-        "样本数",
-        "上涨率",
-        "涨停率",
-        "平均涨跌幅",
-        "中位涨跌幅",
-        "结论",
-    ]
+    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
+    cols = ["组合", "EV范围", "RiskPenalty范围", "样本数", "上涨率", "涨停率", "平均涨跌幅", "中位涨跌幅", "结论"]
     if verified.empty:
         return pd.DataFrame(columns=cols)
 
     ev_col = find_first_col(verified, EV_COLUMNS)
     risk_col = find_first_col(verified, RISK_COLUMNS)
-    if not ev_col or not risk_col:
+    if not ev_col:
         return pd.DataFrame(columns=cols)
 
     verified["_ev_num"] = pd.to_numeric(verified[ev_col], errors="coerce")
-    verified["_risk_num"] = pd.to_numeric(verified[risk_col], errors="coerce")
+    if risk_col:
+        verified["_risk_num"] = pd.to_numeric(verified[risk_col], errors="coerce")
+    else:
+        verified["_risk_num"] = 0.0
     verified = verified[verified["_ev_num"].notna() & verified["_risk_num"].notna()].copy()
     if verified.empty:
         return pd.DataFrame(columns=cols)
@@ -781,22 +736,22 @@ def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
     risk_q1 = float(verified["_risk_num"].quantile(1 / 3))
     risk_q2 = float(verified["_risk_num"].quantile(2 / 3))
 
-    def ev_group(v: float) -> str:
-        if v <= ev_q1:
-            return "低EV"
-        if v <= ev_q2:
-            return "中EV"
-        return "高EV"
+    def bucket(v: float, q1: float, q2: float, prefix: str) -> str:
+        if v <= q1:
+            return f"低{prefix}"
+        if v <= q2:
+            return f"中{prefix}"
+        return f"高{prefix}"
 
-    def risk_group(v: float) -> str:
-        if v <= risk_q1:
-            return "低Risk"
-        if v <= risk_q2:
-            return "中Risk"
-        return "高Risk"
+    def range_label(group: str, q1: float, q2: float) -> str:
+        if group.startswith("低"):
+            return f"≤ {q1:.6g}"
+        if group.startswith("中"):
+            return f"{q1:.6g} ~ {q2:.6g}"
+        return f"> {q2:.6g}"
 
-    verified["_ev_group"] = verified["_ev_num"].map(ev_group)
-    verified["_risk_group"] = verified["_risk_num"].map(risk_group)
+    verified["_ev_group"] = verified["_ev_num"].map(lambda v: bucket(v, ev_q1, ev_q2, "EV"))
+    verified["_risk_group"] = verified["_risk_num"].map(lambda v: bucket(v, risk_q1, risk_q2, "Risk"))
 
     conclusion_map = {
         "高EV + 低Risk": "最优候选池",
@@ -836,11 +791,7 @@ def group_by_ev_risk(history: pd.DataFrame) -> pd.DataFrame:
 
 
 def correlation_summary(history: pd.DataFrame) -> Dict:
-    verified = (
-        history[history.get("validation_status", "") == "已验证"].copy()
-        if not history.empty
-        else pd.DataFrame()
-    )
+    verified = history[history.get("validation_status", "") == "已验证"].copy() if not history.empty else pd.DataFrame()
     out = {
         "corr_EV_return": None,
         "corr_RiskPenalty_return": None,
@@ -848,41 +799,44 @@ def correlation_summary(history: pd.DataFrame) -> Dict:
         "corr_RiskPenalty_down": None,
         "sample_note": "样本不足",
     }
-
     if verified.empty or len(verified) < 3:
         return out
 
     ev_col = find_first_col(verified, EV_COLUMNS)
     risk_col = find_first_col(verified, RISK_COLUMNS)
-    if not ev_col or not risk_col:
-        out["sample_note"] = "缺 EV 或 RiskPenalty 字段"
+    if not ev_col:
+        out["sample_note"] = "缺 EV/ev_pred 字段"
         return out
 
     verified["_ev_num"] = pd.to_numeric(verified[ev_col], errors="coerce")
-    verified["_risk_num"] = pd.to_numeric(verified[risk_col], errors="coerce")
+    if risk_col:
+        verified["_risk_num"] = pd.to_numeric(verified[risk_col], errors="coerce")
+    else:
+        verified["_risk_num"] = pd.NA
     verified["_ret_num"] = pd.to_numeric(verified["T_return_pct"], errors="coerce")
     verified["_up_flag"] = (verified["_ret_num"] > 0.05).astype(int)
     verified["_down_flag"] = (verified["_ret_num"] < -0.05).astype(int)
 
-    use = verified[["_ev_num", "_risk_num", "_ret_num", "_up_flag", "_down_flag"]].dropna()
-    if len(use) < 3:
-        return out
+    use_ev = verified[["_ev_num", "_ret_num", "_up_flag"]].dropna()
+    use_risk = verified[["_risk_num", "_ret_num", "_down_flag"]].dropna()
 
-    def corr(a: str, b: str) -> Optional[float]:
+    def corr(df: pd.DataFrame, a: str, b: str) -> Optional[float]:
         try:
-            v = use[a].corr(use[b])
+            if len(df) < 3:
+                return None
+            v = df[a].corr(df[b])
             if pd.isna(v):
                 return None
             return round(float(v), 6)
         except Exception:
             return None
 
-    out["corr_EV_return"] = corr("_ev_num", "_ret_num")
-    out["corr_RiskPenalty_return"] = corr("_risk_num", "_ret_num")
-    out["corr_EV_up"] = corr("_ev_num", "_up_flag")
-    out["corr_RiskPenalty_down"] = corr("_risk_num", "_down_flag")
+    out["corr_EV_return"] = corr(use_ev, "_ev_num", "_ret_num")
+    out["corr_EV_up"] = corr(use_ev, "_ev_num", "_up_flag")
+    out["corr_RiskPenalty_return"] = corr(use_risk, "_risk_num", "_ret_num")
+    out["corr_RiskPenalty_down"] = corr(use_risk, "_risk_num", "_down_flag")
 
-    n = len(use)
+    n = len(use_ev)
     if n < 30:
         out["sample_note"] = "样本<30，只展示，不下结论"
     elif n < 100:
@@ -891,12 +845,14 @@ def correlation_summary(history: pd.DataFrame) -> Dict:
         out["sample_note"] = "样本100-299，可阶段性评估"
     else:
         out["sample_note"] = "样本>=300，可作为较稳定评估依据"
+    if not risk_col:
+        out["sample_note"] += "；RiskPenalty 需从 candidates 补充，若为空则只验证 EV"
     return out
 
 
 def write_summary_md(summary: Dict, corr: Dict) -> None:
     lines = [
-        "# TopN Targets / Final Rank Top10 验证统计摘要",
+        "# TopN Targets / Final Weights Top10 验证统计摘要",
         "",
         f"- 数据源：{summary.get('source', '')}",
         f"- 生成时间：{summary.get('generated_at', '')}",
@@ -930,39 +886,17 @@ def write_summary_md(summary: Dict, corr: Dict) -> None:
 
 def df_to_html(df: pd.DataFrame, max_rows: int = 50) -> str:
     if df is None or df.empty:
-        return "<p class='note'>暂无数据</p>"
-
+        return "<p>暂无数据</p>"
     show = df.head(max_rows).copy()
-
     priority = [
-        "TopN_rank",
-        "rank",
-        "D_trade_date_fmt",
-        "T_trade_date_fmt",
-        "validation_pair",
-        "ts_code",
-        "ts_code_norm",
-        "name",
-        "name_norm",
-        "weight",
-        "EV",
-        "P_fill",
-        "E_ret",
-        "Cost",
-        "RiskPenalty",
-        "D_close",
-        "T_close",
-        "T_return_pct",
-        "T_result",
-        "T_limit_hit",
-        "validation_status",
-        "validation_note",
-        "validation_source",
-        "candidate_file",
-        "report_file",
+        "TopN_rank", "source_rank_type", "source_rank_value", "target_rank", "backup_rank", "weight",
+        "D_trade_date_fmt", "T_trade_date_fmt", "validation_pair",
+        "ts_code", "ts_code_norm", "name", "name_norm", "ev_pred", "ev_final", "risk_penalty", "RiskPenalty",
+        "D_close", "T_close", "T_return_pct", "T_result", "T_limit_hit", "validation_status", "validation_note",
+        "validation_source", "weights_file", "candidate_aug_file",
     ]
     cols = [c for c in priority if c in show.columns] + [c for c in show.columns if c not in priority]
-    show = show[cols[:55]]
+    show = show[cols[:60]]
 
     def fmt_cell(col: str, val) -> str:
         if pd.isna(val):
@@ -970,9 +904,8 @@ def df_to_html(df: pd.DataFrame, max_rows: int = 50) -> str:
         if col == "T_return_pct":
             try:
                 f = float(val)
-                cls = "up" if f > 0.05 else "down" if f < -0.05 else "flat"
                 sign = "+" if f > 0 else ""
-                return f"<span class='{cls}'>{sign}{f:.2f}%</span>"
+                return f"{sign}{f:.2f}%"
             except Exception:
                 return html.escape(str(val))
         if col in {"上涨率", "涨停率", "下跌率", "平盘率", "平均涨跌幅", "中位涨跌幅"}:
@@ -985,23 +918,11 @@ def df_to_html(df: pd.DataFrame, max_rows: int = 50) -> str:
     header = "".join(f"<th>{html.escape(str(c))}</th>" for c in show.columns)
     rows = []
     for _, r in show.iterrows():
-        rows.append(
-            "<tr>"
-            + "".join(f"<td>{fmt_cell(c, r[c])}</td>" for c in show.columns)
-            + "</tr>"
-        )
-    return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        rows.append("<tr>" + "".join(f"<td>{fmt_cell(c, r[c])}</td>" for c in show.columns) + "</tr>")
+    return f"<div class='table-wrap'><table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
 
 
-def render_html(
-    summary: Dict,
-    corr: Dict,
-    latest: pd.DataFrame,
-    by_date: pd.DataFrame,
-    by_rank: pd.DataFrame,
-    by_ev_risk: pd.DataFrame,
-    history: pd.DataFrame,
-) -> None:
+def render_html(summary: Dict, corr: Dict, latest: pd.DataFrame, by_date: pd.DataFrame, by_rank: pd.DataFrame, by_ev_risk: pd.DataFrame, history: pd.DataFrame) -> None:
     latest_title = ""
     if not latest.empty and "D_trade_date_fmt" in latest.columns and "T_trade_date_fmt" in latest.columns:
         latest_title = f"D：{latest['D_trade_date_fmt'].iloc[0]} → T：{latest['T_trade_date_fmt'].iloc[0]}"
@@ -1009,179 +930,134 @@ def render_html(
     html_text = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TopN Targets / Final Rank Top10 验证系统</title>
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #24292f; }}
-    h1, h2 {{ border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }}
-    .meta {{ color: #57606a; margin-bottom: 16px; }}
-    .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }}
-    .card {{ border: 1px solid #d0d7de; border-radius: 8px; padding: 12px; background: #f6f8fa; }}
-    .card b {{ display: block; font-size: 20px; margin-top: 4px; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 12px 0 28px 0; font-size: 13px; }}
-    th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; text-align: left; white-space: nowrap; }}
-    th {{ background: #f6f8fa; position: sticky; top: 0; }}
-    .table-wrap {{ overflow-x: auto; }}
-    .up {{ color: #cf222e; font-weight: 600; }}
-    .down {{ color: #1a7f37; font-weight: 600; }}
-    .flat {{ color: #57606a; }}
-    .note {{ color: #57606a; font-size: 13px; }}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>top10-decision 最终 weights Top10 验证系统</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 24px; color: #24292f; }}
+h1 {{ font-size: 32px; margin-bottom: 8px; }}
+h2 {{ margin-top: 28px; border-bottom: 1px solid #d0d7de; padding-bottom: 8px; }}
+.meta {{ color: #57606a; font-weight: 600; }}
+.cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 20px 0; }}
+.card {{ border: 1px solid #d0d7de; border-radius: 8px; padding: 14px; background: #f6f8fa; }}
+.card .label {{ color:#57606a; font-weight:700; }}
+.card .value {{ font-size:24px; font-weight:800; margin-top:6px; }}
+.table-wrap {{ overflow-x:auto; margin-top: 12px; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
+th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; white-space: nowrap; }}
+th {{ background: #f6f8fa; }}
+.note {{ color:#57606a; line-height: 1.6; }}
+</style>
 </head>
 <body>
-  <h1>TopN Targets / Final Rank Top10 验证系统</h1>
-  <div class="meta">数据源：{html.escape(str(summary.get("source", "")))}；生成时间：{html.escape(str(summary.get("generated_at", "")))}；最新验证：{html.escape(latest_title)}</div>
+<h1>top10-decision 最终 weights Top10 验证系统</h1>
+<p class="meta">数据源：{html.escape(str(summary.get('source', '')))}；生成时间：{html.escape(str(summary.get('generated_at', '')))}；最新验证：{html.escape(latest_title)}</p>
 
-  <h2>累计统计</h2>
-  <div class="cards">
-    <div class="card">历史累计样本总数<b>{summary.get("verified_samples", 0)}</b></div>
-    <div class="card">上涨率<b>{fmt_pct(summary.get("up_rate"))}</b></div>
-    <div class="card">涨停率<b>{fmt_pct(summary.get("limit_up_rate"))}</b></div>
-    <div class="card">下跌率<b>{fmt_pct(summary.get("down_rate"))}</b></div>
-    <div class="card">平盘率<b>{fmt_pct(summary.get("flat_rate"))}</b></div>
-    <div class="card">平均涨跌幅<b>{fmt_pct(summary.get("mean_return_pct"))}</b></div>
-    <div class="card">中位涨跌幅<b>{fmt_pct(summary.get("median_return_pct"))}</b></div>
-  </div>
+<h2>累计统计</h2>
+<div class="cards">
+  <div class="card"><div class="label">历史累计样本总数</div><div class="value">{summary.get('verified_samples', 0)}</div></div>
+  <div class="card"><div class="label">上涨率</div><div class="value">{fmt_pct(summary.get('up_rate'))}</div></div>
+  <div class="card"><div class="label">涨停率</div><div class="value">{fmt_pct(summary.get('limit_up_rate'))}</div></div>
+  <div class="card"><div class="label">下跌率</div><div class="value">{fmt_pct(summary.get('down_rate'))}</div></div>
+  <div class="card"><div class="label">平盘率</div><div class="value">{fmt_pct(summary.get('flat_rate'))}</div></div>
+  <div class="card"><div class="label">平均涨跌幅</div><div class="value">{fmt_pct(summary.get('mean_return_pct'))}</div></div>
+  <div class="card"><div class="label">中位涨跌幅</div><div class="value">{fmt_pct(summary.get('median_return_pct'))}</div></div>
+</div>
 
-  <h2>EV / RiskPenalty 相关性</h2>
-  <div class="cards">
-    <div class="card">EV 与收益相关<b>{corr.get("corr_EV_return")}</b></div>
-    <div class="card">Risk 与收益相关<b>{corr.get("corr_RiskPenalty_return")}</b></div>
-    <div class="card">EV 与上涨相关<b>{corr.get("corr_EV_up")}</b></div>
-    <div class="card">Risk 与下跌相关<b>{corr.get("corr_RiskPenalty_down")}</b></div>
-  </div>
-  <p class="note">{html.escape(str(corr.get("sample_note", "")))}</p>
+<h2>最新一期最终 weights Top10 验证明细</h2>
+<p class="note">验证名单来自 docs/weights/weights_YYYYMMDD.csv：先取 target_rank，不足 TopN 时用 backup_rank 补足；不再读取 decision_report 展示表，也不再用 decision_candidates 的 rank 作为主排序。</p>
+{df_to_html(latest, max_rows=20)}
 
-  <h2>最新一期验证明细</h2>
-  <div class="note">验证名单来自 data/decision/decision_candidates_YYYYMMDD.csv 的最终总排序前10；当 TopN Targets 展示表为空时，该口径等价于“总表前10”。</div>
-  <div class="table-wrap">{df_to_html(latest, max_rows=30)}</div>
+<h2>按 D/T 日统计</h2>
+{df_to_html(by_date, max_rows=80)}
 
-  <h2>按 D 日统计</h2>
-  <div class="table-wrap">{df_to_html(by_date, max_rows=150)}</div>
+<h2>TopN 排名有效性统计</h2>
+{df_to_html(by_rank, max_rows=20)}
 
-  <h2>TopN 排名有效性统计</h2>
-  <div class="table-wrap">{df_to_html(by_rank, max_rows=20)}</div>
+<h2>EV / RiskPenalty 相关性</h2>
+<div class="cards">
+  <div class="card"><div class="label">corr_EV_return</div><div class="value">{corr.get('corr_EV_return')}</div></div>
+  <div class="card"><div class="label">corr_RiskPenalty_return</div><div class="value">{corr.get('corr_RiskPenalty_return')}</div></div>
+  <div class="card"><div class="label">corr_EV_up</div><div class="value">{corr.get('corr_EV_up')}</div></div>
+  <div class="card"><div class="label">corr_RiskPenalty_down</div><div class="value">{corr.get('corr_RiskPenalty_down')}</div></div>
+</div>
+<p class="note">样本说明：{html.escape(str(corr.get('sample_note', '')))}</p>
+{df_to_html(by_ev_risk, max_rows=20)}
 
-  <h2>EV × RiskPenalty 分层统计</h2>
-  <div class="table-wrap">{df_to_html(by_ev_risk, max_rows=30)}</div>
-
-  <h2>历史明细最近 100 行</h2>
-  <div class="table-wrap">{df_to_html(history.tail(100), max_rows=100)}</div>
+<h2>历史明细预览</h2>
+{df_to_html(history, max_rows=100)}
 </body>
 </html>
 """
     HTML_PATH.write_text(html_text, encoding="utf-8")
 
 
-def save_outputs(history: pd.DataFrame) -> None:
+def write_outputs(history: pd.DataFrame, topn: int) -> None:
     ensure_dirs()
-
     if history.empty:
         history.to_csv(HISTORY_CSV, index=False, encoding="utf-8-sig")
-        pd.DataFrame().to_csv(LATEST_CSV, index=False, encoding="utf-8-sig")
-        summary = summarize(history)
-        corr = correlation_summary(history)
-        SUMMARY_JSON.write_text(
-            json.dumps({**summary, "correlation": corr}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        write_summary_md(summary, corr)
-        render_html(summary, corr, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), history)
-        return
-
-    if "TopN_rank" in history.columns:
-        history["_rank_sort"] = pd.to_numeric(history["TopN_rank"], errors="coerce")
-        history = history.sort_values(["D_trade_date", "_rank_sort"], na_position="last").drop(columns=["_rank_sort"])
+        latest = pd.DataFrame()
     else:
-        history = history.sort_values(["D_trade_date"])
-
-    history.to_csv(HISTORY_CSV, index=False, encoding="utf-8-sig")
-
-    max_d = history["D_trade_date"].dropna().astype(str).max() if "D_trade_date" in history.columns else None
-    latest = history[history["D_trade_date"].astype(str) == max_d].copy() if max_d else pd.DataFrame()
-    latest.to_csv(LATEST_CSV, index=False, encoding="utf-8-sig")
+        history = history.sort_values(["T_trade_date", "TopN_rank"], ascending=[True, True])
+        history.to_csv(HISTORY_CSV, index=False, encoding="utf-8-sig")
+        latest_t = history["T_trade_date"].dropna().max()
+        latest = history[history["T_trade_date"] == latest_t].copy()
+        latest.to_csv(LATEST_CSV, index=False, encoding="utf-8-sig")
 
     summary = summarize(history)
     corr = correlation_summary(history)
+    payload = dict(summary)
+    payload.update(corr)
+    SUMMARY_JSON.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_summary_md(summary, corr)
+
     by_date = group_by_date(history)
     by_rank = group_by_rank(history)
     by_ev_risk = group_by_ev_risk(history)
 
-    SUMMARY_JSON.write_text(
-        json.dumps({**summary, "correlation": corr}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    write_summary_md(summary, corr)
     by_date.to_csv(BY_DATE_CSV, index=False, encoding="utf-8-sig")
     by_rank.to_csv(BY_RANK_CSV, index=False, encoding="utf-8-sig")
     by_ev_risk.to_csv(BY_EV_RISK_CSV, index=False, encoding="utf-8-sig")
     render_html(summary, corr, latest, by_date, by_rank, by_ev_risk, history)
 
 
-def run_backfill(
-    start_date: Optional[str],
-    end_date: Optional[str],
-    topn: int,
-    force: bool,
-) -> pd.DataFrame:
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Backfill TopN validation from docs/weights final ranking.")
+    p.add_argument("--topn", type=int, default=10)
+    p.add_argument("--start-date", type=str, default=None, help="按 T/exec_date 过滤，YYYYMMDD")
+    p.add_argument("--end-date", type=str, default=None, help="按 T/exec_date 过滤，YYYYMMDD")
+    return p.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
     ensure_dirs()
+    topn = int(args.topn or 10)
+    start_date = norm_date(args.start_date)
+    end_date = norm_date(args.end_date)
 
-    start_date = norm_date(start_date) if start_date else None
-    end_date = norm_date(end_date) if end_date else None
-
-    reports = list_report_files()
-    if not reports:
-        print(f"[WARN] 未找到报告文件: {REPORT_DIR}/decision_report_YYYYMMDD.md")
-        history = pd.DataFrame()
-        save_outputs(history)
-        return history
+    weight_files = list_weight_files()
+    if not weight_files:
+        print(f"[WARN] no weights files found in {WEIGHTS_DIR}")
+        write_outputs(pd.DataFrame(), topn=topn)
+        return 0
 
     market = MarketStore(discover_csv_files())
+    all_rows: List[Dict] = []
+    for weight_file_date, weight_path in weight_files:
+        rows = build_rows_from_weights(weight_file_date, weight_path, market, topn, start_date, end_date)
+        all_rows.extend(rows)
 
-    rows: List[Dict] = []
-    for report_date, path in reports:
-        rows.extend(
-            build_rows_from_report(
-                report_date=report_date,
-                report_path=path,
-                market=market,
-                topn=topn,
-                start_date=start_date,
-                end_date=end_date,
-            )
-        )
+    history = pd.DataFrame(all_rows)
+    write_outputs(history, topn=topn)
 
-    history = pd.DataFrame(rows)
-    save_outputs(history)
-
-    verified_n = 0
+    verified_rows = 0
     if not history.empty and "validation_status" in history.columns:
-        verified_n = int((history["validation_status"] == "已验证").sum())
-
-    print(f"[DONE] source=final_rank_top10_from_candidates history_rows={len(history)} verified_rows={verified_n}")
-    print(f"[DONE] wrote: {HISTORY_CSV}")
-    print(f"[DONE] wrote: {HTML_PATH}")
-    return history
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Validate top10-decision TopN Targets; if empty, use final rank top10 from decision_candidates."
-    )
-    parser.add_argument("--start-date", default=None, help="起始 D 日，格式 YYYYMMDD 或 YYYY-MM-DD")
-    parser.add_argument("--end-date", default=None, help="结束 D 日，格式 YYYYMMDD 或 YYYY-MM-DD")
-    parser.add_argument("--topn", type=int, default=10, help="默认 TopN 数量")
-    parser.add_argument("--force", action="store_true", help="保留参数：当前实现每次重算历史输出，天然幂等")
-    args = parser.parse_args()
-
-    run_backfill(
-        start_date=args.start_date,
-        end_date=args.end_date,
-        topn=args.topn,
-        force=args.force,
-    )
+        verified_rows = int((history["validation_status"] == "已验证").sum())
+    print(f"[DONE] source={VALIDATION_SOURCE} history_rows={len(history)} verified_rows={verified_rows}")
+    print(f"[DONE] outputs: {HISTORY_CSV}, {SUMMARY_JSON}, {HTML_PATH}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
