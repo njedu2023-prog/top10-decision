@@ -1,7 +1,7 @@
 {
   "trade_date": "20260429",
   "exec_date": "20260430",
-  "target_date": "nan",
+  "target_date": "20260506",
   "rows": 102,
   "sample_maturity": {
     "PFILL_READY": 102
