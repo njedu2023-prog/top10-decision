@@ -5,8 +5,8 @@
 resolve_sample_maturity.py
 
 职责：
-- 将“样本成熟度 / 训练日期机制”独立成正式基础设施
-- 给定 current_run_date、raw 快照目录、候选 trade_date
+- 将“样本成熟度 / 训练日期机制”独立成正式基础设施。
+- 给定 current_run_date、raw 快照目录、候选 trade_date。
 - 输出每个 trade_date 的：
   trade_date
   exec_date
@@ -16,20 +16,28 @@ resolve_sample_maturity.py
   ERET_READY
   FULLY_READY
 
-核心规则（严格锚定 Core Algorithm Spec）：
-- T 日先预测未来
-- T 日只训练今天刚成熟的过去样本
-- P_fill / PredOpen_T+1：用 T 日真值训练 T-1 对 T 的预测
-- E_ret / PredClose_T+2 / PremiumRet：用 T 日真值训练 T-2 对 T 的预测
-- T 日训练出的新模型，只能从 T+1 生效
-- 当天若训练条件不足，允许 skip，但不得打死主预测链
+核心规则：
+- exec_date = trade_date 之后第 1 个 A 股交易日
+- target_date = trade_date 之后第 2 个 A 股交易日
+- PFILL_READY: exec_date 已有 raw 快照，且 exec_date <= current_run_date
+- ERET_READY : target_date 已有 raw 快照，且 target_date <= current_run_date
+- FULLY_READY = PFILL_READY and ERET_READY
 
-本脚本只负责“日期成熟度解析”，不参与训练，不参与真值构建。
+重要修复：
+- 旧版用 raw 快照中“真实存在的日期序列”直接推断 exec_date / target_date。
+  这会在节假日前后出错：例如 raw 只有到 20260430 时，系统无法预先解析
+  20260430 -> 20260506 -> 20260507。
+- 新版将“交易日链解析”和“数据是否成熟”拆开：
+  1) exec_date / target_date 用交易日历解析；
+  2) READY 状态才用 raw 是否存在判断。
+- 因此，在 20260506 凌晨，即便 raw 尚无 20260506 / 20260507，
+  也能正确输出：
+  20260430 -> 20260506 -> 20260507，但 PFILL_READY=0, ERET_READY=0。
 
-设计原则：
-1. 不猜日期：exec_date / target_date 必须由 raw 快照中真实存在的交易日序列解析出来
-2. 不扩池：候选样本由外部传入的 trade_date 决定，本脚本不自行扩展样本池
-3. 可复用：后续 run_decision_daily.yml / build_fill_truth.py / train_pfill.py 统一使用这里的结果
+交易日历来源：
+- 优先使用 --trade-calendar-file 指定的外部交易日历。
+- 未提供时，使用内置 A 股 2026 休市 fallback + 周末规则生成日历。
+- raw 中已存在的日期会并入交易日历，避免历史数据被漏掉。
 """
 
 from __future__ import annotations
@@ -38,7 +46,8 @@ import argparse
 import csv
 import json
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Set
 
@@ -87,6 +96,17 @@ def norm_date_str(s: object) -> Optional[str]:
     return None
 
 
+def parse_yyyymmdd(s: str) -> date:
+    d = norm_date_str(s)
+    if not d:
+        raise ValueError(f"非法日期：{s!r}")
+    return datetime.strptime(d, "%Y%m%d").date()
+
+
+def fmt_yyyymmdd(d: date) -> str:
+    return d.strftime("%Y%m%d")
+
+
 def ensure_parent_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -96,38 +116,43 @@ def sort_trade_dates(dates: Iterable[str]) -> List[str]:
     return sorted(uniq)
 
 
+def daterange(start: date, end: date) -> Iterable[date]:
+    cur = start
+    while cur <= end:
+        yield cur
+        cur += timedelta(days=1)
+
+
 # =========================
 # raw 快照交易日解析
 # =========================
 
 def discover_raw_trade_dates(raw_root: Path) -> List[str]:
     """
-    从 raw 根目录发现所有可用交易日。
+    从 raw 根目录发现所有已有行情快照日期。
 
-    兼容目录形态（示例）：
+    兼容目录形态：
     - data/market/raw/2026/20260307/
     - data/market/raw/20260307/
     - data/market/raw/2026/20260307/*.csv
+
+    注意：
+    raw 日期只代表“已有数据”，不能再被当成完整交易日历。
     """
     if not raw_root.exists():
         raise FileNotFoundError(f"raw_root 不存在：{raw_root}")
 
     found: Set[str] = set()
 
-    # 递归扫描 1~2 层已够用，但直接 rglob 更稳
     for p in raw_root.rglob("*"):
         if not p.exists():
             continue
-        name = p.name
 
-        # 目录名恰好是 YYYYMMDD
+        name = p.name
         if p.is_dir() and is_yyyymmdd(name):
             found.add(name)
             continue
 
-        # 文件名可能包含 YYYYMMDD，谨慎提取最后一级父目录优先
-        # 这里不主动从任意文件名“猜”日期，避免误判
-        # 只额外接受 parent 是 YYYYMMDD 的情况
         parent_name = p.parent.name if p.parent else ""
         if is_yyyymmdd(parent_name):
             found.add(parent_name)
@@ -137,6 +162,214 @@ def discover_raw_trade_dates(raw_root: Path) -> List[str]:
         raise RuntimeError(f"未在 raw_root 下发现任何交易日目录：{raw_root}")
 
     return dates
+
+
+# =========================
+# 交易日历解析
+# =========================
+
+def _closed_dates_from_ranges(ranges: Sequence[tuple[str, str]]) -> Set[str]:
+    out: Set[str] = set()
+    for start_s, end_s in ranges:
+        start = parse_yyyymmdd(start_s)
+        end = parse_yyyymmdd(end_s)
+        for d in daterange(start, end):
+            out.add(fmt_yyyymmdd(d))
+    return out
+
+
+def builtin_a_share_closed_dates() -> Set[str]:
+    """
+    内置 A 股 2026 主要休市日 fallback。
+
+    该 fallback 的目的不是替代官方交易日历，而是在 GitHub Actions 没有
+    calendar 文件时，至少能正确解析 20260430 -> 20260506 -> 20260507
+    这类节假日跨越链。
+
+    后续若仓库提供正式交易日历文件，应优先通过 --trade-calendar-file 使用。
+    """
+    closed_ranges = [
+        # 2026 元旦
+        ("20260101", "20260103"),
+        # 2026 春节
+        ("20260215", "20260223"),
+        # 2026 清明节
+        ("20260404", "20260406"),
+        # 2026 劳动节：关键修复区间
+        ("20260501", "20260505"),
+        # 2026 端午节
+        ("20260619", "20260621"),
+        # 2026 中秋节
+        ("20260925", "20260927"),
+        # 2026 国庆节 fallback
+        ("20261001", "20261008"),
+    ]
+    return _closed_dates_from_ranges(closed_ranges)
+
+
+def load_trade_calendar_from_csv(path: Path) -> List[str]:
+    if not path.exists():
+        raise FileNotFoundError(f"trade calendar csv 不存在：{path}")
+
+    out: List[str] = []
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            raise RuntimeError(f"交易日历 csv 表头为空：{path}")
+
+        # 常见列名兼容
+        date_col = None
+        for cand in ("trade_date", "cal_date", "date", "day"):
+            if cand in reader.fieldnames:
+                date_col = cand
+                break
+        if date_col is None:
+            # 若只有一列，则用第一列
+            if len(reader.fieldnames) == 1:
+                date_col = reader.fieldnames[0]
+            else:
+                raise RuntimeError(
+                    f"交易日历 csv 未找到日期列，实际列为：{reader.fieldnames}"
+                )
+
+        # 可选 is_open 列：若存在，仅保留开市行
+        is_open_col = None
+        for cand in ("is_open", "open", "is_trade", "trade"):
+            if cand in reader.fieldnames:
+                is_open_col = cand
+                break
+
+        for row in reader:
+            if is_open_col is not None:
+                flag = str(row.get(is_open_col, "")).strip().lower()
+                if flag in {"0", "false", "no", "n", "closed", "休市"}:
+                    continue
+
+            d = norm_date_str(row.get(date_col))
+            if d:
+                out.append(d)
+
+    return sort_trade_dates(out)
+
+
+def load_trade_calendar_from_json(path: Path) -> List[str]:
+    if not path.exists():
+        raise FileNotFoundError(f"trade calendar json 不存在：{path}")
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out: List[str] = []
+
+    def consume_item(item: object) -> None:
+        if isinstance(item, dict):
+            if "is_open" in item:
+                flag = str(item.get("is_open", "")).strip().lower()
+                if flag in {"0", "false", "no", "n", "closed", "休市"}:
+                    return
+            for key in ("trade_date", "cal_date", "date", "day"):
+                d = norm_date_str(item.get(key))
+                if d:
+                    out.append(d)
+                    return
+        else:
+            d = norm_date_str(item)
+            if d:
+                out.append(d)
+
+    if isinstance(data, list):
+        for item in data:
+            consume_item(item)
+    elif isinstance(data, dict):
+        vals = (
+            data.get("trade_dates")
+            or data.get("calendar")
+            or data.get("rows")
+            or data.get("data")
+            or []
+        )
+        if isinstance(vals, list):
+            for item in vals:
+                consume_item(item)
+    else:
+        raise RuntimeError(f"不支持的交易日历 json 结构：{path}")
+
+    return sort_trade_dates(out)
+
+
+def load_trade_calendar_file(path: Path) -> List[str]:
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return load_trade_calendar_from_csv(path)
+    if suffix == ".json":
+        return load_trade_calendar_from_json(path)
+
+    # txt / md / 无后缀：逐行日期
+    if not path.exists():
+        raise FileNotFoundError(f"trade calendar file 不存在：{path}")
+    out: List[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        d = norm_date_str(line.strip())
+        if d:
+            out.append(d)
+    return sort_trade_dates(out)
+
+
+def build_builtin_trade_calendar(
+    anchor_dates: Sequence[str],
+    forward_days: int = 120,
+    backward_days: int = 30,
+) -> List[str]:
+    """
+    用周末规则 + 内置休市日生成 fallback 交易日历。
+    raw 已有日期后续会并入，避免历史样本丢失。
+    """
+    anchors = sort_trade_dates(anchor_dates)
+    if not anchors:
+        raise RuntimeError("无法生成交易日历：没有任何 anchor date")
+
+    start = parse_yyyymmdd(anchors[0]) - timedelta(days=max(0, backward_days))
+    end = parse_yyyymmdd(anchors[-1]) + timedelta(days=max(1, forward_days))
+
+    closed = builtin_a_share_closed_dates()
+    open_days: List[str] = []
+    for d in daterange(start, end):
+        s = fmt_yyyymmdd(d)
+        # 周一到周五，且不在休市日
+        if d.weekday() < 5 and s not in closed:
+            open_days.append(s)
+
+    return sort_trade_dates(open_days)
+
+
+def resolve_trade_calendar(
+    raw_trade_dates: Sequence[str],
+    candidate_trade_dates: Sequence[str],
+    current_run_date: str,
+    trade_calendar_file: Optional[Path] = None,
+    calendar_forward_days: int = 120,
+) -> List[str]:
+    """
+    生成用于解析 exec_date / target_date 的交易日历。
+    """
+    raw_dates = sort_trade_dates(raw_trade_dates)
+    cand_dates = sort_trade_dates(candidate_trade_dates)
+    anchors = sort_trade_dates([*raw_dates, *cand_dates, current_run_date])
+
+    if trade_calendar_file:
+        calendar_dates = load_trade_calendar_file(trade_calendar_file)
+        # 外部日历优先，但 raw 已存在日期也强制并入，避免老样本断链。
+        calendar_dates = sort_trade_dates([*calendar_dates, *raw_dates])
+    else:
+        calendar_dates = build_builtin_trade_calendar(
+            anchors,
+            forward_days=calendar_forward_days,
+            backward_days=30,
+        )
+        calendar_dates = sort_trade_dates([*calendar_dates, *raw_dates])
+
+    if not calendar_dates:
+        raise RuntimeError("交易日历为空")
+
+    return calendar_dates
 
 
 def next_n_trade_date(trade_dates: Sequence[str], base_date: str, n_after: int) -> str:
@@ -150,15 +383,16 @@ def next_n_trade_date(trade_dates: Sequence[str], base_date: str, n_after: int) 
     if n_after <= 0:
         raise ValueError("n_after 必须 >= 1")
 
+    dates = sort_trade_dates(trade_dates)
     try:
-        idx = trade_dates.index(base_date)
+        idx = dates.index(base_date)
     except ValueError:
         return ""
 
     target_idx = idx + n_after
-    if target_idx >= len(trade_dates):
+    if target_idx >= len(dates):
         return ""
-    return trade_dates[target_idx]
+    return dates[target_idx]
 
 
 # =========================
@@ -191,13 +425,8 @@ def load_trade_dates_from_json(path: Path) -> List[str]:
         raise FileNotFoundError(f"trade_dates json 不存在：{path}")
 
     data = json.loads(path.read_text(encoding="utf-8"))
-
     out: List[str] = []
 
-    # 支持：
-    # ["20260301", "20260302"]
-    # [{"trade_date":"20260301"}, ...]
-    # {"trade_dates":["20260301", ...]}
     if isinstance(data, list):
         for item in data:
             if isinstance(item, dict):
@@ -251,7 +480,6 @@ def parse_trade_dates_args(
         elif suffix == ".json":
             out.extend(load_trade_dates_from_json(trade_dates_file))
         else:
-            # txt / md / 无后缀，按逐行处理
             if not trade_dates_file.exists():
                 raise FileNotFoundError(f"trade_dates file 不存在：{trade_dates_file}")
             for line in trade_dates_file.read_text(encoding="utf-8").splitlines():
@@ -285,23 +513,21 @@ def resolve_sample_maturity_rows(
     current_run_date: str,
     all_trade_dates_from_raw: Sequence[str],
     candidate_trade_dates: Sequence[str],
+    trade_calendar_dates: Sequence[str],
 ) -> List[SampleMaturityRow]:
     """
-    基于 raw 中真实存在的交易日序列，解析候选样本的成熟度。
+    基于交易日历解析样本成熟度。
 
-    规则：
-    - exec_date = trade_date 之后第 1 个交易日
-    - target_date = trade_date 之后第 2 个交易日
-    - PFILL_READY: exec_date 非空 且 exec_date <= current_run_date
-    - ERET_READY : target_date 非空 且 target_date <= current_run_date
-    - FULLY_READY = PFILL_READY and ERET_READY
+    关键分离：
+    - exec_date / target_date：来自交易日历。
+    - READY：来自 raw 是否已有对应交易日快照 + current_run_date。
     """
-    raw_dates = sort_trade_dates(all_trade_dates_from_raw)
+    raw_dates = set(sort_trade_dates(all_trade_dates_from_raw))
+    calendar_dates = sort_trade_dates(trade_calendar_dates)
     rows: List[SampleMaturityRow] = []
 
     for trade_date in sort_trade_dates(candidate_trade_dates):
-        # 若 trade_date 本身都不在 raw 序列中，不做猜测，直接视为未就绪
-        if trade_date not in raw_dates:
+        if trade_date not in calendar_dates:
             rows.append(
                 SampleMaturityRow(
                     trade_date=trade_date,
@@ -315,11 +541,13 @@ def resolve_sample_maturity_rows(
             )
             continue
 
-        exec_date = next_n_trade_date(raw_dates, trade_date, 1)
-        target_date = next_n_trade_date(raw_dates, trade_date, 2)
+        exec_date = next_n_trade_date(calendar_dates, trade_date, 1)
+        target_date = next_n_trade_date(calendar_dates, trade_date, 2)
 
-        pfill_ready = bool(exec_date) and exec_date <= current_run_date
-        eret_ready = bool(target_date) and target_date <= current_run_date
+        # 注意：这里必须要求 raw 中已有对应日期数据。
+        # 不能仅因为 exec_date/target_date <= current_run_date 就标记成熟。
+        pfill_ready = bool(exec_date) and exec_date <= current_run_date and exec_date in raw_dates
+        eret_ready = bool(target_date) and target_date <= current_run_date and target_date in raw_dates
         fully_ready = pfill_ready and eret_ready
 
         rows.append(
@@ -364,11 +592,15 @@ def write_json(
     output_json: Path,
     current_run_date: str,
     raw_root: str,
+    trade_calendar_file: str,
+    trade_calendar_count: int,
 ) -> None:
     ensure_parent_dir(output_json)
     payload = {
         "current_run_date": current_run_date,
         "raw_root": raw_root,
+        "trade_calendar_file": trade_calendar_file,
+        "trade_calendar_count": trade_calendar_count,
         "count": len(rows),
         "rows": [asdict(r) for r in rows],
     }
@@ -403,7 +635,10 @@ def print_summary(rows: Sequence[SampleMaturityRow]) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="解析样本成熟度（trade_date / exec_date / target_date / PFILL_READY / ERET_READY / FULLY_READY）"
+        description=(
+            "解析样本成熟度（trade_date / exec_date / target_date / "
+            "PFILL_READY / ERET_READY / FULLY_READY）"
+        )
     )
 
     parser.add_argument(
@@ -417,7 +652,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="raw 快照根目录，默认 data/market/raw",
     )
 
-    # 候选 trade_date：支持内联字符串 + 文件
+    parser.add_argument(
+        "--trade-calendar-file",
+        default="",
+        help=(
+            "可选：A股交易日历文件。支持 csv/json/txt。"
+            "若未提供，则使用内置2026休市fallback + 周末规则生成。"
+        ),
+    )
+    parser.add_argument(
+        "--calendar-forward-days",
+        type=int,
+        default=120,
+        help="未提供交易日历文件时，向未来生成多少自然日的 fallback 日历，默认120",
+    )
+
     parser.add_argument(
         "--trade-dates",
         default="",
@@ -428,8 +677,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="",
         help="候选 trade_date 文件路径，支持 csv/json/txt",
     )
-
-    # csv 专用列名
     parser.add_argument(
         "--trade-date-column",
         default="trade_date",
@@ -460,11 +707,10 @@ def main() -> int:
 
     raw_root = Path(args.raw_root)
     trade_dates_file = Path(args.trade_dates_file) if args.trade_dates_file else None
+    trade_calendar_file = Path(args.trade_calendar_file) if args.trade_calendar_file else None
 
-    # 先发现 raw 中真实存在的交易日
     raw_trade_dates = discover_raw_trade_dates(raw_root)
 
-    # 再读取候选样本 trade_date
     candidate_trade_dates: List[str] = []
     if trade_dates_file and trade_dates_file.suffix.lower() == ".csv":
         candidate_trade_dates.extend(
@@ -483,10 +729,19 @@ def main() -> int:
             trade_dates_file=trade_dates_file,
         )
 
+    trade_calendar_dates = resolve_trade_calendar(
+        raw_trade_dates=raw_trade_dates,
+        candidate_trade_dates=candidate_trade_dates,
+        current_run_date=current_run_date,
+        trade_calendar_file=trade_calendar_file,
+        calendar_forward_days=args.calendar_forward_days,
+    )
+
     rows = resolve_sample_maturity_rows(
         current_run_date=current_run_date,
         all_trade_dates_from_raw=raw_trade_dates,
         candidate_trade_dates=candidate_trade_dates,
+        trade_calendar_dates=trade_calendar_dates,
     )
 
     output_csv = Path(args.output_csv)
@@ -498,6 +753,8 @@ def main() -> int:
         output_json=output_json,
         current_run_date=current_run_date,
         raw_root=str(raw_root),
+        trade_calendar_file=str(trade_calendar_file) if trade_calendar_file else "",
+        trade_calendar_count=len(trade_calendar_dates),
     )
     print_summary(rows)
     return 0
