@@ -35,8 +35,9 @@ resolve_sample_maturity.py
   20260430 -> 20260506 -> 20260507，但 PFILL_READY=0, ERET_READY=0。
 
 交易日历来源：
-- 优先使用 --trade-calendar-file 指定的外部交易日历。
-- 未提供时，使用内置 A 股 2026 休市 fallback + 周末规则生成日历。
+- 若提供 --trade-calendar-file：外部交易日历 + 内置 fallback 扩展日历 + raw 已有日期三者合并。
+  这样即使外部日历只到 20260430，也能继续推演 20260506 / 20260507。
+- 若未提供：使用内置 A 股 2026 休市 fallback + 周末规则生成日历。
 - raw 中已存在的日期会并入交易日历，避免历史数据被漏掉。
 """
 
@@ -182,11 +183,11 @@ def builtin_a_share_closed_dates() -> Set[str]:
     """
     内置 A 股 2026 主要休市日 fallback。
 
-    该 fallback 的目的不是替代官方交易日历，而是在 GitHub Actions 没有
-    calendar 文件时，至少能正确解析 20260430 -> 20260506 -> 20260507
-    这类节假日跨越链。
+    该 fallback 的目的不是替代官方交易日历，而是在 GitHub Actions 的
+    calendar 文件覆盖不完整时，向未来补足交易日链，至少能正确解析
+    20260430 -> 20260506 -> 20260507 这类节假日跨越链。
 
-    后续若仓库提供正式交易日历文件，应优先通过 --trade-calendar-file 使用。
+    如果仓库提供正式交易日历文件，最终日历会合并：外部日历 + fallback + raw 已有日期。
     """
     closed_ranges = [
         # 2026 元旦
@@ -354,17 +355,25 @@ def resolve_trade_calendar(
     cand_dates = sort_trade_dates(candidate_trade_dates)
     anchors = sort_trade_dates([*raw_dates, *cand_dates, current_run_date])
 
+    # 无论是否提供外部交易日历，都构造一份 fallback 扩展日历。
+    # 原因：仓库内 trade_calendar_file 可能只覆盖到当前已有 raw 日期，
+    # 在节假日前后会导致 20260430 之后无法解析出 20260506/20260507。
+    # 正确做法是：外部日历提供权威历史/已知交易日，fallback 负责向未来补足。
+    builtin_calendar_dates = build_builtin_trade_calendar(
+        anchors,
+        forward_days=calendar_forward_days,
+        backward_days=30,
+    )
+
     if trade_calendar_file:
-        calendar_dates = load_trade_calendar_file(trade_calendar_file)
-        # 外部日历优先，但 raw 已存在日期也强制并入，避免老样本断链。
-        calendar_dates = sort_trade_dates([*calendar_dates, *raw_dates])
+        external_calendar_dates = load_trade_calendar_file(trade_calendar_file)
+        calendar_dates = sort_trade_dates([
+            *external_calendar_dates,
+            *builtin_calendar_dates,
+            *raw_dates,
+        ])
     else:
-        calendar_dates = build_builtin_trade_calendar(
-            anchors,
-            forward_days=calendar_forward_days,
-            backward_days=30,
-        )
-        calendar_dates = sort_trade_dates([*calendar_dates, *raw_dates])
+        calendar_dates = sort_trade_dates([*builtin_calendar_dates, *raw_dates])
 
     if not calendar_dates:
         raise RuntimeError("交易日历为空")
