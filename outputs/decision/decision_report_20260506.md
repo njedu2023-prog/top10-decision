@@ -2,7 +2,7 @@
 
 - signal_date: **20260430**
 - exec_date: **20260506**
-- requested_trade_date: **auto**
+- requested_trade_date: **20260430**
 - regime: **RISK_ON**
 - risk_budget: **1**
 - input_mode: **pred_plus_fs**
