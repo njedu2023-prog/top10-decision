@@ -1,0 +1,30 @@
+{
+  "trade_date": "20260511",
+  "exec_date": "20260512",
+  "target_date": "20260513",
+  "rows": 95,
+  "eret_sample_eligible_rows": 89,
+  "sample_maturity": {
+    "FULLY_READY": 95
+  },
+  "label_ready_fill": 95,
+  "label_ready_ret": 95,
+  "quality_counts": {
+    "strong_close_t2_over_entry_proxy_t1": 89,
+    "not_filled_no_trade": 6
+  },
+  "ret_stats": {
+    "mean": 0.01069971528047193,
+    "median": 0.0039447731755424265,
+    "min": -0.11756272401433687,
+    "max": 0.18285714285714283,
+    "positive_rate": 0.5393258426966292
+  },
+  "source": {
+    "pred_source": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260511.csv",
+    "fill_truth": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260511.csv",
+    "target_daily": "/home/runner/work/top10-decision/top10-decision/data/market/raw/2026/20260513/daily.csv",
+    "sample_maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv"
+  },
+  "output": "/home/runner/work/top10-decision/top10-decision/data/market/eret_truth_20260511.csv"
+}
