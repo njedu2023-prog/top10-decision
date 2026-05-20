@@ -4,10 +4,10 @@
   "target_date": "20260520",
   "rows": 82,
   "sample_maturity": {
-    "PFILL_READY": 82
+    "FULLY_READY": 82
   },
   "label_ready_fill": 82,
-  "label_ready_ret": 0,
+  "label_ready_ret": 82,
   "y_fill_rate": 0.9390243902439024,
   "quality_counts": {
     "strong_open_tradable": 77,
