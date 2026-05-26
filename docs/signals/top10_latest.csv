@@ -1,1 +1,4 @@
 trade_date,target_trade_date,jq_code,target_weight,risk_budget,regime,reason
+20260525,20260526,300275.XSHE,0.1,1.0,RISK_ON,P0_EV_weight
+20260525,20260526,002585.XSHE,0.1,1.0,RISK_ON,P0_EV_weight
+20260525,20260526,002735.XSHE,0.1,1.0,RISK_ON,P0_EV_weight

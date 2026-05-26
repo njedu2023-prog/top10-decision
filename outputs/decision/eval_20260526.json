@@ -5,16 +5,16 @@
   "regime": "RISK_ON",
   "risk_budget": 1.0,
   "topk": 100,
-  "picked": 0,
+  "picked": 3,
   "cost_est_mean": 0.0017359770800000002,
   "cost_est_min": 0.001127314,
   "cost_est_max": 0.0032331050000000004,
-  "risk_penalty_mean": 0.01032011728273333,
+  "risk_penalty_mean": 0.010320117282733333,
   "risk_penalty_min": 0.0027,
   "risk_penalty_max": 0.0287,
-  "ev_base_mean": -0.028812620511386496,
-  "ev_final_mean": -0.08580457488563618,
-  "pfill_penalty_extra_mean": 0.043704336761943026,
+  "ev_base_mean": -0.0058492286525162005,
+  "ev_final_mean": -0.05886573615138989,
+  "pfill_penalty_extra_mean": 0.03972888988656702,
   "risk_penalty_extra_mean": 0.013287617612306665,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
@@ -706,7 +706,7 @@
   },
   "report_stats": {
     "high_ev_low_risk_rows": 0,
-    "topn_rows": 0,
-    "full_candidate_rows": 100
+    "topn_rows": 3,
+    "full_candidate_rows": 97
   }
 }
