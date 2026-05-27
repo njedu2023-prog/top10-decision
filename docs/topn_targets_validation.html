@@ -26,7 +26,7 @@ th { background: #f6f8fa; position: sticky; top: 0; }
 </head>
 <body>
 <h1>top10-decision 最终 weights Top10 后验验证</h1>
-<p class="meta">数据源：docs/weights/weights_YYYYMMDD.csv::target_rank_then_backup_rank<br/>生成时间：2026-05-26T17:54:30；最新验证：D：2026-05-26 → T：2026-05-27</p>
+<p class="meta">数据源：docs/weights/weights_YYYYMMDD.csv::target_rank_then_backup_rank<br/>生成时间：2026-05-27T17:56:33；最新验证：D：2026-05-26 → T：2026-05-27</p>
 <div class="notice">
 <strong>核心验证问题：</strong>预测排序之后，真实 T 日到底上涨多少、下跌多少、涨停多少。<br/>
 <strong>排序口径：</strong>先取 docs/weights/weights_YYYYMMDD.csv 的 target_rank；不足 TopN 时用 backup_rank 补足。decision_candidates 只作为 EV/RiskPenalty 补充源，不作为主排序源。
