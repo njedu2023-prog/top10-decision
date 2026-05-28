@@ -1,10 +1,28 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-05-26T16:56:59+00:00
-- current_run_date: 20260526
+- generated_at_utc: 2026-05-28T05:06:24+00:00
+- current_run_date: 20260527
 - overall_pass: FAIL
 
 ## P_fill
+
+- anchor_trade_date: 20260526
+- status: trained
+- loaded_trade_dates: 57
+- missing_trade_dates: 2
+- previous_anchor_trade_date: 20260525
+- acceptance_pass: FAIL
+
+| 指标 | 当前 | 对比上次 |
+|---|---:|---|
+| lr_auc | 0.208333 | worse (-0.688131) |
+| lr_logloss | 0.337684 | worse (+0.109342) |
+| lr_brier | 0.090202 | worse (+0.023863) |
+| lgbm_auc | 0.604167 | worse (-0.322601) |
+| lgbm_logloss | 0.149834 | worse (+0.001412) |
+| lgbm_brier | 0.026772 | improved (-0.008631) |
+
+## E_ret
 
 - anchor_trade_date: 20260525
 - status: trained
@@ -15,30 +33,12 @@
 
 | 指标 | 当前 | 对比上次 |
 |---|---:|---|
-| lr_auc | 0.896465 | improved (+0.015384) |
-| lr_logloss | 0.228342 | improved (-0.014968) |
-| lr_brier | 0.066339 | improved (-0.011597) |
-| lgbm_auc | 0.926768 | improved (+0.132173) |
-| lgbm_logloss | 0.148422 | improved (-0.006276) |
-| lgbm_brier | 0.035403 | worse (+0.001638) |
-
-## E_ret
-
-- anchor_trade_date: 20260522
-- status: trained
-- loaded_trade_dates: 55
-- missing_trade_dates: 2
-- previous_anchor_trade_date: 20260521
-- acceptance_pass: FAIL
-
-| 指标 | 当前 | 对比上次 |
-|---|---:|---|
-| lr_mae | 0.064593 | worse (+0.000544) |
-| lr_rmse | 0.080212 | worse (+0.002221) |
-| lr_corr | -0.038152 | worse (-0.051523) |
-| lr_directional_acc | 0.540541 | worse (-0.084459) |
-| lgbm_mae | 0.066288 | improved (-0.000311) |
-| lgbm_rmse | 0.081854 | improved (-0.001373) |
-| lgbm_corr | -0.007783 | worse (-0.030753) |
-| lgbm_directional_acc | 0.540541 | improved (+0.196791) |
+| lr_mae | 0.059941 | improved (-0.004652) |
+| lr_rmse | 0.074172 | improved (-0.006040) |
+| lr_corr | 0.059932 | improved (+0.098084) |
+| lr_directional_acc | 0.525253 | worse (-0.015288) |
+| lgbm_mae | 0.069568 | worse (+0.003280) |
+| lgbm_rmse | 0.084438 | worse (+0.002584) |
+| lgbm_corr | -0.032242 | worse (-0.024460) |
+| lgbm_directional_acc | 0.454545 | worse (-0.085995) |
 
