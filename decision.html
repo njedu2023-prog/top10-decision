@@ -14,7 +14,6 @@
       --muted:#9fb0d0;
       --good:#18c37e;
       --bad:#ff6b6b;
-      --warn:#ffd166;
       --shadow:0 10px 30px rgba(0,0,0,0.28);
       --radius:18px;
     }
@@ -119,7 +118,9 @@
       overflow:hidden;
     }
 
-    .card-body{ padding:18px 20px; }
+    .card-body{
+      padding:18px 20px;
+    }
 
     .meta{
       display:grid;
@@ -170,12 +171,6 @@
       background:rgba(255,107,107,0.12);
       border-color:rgba(255,107,107,0.2);
       color:#ffd0d0;
-    }
-
-    .pill.warn{
-      background:rgba(255,209,102,0.12);
-      border-color:rgba(255,209,102,0.22);
-      color:#ffe6a3;
     }
 
     .section-title{
@@ -246,7 +241,6 @@
       border:1px solid rgba(255,255,255,0.08);
       border-radius:14px;
       background:rgba(10,18,40,0.55);
-      margin:12px 0 18px;
     }
 
     table{
@@ -301,17 +295,6 @@
       color:#ffd4d4;
       background:rgba(255,107,107,0.06);
       border-color:rgba(255,107,107,0.2);
-      text-align:left;
-    }
-
-    .notice{
-      color:#ffe6a3;
-      background:rgba(255,209,102,0.06);
-      border:1px solid rgba(255,209,102,0.18);
-      border-radius:14px;
-      padding:12px 14px;
-      margin:10px 0 16px;
-      font-size:13px;
     }
 
     .footer{
@@ -322,7 +305,9 @@
     }
 
     @media (max-width:1200px){
-      .meta{ grid-template-columns:repeat(3, minmax(0,1fr)); }
+      .meta{
+        grid-template-columns:repeat(3, minmax(0,1fr));
+      }
     }
 
     @media (max-width:720px){
@@ -336,13 +321,20 @@
         border-radius:18px;
       }
 
-      .title{ font-size:24px; }
-      .meta{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-      .meta-value{ font-size:17px; }
+      .title{
+        font-size:24px;
+      }
+
+      .meta{
+        grid-template-columns:repeat(2, minmax(0,1fr));
+      }
+
+      .meta-value{
+        font-size:17px;
+      }
     }
   </style>
 </head>
-
 <body>
   <div class="wrap">
     <section class="hero">
@@ -351,7 +343,7 @@
           <h1 class="title">Top10 Decision Dashboard</h1>
           <p class="subtitle">
             自动读取并渲染最新的 Decision Markdown 报告。<br />
-            优先读取最新报告，失败时自动回退最近日期；不再依赖外部 Markdown CDN。
+            支持刷新，并可切换查看上一份 / 下一份报告。
           </p>
         </div>
 
@@ -388,9 +380,8 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
-    "use strict";
-
     const REPO = {
       owner: "njedu2023-prog",
       name: "top10-decision",
@@ -398,8 +389,11 @@
       reportDir: "outputs/decision"
     };
 
-    const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
-    const API_LIST_URL = `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
+    const API_LIST_URL =
+      `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
+
+    const RAW_BASE =
+      `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
 
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
@@ -413,11 +407,14 @@
     let reportFiles = [];
     let currentIndex = 0;
     let currentFileName = "";
-    let lastLoadMode = "";
+
+    marked.setOptions({
+      gfm: true,
+      breaks: false
+    });
 
     function setStatus(type, text) {
       statusPill.className = `pill ${type || ""}`.trim();
-      statusPill.textContent = type === "ok" ? "加载成功" : type === "bad" ? "加载失败" : type === "warn" ? "回退模式" : "加载中";
       statusText.textContent = text || "";
     }
 
@@ -429,44 +426,17 @@
         .replaceAll('"', "&quot;");
     }
 
-    function inlineMd(s) {
-      return escapeHtml(s)
-        .replace(/`([^`]+)`/g, "<code>$1</code>")
-        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    }
-
     function classForSigned(v) {
-      const n = Number(String(v).replace("%", ""));
+      const n = Number(v);
       if (!Number.isFinite(n)) return "";
       if (n > 0) return "pos";
       if (n < 0) return "neg";
       return "";
     }
 
-    function formatDateYmd(d) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}${m}${day}`;
-    }
-
-    function getDateCandidates(daysBack = 45) {
-      const out = [];
-      const d = new Date();
-      for (let i = 0; i <= daysBack; i += 1) {
-        const x = new Date(d);
-        x.setDate(d.getDate() - i);
-        out.push(formatDateYmd(x));
-      }
-      return out;
-    }
-
-    async function fetchText(url) {
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(`请求失败: ${res.status} ${res.statusText}`);
-      }
-      return await res.text();
+    function updateNavButtons() {
+      prevBtn.disabled = currentIndex >= reportFiles.length - 1;
+      nextBtn.disabled = currentIndex <= 0;
     }
 
     async function fetchJson(url) {
@@ -477,22 +447,26 @@
       return await res.json();
     }
 
-    function normalizeMarkdown(md) {
-      let s = String(md || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    async function fetchText(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`请求失败: ${res.status} ${res.statusText}`);
+      }
+      return await res.text();
+    }
 
-      /*
-       * 兼容一种常见坏格式：
-       * 生成脚本把整份 Markdown 压成一行，导致标题、元数据、表格无法正常渲染。
-       * 这里在不改变文本含义的前提下补回结构换行。
-       */
-      s = s
-        .replace(/\s+(#{1,6}\s+)/g, "\n\n$1")
-        .replace(/\s+(-\s+[A-Za-z_][A-Za-z0-9_]*:\s+)/g, "\n$1")
-        .replace(/\s+(\|\s*[-:| ]+\s*\|)/g, "\n$1")
-        .replace(/\s+(\|\s*\d+\s*\|)/g, "\n$1")
-        .replace(/\s+(\|\s*rank\s*\|)/gi, "\n$1");
+    async function getReportFiles() {
+      const files = await fetchJson(API_LIST_URL);
+      const rows = Array.isArray(files) ? files : [];
 
-      return s.trim();
+      return rows
+        .filter(x => x && x.type === "file" && /^decision_report_\d{8}\.md$/.test(x.name))
+        .sort((a, b) => b.name.localeCompare(a.name))
+        .map(x => ({
+          name: x.name,
+          path: x.path,
+          rawUrl: x.download_url || `${RAW_BASE}/${x.path}`
+        }));
     }
 
     function extractSimpleFields(md) {
@@ -529,133 +503,31 @@
 
     function parseMarkdownTable(md, sectionTitle) {
       const escaped = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(`##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i");
+      const re = new RegExp(
+        `##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`,
+        "i"
+      );
       const block = md.match(re);
       if (!block) return null;
 
       const lines = block[1]
-        .split(/\n/)
+        .split(/\r?\n/)
         .map(s => s.trim())
         .filter(Boolean)
         .filter(s => s.startsWith("|"));
 
-      if (lines.length < 2) return null;
+      if (lines.length < 3) return null;
 
-      const header = splitTableRow(lines[0]);
+      const header = lines[0]
+        .split("|")
+        .map(s => s.trim())
+        .filter(Boolean);
+
       const body = lines
         .slice(2)
-        .map(splitTableRow)
-        .filter(row => row.length > 0);
+        .map(line => line.split("|").map(s => s.trim()).filter(Boolean));
 
       return { header, body };
-    }
-
-    function splitTableRow(line) {
-      return String(line)
-        .trim()
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map(s => s.trim());
-    }
-
-    function renderMarkdownTable(lines, startIndex) {
-      const header = splitTableRow(lines[startIndex]);
-      let i = startIndex + 1;
-
-      if (i < lines.length && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[i])) {
-        i += 1;
-      }
-
-      const rows = [];
-      while (i < lines.length && /^\s*\|/.test(lines[i])) {
-        rows.push(splitTableRow(lines[i]));
-        i += 1;
-      }
-
-      const numericNames = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
-      const keys = header.map(h => h.trim().toLowerCase());
-
-      const thead = header.map((h, idx) => {
-        const cls = numericNames.has(keys[idx]) ? ' class="num"' : "";
-        return `<th${cls}>${inlineMd(h)}</th>`;
-      }).join("");
-
-      const tbody = rows.map(row => {
-        const cells = header.map((_, idx) => {
-          const val = row[idx] ?? "";
-          const key = keys[idx];
-          const cls = [
-            numericNames.has(key) ? "num" : "",
-            (key === "ev" || key === "e_ret") ? classForSigned(val) : ""
-          ].filter(Boolean).join(" ");
-          return `<td${cls ? ` class="${cls}"` : ""}>${inlineMd(val)}</td>`;
-        }).join("");
-        return `<tr>${cells}</tr>`;
-      }).join("");
-
-      return {
-        html: `<div class="table-wrap"><table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table></div>`,
-        nextIndex: i
-      };
-    }
-
-    function renderMarkdown(md) {
-      const lines = normalizeMarkdown(md).split(/\n/);
-      const html = [];
-      let listOpen = false;
-
-      function closeList() {
-        if (listOpen) {
-          html.push("</ul>");
-          listOpen = false;
-        }
-      }
-
-      for (let i = 0; i < lines.length;) {
-        const line = lines[i].trim();
-
-        if (!line) {
-          closeList();
-          i += 1;
-          continue;
-        }
-
-        if (/^\|/.test(line) && i + 1 < lines.length && /\|?\s*:?-{3,}:?\s*\|/.test(lines[i + 1])) {
-          closeList();
-          const table = renderMarkdownTable(lines, i);
-          html.push(table.html);
-          i = table.nextIndex;
-          continue;
-        }
-
-        const h = line.match(/^(#{1,6})\s+(.*)$/);
-        if (h) {
-          closeList();
-          const level = Math.min(h[1].length, 3);
-          html.push(`<h${level}>${inlineMd(h[2])}</h${level}>`);
-          i += 1;
-          continue;
-        }
-
-        const li = line.match(/^-\s+(.*)$/);
-        if (li) {
-          if (!listOpen) {
-            html.push("<ul>");
-            listOpen = true;
-          }
-          html.push(`<li>${inlineMd(li[1])}</li>`);
-          i += 1;
-          continue;
-        }
-
-        closeList();
-        html.push(`<p>${inlineMd(line)}</p>`);
-        i += 1;
-      }
-
-      closeList();
-      return html.join("\n");
     }
 
     function buildMetaCard(label, value, extraClass = "") {
@@ -685,107 +557,85 @@
       ].join("");
     }
 
-    function updateNavButtons() {
-      prevBtn.disabled = currentIndex >= reportFiles.length - 1;
-      nextBtn.disabled = currentIndex <= 0;
+    function decorateTables(root) {
+      root.querySelectorAll("table").forEach(table => {
+        if (!table.parentElement.classList.contains("table-wrap")) {
+          const wrap = document.createElement("div");
+          wrap.className = "table-wrap";
+          table.parentNode.insertBefore(wrap, table);
+          wrap.appendChild(table);
+        }
+
+        const headers = Array.from(table.querySelectorAll("thead th")).map(th =>
+          th.textContent.trim().toLowerCase()
+        );
+
+        const numericNames = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
+
+        table.querySelectorAll("thead th").forEach((th, idx) => {
+          if (numericNames.has(headers[idx])) th.classList.add("num");
+        });
+
+        table.querySelectorAll("tbody tr").forEach(tr => {
+          Array.from(tr.children).forEach((td, idx) => {
+            const key = headers[idx];
+            if (numericNames.has(key)) td.classList.add("num");
+            if (key === "ev" || key === "e_ret") {
+              td.classList.add(classForSigned(td.textContent.trim()));
+            }
+          });
+        });
+      });
     }
 
-    async function getReportFilesFromApi() {
-      const files = await fetchJson(API_LIST_URL);
-      const rows = Array.isArray(files) ? files : [];
-
-      return rows
-        .filter(x => x && x.type === "file" && /^decision_report_\d{8}\.md$/.test(x.name))
-        .sort((a, b) => b.name.localeCompare(a.name))
-        .map(x => ({
-          name: x.name,
-          path: x.path,
-          rawUrl: x.download_url || `${RAW_BASE}/${x.path}`
-        }));
-    }
-
-    function getFallbackReportFiles() {
-      return getDateCandidates(45).map(ymd => ({
-        name: `decision_report_${ymd}.md`,
-        path: `${REPO.reportDir}/decision_report_${ymd}.md`,
-        rawUrl: `${RAW_BASE}/${REPO.reportDir}/decision_report_${ymd}.md`
-      }));
-    }
-
-    async function ensureReportList() {
-      if (reportFiles.length > 0) return;
-
-      /*
-       * 优先使用 GitHub API，这样上一份/下一份按钮最完整。
-       * 如果 API 被限流或网络拦截，立即切到 raw 日期回退，不让页面卡死。
-       */
-      try {
-        setStatus("", "正在通过 GitHub API 定位报告列表...");
-        reportFiles = await getReportFilesFromApi();
-        lastLoadMode = "api-list";
-      } catch (err) {
-        console.warn("GitHub API list failed, fallback to raw date probing.", err);
-        reportFiles = getFallbackReportFiles();
-        lastLoadMode = "raw-date-fallback";
-      }
-
-      if (!reportFiles.length) {
-        reportFiles = getFallbackReportFiles();
-        lastLoadMode = "raw-date-fallback";
-      }
+    function preprocessMarkdown(md) {
+      return md
+        .replace(/^- (signal_date|exec_date|requested_trade_date|regime|risk_budget|input_mode|fs_degrade_reason):/gm, "- **$1**:")
+        .replace(/^- (pred_loaded|pred_rows|features_base_loaded|features_base_rows|features_limit_loaded|features_limit_rows|truth_close_loaded|truth_close_rows|meta_loaded):/gm, "- **$1**:")
+        .replace(/^- (p_fill_pred_src|p_fill_model_loaded|p_fill_model_kind|p_fill_degrade_reason|eret_pred_src|eret_model_loaded|eret_model_kind|eret_degrade_reason):/gm, "- **$1**:")
+        .replace(/^- (candidates_snapshot|execution_table|learning_table|weights_latest|weights_dated):/gm, "- **$1**:");
     }
 
     async function loadReportByIndex(index) {
       try {
-        await ensureReportList();
+        if (!reportFiles.length) {
+          reportFiles = await getReportFiles();
+        }
+
+        if (!reportFiles.length) {
+          throw new Error("未找到 decision_report_YYYYMMDD.md");
+        }
 
         currentIndex = Math.max(0, Math.min(index, reportFiles.length - 1));
         updateNavButtons();
 
+        const info = reportFiles[currentIndex];
+        currentFileName = info.name;
+
+        setStatus("", `正在读取：${info.name}`);
         reportBox.className = "markdown empty";
         reportBox.innerHTML = "正在加载...";
         metaGrid.innerHTML = "";
 
-        let lastErr = null;
+        const mdRaw = await fetchText(info.rawUrl);
+        const md = preprocessMarkdown(mdRaw);
 
-        for (let i = currentIndex; i < reportFiles.length; i += 1) {
-          const info = reportFiles[i];
-          currentIndex = i;
-          currentFileName = info.name;
-          updateNavButtons();
+        const fields = extractSimpleFields(mdRaw);
+        const topnTable = parseMarkdownTable(mdRaw, "TopN Targets");
+        const allTable = parseMarkdownTable(mdRaw, "Full Candidate Pool");
 
-          try {
-            setStatus(lastLoadMode === "raw-date-fallback" ? "warn" : "", `正在读取：${info.name}`);
-            const mdRaw = await fetchText(info.rawUrl);
-            const md = normalizeMarkdown(mdRaw);
+        renderMeta(fields, topnTable?.body?.length ?? null, allTable?.body?.length ?? null);
 
-            const fields = extractSimpleFields(md);
-            const topnTable = parseMarkdownTable(md, "TopN Targets");
-            const allTable = parseMarkdownTable(md, "Full Candidate Pool");
+        const html = marked.parse(md);
+        reportBox.className = "markdown";
+        reportBox.innerHTML = html;
+        decorateTables(reportBox);
 
-            renderMeta(fields, topnTable?.body?.length ?? null, allTable?.body?.length ?? null);
-
-            const html = renderMarkdown(md);
-            reportBox.className = "markdown";
-            reportBox.innerHTML = `
-              ${lastLoadMode === "raw-date-fallback" ? '<div class="notice">提示：当前使用 raw 日期回退模式，说明 GitHub API 列表读取失败或被限流；正文读取已恢复。</div>' : ""}
-              ${html}
-            `;
-
-            setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
-            footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
-            return;
-          } catch (err) {
-            lastErr = err;
-            console.warn(`Report not loaded: ${info.name}`, err);
-            if (lastLoadMode !== "raw-date-fallback") break;
-          }
-        }
-
-        throw lastErr || new Error("未找到可读取的 decision_report_YYYYMMDD.md");
+        setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
+        footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
       } catch (err) {
         console.error(err);
-        setStatus("bad", "页面加载失败");
+        setStatus("bad", "加载失败");
         reportBox.className = "markdown error";
         reportBox.innerHTML = `
           <strong>页面加载失败</strong><br><br>
@@ -793,37 +643,21 @@
           请检查：<br>
           1. 仓库是否公开；<br>
           2. outputs/decision/ 下是否已有 decision_report_YYYYMMDD.md；<br>
-          3. 当前日期附近是否存在最新报告，例如 outputs/decision/decision_report_YYYYMMDD.md；<br>
-          4. GitHub raw 或 GitHub API 是否临时限流。
+          3. GitHub API 是否临时限流。
         `;
         metaGrid.innerHTML = "";
       }
     }
 
-    refreshBtn.addEventListener("click", () => {
-      reportFiles = [];
-      currentIndex = 0;
-      loadReportByIndex(0);
-    });
-
+    refreshBtn.addEventListener("click", () => loadReportByIndex(currentIndex));
     prevBtn.addEventListener("click", () => loadReportByIndex(currentIndex + 1));
     nextBtn.addEventListener("click", () => loadReportByIndex(currentIndex - 1));
 
     async function init() {
-      setStatus("", "正在定位报告...");
+      setStatus("", "正在定位报告列表...");
+      reportFiles = await getReportFiles();
       await loadReportByIndex(0);
     }
-
-    window.addEventListener("error", event => {
-      console.error("Global page error:", event.error || event.message);
-      setStatus("bad", "页面脚本异常");
-      reportBox.className = "markdown error";
-      reportBox.innerHTML = `
-        <strong>页面脚本异常</strong><br><br>
-        ${escapeHtml(event.message || "未知脚本错误")}<br><br>
-        此版本已去除外部 Markdown CDN。如果仍异常，请检查浏览器控制台或 GitHub Pages 缓存。
-      `;
-    });
 
     init();
     setInterval(() => loadReportByIndex(currentIndex), 5 * 60 * 1000);
