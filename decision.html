@@ -14,6 +14,7 @@
       --muted:#9fb0d0;
       --good:#18c37e;
       --bad:#ff6b6b;
+      --warn:#ffd166;
       --shadow:0 10px 30px rgba(0,0,0,0.28);
       --radius:18px;
     }
@@ -32,17 +33,21 @@
     }
 
     .wrap{
-      width:min(1400px, calc(100vw - 32px));
+      width:min(1500px, calc(100vw - 32px));
       margin:24px auto 48px;
     }
 
-    .hero{
+    .hero,
+    .card{
       background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
       border:1px solid var(--line);
-      border-radius:24px;
-      padding:24px;
       box-shadow:var(--shadow);
       backdrop-filter:blur(8px);
+    }
+
+    .hero{
+      border-radius:24px;
+      padding:24px;
     }
 
     .hero-top{
@@ -111,16 +116,11 @@
 
     .card{
       grid-column:span 12;
-      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-      border:1px solid var(--line);
       border-radius:var(--radius);
-      box-shadow:var(--shadow);
       overflow:hidden;
     }
 
-    .card-body{
-      padding:18px 20px;
-    }
+    .card-body{ padding:18px 20px; }
 
     .meta{
       display:grid;
@@ -143,7 +143,7 @@
     }
 
     .meta-value{
-      font-size:20px;
+      font-size:19px;
       font-weight:800;
       word-break:break-word;
     }
@@ -173,8 +173,14 @@
       color:#ffd0d0;
     }
 
+    .pill.warn{
+      background:rgba(255,209,102,0.12);
+      border-color:rgba(255,209,102,0.22);
+      color:#ffe6a3;
+    }
+
     .section-title{
-      font-size:18px;
+      font-size:19px;
       font-weight:800;
       margin:0 0 14px 0;
     }
@@ -189,50 +195,74 @@
       margin-top:10px;
     }
 
-    .markdown{
-      line-height:1.8;
-      color:var(--text);
-    }
-
-    .markdown h1,
-    .markdown h2,
-    .markdown h3{
-      margin:22px 0 12px;
-      line-height:1.35;
-    }
-
-    .markdown h1{ font-size:24px; }
-    .markdown h2{ font-size:20px; }
-    .markdown h3{ font-size:16px; }
-
-    .markdown p,
-    .markdown ul,
-    .markdown ol{
-      margin:10px 0;
-    }
-
-    .markdown ul{
-      padding-left:20px;
-    }
-
-    .markdown li{
-      margin:4px 0;
-    }
-
-    .markdown code{
-      background:rgba(255,255,255,0.06);
-      border:1px solid rgba(255,255,255,0.08);
-      border-radius:8px;
-      padding:2px 6px;
-      font-size:13px;
-    }
-
-    .markdown pre{
-      background:#0a1228;
-      border:1px solid rgba(255,255,255,0.08);
+    .notice{
+      color:#ffe6a3;
+      background:rgba(255,209,102,0.06);
+      border:1px solid rgba(255,209,102,0.18);
       border-radius:14px;
-      padding:14px;
-      overflow:auto;
+      padding:12px 14px;
+      margin:10px 0 16px;
+      font-size:13px;
+      line-height:1.7;
+    }
+
+    .empty,
+    .error{
+      padding:24px;
+      border:1px dashed rgba(255,255,255,0.15);
+      border-radius:16px;
+      color:var(--muted);
+      text-align:center;
+    }
+
+    .error{
+      color:#ffd4d4;
+      background:rgba(255,107,107,0.06);
+      border-color:rgba(255,107,107,0.2);
+      text-align:left;
+      line-height:1.8;
+    }
+
+    .report-section{
+      margin:20px 0 28px;
+    }
+
+    .report-section h2{
+      font-size:20px;
+      line-height:1.35;
+      margin:0 0 12px;
+    }
+
+    .report-section h3{
+      font-size:16px;
+      color:#dce8ff;
+      margin:16px 0 10px;
+    }
+
+    .kv-list{
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0,1fr));
+      gap:10px;
+      margin:10px 0 18px;
+    }
+
+    .kv{
+      border:1px solid rgba(255,255,255,0.07);
+      background:rgba(10,18,40,0.45);
+      border-radius:12px;
+      padding:10px 12px;
+      min-height:62px;
+    }
+
+    .kv-key{
+      color:var(--muted);
+      font-size:12px;
+      margin-bottom:5px;
+    }
+
+    .kv-val{
+      font-weight:700;
+      word-break:break-word;
     }
 
     .table-wrap{
@@ -241,6 +271,7 @@
       border:1px solid rgba(255,255,255,0.08);
       border-radius:14px;
       background:rgba(10,18,40,0.55);
+      margin:12px 0 18px;
     }
 
     table{
@@ -282,19 +313,16 @@
     .neg{ color:var(--bad); font-weight:700; }
     .muted{ color:var(--muted); }
 
-    .empty,
-    .error{
-      padding:24px;
-      border:1px dashed rgba(255,255,255,0.15);
-      border-radius:16px;
-      color:var(--muted);
-      text-align:center;
-    }
-
-    .error{
-      color:#ffd4d4;
-      background:rgba(255,107,107,0.06);
-      border-color:rgba(255,107,107,0.2);
+    pre.raw{
+      white-space:pre-wrap;
+      word-break:break-word;
+      background:#0a1228;
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:14px;
+      padding:14px;
+      overflow:auto;
+      color:#dce8ff;
+      max-height:480px;
     }
 
     .footer{
@@ -305,9 +333,8 @@
     }
 
     @media (max-width:1200px){
-      .meta{
-        grid-template-columns:repeat(3, minmax(0,1fr));
-      }
+      .meta{ grid-template-columns:repeat(3, minmax(0,1fr)); }
+      .kv-list{ grid-template-columns:repeat(2, minmax(0,1fr)); }
     }
 
     @media (max-width:720px){
@@ -321,20 +348,14 @@
         border-radius:18px;
       }
 
-      .title{
-        font-size:24px;
-      }
-
-      .meta{
-        grid-template-columns:repeat(2, minmax(0,1fr));
-      }
-
-      .meta-value{
-        font-size:17px;
-      }
+      .title{ font-size:24px; }
+      .meta{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+      .kv-list{ grid-template-columns:1fr; }
+      .meta-value{ font-size:17px; }
     }
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <section class="hero">
@@ -342,8 +363,8 @@
         <div>
           <h1 class="title">Top10 Decision Dashboard</h1>
           <p class="subtitle">
-            自动读取并渲染最新的 Decision Markdown 报告。<br />
-            支持刷新，并可切换查看上一份 / 下一份报告。
+            自动读取并渲染最新的 Decision 报告。<br />
+            本版专门兼容报告被压成一整行的情况，直接解析三张核心表。
           </p>
         </div>
 
@@ -370,7 +391,7 @@
       <section class="card">
         <div class="card-body">
           <h2 class="section-title">报告正文</h2>
-          <div id="reportBox" class="markdown empty">等待加载...</div>
+          <div id="reportBox" class="empty">等待加载...</div>
         </div>
       </section>
     </div>
@@ -380,8 +401,9 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
+    "use strict";
+
     const REPO = {
       owner: "njedu2023-prog",
       name: "top10-decision",
@@ -389,11 +411,8 @@
       reportDir: "outputs/decision"
     };
 
-    const API_LIST_URL =
-      `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
-
-    const RAW_BASE =
-      `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
+    const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
+    const API_LIST_URL = `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
 
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
@@ -407,14 +426,11 @@
     let reportFiles = [];
     let currentIndex = 0;
     let currentFileName = "";
-
-    marked.setOptions({
-      gfm: true,
-      breaks: false
-    });
+    let lastLoadMode = "";
 
     function setStatus(type, text) {
       statusPill.className = `pill ${type || ""}`.trim();
+      statusPill.textContent = type === "ok" ? "加载成功" : type === "bad" ? "加载失败" : type === "warn" ? "回退模式" : "加载中";
       statusText.textContent = text || "";
     }
 
@@ -426,12 +442,320 @@
         .replaceAll('"', "&quot;");
     }
 
-    function classForSigned(v) {
-      const n = Number(v);
-      if (!Number.isFinite(n)) return "";
-      if (n > 0) return "pos";
-      if (n < 0) return "neg";
+    function stripMd(s) {
+      return String(s ?? "")
+        .replace(/\*\*/g, "")
+        .replace(/`/g, "")
+        .trim();
+    }
+
+    function formatDateYmd(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}${m}${day}`;
+    }
+
+    function getDateCandidates(daysBack = 60) {
+      const out = [];
+      const d = new Date();
+      for (let i = 0; i <= daysBack; i += 1) {
+        const x = new Date(d);
+        x.setDate(d.getDate() - i);
+        out.push(formatDateYmd(x));
+      }
+      return out;
+    }
+
+    async function fetchText(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`请求失败: ${res.status} ${res.statusText}`);
+      return await res.text();
+    }
+
+    async function fetchJson(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`请求失败: ${res.status} ${res.statusText}`);
+      return await res.json();
+    }
+
+    function normalizeReport(md) {
+      let s = String(md || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .trim();
+
+      /*
+       * 核心修复：
+       * 当前报告文件可能整份被压缩成 1 行。
+       * 必须先把标题、二级标题、元数据、表格行重新拆开，否则页面会一直像“没有数据”。
+       */
+      s = s
+        .replace(/\s+(##\s+)/g, "\n\n$1")
+        .replace(/\s+(-\s+[A-Za-z_][A-Za-z0-9_]*:\s+)/g, "\n$1")
+        .replace(/\s+(\|\s*rank\s*\|)/gi, "\n$1")
+        .replace(/\s+(\|\s*:?-{3,}:?\s*\|)/g, "\n$1")
+        .replace(/\s+(\|\s*\d+\s*\|)/g, "\n$1");
+
+      return s.trim();
+    }
+
+    function extractTitleDate(md) {
+      const m = md.match(/#\s*Decision Report\s*\((\d{8})\)/i);
+      return m ? m[1] : "";
+    }
+
+    function extractField(md, key) {
+      const patterns = [
+        new RegExp(`(?:^|\\n)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i"),
+        new RegExp(`(?:^|\\s)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i"),
+        new RegExp(`${key}:\\s*\\*\\*(.*?)\\*\\*`, "i")
+      ];
+
+      for (const re of patterns) {
+        const m = md.match(re);
+        if (m) return stripMd(m[1]);
+      }
       return "";
+    }
+
+    function extractFields(md) {
+      const keys = [
+        "signal_date",
+        "exec_date",
+        "requested_trade_date",
+        "regime",
+        "risk_budget",
+        "input_mode",
+        "fs_degrade_reason",
+        "pred_loaded",
+        "pred_rows",
+        "features_base_loaded",
+        "features_base_rows",
+        "features_limit_loaded",
+        "features_limit_rows",
+        "truth_close_loaded",
+        "truth_close_rows",
+        "meta_loaded",
+        "p_fill_pred_src",
+        "p_fill_model_loaded",
+        "p_fill_model_kind",
+        "p_fill_degrade_reason",
+        "eret_pred_src",
+        "eret_model_loaded",
+        "eret_model_kind",
+        "eret_degrade_reason",
+        "candidates_snapshot",
+        "execution_table",
+        "learning_table",
+        "weights_latest",
+        "weights_dated",
+        "top_evr_latest",
+        "top_evr_dated"
+      ];
+
+      const out = { report_date: extractTitleDate(md) };
+      keys.forEach(key => out[key] = extractField(md, key));
+      return out;
+    }
+
+    function splitRow(line) {
+      return String(line)
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map(x => stripMd(x));
+    }
+
+    function isSeparatorRow(line) {
+      return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(String(line).trim());
+    }
+
+    function parseSectionTable(md, sectionName) {
+      const safe = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`##\\s+${safe}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i");
+      const m = md.match(re);
+      if (!m) return { header: [], rows: [] };
+
+      const lines = m[1]
+        .split("\n")
+        .map(x => x.trim())
+        .filter(Boolean)
+        .filter(x => x.startsWith("|"));
+
+      if (lines.length < 2) return { header: [], rows: [] };
+
+      const headerLine = lines.find(x => /\|\s*rank\s*\|/i.test(x)) || lines[0];
+      const header = splitRow(headerLine);
+
+      const rows = lines
+        .filter(x => x !== headerLine)
+        .filter(x => !isSeparatorRow(x))
+        .map(splitRow)
+        .filter(row => row.length >= 3 && /^\d+$/.test(row[0]));
+
+      return { header, rows };
+    }
+
+    function tableHtml(table, emptyText) {
+      if (!table || !table.header || table.header.length === 0) {
+        return `<div class="empty">${escapeHtml(emptyText || "未解析到表格")}</div>`;
+      }
+
+      if (!table.rows || table.rows.length === 0) {
+        return `<div class="empty">${escapeHtml(emptyText || "该表当前为空")}</div>`;
+      }
+
+      const numericKeys = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
+      const keys = table.header.map(h => String(h).toLowerCase());
+
+      const th = table.header.map((h, idx) => {
+        const cls = numericKeys.has(keys[idx]) ? ' class="num"' : "";
+        return `<th${cls}>${escapeHtml(h)}</th>`;
+      }).join("");
+
+      const tr = table.rows.map(row => {
+        return `<tr>${table.header.map((_, idx) => {
+          const key = keys[idx];
+          const val = row[idx] ?? "";
+          const n = Number(String(val).replace("%", ""));
+          const classes = [];
+          if (numericKeys.has(key)) classes.push("num");
+          if ((key === "ev" || key === "e_ret") && Number.isFinite(n)) {
+            if (n > 0) classes.push("pos");
+            if (n < 0) classes.push("neg");
+          }
+          return `<td${classes.length ? ` class="${classes.join(" ")}"` : ""}>${escapeHtml(val)}</td>`;
+        }).join("")}</tr>`;
+      }).join("");
+
+      return `<div class="table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`;
+    }
+
+    function kvHtml(fields, keys) {
+      return `<div class="kv-list">${keys.map(([key, label]) => `
+        <div class="kv">
+          <div class="kv-key">${escapeHtml(label)}</div>
+          <div class="kv-val">${escapeHtml(fields[key] || "-")}</div>
+        </div>
+      `).join("")}</div>`;
+    }
+
+    function buildMetaCard(label, value) {
+      return `
+        <div class="meta-item">
+          <div class="meta-label">${escapeHtml(label)}</div>
+          <div class="meta-value">${escapeHtml(value == null || value === "" ? "-" : value)}</div>
+        </div>
+      `;
+    }
+
+    function renderMeta(fields, evRows, topRows, fullRows) {
+      metaGrid.innerHTML = [
+        buildMetaCard("报告日期", fields.report_date || "-"),
+        buildMetaCard("信号日", fields.signal_date || "-"),
+        buildMetaCard("执行日", fields.exec_date || "-"),
+        buildMetaCard("市场状态", fields.regime || "-"),
+        buildMetaCard("风险预算", fields.risk_budget || "-"),
+        buildMetaCard("输入模式", fields.input_mode || "-"),
+        buildMetaCard("EV筛选数量", String(evRows)),
+        buildMetaCard("TopN数量", String(topRows)),
+        buildMetaCard("候选池数量", String(fullRows)),
+        buildMetaCard("P_fill来源", fields.p_fill_pred_src || "-"),
+        buildMetaCard("E_ret来源", fields.eret_pred_src || "-"),
+        buildMetaCard("当前文件", currentFileName || "-")
+      ].join("");
+    }
+
+    function renderReport(mdRaw) {
+      const md = normalizeReport(mdRaw);
+      const fields = extractFields(md);
+      const evTable = parseSectionTable(md, "EV > 3% & RiskPenalty < 1%");
+      const topnTable = parseSectionTable(md, "TopN Targets");
+      const fullTable = parseSectionTable(md, "Full Candidate Pool");
+
+      renderMeta(
+        fields,
+        evTable.rows.length,
+        topnTable.rows.length,
+        fullTable.rows.length
+      );
+
+      const rawNotice = mdRaw.split(/\r?\n/).length <= 2
+        ? `<div class="notice">检测到报告文件被压成一整行；本页面已启用强制拆分解析，所以 Full Candidate Pool 等表格仍可显示。</div>`
+        : "";
+
+      reportBox.className = "";
+      reportBox.innerHTML = `
+        ${lastLoadMode === "raw-date-fallback" ? '<div class="notice">当前使用 raw 日期回退模式：GitHub API 列表读取失败或被限流，但报告正文已通过 raw 文件恢复读取。</div>' : ""}
+        ${rawNotice}
+
+        <div class="report-section">
+          <h2>报告状态</h2>
+          ${kvHtml(fields, [
+            ["signal_date", "信号日"],
+            ["exec_date", "执行日"],
+            ["requested_trade_date", "请求交易日"],
+            ["regime", "市场状态"],
+            ["risk_budget", "风险预算"],
+            ["input_mode", "输入模式"],
+            ["fs_degrade_reason", "FS降级原因"],
+            ["pred_loaded", "pred_loaded"],
+            ["pred_rows", "pred_rows"],
+            ["features_base_rows", "features_base_rows"],
+            ["features_limit_rows", "features_limit_rows"],
+            ["truth_close_rows", "truth_close_rows"]
+          ])}
+        </div>
+
+        <div class="report-section">
+          <h2>模型状态</h2>
+          ${kvHtml(fields, [
+            ["p_fill_pred_src", "P_fill来源"],
+            ["p_fill_model_loaded", "P_fill模型加载"],
+            ["p_fill_model_kind", "P_fill模型类型"],
+            ["p_fill_degrade_reason", "P_fill降级原因"],
+            ["eret_pred_src", "E_ret来源"],
+            ["eret_model_loaded", "E_ret模型加载"],
+            ["eret_model_kind", "E_ret模型类型"],
+            ["eret_degrade_reason", "E_ret降级原因"]
+          ])}
+        </div>
+
+        <div class="report-section">
+          <h2>Artifacts</h2>
+          ${kvHtml(fields, [
+            ["candidates_snapshot", "候选快照"],
+            ["execution_table", "执行表"],
+            ["learning_table", "学习表"],
+            ["weights_latest", "weights_latest"],
+            ["weights_dated", "weights_dated"],
+            ["top_evr_latest", "TopEVR_latest"],
+            ["top_evr_dated", "TopEVR_dated"]
+          ])}
+        </div>
+
+        <div class="report-section">
+          <h2>EV &gt; 3% &amp; RiskPenalty &lt; 1%</h2>
+          ${tableHtml(evTable, "该严格筛选表当前为空：没有股票同时满足 EV > 3% 且 RiskPenalty < 1%。")}
+        </div>
+
+        <div class="report-section">
+          <h2>TopN Targets</h2>
+          ${tableHtml(topnTable, "TopN Targets 当前为空。")}
+        </div>
+
+        <div class="report-section">
+          <h2>Full Candidate Pool</h2>
+          ${tableHtml(fullTable, "Full Candidate Pool 当前未解析到数据。")}
+        </div>
+
+        <div class="report-section">
+          <h2>原始报告预览</h2>
+          <pre class="raw">${escapeHtml(md.slice(0, 8000))}</pre>
+        </div>
+      `;
     }
 
     function updateNavButtons() {
@@ -439,23 +763,7 @@
       nextBtn.disabled = currentIndex <= 0;
     }
 
-    async function fetchJson(url) {
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(`请求失败: ${res.status} ${res.statusText}`);
-      }
-      return await res.json();
-    }
-
-    async function fetchText(url) {
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(`请求失败: ${res.status} ${res.statusText}`);
-      }
-      return await res.text();
-    }
-
-    async function getReportFiles() {
+    async function getReportFilesFromApi() {
       const files = await fetchJson(API_LIST_URL);
       const rows = Array.isArray(files) ? files : [];
 
@@ -469,197 +777,106 @@
         }));
     }
 
-    function extractSimpleFields(md) {
-      const out = {};
-      const fields = [
-        "signal_date",
-        "exec_date",
-        "requested_trade_date",
-        "regime",
-        "risk_budget",
-        "input_mode",
-        "fs_degrade_reason",
-        "p_fill_pred_src",
-        "p_fill_model_loaded",
-        "p_fill_model_kind",
-        "p_fill_degrade_reason",
-        "eret_pred_src",
-        "eret_model_loaded",
-        "eret_model_kind",
-        "eret_degrade_reason"
-      ];
+    function getFallbackReportFiles() {
+      return getDateCandidates(60).map(ymd => ({
+        name: `decision_report_${ymd}.md`,
+        path: `${REPO.reportDir}/decision_report_${ymd}.md`,
+        rawUrl: `${RAW_BASE}/${REPO.reportDir}/decision_report_${ymd}.md`
+      }));
+    }
 
-      for (const key of fields) {
-        const re = new RegExp(`(?:^|\\n)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i");
-        const m = md.match(re);
-        if (m) out[key] = m[1].trim();
+    async function ensureReportList() {
+      if (reportFiles.length > 0) return;
+
+      try {
+        setStatus("", "正在通过 GitHub API 定位报告列表...");
+        reportFiles = await getReportFilesFromApi();
+        lastLoadMode = "api-list";
+      } catch (err) {
+        console.warn("GitHub API list failed, fallback to raw date probing.", err);
+        reportFiles = getFallbackReportFiles();
+        lastLoadMode = "raw-date-fallback";
       }
 
-      const titleMatch = md.match(/^#\s*Decision Report\s*\((\d{8})\)/im);
-      if (titleMatch) out.report_date = titleMatch[1];
-
-      return out;
-    }
-
-    function parseMarkdownTable(md, sectionTitle) {
-      const escaped = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(
-        `##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`,
-        "i"
-      );
-      const block = md.match(re);
-      if (!block) return null;
-
-      const lines = block[1]
-        .split(/\r?\n/)
-        .map(s => s.trim())
-        .filter(Boolean)
-        .filter(s => s.startsWith("|"));
-
-      if (lines.length < 3) return null;
-
-      const header = lines[0]
-        .split("|")
-        .map(s => s.trim())
-        .filter(Boolean);
-
-      const body = lines
-        .slice(2)
-        .map(line => line.split("|").map(s => s.trim()).filter(Boolean));
-
-      return { header, body };
-    }
-
-    function buildMetaCard(label, value, extraClass = "") {
-      const val = value == null || value === "" ? "-" : String(value);
-      return `
-        <div class="meta-item">
-          <div class="meta-label">${escapeHtml(label)}</div>
-          <div class="meta-value ${extraClass}">${escapeHtml(val)}</div>
-        </div>
-      `;
-    }
-
-    function renderMeta(fields, topnRows, allRows) {
-      metaGrid.innerHTML = [
-        buildMetaCard("报告日期", fields.report_date || "-"),
-        buildMetaCard("信号日", fields.signal_date || "-"),
-        buildMetaCard("执行日", fields.exec_date || "-"),
-        buildMetaCard("市场状态", fields.regime || "-"),
-        buildMetaCard("风险预算", fields.risk_budget || "-"),
-        buildMetaCard("输入模式", fields.input_mode || "-"),
-        buildMetaCard("TopN 数量", topnRows != null ? String(topnRows) : "-"),
-        buildMetaCard("候选池数量", allRows != null ? String(allRows) : "-"),
-        buildMetaCard("P_fill 来源", fields.p_fill_pred_src || "-"),
-        buildMetaCard("E_ret 来源", fields.eret_pred_src || "-"),
-        buildMetaCard("FS 降级原因", fields.fs_degrade_reason || "none"),
-        buildMetaCard("当前文件", currentFileName || "-")
-      ].join("");
-    }
-
-    function decorateTables(root) {
-      root.querySelectorAll("table").forEach(table => {
-        if (!table.parentElement.classList.contains("table-wrap")) {
-          const wrap = document.createElement("div");
-          wrap.className = "table-wrap";
-          table.parentNode.insertBefore(wrap, table);
-          wrap.appendChild(table);
-        }
-
-        const headers = Array.from(table.querySelectorAll("thead th")).map(th =>
-          th.textContent.trim().toLowerCase()
-        );
-
-        const numericNames = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
-
-        table.querySelectorAll("thead th").forEach((th, idx) => {
-          if (numericNames.has(headers[idx])) th.classList.add("num");
-        });
-
-        table.querySelectorAll("tbody tr").forEach(tr => {
-          Array.from(tr.children).forEach((td, idx) => {
-            const key = headers[idx];
-            if (numericNames.has(key)) td.classList.add("num");
-            if (key === "ev" || key === "e_ret") {
-              td.classList.add(classForSigned(td.textContent.trim()));
-            }
-          });
-        });
-      });
-    }
-
-    function preprocessMarkdown(md) {
-      return md
-        .replace(/^- (signal_date|exec_date|requested_trade_date|regime|risk_budget|input_mode|fs_degrade_reason):/gm, "- **$1**:")
-        .replace(/^- (pred_loaded|pred_rows|features_base_loaded|features_base_rows|features_limit_loaded|features_limit_rows|truth_close_loaded|truth_close_rows|meta_loaded):/gm, "- **$1**:")
-        .replace(/^- (p_fill_pred_src|p_fill_model_loaded|p_fill_model_kind|p_fill_degrade_reason|eret_pred_src|eret_model_loaded|eret_model_kind|eret_degrade_reason):/gm, "- **$1**:")
-        .replace(/^- (candidates_snapshot|execution_table|learning_table|weights_latest|weights_dated):/gm, "- **$1**:");
+      if (!reportFiles.length) {
+        reportFiles = getFallbackReportFiles();
+        lastLoadMode = "raw-date-fallback";
+      }
     }
 
     async function loadReportByIndex(index) {
       try {
-        if (!reportFiles.length) {
-          reportFiles = await getReportFiles();
-        }
-
-        if (!reportFiles.length) {
-          throw new Error("未找到 decision_report_YYYYMMDD.md");
-        }
+        await ensureReportList();
 
         currentIndex = Math.max(0, Math.min(index, reportFiles.length - 1));
         updateNavButtons();
 
-        const info = reportFiles[currentIndex];
-        currentFileName = info.name;
-
-        setStatus("", `正在读取：${info.name}`);
-        reportBox.className = "markdown empty";
+        reportBox.className = "empty";
         reportBox.innerHTML = "正在加载...";
         metaGrid.innerHTML = "";
 
-        const mdRaw = await fetchText(info.rawUrl);
-        const md = preprocessMarkdown(mdRaw);
+        let lastErr = null;
 
-        const fields = extractSimpleFields(mdRaw);
-        const topnTable = parseMarkdownTable(mdRaw, "TopN Targets");
-        const allTable = parseMarkdownTable(mdRaw, "Full Candidate Pool");
+        for (let i = currentIndex; i < reportFiles.length; i += 1) {
+          const info = reportFiles[i];
+          currentIndex = i;
+          currentFileName = info.name;
+          updateNavButtons();
 
-        renderMeta(fields, topnTable?.body?.length ?? null, allTable?.body?.length ?? null);
+          try {
+            setStatus(lastLoadMode === "raw-date-fallback" ? "warn" : "", `正在读取：${info.name}`);
+            const mdRaw = await fetchText(info.rawUrl);
+            renderReport(mdRaw);
+            setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
+            footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
+            return;
+          } catch (err) {
+            lastErr = err;
+            console.warn(`Report not loaded: ${info.name}`, err);
+            if (lastLoadMode !== "raw-date-fallback") break;
+          }
+        }
 
-        const html = marked.parse(md);
-        reportBox.className = "markdown";
-        reportBox.innerHTML = html;
-        decorateTables(reportBox);
-
-        setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
-        footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
+        throw lastErr || new Error("未找到可读取的 decision_report_YYYYMMDD.md");
       } catch (err) {
         console.error(err);
-        setStatus("bad", "加载失败");
-        reportBox.className = "markdown error";
+        setStatus("bad", "页面加载失败");
+        reportBox.className = "error";
         reportBox.innerHTML = `
           <strong>页面加载失败</strong><br><br>
           ${escapeHtml(err?.message || String(err))}<br><br>
           请检查：<br>
           1. 仓库是否公开；<br>
           2. outputs/decision/ 下是否已有 decision_report_YYYYMMDD.md；<br>
-          3. GitHub API 是否临时限流。
+          3. GitHub raw 或 GitHub API 是否临时限流；<br>
+          4. 浏览器是否阻止跨域 fetch。
         `;
         metaGrid.innerHTML = "";
       }
     }
 
-    refreshBtn.addEventListener("click", () => loadReportByIndex(currentIndex));
+    refreshBtn.addEventListener("click", () => {
+      reportFiles = [];
+      currentIndex = 0;
+      loadReportByIndex(0);
+    });
+
     prevBtn.addEventListener("click", () => loadReportByIndex(currentIndex + 1));
     nextBtn.addEventListener("click", () => loadReportByIndex(currentIndex - 1));
 
-    async function init() {
-      setStatus("", "正在定位报告列表...");
-      reportFiles = await getReportFiles();
-      await loadReportByIndex(0);
-    }
+    window.addEventListener("error", event => {
+      console.error("Global page error:", event.error || event.message);
+      setStatus("bad", "页面脚本异常");
+      reportBox.className = "error";
+      reportBox.innerHTML = `
+        <strong>页面脚本异常</strong><br><br>
+        ${escapeHtml(event.message || "未知脚本错误")}
+      `;
+    });
 
-    init();
+    setStatus("", "正在定位报告...");
+    loadReportByIndex(0);
+
     setInterval(() => loadReportByIndex(currentIndex), 5 * 60 * 1000);
   </script>
 </body>
