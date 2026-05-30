@@ -2,19 +2,21 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Markdown 报告渲染（去模板化版本）
+Premium 子系统 — Markdown 报告渲染（V3.1：E_ret_plus / EHX 展示增强版）
 
-A) ✅ 新口径（Premium V2 主线，锁死）：
-- 报告包含两张表：预测表 + 验证表（输出为 Markdown + 内嵌 HTML table）
-- 不依赖 PremiumA.html / PremiumB.html（彻底去模板化）
-- 若 T+2 行情未到：pending（不得报错卡死），验证表显示 PENDING 原因
-- 验证表顺序必须与预测表 Top30 完全一致（由上游保证）
+A) ✅ 新口径（Premium V3 主线，锁死）：
+- 报告包含两张表：预测表 + 验证表（输出为 Markdown + 内嵌 HTML table）。
+- 不依赖 PremiumA.html / PremiumB.html（彻底去模板化）。
+- 若 T+2 行情未到：pending（不得报错卡死），验证表显示 PENDING 原因。
+- 验证表顺序必须与预测表 Top30 完全一致（由上游保证）。
+- 新增展示 E_ret_plus / EHX：raw、plus、delta、方向、置信度、来源。
+- 新增 raw_abs_err / plus_abs_err / improve_flag，用于验证 EHX 是否真的改善。
 
 入口函数：
 - render_premium_report_md(...)
 
 B) ♻️ 旧口径（PredEV/TopK/RankIC）：
-- 保留 render_premium_md(...)，避免旧链路引用时炸裂
+- 保留 render_premium_md(...)，避免旧链路引用时炸裂。
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ from .config import PremiumConfig
 
 
 # =========================
-# 新口径（V2 报告：去模板化 + 内嵌 HTML）
+# 新口径（V3 报告：去模板化 + 内嵌 HTML）
 # =========================
 
 def _fmt_prob(x: object, digits: int = 2) -> str:
@@ -76,19 +78,41 @@ def _fmt_price(x: object, digits: int = 3) -> str:
 
 
 def _fmt_bool(x: object) -> str:
-    if x is True or str(x).lower() == "true":
+    if x is True or str(x).lower() == "true" or str(x) == "1":
         return "✅"
-    if x is False or str(x).lower() == "false":
+    if x is False or str(x).lower() == "false" or str(x) == "0":
         return "❌"
     return "-"
 
 
+def _fmt_direction(x: object) -> str:
+    s = str(x or "").strip().lower()
+    if s == "up":
+        return "上修"
+    if s == "down":
+        return "下修"
+    if s == "flat":
+        return "持平"
+    return str(x) if str(x).strip() else "-"
+
+
+def _fmt_conf_label(x: object) -> str:
+    s = str(x or "").strip().lower()
+    if s == "high":
+        return "高"
+    if s == "mid":
+        return "中"
+    if s == "low":
+        return "低"
+    return str(x) if str(x).strip() else "-"
+
+
 def _detect_quantile_cols(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
     """
-    ✅ 按需求：预测表/Top all 不再展示 T 的 ln 分位（r_pXX）。
-    这里只返回价格分位 close_T2_pXX。
+    当前报告只展示 T+2 价格分位 close_T2_pXX。
+    r_pXX 为内部 log-return 分位，不在预测表中展示，避免页面过宽与读者误解。
     """
-    r_cols: List[str] = []  # 不展示 r_pXX
+    r_cols: List[str] = []
     p_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("close_T2_p")]
 
     def _key(c: str) -> int:
@@ -108,9 +132,6 @@ def _select_cols_exist(df: pd.DataFrame, cols: Sequence[str]) -> List[str]:
 # =========================
 # 展示层：中文表头（仅影响报告渲染，不影响计算/CSV）
 # =========================
-# 你确认的无歧义命名：
-# - 预测日（T）
-# - 预测到期日（T+2）
 
 _CN_FIXED = {
     "rank": "排名",
@@ -122,9 +143,17 @@ _CN_FIXED = {
     "close_T2_actual": "收盘价(T+2)",
     "r_actual": "实际ln收益",
     "rank_r_p50": "ln中位排名",
+    "rank_eret_plus": "E_ret_plus排名",
     "p_premium": "上涨概率",
-    "e_premium": "预期溢价",
+    "e_premium": "原始E_ret",
     "score_ev": "综合评分",
+    "eret_pred_raw": "E_ret原始值",
+    "eret_plus_value": "E_ret_plus",
+    "eret_plus_delta": "EHX修正值",
+    "eret_plus_direction": "EHX方向",
+    "eret_plus_conf": "EHX置信度",
+    "eret_plus_conf_score": "EHX置信分",
+    "eret_plus_src": "EHX来源",
     "dec_rank": "决策排名",
     "dec_weight": "决策权重",
     "dec_can_buy": "可买",
@@ -135,6 +164,9 @@ _CN_FIXED = {
     "err_r_p50": "ln误差(中位)",
     "err_close_p50": "价误差(中位)",
     "actual_ret": "实际收益",
+    "raw_abs_err": "Raw绝对误差",
+    "plus_abs_err": "Plus绝对误差",
+    "improve_flag": "Plus优于Raw",
     "hit_up": "是否上涨",
 }
 
@@ -144,7 +176,7 @@ def _cn_col(col: str) -> str:
     if c in _CN_FIXED:
         return _CN_FIXED[c]
 
-    # r_pXX 已不再展示，但这里保留映射以避免未来误入时表头变脏
+    # r_pXX 已不在预测表展示，这里保留映射，避免未来误入时表头变脏。
     m = re.match(r"^r_p(\d{2})$", c)
     if m:
         return f"ln分位{m.group(1)}"
@@ -159,42 +191,61 @@ def _cn_col(col: str) -> str:
 def _df_to_html_table(df: pd.DataFrame) -> str:
     """
     GitHub Markdown 对 <style> 会过滤/转义，导致样式内容被打印出来；
-    这里改为：只输出可渲染的 <table>，不输出 <style>，不做 HTML 转义。
+    这里只输出可渲染的 <table>，不输出 <style>。
     """
     if df is None or df.empty:
         return ""
     show = df.copy()
     show.columns = [_cn_col(c) for c in show.columns]
-
-    # 直接输出 HTML table（GitHub 支持）
     html = show.to_html(index=False, escape=True, border=0)
     return f"<div>{html}</div>"
 
 
 def _format_pred_table(df_top30: pd.DataFrame) -> pd.DataFrame:
     df = df_top30.copy()
-    r_cols, p_cols = _detect_quantile_cols(df)  # r_cols 将始终为空（不展示 ln 分位）
+    r_cols, p_cols = _detect_quantile_cols(df)
 
     base_cols = [
         "rank", "trade_date", "target_date", "ts_code", "name", "close_T",
     ]
-    cols = base_cols + r_cols + p_cols
-    cols += _select_cols_exist(df, ["rank_r_p50"])
+    cols = base_cols
+    cols += _select_cols_exist(
+        df,
+        [
+            "eret_pred_raw",
+            "eret_plus_value",
+            "eret_plus_delta",
+            "eret_plus_direction",
+            "eret_plus_conf",
+            "eret_plus_conf_score",
+            "eret_plus_src",
+        ],
+    )
+    cols += r_cols + p_cols
+    cols += _select_cols_exist(df, ["rank_eret_plus", "rank_r_p50"])
     cols += _select_cols_exist(df, ["p_premium", "e_premium", "score_ev"])
     cols += _select_cols_exist(df, ["dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"])
 
     cols = _select_cols_exist(df, cols)
     out = df[cols].copy()
 
+    for c in ["eret_pred_raw", "eret_plus_value", "eret_plus_delta", "e_premium"]:
+        if c in out.columns:
+            out[c] = out[c].map(lambda x: _fmt_pct_ratio(x, 2))
+
+    if "eret_plus_direction" in out.columns:
+        out["eret_plus_direction"] = out["eret_plus_direction"].map(_fmt_direction)
+    if "eret_plus_conf" in out.columns:
+        out["eret_plus_conf"] = out["eret_plus_conf"].map(_fmt_conf_label)
+    if "eret_plus_conf_score" in out.columns:
+        out["eret_plus_conf_score"] = out["eret_plus_conf_score"].map(lambda x: _fmt_float(x, 3))
+
     if "p_premium" in out.columns:
         out["p_premium"] = out["p_premium"].map(lambda x: _fmt_prob(x, 2))
-    if "e_premium" in out.columns:
-        out["e_premium"] = out["e_premium"].map(lambda x: _fmt_pct_ratio(x, 2))
 
     if "close_T" in out.columns:
         out["close_T"] = out["close_T"].map(lambda x: _fmt_price(x, 2))
 
-    # r_cols 为空，不会执行
     for c in r_cols:
         if c in out.columns:
             out[c] = out[c].map(lambda x: _fmt_float(x, 4))
@@ -205,6 +256,10 @@ def _format_pred_table(df_top30: pd.DataFrame) -> pd.DataFrame:
 
     if "score_ev" in out.columns:
         out["score_ev"] = out["score_ev"].map(lambda x: _fmt_float(x, 4))
+    if "dec_weight" in out.columns:
+        out["dec_weight"] = out["dec_weight"].map(lambda x: _fmt_float(x, 4))
+    if "dec_p_fill" in out.columns:
+        out["dec_p_fill"] = out["dec_p_fill"].map(lambda x: _fmt_prob(x, 2))
 
     return out
 
@@ -215,9 +270,10 @@ def _format_verify_table(df_verify: pd.DataFrame) -> pd.DataFrame:
     cols = [
         "rank", "trade_date", "target_date", "ts_code", "name",
         "close_T", "close_T2_actual", "r_actual",
+        "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
         "in_p10", "in_p50",
         "err_r_p50", "err_close_p50",
-        "actual_ret", "hit_up",
+        "actual_ret", "raw_abs_err", "plus_abs_err", "improve_flag", "hit_up",
     ]
     cols = _select_cols_exist(df, cols)
     out = df[cols].copy()
@@ -228,19 +284,56 @@ def _format_verify_table(df_verify: pd.DataFrame) -> pd.DataFrame:
         out["close_T2_actual"] = out["close_T2_actual"].map(lambda x: _fmt_price(x, 2))
     if "r_actual" in out.columns:
         out["r_actual"] = out["r_actual"].map(lambda x: _fmt_float(x, 4))
+
+    for c in ["eret_pred_raw", "eret_plus_value", "eret_plus_delta", "actual_ret", "raw_abs_err", "plus_abs_err"]:
+        if c in out.columns:
+            out[c] = out[c].map(lambda x: _fmt_pct_ratio(x, 2))
+
+    if "eret_plus_direction" in out.columns:
+        out["eret_plus_direction"] = out["eret_plus_direction"].map(_fmt_direction)
+    if "eret_plus_conf" in out.columns:
+        out["eret_plus_conf"] = out["eret_plus_conf"].map(_fmt_conf_label)
+
     if "in_p10" in out.columns:
         out["in_p10"] = out["in_p10"].map(_fmt_bool)
     if "in_p50" in out.columns:
         out["in_p50"] = out["in_p50"].map(_fmt_bool)
+    if "improve_flag" in out.columns:
+        out["improve_flag"] = out["improve_flag"].map(_fmt_bool)
+
     if "err_r_p50" in out.columns:
         out["err_r_p50"] = out["err_r_p50"].map(lambda x: _fmt_float(x, 4))
     if "err_close_p50" in out.columns:
         out["err_close_p50"] = out["err_close_p50"].map(lambda x: _fmt_price(x, 3))
 
-    if "actual_ret" in out.columns:
-        out["actual_ret"] = out["actual_ret"].map(lambda x: _fmt_pct_ratio(x, 2))
-
     return out
+
+
+def _append_ehx_summary(parts: List[str], df_verify: pd.DataFrame) -> None:
+    """验证完成后，追加 raw vs plus 误差改善摘要。"""
+    if df_verify is None or df_verify.empty:
+        return
+    if "raw_abs_err" not in df_verify.columns or "plus_abs_err" not in df_verify.columns:
+        return
+
+    raw_err = pd.to_numeric(df_verify["raw_abs_err"], errors="coerce")
+    plus_err = pd.to_numeric(df_verify["plus_abs_err"], errors="coerce")
+    valid = raw_err.notna() & plus_err.notna()
+    if not bool(valid.any()):
+        return
+
+    raw_mae = float(raw_err[valid].mean())
+    plus_mae = float(plus_err[valid].mean())
+    improve_rate = float((plus_err[valid] < raw_err[valid]).mean())
+    delta = raw_mae - plus_mae
+
+    parts.append("")
+    parts.append("## E_ret_plus / EHX 验证摘要")
+    parts.append("")
+    parts.append(f"- Raw MAE：{raw_mae * 100:.4f}%")
+    parts.append(f"- Plus MAE：{plus_mae * 100:.4f}%")
+    parts.append(f"- MAE 改善：{delta * 100:+.4f}%")
+    parts.append(f"- Plus 优于 Raw 比例：{improve_rate * 100:.2f}%")
 
 
 def render_premium_report_md(
@@ -253,9 +346,10 @@ def render_premium_report_md(
     gen_ts: str,
 ) -> str:
     """
-    ✅ 新口径：生成 Premium V2 报告（Markdown + 内嵌 HTML table）
-    - 不再输出 <style>（GitHub 会过滤/转义）
-    - 中文表头：预测日/预测到期日（无歧义）
+    ✅ 新口径：生成 Premium V3 报告（Markdown + 内嵌 HTML table）
+    - 不输出 <style>（GitHub 会过滤/转义）。
+    - 中文表头：预测日/预测到期日（无歧义）。
+    - 展示 E_ret_plus / EHX 的增强结果与后验误差对比。
     """
     cfg = PremiumConfig.load()
 
@@ -263,7 +357,7 @@ def render_premium_report_md(
     target_date = str(target_date or trade_date).strip()
 
     parts: List[str] = []
-    parts.append("# Premium（溢价预测）V2（Close[T+2] 分布预测）")
+    parts.append("# Premium（溢价预测）V3（E_ret_plus / Close[T+2] 分布预测）")
     parts.append("")
     parts.append("> 注：T 为本次预测的**基准交易日**（使用 Close[T]）；T+2 为**预测到期交易日**（预测 Close[T+2] 的分布）。")
     parts.append("")
@@ -321,14 +415,21 @@ def render_premium_report_md(
             mae_c = float(pd.to_numeric(df_verify["err_close_p50"], errors="coerce").abs().mean())
             parts.append(f"- MAE（V2：|err_close_p50|）：{mae_c:.6f}")
 
+        _append_ehx_summary(parts, df_verify)
+
     parts.append("")
-    parts.append("## 字段说明（V2 核心）")
+    parts.append("## 字段说明（V3 核心）")
     parts.append("")
-    parts.append("- close_T2_pXX：预测到期日（T+2）收盘价的价格分位点（展示字段）")
-    parts.append("- in_p10：r_actual 是否落在 [p05, p95]")
-    parts.append("- in_p50：r_actual 是否落在 [p25, p75]")
+    parts.append("- E_ret原始值：进入 EHX 前的原始溢价预测值。")
+    parts.append("- E_ret_plus：EHX 残差增强后的溢价预测值，当前 Premium 主线优先围绕它排序和展示。")
+    parts.append("- EHX修正值：E_ret_plus - E_ret原始值，正数表示上修，负数表示下修。")
+    parts.append("- EHX方向 / EHX置信度 / EHX来源：用于判断增强层是否真实接入、是否处于模型态或冷启动态。")
+    parts.append("- Raw绝对误差 / Plus绝对误差 / Plus优于Raw：T+2 真值出来后，用于验证 EHX 是否真的改善。")
+    parts.append("- close_T2_pXX：预测到期日（T+2）收盘价的价格分位点（展示字段）。")
+    parts.append("- in_p10：r_actual 是否落在 [p05, p95]。")
+    parts.append("- in_p50：r_actual 是否落在 [p25, p75]。")
     parts.append("")
-    parts.append("> 注：r_pXX（log-return 分位点，r = ln(Close[T+2]/Close[T])）为内部计算字段，当前报告不再展示。")
+    parts.append("> 注：r_pXX（log-return 分位点，r = ln(Close[T+2]/Close[T])）为内部计算字段，当前报告不在预测表展示。")
     parts.append("")
 
     return "\n".join(parts)
@@ -447,7 +548,7 @@ def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str
     lines = []
     lines.append(f"# Premium 溢价预测排序（{trade_date}）")
     lines.append("")
-    lines.append("- （旧口径报告渲染，保留用于历史链路；新主线已迁移至 V2）")
+    lines.append("- （旧口径报告渲染，保留用于历史链路；新主线已迁移至 V3）")
     lines.append(f"- trade_date：**{trade_date}**")
     lines.append(f"- next_trade_date：**{next_td}**")
     lines.append(f"- 模型版本：**{getattr(cfg, 'model_version', '-') }**")
