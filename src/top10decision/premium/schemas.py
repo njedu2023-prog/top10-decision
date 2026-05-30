@@ -2,18 +2,22 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — 字段契约（Schemas）
+Premium 子系统 — 字段契约（Schemas｜V3.1：E_ret_plus / EHX 字段契约增强版）
 
 本文件的职责：
-- 统一定义 Premium 模块的输入/输出/标签/评估表的字段规范
-- 提供“列名别名映射（alias）”以适配上游 decision 表列名差异
-- 提供最小校验函数：确保关键字段存在，避免 silent wrong
+- 统一定义 Premium 模块的输入/输出/标签/评估表的字段规范。
+- 提供“列名别名映射（alias）”以适配上游 decision / pred_source 表列名差异。
+- 提供最小校验函数：确保关键字段存在，避免 silent wrong。
+- 将 E_ret_plus / EHX 新增字段纳入正式契约，避免后续写入、校验、展示或历史评估时被旧 schema 截断。
 
 ⚠️ 设计原则（工程约束）：
-1) PremiumRet(2→3) 固定为：RealPremiumRet = Close[3] / Close[2] - 1
+1) PremiumRet(2→3) 固定为：RealPremiumRet = Close[3] / Close[2] - 1。
 2) Premium 预测阶段只允许使用“<= 1日收盘后可得信息” + “1日生成的2日预测表”。
    任何 2日盘中/2日收盘后才知道的信息，不能进入特征（防未来函数泄漏）。
 3) 字段分为：必需(required) 与可选(optional)。上游字段缺失时可降级，但必须显式告警。
+4) V3 主线新增 EHX：
+   eret_plus_value = eret_pred_raw + eret_plus_delta。
+   raw / plus 后验误差必须可落库、可报告、可回灌。
 """
 
 from __future__ import annotations
@@ -97,7 +101,7 @@ def resolve_optional_columns(
 
 
 # =========================
-# 2) 输入契约：上游 decision 预测表（用于构建 Premium 特征）
+# 2) 输入契约：上游 decision / pred_source 预测表（用于构建 Premium 特征）
 # =========================
 
 @dataclass(frozen=True)
@@ -110,10 +114,11 @@ class DecisionInputSchema:
     - ts_code：股票代码（tushare 格式）
     - name：股票名称（可选，但强烈建议）
     - rank：该表内部排序（可选，但建议有，用于衍生特征）
-    - 上游得分/概率/题材等列：可选（越多越好，但必须是<=1日可得信息派生）
+    - 上游得分/概率/题材/成本/风险/E_ret 等列：可选。
 
     注意：
     - 上游列名可能不一致，因此用 aliases 做兼容。
+    - 这里仅声明字段契约，不代表所有字段都必须存在。
     """
 
     # 必需（最低可跑）
@@ -125,7 +130,6 @@ class DecisionInputSchema:
     @staticmethod
     def required_aliases() -> Dict[str, Sequence[str]]:
         return {
-            # 规范字段名 -> 可能出现的列名
             "trade_date": ("trade_date", "date", "dt", "交易日期", "日期"),
             "ts_code": ("ts_code", "code", "symbol", "ticker", "股票代码", "代码"),
         }
@@ -135,18 +139,68 @@ class DecisionInputSchema:
         return {
             "name": ("name", "stock_name", "股票名称", "名称"),
             "rank": ("rank", "rank_no", "排名", "order"),
-            # 上游常见评分/因子（示例：你系统里可能叫 StrengthScore/ThemeBoost 等）
-            "strength_score": ("strengthscore", "strength_score", "强度得分", "strength"),
-            "theme_boost": ("themeboost", "theme_boost", "题材加权", "theme"),
-            "probability": ("probability", "prob", "_prob", "p", "概率"),
-            "final_score": ("finalscore", "final_score", "最终得分", "score"),
+            "decision_rank": ("decision_rank", "dec_rank", "rank_pred_ev", "rank_eret_plus", "决策排名"),
+
+            # 上游常见评分/因子
+            "strength_score": ("strengthscore", "strength_score", "强度得分", "strength", "f_strength"),
+            "theme_boost": ("themeboost", "theme_boost", "题材加权", "themeboost_score", "f_theme"),
+            "probability": ("probability", "prob", "_prob", "p", "p_premium", "up_prob", "f_prob", "概率"),
+            "final_score": ("finalscore", "final_score", "最终得分", "score", "score_ev", "ev", "pred_ev"),
             "regime_weight": ("regime_weight", "regime", "情绪权重", "市场状态权重"),
             "industry": ("industry", "行业"),
             "theme": ("theme", "题材", "concept", "concept_name"),
             "turnover_rate": ("turnover_rate", "换手率"),
             "amount": ("amount", "成交额"),
             "vol": ("vol", "volume", "成交量"),
-            # 预留：若上游带“可成交风险提示”也可作为特征/风险提示（但本模块不做 P_fill）
+            "close": ("close", "close_t", "close_T", "收盘价"),
+            "pct_chg": ("pct_chg", "pct_change", "涨跌幅"),
+            "amplitude": ("amplitude", "range_1d", "振幅"),
+
+            # P_fill / 成本 / 风险：EHX 与排序解释会用到
+            "p_fill_pred": ("p_fill_pred", "p_fill_pred_final", "p_fill", "P_fill", "dec_p_fill"),
+            "cost_total": ("cost_total", "cost", "cost_value", "cost_all", "trade_cost"),
+            "risk_penalty_total": (
+                "risk_penalty_total",
+                "risk_penalty",
+                "riskpenalty",
+                "risk_penalty_score",
+                "risk_score",
+            ),
+
+            # 原始 E_ret / E_ret_plus 字段别名，需与 train.py / predict.py 对齐
+            "eret_pred_raw": (
+                "eret_pred_raw",
+                "e_ret_pred_raw",
+                "raw_eret_pred",
+                "raw_e_ret_pred",
+                "eret_pred",
+                "e_ret_pred",
+                "E_ret",
+                "e_ret",
+                "eret_pred_final",
+                "e_premium",
+                "pred_ret",
+                "pred_return",
+                "ret",
+                "premium_ret",
+                "pred_premium_ret",
+                "pred_ret_mean",
+            ),
+            "eret_plus_value": (
+                "eret_plus_value",
+                "eret_plus",
+                "e_ret_plus",
+                "E_ret_plus",
+                "eret_plus_pred",
+                "e_ret_plus_pred",
+            ),
+            "eret_plus_delta": ("eret_plus_delta", "ehx_delta", "delta_hat", "delta_ret_hat"),
+            "eret_plus_direction": ("eret_plus_direction", "ehx_direction"),
+            "eret_plus_conf": ("eret_plus_conf", "ehx_conf", "ehx_confidence"),
+            "eret_plus_conf_score": ("eret_plus_conf_score", "ehx_conf_score"),
+            "eret_plus_src": ("eret_plus_src", "ehx_src", "ehx_source"),
+
+            # 预留：若上游带“可成交风险提示”也可作为特征/风险提示
             "fill_risk_hint": ("fill_risk_hint", "fillrisk", "成交风险", "买不到风险"),
         }
 
@@ -175,10 +229,6 @@ class CloseLabelSchema:
     - trade_date：交易日（用于定位第2日/第3日）
     - ts_code：股票代码
     - close：收盘价
-
-    说明：
-    - 你可以从任何可靠来源拿到 (trade_date, ts_code, close)
-      例如：本仓库已有落盘、或从 data 仓库同步等。
     """
 
     REQUIRED_ALIASES: Dict[str, Sequence[str]] = None  # type: ignore
@@ -212,57 +262,92 @@ class CloseLabelSchema:
 
 
 # =========================
-# 4) Premium 输出契约：给人类看的“溢价预测排序表”（csv/md）
+# 4) Premium 输出契约：预测排序表 / full 表 / report 表字段
 # =========================
 
 @dataclass(frozen=True)
 class PremiumRankOutputSchema:
     """
-    Premium 最终输出表字段（写入 outputs/premium/rank/*.csv 以及用于 md 报告）。
+    Premium 最终输出表字段建议。
 
-    核心字段：
-    - trade_date：第2日（这张表的日期语义统一按 2日）
-    - next_trade_date：第3日（用于对照 RealPremiumRet）
-    - ts_code, name
-    - pred_up_prob：预测 2→3 为正的概率（0~1）
-    - pred_ret_mean：预测 2→3 的平均收益（回归输出，单位：比例，如 0.03=3%）
-    - pred_ev：预测期望收益（建议 = pred_up_prob * pred_ret_mean）
-    - rank_pred_ev：按 pred_ev 排序后的名次
+    兼容两条线：
+    - 旧线：pred_up_prob / pred_ret_mean / pred_ev / rank_pred_ev。
+    - V3 线：eret_pred_raw / eret_plus_value / eret_plus_delta / rank_eret_plus。
 
-    风险提示字段（先预留，后续在 features/labels 里逐步填充）：
-    - risk_liquidity / risk_volatility / risk_crowding / risk_event
-    - confidence：模型置信度（高/中/低 或 0~1）
-
-    可追溯字段：
-    - run_id / commit_sha / model_version / data_snapshot
+    注意：
+    - 这是字段契约和建议顺序，不强制所有文件都必须完整输出全部列。
+    - predict.py 当前会按自身 out_cols 输出；本 schema 用于校验、排序、后续接线和历史兼容。
     """
 
-    # 建议输出列顺序（便于阅读与前端展示）
     COLUMNS: Tuple[str, ...] = (
+        "rank",
         "trade_date",
         "next_trade_date",
+        "target_date",
         "ts_code",
         "name",
+        "close_T",
+
         # 上游信息（可选）
         "decision_rank",
+        "dec_rank",
+        "dec_weight",
+        "dec_can_buy",
+        "dec_p_fill",
+        "dec_reason",
         "strength_score",
         "theme_boost",
         "probability",
         "final_score",
-        # Premium 预测
+
+        # 旧 Premium 预测
         "pred_up_prob",
         "pred_ret_mean",
         "pred_ev",
         "rank_pred_ev",
+
+        # V3 / EHX 主线预测
+        "eret_pred_raw",
+        "eret_plus_value",
+        "eret_plus_delta",
+        "eret_plus_direction",
+        "eret_plus_conf",
+        "eret_plus_conf_score",
+        "eret_plus_src",
+        "rank_eret_plus",
+
+        # 分布预测
+        "rank_r_p50",
+        "r_p05",
+        "r_p25",
+        "r_p50",
+        "r_p75",
+        "r_p95",
+        "close_T2_p05",
+        "close_T2_p25",
+        "close_T2_p50",
+        "close_T2_p75",
+        "close_T2_p95",
+
         # 风险提示（结构化）
         "risk_liquidity",
         "risk_volatility",
         "risk_crowding",
         "risk_event",
         "fill_risk_hint",
+        "risk_flags",
         "confidence",
+        "data_quality",
+
         # 真实对照（训练/回测时可填；纯预测日可为空）
         "real_premium_ret",
+        "actual_ret",
+        "close_T2_actual",
+        "raw_abs_err",
+        "plus_abs_err",
+        "improve_flag",
+        "hit_up",
+
         # 追溯
         "run_id",
         "commit_sha",
@@ -273,7 +358,42 @@ class PremiumRankOutputSchema:
 
 
 # =========================
-# 5) 学习/评估落库契约：用于 learning/ 目录
+# 5) Premium 验证输出契约：premium_verify_{T}.csv
+# =========================
+
+@dataclass(frozen=True)
+class PremiumVerifyOutputSchema:
+    """Premium 验证表字段建议，重点服务 EHX raw-vs-plus 后验验收。"""
+
+    COLUMNS: Tuple[str, ...] = (
+        "rank",
+        "trade_date",
+        "target_date",
+        "ts_code",
+        "name",
+        "close_T",
+        "close_T2_actual",
+        "r_actual",
+        "r_p50",
+        "eret_pred_raw",
+        "eret_plus_value",
+        "eret_plus_delta",
+        "eret_plus_direction",
+        "eret_plus_conf",
+        "in_p10",
+        "in_p50",
+        "err_r_p50",
+        "err_close_p50",
+        "actual_ret",
+        "raw_abs_err",
+        "plus_abs_err",
+        "improve_flag",
+        "hit_up",
+    )
+
+
+# =========================
+# 6) 学习/评估落库契约：用于 learning/ 目录
 # =========================
 
 @dataclass(frozen=True)
@@ -281,15 +401,12 @@ class PremiumEvalHistorySchema:
     """
     learning/premium_eval_history.csv 的字段建议（滚动评估）。
 
-    评估口径（按 2日为主）：
-    - trade_date：第2日
-    - next_trade_date：第3日（对照日）
-    - n：样本数（当日参与排序的股票数量）
-    - topk：评估用的 K（例如 10/20）
-    - hit_rate_at_k：TopK 中 real_premium_ret>0 的比例
-    - mean_ret_at_k：TopK 真实平均收益
-    - rank_ic：pred_ev 与 real_premium_ret 的秩相关（Spearman）
-    - model_version / run_id / commit_sha：追溯
+    旧评估口径：
+    - hit_rate_at_k / mean_ret_at_k / rank_ic。
+
+    V3 / EHX 评估口径：
+    - ehx_trained / ehx_reason / delta_mae / delta_rmse。
+    - plus_improve_rate：最后一个可验证交易日中，Plus 绝对误差小于 Raw 绝对误差的比例。
     """
 
     COLUMNS: Tuple[str, ...] = (
@@ -300,6 +417,17 @@ class PremiumEvalHistorySchema:
         "hit_rate_at_k",
         "mean_ret_at_k",
         "rank_ic",
+
+        # EHX 训练与评估追溯
+        "ehx_trained",
+        "ehx_reason",
+        "ehx_n_samples",
+        "ehx_min_samples",
+        "delta_mae",
+        "delta_rmse",
+        "plus_improve_rate",
+
+        # 追溯
         "model_version",
         "run_id",
         "commit_sha",
@@ -308,13 +436,14 @@ class PremiumEvalHistorySchema:
 
 
 # =========================
-# 6) 统一导出：便于其它模块引用
+# 7) 统一导出：便于其它模块引用
 # =========================
 
 __all__ = [
     "DecisionInputSchema",
     "CloseLabelSchema",
     "PremiumRankOutputSchema",
+    "PremiumVerifyOutputSchema",
     "PremiumEvalHistorySchema",
     "resolve_required_columns",
     "resolve_optional_columns",
