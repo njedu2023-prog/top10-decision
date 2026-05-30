@@ -1,11 +1,11 @@
-# Premium（溢价预测）V2（Close[T+2] 分布预测）
+# Premium（溢价预测）V3（E_ret_plus / Close[T+2] 分布预测）
 
 > 注：T 为本次预测的**基准交易日**（使用 Close[T]）；T+2 为**预测到期交易日**（预测 Close[T+2] 的分布）。
 
 - 预测日（T）：**20260527**
 - 预测到期日（T+2）：**20260529**
 - 周期：**2 个交易日（T→T+2）**
-- 生成时间：2026-05-29T16:54:50Z
+- 生成时间：2026-05-30T09:21:04Z
 - 模型版本：**premium_v2**
 
 ## 预测表（Top30）
@@ -19,14 +19,22 @@
       <th>代码</th>
       <th>名称</th>
       <th>收盘价(T)</th>
+      <th>E_ret原始值</th>
+      <th>E_ret_plus</th>
+      <th>EHX修正值</th>
+      <th>EHX方向</th>
+      <th>EHX置信度</th>
+      <th>EHX置信分</th>
+      <th>EHX来源</th>
       <th>T+2价分位05</th>
       <th>T+2价分位25</th>
       <th>T+2价分位50</th>
       <th>T+2价分位75</th>
       <th>T+2价分位95</th>
+      <th>E_ret_plus排名</th>
       <th>ln中位排名</th>
       <th>上涨概率</th>
-      <th>预期溢价</th>
+      <th>原始E_ret</th>
       <th>综合评分</th>
       <th>决策排名</th>
       <th>决策权重</th>
@@ -43,19 +51,27 @@
       <td>002484.SZ</td>
       <td>江海股份</td>
       <td>67.60</td>
+      <td>+0.00%</td>
+      <td>+2.57%</td>
+      <td>+2.57%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>63.865</td>
       <td>67.040</td>
       <td>69.340</td>
       <td>71.718</td>
       <td>75.284</td>
       <td>1</td>
+      <td>1</td>
       <td>69.99%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -65,19 +81,27 @@
       <td>600726.SH</td>
       <td>华电能源</td>
       <td>8.37</td>
+      <td>+0.00%</td>
+      <td>+1.32%</td>
+      <td>+1.32%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>7.811</td>
       <td>8.200</td>
       <td>8.481</td>
       <td>8.772</td>
       <td>9.208</td>
       <td>2</td>
+      <td>2</td>
       <td>43.07%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -87,19 +111,27 @@
       <td>002579.SZ</td>
       <td>中京电子</td>
       <td>16.54</td>
+      <td>+0.00%</td>
+      <td>+1.01%</td>
+      <td>+1.01%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>15.388</td>
       <td>16.153</td>
       <td>16.707</td>
       <td>17.280</td>
       <td>18.139</td>
       <td>3</td>
+      <td>3</td>
       <td>36.24%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -109,19 +141,27 @@
       <td>605055.SH</td>
       <td>迎丰股份</td>
       <td>14.82</td>
+      <td>+0.00%</td>
+      <td>+0.83%</td>
+      <td>+0.83%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>13.763</td>
       <td>14.447</td>
       <td>14.943</td>
       <td>15.455</td>
       <td>16.224</td>
       <td>4</td>
+      <td>4</td>
       <td>32.37%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -131,19 +171,27 @@
       <td>600758.SH</td>
       <td>辽宁能源</td>
       <td>4.64</td>
+      <td>+0.00%</td>
+      <td>+0.34%</td>
+      <td>+0.34%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>4.288</td>
       <td>4.501</td>
       <td>4.656</td>
       <td>4.815</td>
       <td>5.055</td>
       <td>5</td>
+      <td>5</td>
       <td>21.75%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -153,19 +201,27 @@
       <td>000892.SZ</td>
       <td>欢瑞世纪</td>
       <td>4.50</td>
+      <td>+0.00%</td>
+      <td>+0.31%</td>
+      <td>+0.31%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>4.158</td>
       <td>4.364</td>
       <td>4.514</td>
       <td>4.669</td>
       <td>4.901</td>
       <td>6</td>
+      <td>6</td>
       <td>21.17%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -175,19 +231,27 @@
       <td>605167.SH</td>
       <td>利柏特</td>
       <td>17.47</td>
+      <td>+0.00%</td>
+      <td>+0.29%</td>
+      <td>+0.29%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>16.138</td>
       <td>16.940</td>
       <td>17.521</td>
       <td>18.122</td>
       <td>19.023</td>
       <td>7</td>
+      <td>7</td>
       <td>20.81%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -197,19 +261,27 @@
       <td>603533.SH</td>
       <td>掌阅科技</td>
       <td>25.85</td>
+      <td>+0.00%</td>
+      <td>+0.22%</td>
+      <td>+0.22%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>23.863</td>
       <td>25.049</td>
       <td>25.908</td>
       <td>26.797</td>
       <td>28.129</td>
       <td>8</td>
+      <td>8</td>
       <td>19.35%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -219,19 +291,27 @@
       <td>001257.SZ</td>
       <td>盛龙股份</td>
       <td>28.41</td>
+      <td>+0.00%</td>
+      <td>+0.22%</td>
+      <td>+0.22%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>26.225</td>
       <td>27.529</td>
       <td>28.473</td>
       <td>29.450</td>
       <td>30.914</td>
       <td>9</td>
+      <td>9</td>
       <td>19.31%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -241,19 +321,27 @@
       <td>605289.SH</td>
       <td>罗曼股份</td>
       <td>119.15</td>
+      <td>+0.00%</td>
+      <td>+0.22%</td>
+      <td>+0.22%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>109.986</td>
       <td>115.454</td>
       <td>119.414</td>
       <td>123.509</td>
       <td>129.650</td>
       <td>10</td>
+      <td>10</td>
       <td>19.28%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -263,19 +351,27 @@
       <td>600779.SH</td>
       <td>水井坊</td>
       <td>33.94</td>
+      <td>+0.00%</td>
+      <td>+0.21%</td>
+      <td>+0.21%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>31.325</td>
       <td>32.883</td>
       <td>34.011</td>
       <td>35.177</td>
       <td>36.926</td>
       <td>11</td>
+      <td>11</td>
       <td>18.99%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -285,19 +381,27 @@
       <td>002881.SZ</td>
       <td>美格智能</td>
       <td>49.79</td>
+      <td>+0.00%</td>
+      <td>+0.20%</td>
+      <td>+0.20%</td>
+      <td>上修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>45.951</td>
       <td>48.235</td>
       <td>49.890</td>
       <td>51.601</td>
       <td>54.166</td>
       <td>12</td>
+      <td>12</td>
       <td>18.83%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -307,19 +411,27 @@
       <td>603011.SH</td>
       <td>合锻智能</td>
       <td>20.59</td>
+      <td>+0.00%</td>
+      <td>+0.20%</td>
+      <td>+0.20%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>19.002</td>
       <td>19.946</td>
       <td>20.630</td>
       <td>21.338</td>
       <td>22.399</td>
       <td>13</td>
+      <td>13</td>
       <td>18.73%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -329,19 +441,27 @@
       <td>600162.SH</td>
       <td>香江控股</td>
       <td>2.31</td>
+      <td>+0.00%</td>
+      <td>+0.18%</td>
+      <td>+0.18%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>2.132</td>
       <td>2.238</td>
       <td>2.314</td>
       <td>2.394</td>
       <td>2.513</td>
       <td>14</td>
+      <td>14</td>
       <td>18.50%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -351,19 +471,27 @@
       <td>603663.SH</td>
       <td>三祥新材</td>
       <td>64.13</td>
+      <td>+0.00%</td>
+      <td>+0.15%</td>
+      <td>+0.15%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>59.155</td>
       <td>62.096</td>
       <td>64.226</td>
       <td>66.429</td>
       <td>69.731</td>
       <td>15</td>
+      <td>15</td>
       <td>17.74%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -373,19 +501,27 @@
       <td>605066.SH</td>
       <td>天正电气</td>
       <td>8.01</td>
+      <td>+0.00%</td>
+      <td>+0.15%</td>
+      <td>+0.15%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>7.388</td>
       <td>7.756</td>
       <td>8.022</td>
       <td>8.297</td>
       <td>8.709</td>
       <td>16</td>
+      <td>16</td>
       <td>17.67%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -395,19 +531,27 @@
       <td>600744.SH</td>
       <td>华银电力</td>
       <td>8.60</td>
+      <td>+0.00%</td>
+      <td>+0.10%</td>
+      <td>+0.10%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>7.929</td>
       <td>8.323</td>
       <td>8.608</td>
       <td>8.904</td>
       <td>9.346</td>
       <td>17</td>
+      <td>17</td>
       <td>16.59%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -417,19 +561,27 @@
       <td>000601.SZ</td>
       <td>韶能股份</td>
       <td>8.04</td>
+      <td>+0.00%</td>
+      <td>+0.08%</td>
+      <td>+0.08%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>7.411</td>
       <td>7.780</td>
       <td>8.047</td>
       <td>8.323</td>
       <td>8.736</td>
       <td>18</td>
+      <td>18</td>
       <td>16.26%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -439,19 +591,27 @@
       <td>002129.SZ</td>
       <td>TCL中环</td>
       <td>9.93</td>
+      <td>+0.00%</td>
+      <td>+0.04%</td>
+      <td>+0.04%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>9.150</td>
       <td>9.605</td>
       <td>9.934</td>
       <td>10.275</td>
       <td>10.786</td>
       <td>19</td>
+      <td>19</td>
       <td>15.38%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -461,19 +621,27 @@
       <td>605300.SH</td>
       <td>佳禾食品</td>
       <td>10.90</td>
+      <td>+0.00%</td>
+      <td>+0.01%</td>
+      <td>+0.01%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>10.040</td>
       <td>10.539</td>
       <td>10.901</td>
       <td>11.275</td>
       <td>11.835</td>
       <td>20</td>
+      <td>20</td>
       <td>14.63%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -483,19 +651,27 @@
       <td>000509.SZ</td>
       <td>华塑控股</td>
       <td>5.21</td>
+      <td>+0.00%</td>
+      <td>-0.06%</td>
+      <td>-0.06%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>4.796</td>
       <td>5.034</td>
       <td>5.207</td>
       <td>5.386</td>
       <td>5.653</td>
       <td>21</td>
+      <td>21</td>
       <td>13.27%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -505,19 +681,27 @@
       <td>600353.SH</td>
       <td>旭光电子</td>
       <td>24.76</td>
+      <td>+0.00%</td>
+      <td>-0.09%</td>
+      <td>-0.09%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>22.785</td>
       <td>23.917</td>
       <td>24.738</td>
       <td>25.586</td>
       <td>26.858</td>
       <td>22</td>
+      <td>22</td>
       <td>12.56%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -527,19 +711,27 @@
       <td>001299.SZ</td>
       <td>美能能源</td>
       <td>13.07</td>
+      <td>+0.00%</td>
+      <td>-0.10%</td>
+      <td>-0.10%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>12.026</td>
       <td>12.624</td>
       <td>13.057</td>
       <td>13.505</td>
       <td>14.176</td>
       <td>23</td>
+      <td>23</td>
       <td>12.31%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -549,19 +741,27 @@
       <td>000608.SZ</td>
       <td>阳光股份</td>
       <td>4.18</td>
+      <td>+0.00%</td>
+      <td>-0.12%</td>
+      <td>-0.12%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>3.846</td>
       <td>4.037</td>
       <td>4.175</td>
       <td>4.318</td>
       <td>4.533</td>
       <td>24</td>
+      <td>24</td>
       <td>12.02%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -571,19 +771,27 @@
       <td>603335.SH</td>
       <td>迪生力</td>
       <td>7.32</td>
+      <td>+0.00%</td>
+      <td>-0.13%</td>
+      <td>-0.13%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>6.733</td>
       <td>7.068</td>
       <td>7.311</td>
       <td>7.561</td>
       <td>7.937</td>
       <td>25</td>
+      <td>25</td>
       <td>11.72%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -593,19 +801,27 @@
       <td>001360.SZ</td>
       <td>南矿集团</td>
       <td>23.22</td>
+      <td>+0.00%</td>
+      <td>-0.15%</td>
+      <td>-0.15%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>21.356</td>
       <td>22.417</td>
       <td>23.186</td>
       <td>23.981</td>
       <td>25.174</td>
       <td>26</td>
+      <td>26</td>
       <td>11.37%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -615,19 +831,27 @@
       <td>603538.SH</td>
       <td>美诺华</td>
       <td>46.46</td>
+      <td>+0.00%</td>
+      <td>-0.15%</td>
+      <td>-0.15%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>42.729</td>
       <td>44.853</td>
       <td>46.392</td>
       <td>47.983</td>
       <td>50.368</td>
       <td>27</td>
+      <td>27</td>
       <td>11.34%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -637,19 +861,27 @@
       <td>002771.SZ</td>
       <td>真视通</td>
       <td>16.49</td>
+      <td>+0.00%</td>
+      <td>-0.18%</td>
+      <td>-0.18%</td>
+      <td>持平</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>15.160</td>
       <td>15.914</td>
       <td>16.460</td>
       <td>17.024</td>
       <td>17.871</td>
       <td>28</td>
+      <td>28</td>
       <td>10.55%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -659,19 +891,27 @@
       <td>002927.SZ</td>
       <td>泰永长征</td>
       <td>23.60</td>
+      <td>+0.00%</td>
+      <td>-0.24%</td>
+      <td>-0.24%</td>
+      <td>下修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>21.684</td>
       <td>22.762</td>
       <td>23.543</td>
       <td>24.351</td>
       <td>25.561</td>
       <td>29</td>
+      <td>29</td>
       <td>9.32%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
     <tr>
@@ -681,19 +921,27 @@
       <td>002706.SZ</td>
       <td>良信股份</td>
       <td>14.82</td>
+      <td>+0.00%</td>
+      <td>-0.25%</td>
+      <td>-0.25%</td>
+      <td>下修</td>
+      <td>高</td>
+      <td>1.000</td>
+      <td>ehx:coldstart_v1</td>
       <td>13.616</td>
       <td>14.293</td>
       <td>14.784</td>
       <td>15.291</td>
       <td>16.051</td>
       <td>30</td>
+      <td>30</td>
       <td>9.22%</td>
       <td>+0.00%</td>
       <td>0.0000</td>
       <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
-      <td>&lt;NA&gt;</td>
+      <td>-</td>
       <td>&lt;NA&gt;</td>
     </tr>
   </tbody>
@@ -712,11 +960,19 @@
       <th>收盘价(T)</th>
       <th>收盘价(T+2)</th>
       <th>实际ln收益</th>
+      <th>E_ret原始值</th>
+      <th>E_ret_plus</th>
+      <th>EHX修正值</th>
+      <th>EHX方向</th>
+      <th>EHX置信度</th>
       <th>命中P10</th>
       <th>命中P50</th>
       <th>ln误差(中位)</th>
       <th>价误差(中位)</th>
       <th>实际收益</th>
+      <th>Raw绝对误差</th>
+      <th>Plus绝对误差</th>
+      <th>Plus优于Raw</th>
       <th>是否上涨</th>
     </tr>
   </thead>
@@ -730,11 +986,19 @@
       <td>67.60</td>
       <td>77.85</td>
       <td>0.1412</td>
+      <td>+0.00%</td>
+      <td>+2.57%</td>
+      <td>+2.57%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>0.1158</td>
       <td>8.510</td>
       <td>+15.16%</td>
+      <td>+15.16%</td>
+      <td>+12.59%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -746,11 +1010,19 @@
       <td>8.37</td>
       <td>10.13</td>
       <td>0.1908</td>
+      <td>+0.00%</td>
+      <td>+1.32%</td>
+      <td>+1.32%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>0.1777</td>
       <td>1.649</td>
       <td>+21.03%</td>
+      <td>+21.03%</td>
+      <td>+19.70%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -762,11 +1034,19 @@
       <td>16.54</td>
       <td>17.15</td>
       <td>0.0362</td>
+      <td>+0.00%</td>
+      <td>+1.01%</td>
+      <td>+1.01%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>0.0262</td>
       <td>0.443</td>
       <td>+3.69%</td>
+      <td>+3.69%</td>
+      <td>+2.68%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -778,11 +1058,19 @@
       <td>14.82</td>
       <td>14.40</td>
       <td>-0.0287</td>
+      <td>+0.00%</td>
+      <td>+0.83%</td>
+      <td>+0.83%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>✅</td>
       <td>❌</td>
       <td>-0.0370</td>
       <td>-0.543</td>
       <td>-2.83%</td>
+      <td>+2.83%</td>
+      <td>+3.66%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -794,11 +1082,19 @@
       <td>4.64</td>
       <td>4.69</td>
       <td>0.0107</td>
+      <td>+0.00%</td>
+      <td>+0.34%</td>
+      <td>+0.34%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>0.0074</td>
       <td>0.034</td>
       <td>+1.08%</td>
+      <td>+1.08%</td>
+      <td>+0.74%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -810,11 +1106,19 @@
       <td>4.50</td>
       <td>4.37</td>
       <td>-0.0293</td>
+      <td>+0.00%</td>
+      <td>+0.31%</td>
+      <td>+0.31%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0324</td>
       <td>-0.144</td>
       <td>-2.89%</td>
+      <td>+2.89%</td>
+      <td>+3.20%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -826,11 +1130,19 @@
       <td>17.47</td>
       <td>15.01</td>
       <td>-0.1518</td>
+      <td>+0.00%</td>
+      <td>+0.29%</td>
+      <td>+0.29%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>-0.1547</td>
       <td>-2.511</td>
       <td>-14.08%</td>
+      <td>+14.08%</td>
+      <td>+14.37%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -842,11 +1154,19 @@
       <td>25.85</td>
       <td>24.04</td>
       <td>-0.0726</td>
+      <td>+0.00%</td>
+      <td>+0.22%</td>
+      <td>+0.22%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>✅</td>
       <td>❌</td>
       <td>-0.0748</td>
       <td>-1.868</td>
       <td>-7.00%</td>
+      <td>+7.00%</td>
+      <td>+7.23%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -858,11 +1178,19 @@
       <td>28.41</td>
       <td>25.20</td>
       <td>-0.1199</td>
+      <td>+0.00%</td>
+      <td>+0.22%</td>
+      <td>+0.22%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>-0.1221</td>
       <td>-3.273</td>
       <td>-11.30%</td>
+      <td>+11.30%</td>
+      <td>+11.52%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -874,11 +1202,19 @@
       <td>119.15</td>
       <td>118.68</td>
       <td>-0.0040</td>
+      <td>+0.00%</td>
+      <td>+0.22%</td>
+      <td>+0.22%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0062</td>
       <td>-0.734</td>
       <td>-0.39%</td>
+      <td>+0.39%</td>
+      <td>+0.62%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -890,11 +1226,19 @@
       <td>33.94</td>
       <td>35.80</td>
       <td>0.0534</td>
+      <td>+0.00%</td>
+      <td>+0.21%</td>
+      <td>+0.21%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>✅</td>
       <td>❌</td>
       <td>0.0513</td>
       <td>1.789</td>
       <td>+5.48%</td>
+      <td>+5.48%</td>
+      <td>+5.27%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -906,11 +1250,19 @@
       <td>49.79</td>
       <td>45.44</td>
       <td>-0.0914</td>
+      <td>+0.00%</td>
+      <td>+0.20%</td>
+      <td>+0.20%</td>
+      <td>上修</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>-0.0934</td>
       <td>-4.450</td>
       <td>-8.74%</td>
+      <td>+8.74%</td>
+      <td>+8.94%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -922,11 +1274,19 @@
       <td>20.59</td>
       <td>24.92</td>
       <td>0.1909</td>
+      <td>+0.00%</td>
+      <td>+0.20%</td>
+      <td>+0.20%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>0.1889</td>
       <td>4.290</td>
       <td>+21.03%</td>
+      <td>+21.03%</td>
+      <td>+20.83%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -938,11 +1298,19 @@
       <td>2.31</td>
       <td>2.79</td>
       <td>0.1888</td>
+      <td>+0.00%</td>
+      <td>+0.18%</td>
+      <td>+0.18%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>0.1869</td>
       <td>0.476</td>
       <td>+20.78%</td>
+      <td>+20.78%</td>
+      <td>+20.59%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -954,11 +1322,19 @@
       <td>64.13</td>
       <td>58.87</td>
       <td>-0.0856</td>
+      <td>+0.00%</td>
+      <td>+0.15%</td>
+      <td>+0.15%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>-0.0871</td>
       <td>-5.356</td>
       <td>-8.20%</td>
+      <td>+8.20%</td>
+      <td>+8.35%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -970,11 +1346,19 @@
       <td>8.01</td>
       <td>7.65</td>
       <td>-0.0460</td>
+      <td>+0.00%</td>
+      <td>+0.15%</td>
+      <td>+0.15%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>❌</td>
       <td>-0.0474</td>
       <td>-0.372</td>
       <td>-4.49%</td>
+      <td>+4.49%</td>
+      <td>+4.64%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -986,11 +1370,19 @@
       <td>8.60</td>
       <td>9.06</td>
       <td>0.0521</td>
+      <td>+0.00%</td>
+      <td>+0.10%</td>
+      <td>+0.10%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>❌</td>
       <td>0.0511</td>
       <td>0.452</td>
       <td>+5.35%</td>
+      <td>+5.35%</td>
+      <td>+5.25%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -1002,11 +1394,19 @@
       <td>8.04</td>
       <td>8.46</td>
       <td>0.0509</td>
+      <td>+0.00%</td>
+      <td>+0.08%</td>
+      <td>+0.08%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>❌</td>
       <td>0.0501</td>
       <td>0.413</td>
       <td>+5.22%</td>
+      <td>+5.22%</td>
+      <td>+5.14%</td>
+      <td>✅</td>
       <td>是</td>
     </tr>
     <tr>
@@ -1018,11 +1418,19 @@
       <td>9.93</td>
       <td>9.75</td>
       <td>-0.0183</td>
+      <td>+0.00%</td>
+      <td>+0.04%</td>
+      <td>+0.04%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0187</td>
       <td>-0.184</td>
       <td>-1.81%</td>
+      <td>+1.81%</td>
+      <td>+1.85%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -1034,11 +1442,19 @@
       <td>10.90</td>
       <td>10.73</td>
       <td>-0.0157</td>
+      <td>+0.00%</td>
+      <td>+0.01%</td>
+      <td>+0.01%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0158</td>
       <td>-0.171</td>
       <td>-1.56%</td>
+      <td>+1.56%</td>
+      <td>+1.57%</td>
+      <td>❌</td>
       <td>否</td>
     </tr>
     <tr>
@@ -1050,11 +1466,19 @@
       <td>5.21</td>
       <td>5.16</td>
       <td>-0.0096</td>
+      <td>+0.00%</td>
+      <td>-0.06%</td>
+      <td>-0.06%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0091</td>
       <td>-0.047</td>
       <td>-0.96%</td>
+      <td>+0.96%</td>
+      <td>+0.90%</td>
+      <td>✅</td>
       <td>否</td>
     </tr>
     <tr>
@@ -1066,11 +1490,19 @@
       <td>24.76</td>
       <td>22.22</td>
       <td>-0.1082</td>
+      <td>+0.00%</td>
+      <td>-0.09%</td>
+      <td>-0.09%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>-0.1073</td>
       <td>-2.518</td>
       <td>-10.26%</td>
+      <td>+10.26%</td>
+      <td>+10.17%</td>
+      <td>✅</td>
       <td>否</td>
     </tr>
     <tr>
@@ -1082,11 +1514,19 @@
       <td>13.07</td>
       <td>12.67</td>
       <td>-0.0311</td>
+      <td>+0.00%</td>
+      <td>-0.10%</td>
+      <td>-0.10%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0301</td>
       <td>-0.387</td>
       <td>-3.06%</td>
+      <td>+3.06%</td>
+      <td>+2.96%</td>
+      <td>✅</td>
       <td>否</td>
     </tr>
     <tr>
@@ -1098,11 +1538,19 @@
       <td>4.18</td>
       <td>4.58</td>
       <td>0.0914</td>
+      <td>+0.00%</td>
+      <td>-0.12%</td>
+      <td>-0.12%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>0.0925</td>
       <td>0.405</td>
       <td>+9.57%</td>
+      <td>+9.57%</td>
+      <td>+9.68%</td>
+      <td>❌</td>
       <td>是</td>
     </tr>
     <tr>
@@ -1114,11 +1562,19 @@
       <td>7.32</td>
       <td>7.35</td>
       <td>0.0041</td>
+      <td>+0.00%</td>
+      <td>-0.13%</td>
+      <td>-0.13%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>0.0054</td>
       <td>0.039</td>
       <td>+0.41%</td>
+      <td>+0.41%</td>
+      <td>+0.54%</td>
+      <td>❌</td>
       <td>是</td>
     </tr>
     <tr>
@@ -1130,11 +1586,19 @@
       <td>23.22</td>
       <td>20.52</td>
       <td>-0.1236</td>
+      <td>+0.00%</td>
+      <td>-0.15%</td>
+      <td>-0.15%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>❌</td>
       <td>❌</td>
       <td>-0.1222</td>
       <td>-2.666</td>
       <td>-11.63%</td>
+      <td>+11.63%</td>
+      <td>+11.48%</td>
+      <td>✅</td>
       <td>否</td>
     </tr>
     <tr>
@@ -1146,11 +1610,19 @@
       <td>46.46</td>
       <td>45.08</td>
       <td>-0.0302</td>
+      <td>+0.00%</td>
+      <td>-0.15%</td>
+      <td>-0.15%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0287</td>
       <td>-1.312</td>
       <td>-2.97%</td>
+      <td>+2.97%</td>
+      <td>+2.82%</td>
+      <td>✅</td>
       <td>否</td>
     </tr>
     <tr>
@@ -1162,11 +1634,19 @@
       <td>16.49</td>
       <td>17.48</td>
       <td>0.0583</td>
+      <td>+0.00%</td>
+      <td>-0.18%</td>
+      <td>-0.18%</td>
+      <td>持平</td>
+      <td>高</td>
       <td>✅</td>
       <td>❌</td>
       <td>0.0601</td>
       <td>1.020</td>
       <td>+6.00%</td>
+      <td>+6.00%</td>
+      <td>+6.19%</td>
+      <td>❌</td>
       <td>是</td>
     </tr>
     <tr>
@@ -1178,11 +1658,19 @@
       <td>23.60</td>
       <td>24.30</td>
       <td>0.0292</td>
+      <td>+0.00%</td>
+      <td>-0.24%</td>
+      <td>-0.24%</td>
+      <td>下修</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>0.0316</td>
       <td>0.757</td>
       <td>+2.97%</td>
+      <td>+2.97%</td>
+      <td>+3.21%</td>
+      <td>❌</td>
       <td>是</td>
     </tr>
     <tr>
@@ -1194,11 +1682,19 @@
       <td>14.82</td>
       <td>14.65</td>
       <td>-0.0115</td>
+      <td>+0.00%</td>
+      <td>-0.25%</td>
+      <td>-0.25%</td>
+      <td>下修</td>
+      <td>高</td>
       <td>✅</td>
       <td>✅</td>
       <td>-0.0091</td>
       <td>-0.134</td>
       <td>-1.15%</td>
+      <td>+1.15%</td>
+      <td>+0.90%</td>
+      <td>✅</td>
       <td>否</td>
     </tr>
   </tbody>
@@ -1210,13 +1706,25 @@
 - MAE（V2：|err_r_p50|）：0.068037
 - MAE（V2：|err_close_p50|）：1.564865
 
-## 字段说明（V2 核心）
+## E_ret_plus / EHX 验证摘要
 
-- close_T2_pXX：预测到期日（T+2）收盘价的价格分位点（展示字段）
-- in_p10：r_actual 是否落在 [p05, p95]
-- in_p50：r_actual 是否落在 [p25, p75]
+- Raw MAE：7.0365%
+- Plus MAE：6.9203%
+- MAE 改善：+0.1162%
+- Plus 优于 Raw 比例：50.00%
 
-> 注：r_pXX（log-return 分位点，r = ln(Close[T+2]/Close[T])）为内部计算字段，当前报告不再展示。
+## 字段说明（V3 核心）
+
+- E_ret原始值：进入 EHX 前的原始溢价预测值。
+- E_ret_plus：EHX 残差增强后的溢价预测值，当前 Premium 主线优先围绕它排序和展示。
+- EHX修正值：E_ret_plus - E_ret原始值，正数表示上修，负数表示下修。
+- EHX方向 / EHX置信度 / EHX来源：用于判断增强层是否真实接入、是否处于模型态或冷启动态。
+- Raw绝对误差 / Plus绝对误差 / Plus优于Raw：T+2 真值出来后，用于验证 EHX 是否真的改善。
+- close_T2_pXX：预测到期日（T+2）收盘价的价格分位点（展示字段）。
+- in_p10：r_actual 是否落在 [p05, p95]。
+- in_p50：r_actual 是否落在 [p25, p75]。
+
+> 注：r_pXX（log-return 分位点，r = ln(Close[T+2]/Close[T])）为内部计算字段，当前报告不在预测表展示。
 
 ---
 ## 审计（Factor Packs / Degrade）
