@@ -10,7 +10,7 @@ on:
       cmd:
         description: "执行命令：predict / train / all"
         required: false
-        default: "predict"
+        default: "all"
         type: choice
         options:
           - predict
@@ -37,7 +37,7 @@ jobs:
         && github.ref == 'refs/heads/main'
       }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -63,29 +63,50 @@ jobs:
 
       - name: Install deps
         run: |
+          set -e
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Run Premium
         env:
           PYTHONPATH: "${{ github.workspace }}/src"
+          TUSHARE_TOKEN: "${{ secrets.TUSHARE_TOKEN }}"
         run: |
           set -e
-          CMD="${{ inputs.cmd }}"
-          if [ -z "$CMD" ]; then CMD="predict"; fi
-          echo "[run_premium] cmd=$CMD"
+
+          EVENT_NAME="${{ github.event_name }}"
+
+          # 自动链路跟随 Decision 成功后，必须先 train 再 predict，
+          # 让 EHX 学习版模型有机会落盘并被 predict 接管。
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            CMD="all"
+          else
+            CMD="${{ github.event.inputs.cmd }}"
+            if [ -z "$CMD" ]; then CMD="all"; fi
+          fi
+
+          echo "[run_premium] event=$EVENT_NAME cmd=$CMD"
           python scripts/run_premium.py "$CMD" --verbose
 
       - name: Sanity check outputs
         run: |
           set -e
           test -f outputs/premium/_last_run.txt
+
           echo "=== outputs/premium ==="
           ls -la outputs/premium || true
+
+          echo "=== outputs/premium/models ==="
+          ls -la outputs/premium/models || true
+
           echo "=== docs/reports ==="
           ls -la docs/reports || true
+
           echo "=== data/market ==="
           ls -la data/market || true
+
+          echo "=== _last_run.txt ==="
+          cat outputs/premium/_last_run.txt || true
 
       - name: Commit outputs + market cache (if changed)
         run: |
@@ -93,7 +114,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # ✅ Premium V2：必须提交真值缓存（data/market）与报告（docs/reports）
+          # ✅ Premium V3：提交预测产物、EHX 模型产物、报告与真值缓存
           git add outputs/premium || true
           git add docs/reports || true
           git add data/market || true
@@ -109,8 +130,8 @@ jobs:
 
           git commit -m "premium: update outputs + market cache (${TRADE_DATE})"
 
-          # ✅ 关键修复：不要在 commit 后再 pull --rebase（必然引发状态冲突/脏工作区问题）
-          # ✅ 关键修复：push 遇到 GitHub 500 等临时故障时，不让整个 workflow 失败（产物已生成）
+          # ✅ 不在 commit 后再 pull --rebase，避免脏工作区冲突
+          # ✅ push 遇到临时远端故障时，不让产物生成流程失败
           set +e
           git push origin HEAD:main
           RC=$?
