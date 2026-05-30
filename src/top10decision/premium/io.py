@@ -2,21 +2,28 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — IO 层（读写/落盘/追溯）
+Premium 子系统 — IO 层（读写/落盘/追溯｜V3.1：E_ret_plus / EHX 字段保真版）
 
 本文件职责：
 - 统一处理 Premium 的输入读取（pred_source_latest / decision 预测表 / close 真值表(旧)）
 - 统一处理 Premium 的输出落盘（V1: top30/full/verify/md；旧: rank csv/md、eval_history、_last_run.txt）
 - 自动创建输出目录（避免目录不存在导致报错）
 - 统一追溯字段：run_id / commit_sha / created_at_utc
+- 保证 E_ret_plus / EHX 新增字段在 IO 层不被旧 schema 截断。
 
 注意：
 - 本模块只处理文件层，不做业务计算。
 - 学习模块能力不损失：旧接口全部保留（train/rank/learning 相关）。
+- append_eval_history 采用“历史列 ∪ schema列 ∪ 新行列”的合并方式，避免 EHX 指标 silent drop。
 
 ✅ 2026-03-03 变更（按你的需求）：
 - premium_top30/premium_full 的 CSV 落盘前，移除 r_pXX（ln 分位）列
   （报告侧已不展示；这里保证 CSV 与报告一致）
+
+✅ 2026-05-30 变更：
+- append_eval_history 不再强制按旧固定列截断，保留 ehx_trained / delta_mae / plus_improve_rate 等新增字段。
+- write_premium_verify 兼容 PremiumVerifyOutputSchema 的字段顺序，同时保留未来新增验证字段。
+- _ensure_columns 改为默认保留 extra columns，避免旧 rank 写出函数误删 V3 字段。
 """
 
 from __future__ import annotations
@@ -28,12 +35,12 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import pandas as pd
 
 from .config import PremiumConfig
-from .schemas import PremiumEvalHistorySchema, PremiumRankOutputSchema
+from .schemas import PremiumEvalHistorySchema, PremiumRankOutputSchema, PremiumVerifyOutputSchema
 
 
 # =========================
@@ -121,7 +128,7 @@ def _to_yyyymmdd(x: object) -> str:
 
 
 # =========================
-# 3.1) 输出字段清理（仅影响 CSV 落盘，不影响计算/报告）
+# 3.1) 输出字段清理/排序（仅影响 CSV 落盘，不影响计算/报告）
 # =========================
 
 def _drop_ln_quantile_cols(df: pd.DataFrame) -> pd.DataFrame:
@@ -135,6 +142,22 @@ def _drop_ln_quantile_cols(df: pd.DataFrame) -> pd.DataFrame:
     if not drop_cols:
         return df
     return df.drop(columns=drop_cols, errors="ignore")
+
+
+def _order_columns_keep_extra(df: pd.DataFrame, preferred_cols: Sequence[str]) -> pd.DataFrame:
+    """
+    按 preferred_cols 排在前面，同时保留 preferred_cols 之外的所有新增字段。
+
+    目的：
+    - 让 schema 提供稳定表头顺序；
+    - 不让旧 schema 把 EHX 或未来新增字段 silent drop。
+    """
+    if df is None:
+        return df
+    out = df.copy()
+    front = [c for c in preferred_cols if c in out.columns]
+    extra = [c for c in out.columns if c not in front]
+    return out.loc[:, front + extra]
 
 
 # =========================
@@ -158,7 +181,7 @@ def _extract_trade_date_from_df(df: pd.DataFrame) -> Optional[str]:
             if len(s) == 1:
                 return _to_yyyymmdd(s[0].strip())
             if len(s) > 1:
-                return sorted([_to_yyyymmdd(x.strip()) for x in s])[-1]
+                return sorted([_to_yyyymmdd(str(x).strip()) for x in s])[-1]
     return None
 
 
@@ -329,7 +352,7 @@ def load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     m_rank = pick("dec_rank", "decision_rank", "rank", "决策排名")
     m_w = pick("dec_weight", "weight", "target_weight", "决策权重")
     m_can = pick("dec_can_buy", "can_buy", "可买提示")
-    m_pf = pick("dec_p_fill", "p_fill", "P_fill")
+    m_pf = pick("dec_p_fill", "p_fill", "P_fill", "p_fill_pred", "p_fill_pred_final")
     m_reason = pick("dec_reason", "reason", "label", "决策原因", "决策标签")
 
     out["dec_rank"] = dec[m_rank] if m_rank else pd.NA
@@ -354,6 +377,7 @@ def write_premium_top30(cfg: PremiumConfig, trade_date: str, df_top30: pd.DataFr
     ensure_output_dirs(cfg)
     p = cfg.out_top30_csv(trade_date)
     df_out = _drop_ln_quantile_cols(df_top30.copy())
+    df_out = _order_columns_keep_extra(df_out, PremiumRankOutputSchema.COLUMNS)
     df_out.to_csv(p, index=False, encoding="utf-8-sig")
     return p
 
@@ -366,14 +390,20 @@ def write_premium_full(cfg: PremiumConfig, trade_date: str, df_full: pd.DataFram
     ensure_output_dirs(cfg)
     p = cfg.out_full_csv(trade_date)
     df_out = _drop_ln_quantile_cols(df_full.copy())
+    df_out = _order_columns_keep_extra(df_out, PremiumRankOutputSchema.COLUMNS)
     df_out.to_csv(p, index=False, encoding="utf-8-sig")
     return p
 
 
 def write_premium_verify(cfg: PremiumConfig, trade_date: str, df_verify: pd.DataFrame) -> Path:
+    """
+    ✅ 新口径：写 outputs/premium/premium_verify_{trade_date}.csv
+    约束：优先按 PremiumVerifyOutputSchema 排序，但保留新增验证字段。
+    """
     ensure_output_dirs(cfg)
     p = cfg.out_verify_csv(trade_date)
-    df_verify.to_csv(p, index=False, encoding="utf-8-sig")
+    df_out = _order_columns_keep_extra(df_verify.copy(), PremiumVerifyOutputSchema.COLUMNS)
+    df_out.to_csv(p, index=False, encoding="utf-8-sig")
     return p
 
 
@@ -393,11 +423,23 @@ def write_report_md(cfg: PremiumConfig, trade_date: str, md_text: str) -> Tuple[
 # 7) 输出落盘（旧：rank / md）
 # =========================
 
-def _ensure_columns(df: pd.DataFrame, columns: Tuple[str, ...]) -> pd.DataFrame:
+def _ensure_columns(df: pd.DataFrame, columns: Tuple[str, ...], keep_extra: bool = True) -> pd.DataFrame:
+    """
+    保证 columns 中的字段存在并按顺序前置。
+
+    keep_extra=True 是 V3 后的关键调整：
+    - 旧函数依赖 schema 组织表头；
+    - 但不能再把 EHX / 未来新增字段裁掉。
+    """
+    out = df.copy()
     for c in columns:
-        if c not in df.columns:
-            df[c] = pd.NA
-    return df.loc[:, list(columns)]
+        if c not in out.columns:
+            out[c] = pd.NA
+    if keep_extra:
+        front = list(columns)
+        extra = [c for c in out.columns if c not in front]
+        return out.loc[:, front + extra]
+    return out.loc[:, list(columns)]
 
 
 def write_rank_csv(cfg: PremiumConfig, trade_date: str, df_rank: pd.DataFrame) -> Path:
@@ -406,7 +448,7 @@ def write_rank_csv(cfg: PremiumConfig, trade_date: str, df_rank: pd.DataFrame) -
     """
     ensure_output_dirs(cfg)
     p = cfg.rank_csv_path(trade_date)
-    df_out = _ensure_columns(df_rank.copy(), PremiumRankOutputSchema.COLUMNS)
+    df_out = _ensure_columns(df_rank.copy(), PremiumRankOutputSchema.COLUMNS, keep_extra=True)
     df_out.to_csv(p, index=False, encoding="utf-8-sig")
     return p
 
@@ -428,23 +470,52 @@ def write_rank_md(cfg: PremiumConfig, trade_date: str, md_text: str) -> Path:
 def append_eval_history(cfg: PremiumConfig, row: dict) -> Path:
     """
     ♻️ 旧口径：向 learning/premium_eval_history.csv 追加一行。
+
+    V3 修复：
+    - 不再只按 PremiumEvalHistorySchema.COLUMNS 截断；
+    - 改为“历史列 ∪ schema列 ∪ row列”，保证 EHX 新字段和未来扩展字段都能保留。
     """
     ensure_output_dirs(cfg)
     p = cfg.eval_history_path()
-    cols = list(PremiumEvalHistorySchema.COLUMNS)
 
-    for c in cols:
-        row.setdefault(c, pd.NA)
+    # 避免修改调用方传入的 dict。
+    row_in = dict(row or {})
+    schema_cols = list(PremiumEvalHistorySchema.COLUMNS)
 
-    df_row = pd.DataFrame([row])[cols]
+    df_row = pd.DataFrame([row_in])
+
     if p.exists():
         try:
             df_old = _read_csv(p)
-            df_new = pd.concat([df_old, df_row], ignore_index=True)
         except Exception:
-            df_new = df_row
+            df_old = pd.DataFrame()
     else:
-        df_new = df_row
+        df_old = pd.DataFrame()
+
+    all_cols: List[str] = []
+
+    # 先保留历史文件列，避免旧数据列顺序漂移。
+    for c in list(df_old.columns):
+        if c not in all_cols:
+            all_cols.append(c)
+
+    # 再补 schema 列，保证契约字段稳定存在。
+    for c in schema_cols:
+        if c not in all_cols:
+            all_cols.append(c)
+
+    # 最后补本次 row 的新增字段，避免 silent drop。
+    for c in list(df_row.columns):
+        if c not in all_cols:
+            all_cols.append(c)
+
+    if not df_old.empty:
+        df_old = df_old.reindex(columns=all_cols)
+    else:
+        df_old = pd.DataFrame(columns=all_cols)
+
+    df_row = df_row.reindex(columns=all_cols)
+    df_new = pd.concat([df_old, df_row], ignore_index=True)
 
     df_new.to_csv(p, index=False, encoding="utf-8-sig")
     return p
