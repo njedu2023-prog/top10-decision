@@ -15,6 +15,8 @@ Premium 子系统 — Predict（V3.1：E_ret_plus / EHX 推理接线增强版）
 - EHX 推理优先加载 outputs/premium/models/ehx_delta.joblib。
 - EHX 加载/预测失败不阻断主流程，但会在 eret_plus_src 与 _last_run.txt 中追溯失败原因。
 - eret_pred_raw / eret_plus_value / eret_plus_delta 全链路落盘，供 report / verify / 后续 decision 接线使用。
+- 修复 _write_last_run 前 eret_plus_src 兜底 Series 长度不匹配问题。
+- 修复 _zscore 全空输入触发 RuntimeWarning 的问题。
 
 主输入：
 - data/pred/pred_source_latest.csv（a-top10 全量源表，候选=全量，不过滤）
@@ -162,6 +164,8 @@ def _rebuild_rank_front(df: pd.DataFrame) -> pd.DataFrame:
 
 def _zscore(s: pd.Series) -> pd.Series:
     x = pd.to_numeric(s, errors="coerce")
+    if len(x) == 0 or x.notna().sum() == 0:
+        return pd.Series(np.zeros(len(x)), index=x.index)
     mu = np.nanmean(x.values)
     sd = np.nanstd(x.values)
     if not np.isfinite(sd) or sd == 0:
@@ -863,7 +867,11 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         notes=pack_status.notes,
     )
 
-    eret_plus_src = str(df.get("eret_plus_src", pd.Series(["ehx:unknown"], index=df.index)).iloc[0]) if len(df) > 0 else "ehx:unknown"
+    if len(df) > 0 and "eret_plus_src" in df.columns and df["eret_plus_src"].notna().any():
+        eret_plus_src = str(df["eret_plus_src"].dropna().iloc[0])
+    else:
+        eret_plus_src = "ehx:unknown"
+
     _write_last_run(
         cfg,
         trade_date,
