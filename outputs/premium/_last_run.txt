@@ -1,8 +1,8 @@
 trade_date: 20260528
-run_id: gh_26757479074
-commit_sha: ca6fc66999d3
+run_id: gh_26775017700
+commit_sha: 428fabac2297
 model_version: premium_v2
-created_at_utc: 2026-06-01T13:20:53Z
+created_at_utc: 2026-06-01T18:50:32Z
 ok: True
 target_date: 20260601
 pending: False
