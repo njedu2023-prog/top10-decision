@@ -12,9 +12,9 @@
   "risk_penalty_mean": 0.008027978575833336,
   "risk_penalty_min": 0.0027,
   "risk_penalty_max": 0.01752364528,
-  "ev_base_mean": -0.011837217603902519,
-  "ev_final_mean": -0.0718889602947547,
-  "pfill_penalty_extra_mean": 0.0499550801392196,
+  "ev_base_mean": -0.01105167380690704,
+  "ev_final_mean": -0.08337492399595403,
+  "pfill_penalty_extra_mean": 0.06222658763741442,
   "risk_penalty_extra_mean": 0.010096662551632577,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
@@ -32,8 +32,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260602",
-      "created_at_utc": "2026-06-02T10:31:03+00:00",
-      "commit_sha": "1434d8e0233d1e0fdcfd8997066fed10385c1d92",
+      "created_at_utc": "2026-06-02T17:48:53+00:00",
+      "commit_sha": "d48f029ff03a03c2e8948fdc52c6f679723686ae",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -196,7 +196,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260602",
-            "created_at_utc": "2026-06-02T10:31:03+00:00",
+            "created_at_utc": "2026-06-02T17:48:53+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -211,7 +211,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260602",
-              "generated_at_bj": "2026-06-02 18:14:57",
+              "generated_at_bj": "2026-06-02 21:59:49",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -499,7 +499,7 @@
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260602/top_list.csv",
                 "latest_path": "data/market/raw/latest/top_list.csv",
-                "bytes": 17134
+                "bytes": 16996
               }
             ],
             "required_failures": [],
