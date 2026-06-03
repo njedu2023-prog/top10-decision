@@ -5,16 +5,16 @@
   "regime": "RISK_ON",
   "risk_budget": 1.0,
   "topk": 66,
-  "picked": 0,
+  "picked": 2,
   "cost_est_mean": 0.001613317765151515,
   "cost_est_min": 0.0011127679999999999,
   "cost_est_max": 0.0023721915,
   "risk_penalty_mean": 0.00918456166790404,
   "risk_penalty_min": 0.0027,
   "risk_penalty_max": 0.027525666666666667,
-  "ev_base_mean": -0.010970538819105915,
-  "ev_final_mean": -0.07865764508107292,
-  "pfill_penalty_extra_mean": 0.055657161417839475,
+  "ev_base_mean": -0.01120620384432167,
+  "ev_final_mean": -0.0598372546664044,
+  "pfill_penalty_extra_mean": 0.03660110597795521,
   "risk_penalty_extra_mean": 0.012029944844127526,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
@@ -32,8 +32,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260603",
-      "created_at_utc": "2026-06-03T16:56:30+00:00",
-      "commit_sha": "65dc560cbd33620ec1b529662415a476e2c0b783",
+      "created_at_utc": "2026-06-03T18:04:18+00:00",
+      "commit_sha": "c89dcb59c8dd9e290dc2c15d72950358a833b098",
       "fs_version": "v0.4-real-header-plus-tag-meta",
       "richness_target": 0.75,
       "richness_estimate": 0.982456,
@@ -196,7 +196,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260603",
-            "created_at_utc": "2026-06-03T16:56:29+00:00",
+            "created_at_utc": "2026-06-03T18:04:17+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -712,7 +712,7 @@
   },
   "report_stats": {
     "high_ev_low_risk_rows": 0,
-    "topn_rows": 0,
-    "full_candidate_rows": 66
+    "topn_rows": 2,
+    "full_candidate_rows": 64
   }
 }
