@@ -1,29 +1,11 @@
-trade_date: 20260603
-run_id: gh_27026054727
-commit_sha: 5776ad8ded8e
+trade_date: unknown
+run_id: gh_27098703147
+commit_sha: 4800255d32cd
 model_version: premium_v2
-created_at_utc: 2026-06-05T16:10:26Z
-ok: True
-target_date: 20260605
-pending: False
-pending_reason: trade_cal_ok
-truth_T_ok: True
-truth_T_reason: ok
-verify_pending: False
-verify_reason: ok
-eret_plus_src: ehx:coldstart_v1
-ehx_mode: coldstart
-ehx_reason: ehx_model_missing
-ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
-ehx_load_reason: ehx_model_missing
-out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260603.csv
-out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260603.csv
-out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260603.csv
-report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260603.md
-degrade_mode: full
-packs_used: ['Pack0', 'Pack1', 'Pack2']
-packs_missing: []
-missing_fields: []
-missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260603.csv', 'Pack2 enabled (soft mode, fixed)']
-extra_prefix: factor
+created_at_utc: 2026-06-07T16:48:36Z
+trained: False
+reason: no_samples
+pending_days: 0
+ok_days: 0
+skipped_files: 0
+notes_tail: 
