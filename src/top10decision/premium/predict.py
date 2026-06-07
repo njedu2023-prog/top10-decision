@@ -870,7 +870,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     if len(df) > 0 and "eret_plus_src" in df.columns and df["eret_plus_src"].notna().any():
         eret_plus_src = str(df["eret_plus_src"].dropna().iloc[0])
     else:
-        eret_plus_src = "ehx:unknown"
+        eret_plus_src = "ehx_unknown"
 
     _write_last_run(
         cfg,
