@@ -85,7 +85,7 @@ predict.py 第 866 行附近
 旧错误代码核心问题：
 
 ```python
-pd.Series(["ehx:unknown"], index=df.index)
+pd.Series(["ehx_unknown"], index=df.index)
 ```
 
 当 `df.index` 有 47 行时，只给 1 个值，会触发 Pandas 长度不匹配。
@@ -96,7 +96,7 @@ pd.Series(["ehx:unknown"], index=df.index)
 if len(df) > 0 and "eret_plus_src" in df.columns and df["eret_plus_src"].notna().any():
     eret_plus_src = str(df["eret_plus_src"].dropna().iloc[0])
 else:
-    eret_plus_src = "ehx:unknown"
+    eret_plus_src = "ehx_unknown"
 ```
 
 ### 修复 2：处理 `_zscore()` 空值 warning
@@ -331,7 +331,7 @@ Plus 优于 Raw 比例
 在 GitHub 文件页面搜索：
 
 ```text
-pd.Series(["ehx:unknown"], index=df.index)
+pd.Series(["ehx_unknown"], index=df.index)
 ```
 
 要求：
@@ -465,7 +465,7 @@ rank_eret_plus 是否有实际排序差异
 ValueError: Length of values (1) does not match length of index (47)
 
 旧错误字符串：
-pd.Series(["ehx:unknown"], index=df.index)
+pd.Series(["ehx_unknown"], index=df.index)
 
 已经替换为安全取值逻辑，并顺手修复 _zscore() 全空列 warning。
 
