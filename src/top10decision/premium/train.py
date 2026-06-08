@@ -1,36 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Premium 子系统 — Train（训练闭环｜V3.1：E_ret_plus / EHX 残差增强版）
+Premium 子系统 — Train（训练闭环｜V3.2：E_ret_plus / EHX 残差增强版）
 
-当前主线：
-- 不再把 Premium 仅视为“报告层”。
-- 当前训练目标新增：围绕原始 E_ret 训练二级增强层 EHX。
-- 第一版技术路线锁定为：
-    delta_ret = real_premium_ret - e_ret_pred
-    eret_plus = e_ret_pred + delta_hat
-
-本版关键修复：
-- EHX 训练指标不再被旧 PremiumEvalHistorySchema 截断。
-- premium_eval_history.csv 会真实保留 ehx_trained / delta_mae / delta_rmse / plus_improve_rate。
-- 原始 E_ret 字段识别增强，兼容 E_ret / E_ret_plus / eret_plus 等常见列名。
-- EHX 样本不足时不阻断旧 LR/LGBM 训练链，只显式追溯原因。
-
-保留：
-- 旧 Premium LR / LGBM 训练链继续保留，避免一次性推翻旧体系。
-- Market Truth Layer 仍为唯一 close 真值入口。
-- 第3日未到（缺 close_3）仍严格 pending，不训练。
-
-新增/更新输出：
-- outputs/premium/models/ehx_delta.joblib
-- outputs/premium/models/ehx_meta.json
-- outputs/premium/learning/premium_eval_history.csv（真实追加 EHX 指标）
-- outputs/premium/_last_run.txt（覆盖，新增 EHX 追溯）
+本文件只负责训练链：
+- 保留旧 Premium LR / LGBM 训练链；
+- 新增/增强 EHX 残差训练链；
+- train 不再覆盖 outputs/premium/_last_run.txt，避免覆盖 predict 的验收摘要；
+- train 状态写入 outputs/premium/_last_train.txt；
+- 当 decision 样本不足时，允许从 premium_verify_*.csv 回收已验证样本训练 EHX。
 """
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -46,7 +30,6 @@ from .io import (
     get_run_id,
     load_decision_inputs,
     utc_now_iso,
-    write_last_run,
 )
 from .labels import build_premium_labels
 from .market_truth import ensure_daily_cached, load_daily
@@ -66,10 +49,7 @@ class TrainResult:
 # ========= 基础工具 =========
 
 def _spearman_rank_ic(a: np.ndarray, b: np.ndarray) -> float:
-    """
-    简易 Spearman（不依赖 scipy）：
-    - 先 rank，再计算 pearson
-    """
+    """简易 Spearman（不依赖 scipy）：先 rank，再计算 pearson。"""
     if len(a) < 3:
         return float("nan")
 
@@ -111,6 +91,15 @@ def _safe_numeric_series(df: pd.DataFrame, candidates: List[str], default: float
     return pd.Series([default] * len(df), index=df.index, dtype="float64")
 
 
+def _first_existing_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+    cols = {str(c).strip().lower(): c for c in df.columns}
+    for name in candidates:
+        hit = cols.get(str(name).strip().lower())
+        if hit is not None:
+            return str(hit)
+    return None
+
+
 def _read_csv_smart(path: Path) -> pd.DataFrame:
     for enc in ("utf-8", "utf-8-sig", "gbk"):
         try:
@@ -120,15 +109,49 @@ def _read_csv_smart(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _append_eval_history_keep_extra(cfg: PremiumConfig, row: Dict) -> Path:
-    """
-    追加 learning/premium_eval_history.csv。
+def _json_safe(v):
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.floating,)):
+        if np.isfinite(float(v)):
+            return float(v)
+        return None
+    if isinstance(v, float):
+        if np.isfinite(v):
+            return v
+        return None
+    if pd.isna(v):
+        return None
+    return v
 
-    为什么不直接调用 io.append_eval_history：
-    - 旧 append_eval_history 会按 PremiumEvalHistorySchema.COLUMNS 固定截断；
-    - EHX 新增字段会被 silently drop；
-    - 本函数用“历史列 ∪ 新行列”合并，避免新增指标落库失败。
+
+def _write_train_state(cfg: PremiumConfig, trade_date: str = "unknown", extra: Optional[Dict] = None) -> Path:
     """
+    写训练态摘要，不覆盖 predict 生成的 outputs/premium/_last_run.txt。
+
+    之前 train.py 在 no_samples / min_train_days_not_met / train ok 时会写 _last_run.txt，
+    这会把 Premium V3 predict 验收入口覆盖成训练摘要。这里改为只写 _last_train.txt。
+    """
+    extra = extra or {}
+    p = cfg.out_root() / "_last_train.txt"
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "trade_date": str(trade_date),
+        "model_version": str(getattr(cfg, "model_version", "premium_v2")),
+        "run_id": get_run_id(),
+        "commit_sha": get_commit_sha(cfg.repo_root()),
+        "created_at_utc": utc_now_iso(),
+    }
+    data.update(extra)
+
+    lines = [f"{k}: {_json_safe(v)}" for k, v in data.items()]
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return p
+
+
+def _append_eval_history_keep_extra(cfg: PremiumConfig, row: Dict) -> Path:
+    """追加 learning/premium_eval_history.csv，并保留新增 EHX 字段。"""
     p = cfg.eval_history_path()
     p.parent.mkdir(parents=True, exist_ok=True)
 
@@ -159,11 +182,7 @@ def _infer_next_trade_date_by_probe(
     trade_date: str,
     max_probe_days: int = 10,
 ) -> Optional[str]:
-    """
-    用“探测缓存/拉取是否成功”的方式推断 next_trade_date：
-    - 从 trade_date 的次日开始，最多探测 max_probe_days 个自然日。
-    - 第一个能成功 ensure_daily_cached 的日期，视为 next_trade_date。
-    """
+    """从 trade_date 次日开始探测第一个可缓存/拉取成功的交易日。"""
     import datetime as dt
 
     trade_date = _to_yyyymmdd(trade_date)
@@ -182,14 +201,7 @@ def _infer_next_trade_date_by_probe(
 
 
 def _build_close_df_for_label(cfg: PremiumConfig, trade_date: str) -> Tuple[pd.DataFrame, Optional[str], str]:
-    """
-    为 labels.build_premium_labels 构造 close_df（仅包含：trade_date/ts_code/close 的多日表）。
-
-    返回：
-    - close_df
-    - next_trade_date（若可推断到）
-    - reason（ok/pending原因）
-    """
+    """为 labels.build_premium_labels 构造 close_df。"""
     trade_date = _to_yyyymmdd(trade_date)
 
     r2 = ensure_daily_cached(cfg, trade_date)
@@ -212,14 +224,7 @@ def _build_close_df_for_label(cfg: PremiumConfig, trade_date: str) -> Tuple[pd.D
 # ========= 样本构建 =========
 
 def _extract_raw_eret_from_decision_df(df_dec: pd.DataFrame) -> pd.Series:
-    """
-    从 decision / source 表中尽量提取原始 E_ret。
-
-    兼容说明：
-    - 优先读取 raw/original 语义字段；
-    - 若没有 raw 字段，再兼容 eret_plus / e_ret_plus 等增强字段；
-    - 这样不会因为上游列名变化导致 EHX 全部 no sample。
-    """
+    """从 decision / source 表中尽量提取原始 E_ret。"""
     return _safe_numeric_series(
         df_dec,
         [
@@ -248,14 +253,7 @@ def _extract_raw_eret_from_decision_df(df_dec: pd.DataFrame) -> pd.Series:
 
 
 def _extract_extra_ehx_inputs(df_dec: pd.DataFrame) -> pd.DataFrame:
-    """
-    从原始输入中提取 EHX 可能用到的附加输入。
-
-    原则：
-    - 不要求全部都有；
-    - 只做宽松提取，缺失留空，后面统一 fillna；
-    - 字段只来自训练时已经存在的 decision/source 表，不引入未来函数。
-    """
+    """从原始输入中提取 EHX 可能用到的附加输入。"""
     out = pd.DataFrame(index=df_dec.index)
     out["eret_pred_raw"] = _extract_raw_eret_from_decision_df(df_dec)
     out["p_fill_pred"] = _safe_numeric_series(
@@ -288,13 +286,7 @@ def _extract_extra_ehx_inputs(df_dec: pd.DataFrame) -> pd.DataFrame:
 
 
 def collect_training_samples(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
-    """
-    从历史 decision 文件中收集“可打标”的样本。
-
-    返回：
-    - samples_df：每个股票一行，包含 X 特征列 + meta + risk + real_premium_ret + trade_date/next_trade_date。
-    - stats：过程统计信息。
-    """
+    """从历史 decision 文件中收集可打标样本。"""
     decision_files = load_decision_inputs(cfg)
     stats = {
         "n_decision_files": len(decision_files),
@@ -341,7 +333,6 @@ def collect_training_samples(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
         X["ts_code"] = feat.meta["ts_code"].astype(str).values
         df_all = df_join.merge(X, on="ts_code", how="left")
 
-        # 新增：补充 EHX 所需原始增强输入。
         extra_raw = _extract_extra_ehx_inputs(df_dec).copy()
         extra_raw["ts_code"] = feat.meta["ts_code"].astype(str).values
         df_all = df_all.merge(extra_raw, on="ts_code", how="left")
@@ -356,15 +347,13 @@ def collect_training_samples(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
     samples["trade_date"] = samples["trade_date"].astype(str).map(_to_yyyymmdd)
     samples["ts_code"] = samples["ts_code"].astype(str).str.strip()
     samples["real_premium_ret"] = pd.to_numeric(samples["real_premium_ret"], errors="coerce")
-
-    # EHX 训练目标：delta_ret = y_true - e_ret_pred。
     samples["eret_pred_raw"] = pd.to_numeric(samples.get("eret_pred_raw"), errors="coerce")
     samples["delta_ret"] = samples["real_premium_ret"] - samples["eret_pred_raw"]
     return samples, stats
 
 
 def _filter_recent_days(samples: pd.DataFrame, cfg: PremiumConfig) -> pd.DataFrame:
-    """只保留最近 train_window_days 天的样本（按 trade_date 排序）。"""
+    """只保留最近 train_window_days 天的样本。"""
     if samples.empty:
         return samples
 
@@ -378,20 +367,139 @@ def _filter_recent_days(samples: pd.DataFrame, cfg: PremiumConfig) -> pd.DataFra
     return samples[samples["trade_date"].isin(keep_dates)].reset_index(drop=True)
 
 
+# ========= premium_verify 回收 EHX 样本 =========
+
+def _infer_trade_date_from_path(path: Path) -> str:
+    m = re.search(r"(20\d{6})", path.name)
+    return m.group(1) if m else "unknown"
+
+
+def _real_ret_from_verify_df(df: pd.DataFrame) -> pd.Series:
+    y = _safe_numeric_series(
+        df,
+        [
+            "real_premium_ret",
+            "real_ret",
+            "actual_ret",
+            "premium_real_ret",
+            "ret_real",
+            "y_true",
+            "truth_ret",
+            "t2_ret",
+            "close_t2_ret",
+        ],
+        default=np.nan,
+    )
+    if y.notna().any():
+        return y
+
+    c2 = _safe_numeric_series(df, ["close_2", "close_t1", "buy_close", "entry_close", "close_buy"], default=np.nan)
+    c3 = _safe_numeric_series(df, ["close_3", "close_t2", "sell_close", "exit_close", "close_sell"], default=np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        derived = c3 / c2 - 1.0
+    return pd.to_numeric(derived, errors="coerce")
+
+
+def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
+    """
+    从 outputs/premium/premium_verify_*.csv 回收 EHX 已验证样本。
+
+    用途：Decision 历史样本无法打标或原始 E_ret 字段缺失时，仍可用已生成的
+    premium_verify 文件训练第一版 EHX，而不是一直停留在 ehx:coldstart_v1。
+    """
+    out_root = cfg.out_root()
+    files = sorted(out_root.glob("premium_verify_*.csv"))
+    stats = {
+        "n_verify_files": len(files),
+        "ok_files": 0,
+        "skipped_files": 0,
+        "notes": [],
+    }
+    rows: List[pd.DataFrame] = []
+
+    for path in files:
+        try:
+            df = _read_csv_smart(path)
+        except Exception as e:
+            stats["skipped_files"] += 1
+            stats["notes"].append(f"skip {path.name}: read error: {e}")
+            continue
+
+        if df.empty:
+            stats["skipped_files"] += 1
+            stats["notes"].append(f"skip {path.name}: empty")
+            continue
+
+        raw = _safe_numeric_series(
+            df,
+            ["eret_pred_raw", "e_ret_pred_raw", "raw_eret_pred", "e_ret", "E_ret", "eret_pred"],
+            default=np.nan,
+        )
+        real = _real_ret_from_verify_df(df)
+        if raw.notna().sum() == 0 or real.notna().sum() == 0:
+            stats["skipped_files"] += 1
+            stats["notes"].append(
+                f"skip {path.name}: missing raw/real columns raw_notna={int(raw.notna().sum())} real_notna={int(real.notna().sum())}"
+            )
+            continue
+
+        out = pd.DataFrame(index=df.index)
+        ts_col = _first_existing_col(df, ["ts_code", "code", "symbol"])
+        name_col = _first_existing_col(df, ["name", "名称", "stock_name"])
+        td_col = _first_existing_col(df, ["trade_date", "target_date", "date"])
+        ntd_col = _first_existing_col(df, ["next_trade_date", "verify_date", "t2_date"])
+
+        out["trade_date"] = df[td_col].astype(str).map(_to_yyyymmdd) if td_col else _infer_trade_date_from_path(path)
+        out["next_trade_date"] = df[ntd_col].astype(str).map(_to_yyyymmdd) if ntd_col else pd.NA
+        out["ts_code"] = df[ts_col].astype(str).str.strip() if ts_col else pd.NA
+        out["name"] = df[name_col].astype(str) if name_col else pd.NA
+        out["real_premium_ret"] = real
+        out["eret_pred_raw"] = raw
+
+        # 只保留预测时也可能有的非未来字段，避免 raw_abs_err/plus_abs_err 等未来泄漏。
+        feature_candidates = {
+            "p_fill_pred": ["p_fill_pred", "p_fill", "P_fill", "dec_p_fill"],
+            "cost_total": ["cost_total", "cost", "trade_cost"],
+            "risk_penalty_total": ["risk_penalty_total", "risk_penalty", "risk_score"],
+            "ev": ["ev", "EV", "score_ev", "pred_ev", "final_score", "score"],
+            "turnover_rate": ["turnover_rate", "换手率"],
+            "amount": ["amount", "成交额"],
+            "vol": ["vol", "volume", "成交量"],
+            "close": ["close", "close_t", "收盘价", "close_2", "close_t1"],
+            "pct_chg": ["pct_chg", "pct_change", "涨跌幅"],
+            "amplitude": ["amplitude", "range_1d", "振幅"],
+            "rank_eret_plus": ["rank_eret_plus", "E_ret_plus排名"],
+            "eret_plus_conf_score": ["eret_plus_conf_score", "EHX置信分"],
+        }
+        for target, candidates in feature_candidates.items():
+            out[target] = _safe_numeric_series(df, candidates, default=np.nan)
+
+        out["delta_ret"] = out["real_premium_ret"] - out["eret_pred_raw"]
+        out = out[out["real_premium_ret"].notna() & out["eret_pred_raw"].notna()].reset_index(drop=True)
+        if out.empty:
+            stats["skipped_files"] += 1
+            stats["notes"].append(f"skip {path.name}: no valid rows after filter")
+            continue
+
+        stats["ok_files"] += 1
+        rows.append(out)
+
+    if not rows:
+        return pd.DataFrame(), stats
+
+    samples = pd.concat(rows, ignore_index=True)
+    samples["trade_date"] = samples["trade_date"].astype(str).map(_to_yyyymmdd)
+    samples["ts_code"] = samples["ts_code"].astype(str).str.strip()
+    return samples, stats
+
+
 # ========= EHX 模型 =========
 
 def _build_ehx_feature_cols(samples: pd.DataFrame) -> List[str]:
-    """
-    第一版 EHX 特征列：
-    - 原始 premium/features 输出的数值列尽量保留；
-    - 再叠加少量围绕 E_ret 的增强输入。
-    """
+    """第一版 EHX 特征列。"""
     cols: List[str] = []
-
-    # 旧 features.py 的标准输出。
     cols.extend([c for c in samples.columns if str(c).startswith("auto__")])
 
-    # 兼容旧 premium 线常见数值特征。
     for c in [
         "rank_score",
         "strength_score",
@@ -402,12 +510,6 @@ def _build_ehx_feature_cols(samples: pd.DataFrame) -> List[str]:
         "turnover_rate",
         "amount",
         "vol",
-    ]:
-        if c in samples.columns:
-            cols.append(c)
-
-    # EHX 新增围绕 E_ret 的增强输入。
-    for c in [
         "eret_pred_raw",
         "p_fill_pred",
         "cost_total",
@@ -416,11 +518,12 @@ def _build_ehx_feature_cols(samples: pd.DataFrame) -> List[str]:
         "close",
         "pct_chg",
         "amplitude",
+        "rank_eret_plus",
+        "eret_plus_conf_score",
     ]:
         if c in samples.columns:
             cols.append(c)
 
-    # 去重并保持顺序。
     uniq: List[str] = []
     seen = set()
     for c in cols:
@@ -442,11 +545,7 @@ def fit_ehx_delta_regressor(
     y_delta: pd.Series,
     feature_cols: List[str],
 ):
-    """
-    第一版 EHX 模型：
-    - 用 sklearn HistGradientBoostingRegressor；
-    - 依赖轻、稳、能处理非线性，适合第一版残差学习。
-    """
+    """第一版 EHX 模型：HistGradientBoostingRegressor。"""
     from sklearn.ensemble import HistGradientBoostingRegressor
 
     y = pd.to_numeric(y_delta, errors="coerce").fillna(0.0).clip(lower=-1.0, upper=1.0)
@@ -455,7 +554,7 @@ def fit_ehx_delta_regressor(
         learning_rate=0.05,
         max_depth=4,
         max_iter=200,
-        min_samples_leaf=20,
+        min_samples_leaf=10,
         l2_regularization=0.1,
         random_state=42,
     )
@@ -486,7 +585,8 @@ def save_ehx(bundle, model_path: str) -> None:
 
 def _save_ehx_meta(meta_path: Path, payload: Dict) -> None:
     meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    clean_payload = {k: _json_safe(v) for k, v in payload.items()}
+    meta_path.write_text(json.dumps(clean_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -505,6 +605,146 @@ def _rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.sqrt(np.nanmean((y_true - y_pred) ** 2)))
 
 
+def _train_ehx_only(
+    cfg: PremiumConfig,
+    ehx_samples: pd.DataFrame,
+    reason_prefix: str,
+    stats: Optional[Dict] = None,
+) -> TrainResult:
+    """只训练 EHX；用于旧 LR/LGBM 样本不足但 verify 样本可用的场景。"""
+    stats = stats or {}
+    ehx_samples = ehx_samples.copy()
+    ehx_samples = ehx_samples[
+        ehx_samples["real_premium_ret"].notna()
+        & ehx_samples["eret_pred_raw"].notna()
+    ].reset_index(drop=True)
+
+    n_samples = int(len(ehx_samples))
+    n_days = int(ehx_samples["trade_date"].nunique()) if "trade_date" in ehx_samples.columns else 0
+    ehx_min_samples = max(10, min(30, int(getattr(cfg, "min_train_days", 3)) * 5))
+    ehx_model_path = cfg.out_root() / "models" / "ehx_delta.joblib"
+    ehx_meta_path = cfg.out_root() / "models" / "ehx_meta.json"
+
+    if n_samples < ehx_min_samples:
+        ehx_reason = f"ehx_samples_not_enough:{n_samples}<{ehx_min_samples}"
+        _save_ehx_meta(
+            ehx_meta_path,
+            {
+                "kind": "ehx_delta_regressor",
+                "model_version": cfg.model_version,
+                "trained": False,
+                "reason": ehx_reason,
+                "n_samples": n_samples,
+                "n_days": n_days,
+                "source": reason_prefix,
+                "stats": stats,
+                "created_at_utc": utc_now_iso(),
+                "commit_sha": get_commit_sha(cfg.repo_root()),
+                "run_id": get_run_id(),
+            },
+        )
+        _write_train_state(
+            cfg,
+            trade_date="unknown",
+            extra={
+                "trained": False,
+                "reason": ehx_reason,
+                "ehx_trained": False,
+                "ehx_n_samples": n_samples,
+                "ehx_min_samples": ehx_min_samples,
+                "ehx_meta_path": str(ehx_meta_path),
+            },
+        )
+        return TrainResult(False, ehx_reason, n_samples, n_days, cfg.model_version)
+
+    ehx_feature_cols = _build_ehx_feature_cols(ehx_samples)
+    if not ehx_feature_cols:
+        ehx_reason = "ehx_feature_cols_empty"
+        _write_train_state(cfg, trade_date="unknown", extra={"trained": False, "reason": ehx_reason})
+        return TrainResult(False, ehx_reason, n_samples, n_days, cfg.model_version)
+
+    X_ehx = _prepare_numeric_matrix(ehx_samples, ehx_feature_cols)
+    y_delta = pd.to_numeric(ehx_samples["delta_ret"], errors="coerce").fillna(0.0)
+    ehx_bundle = fit_ehx_delta_regressor(X_ehx, y_delta, feature_cols=list(X_ehx.columns))
+    save_ehx(ehx_bundle, str(ehx_model_path))
+
+    delta_pred = np.asarray(ehx_bundle.predict(X_ehx), dtype=float)
+    delta_true = np.asarray(y_delta, dtype=float)
+    delta_mae = _mae(delta_true, delta_pred)
+    delta_rmse = _rmse(delta_true, delta_pred)
+
+    last_td = sorted(ehx_samples["trade_date"].dropna().astype(str).unique())[-1] if n_days > 0 else "unknown"
+    raw_ret = pd.to_numeric(ehx_samples["eret_pred_raw"], errors="coerce").values
+    real_ret = pd.to_numeric(ehx_samples["real_premium_ret"], errors="coerce").values
+    plus_ret = raw_ret + delta_pred
+    raw_abs_err = np.abs(real_ret - raw_ret)
+    plus_abs_err = np.abs(real_ret - plus_ret)
+    plus_improve_rate = float(np.mean(plus_abs_err < raw_abs_err)) if len(raw_abs_err) > 0 else float("nan")
+
+    _save_ehx_meta(
+        ehx_meta_path,
+        {
+            "kind": "ehx_delta_regressor",
+            "model_version": cfg.model_version,
+            "trained": True,
+            "reason": "ok",
+            "source": reason_prefix,
+            "feature_cols": list(X_ehx.columns),
+            "n_samples": n_samples,
+            "n_days": n_days,
+            "delta_mae": delta_mae,
+            "delta_rmse": delta_rmse,
+            "plus_improve_rate": plus_improve_rate,
+            "created_at_utc": utc_now_iso(),
+            "commit_sha": get_commit_sha(cfg.repo_root()),
+            "run_id": get_run_id(),
+        },
+    )
+
+    row = {
+        "trade_date": str(last_td),
+        "next_trade_date": pd.NA,
+        "n": n_samples,
+        "topk": int(getattr(cfg, "topk", 30)),
+        "hit_rate_at_k": float("nan"),
+        "mean_ret_at_k": float("nan"),
+        "rank_ic": float("nan"),
+        "ehx_trained": 1,
+        "ehx_reason": f"ok:{reason_prefix}",
+        "ehx_n_samples": n_samples,
+        "ehx_min_samples": ehx_min_samples,
+        "delta_mae": delta_mae,
+        "delta_rmse": delta_rmse,
+        "plus_improve_rate": plus_improve_rate,
+        "model_version": cfg.model_version,
+        "run_id": get_run_id(),
+        "commit_sha": get_commit_sha(cfg.repo_root()),
+        "created_at_utc": utc_now_iso(),
+    }
+    _append_eval_history_keep_extra(cfg, row)
+
+    _write_train_state(
+        cfg,
+        trade_date=str(last_td),
+        extra={
+            "trained": True,
+            "reason": f"ok:{reason_prefix}",
+            "n_samples": n_samples,
+            "n_days": n_days,
+            "ehx_trained": True,
+            "ehx_reason": "ok",
+            "ehx_n_samples": n_samples,
+            "ehx_min_samples": ehx_min_samples,
+            "ehx_model_path": str(ehx_model_path),
+            "ehx_meta_path": str(ehx_meta_path),
+            "delta_mae": delta_mae,
+            "delta_rmse": delta_rmse,
+            "plus_improve_rate": plus_improve_rate,
+        },
+    )
+    return TrainResult(True, f"ok:{reason_prefix}", n_samples, n_days, cfg.model_version)
+
+
 # ========= 主训练入口 =========
 
 def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
@@ -512,8 +752,33 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     cfg = cfg or PremiumConfig.load()
 
     samples, stats = collect_training_samples(cfg)
+    verify_samples, verify_stats = _collect_ehx_samples_from_verify_outputs(cfg)
+
     if samples.empty:
-        write_last_run(
+        if not verify_samples.empty:
+            return _train_ehx_only(
+                cfg,
+                verify_samples,
+                reason_prefix="ehx_from_premium_verify",
+                stats={"decision": stats, "verify": verify_stats},
+            )
+
+        ehx_meta_path = cfg.out_root() / "models" / "ehx_meta.json"
+        _save_ehx_meta(
+            ehx_meta_path,
+            {
+                "kind": "ehx_delta_regressor",
+                "model_version": cfg.model_version,
+                "trained": False,
+                "reason": "no_samples",
+                "decision_stats": stats,
+                "verify_stats": verify_stats,
+                "created_at_utc": utc_now_iso(),
+                "commit_sha": get_commit_sha(cfg.repo_root()),
+                "run_id": get_run_id(),
+            },
+        )
+        _write_train_state(
             cfg,
             trade_date="unknown",
             extra={
@@ -522,7 +787,9 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
                 "pending_days": stats.get("pending_days", 0),
                 "ok_days": stats.get("ok_days", 0),
                 "skipped_files": stats.get("skipped_files", 0),
+                "verify_ok_files": verify_stats.get("ok_files", 0),
                 "notes_tail": " | ".join(stats.get("notes", [])[-5:]),
+                "ehx_meta_path": str(ehx_meta_path),
             },
         )
         return TrainResult(
@@ -540,8 +807,16 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     n_days = int(samples["trade_date"].nunique()) if "trade_date" in samples.columns else 0
 
     if n_days < int(cfg.min_train_days):
+        if not verify_samples.empty:
+            return _train_ehx_only(
+                cfg,
+                verify_samples,
+                reason_prefix="ehx_from_premium_verify_min_days_fallback",
+                stats={"decision": stats, "verify": verify_stats, "decision_n_days": n_days},
+            )
+
         last_td = sorted(samples["trade_date"].unique())[-1] if n_days > 0 else "unknown"
-        write_last_run(
+        _write_train_state(
             cfg,
             trade_date=str(last_td),
             extra={
@@ -623,15 +898,20 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     )
     save_lgbm(lgbm_bundle, str(cfg.lgbm_model_path()))
 
-    # ========== 新 EHX 残差训练链 ==========
+    # ========== EHX 残差训练链 ==========
     ehx_samples = samples.copy()
     ehx_samples = ehx_samples[
         ehx_samples["real_premium_ret"].notna()
         & ehx_samples["eret_pred_raw"].notna()
     ].reset_index(drop=True)
 
+    if not verify_samples.empty:
+        # 用 verify 样本补充 EHX。列不一致没关系，矩阵阶段会 reindex/fillna。
+        ehx_samples = pd.concat([ehx_samples, verify_samples], ignore_index=True, sort=False)
+        ehx_samples = ehx_samples.drop_duplicates(subset=["trade_date", "ts_code"], keep="last").reset_index(drop=True)
+
     ehx_feature_cols = _build_ehx_feature_cols(ehx_samples)
-    ehx_min_samples = max(30, int(cfg.min_train_days) * 5)
+    ehx_min_samples = max(10, min(30, int(cfg.min_train_days) * 5))
     ehx_trained = False
     ehx_reason = "not_run"
     delta_mae = float("nan")
@@ -643,6 +923,22 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
 
     if len(ehx_samples) < ehx_min_samples:
         ehx_reason = f"ehx_samples_not_enough:{len(ehx_samples)}<{ehx_min_samples}"
+        _save_ehx_meta(
+            ehx_meta_path,
+            {
+                "kind": "ehx_delta_regressor",
+                "model_version": cfg.model_version,
+                "trained": False,
+                "reason": ehx_reason,
+                "n_samples": int(len(ehx_samples)),
+                "n_days": int(ehx_samples["trade_date"].nunique()) if "trade_date" in ehx_samples.columns else 0,
+                "decision_stats": stats,
+                "verify_stats": verify_stats,
+                "created_at_utc": utc_now_iso(),
+                "commit_sha": get_commit_sha(cfg.repo_root()),
+                "run_id": get_run_id(),
+            },
+        )
     elif not ehx_feature_cols:
         ehx_reason = "ehx_feature_cols_empty"
     else:
@@ -655,7 +951,6 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
         )
         save_ehx(ehx_bundle, str(ehx_model_path))
 
-        # 训练集内粗评估（第一版先做轻评估）。
         delta_pred = np.asarray(ehx_bundle.predict(X_ehx), dtype=float)
         delta_true = np.asarray(y_delta, dtype=float)
         delta_mae = _mae(delta_true, delta_pred)
@@ -666,6 +961,9 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
             {
                 "kind": "ehx_delta_regressor",
                 "model_version": cfg.model_version,
+                "trained": True,
+                "reason": "ok",
+                "source": "decision_plus_verify" if not verify_samples.empty else "decision",
                 "feature_cols": list(X_ehx.columns),
                 "n_samples": int(len(ehx_samples)),
                 "n_days": int(ehx_samples["trade_date"].nunique()) if "trade_date" in ehx_samples.columns else 0,
@@ -696,7 +994,6 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     mean_ret = float(np.nanmean(real_topk)) if len(real_topk) > 0 else float("nan")
     rank_ic = _spearman_rank_ic(pred_ev, real)
 
-    # 新增：最后一天的 EHX 粗验证。
     plus_improve_rate = float("nan")
     if ehx_trained and ehx_bundle is not None:
         df_last_ehx = df_last[
@@ -714,7 +1011,6 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
             plus_abs_err = np.abs(real_ret_last - plus_ret_last)
             plus_improve_rate = float(np.mean(plus_abs_err < raw_abs_err)) if len(raw_abs_err) > 0 else float("nan")
 
-    # ========== 追溯 ==========
     run_id = get_run_id()
     sha = get_commit_sha(cfg.repo_root())
     now = utc_now_iso()
@@ -743,22 +1039,24 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     }
     _append_eval_history_keep_extra(cfg, row)
 
-    write_last_run(
+    _write_train_state(
         cfg,
         trade_date=str(last_td),
         extra={
             "trained": True,
+            "reason": "ok",
             "n_samples": n_samples,
             "n_days": n_days,
             "pending_days": stats["pending_days"],
             "ok_days": stats["ok_days"],
             "skipped_files": stats.get("skipped_files", 0),
+            "verify_ok_files": verify_stats.get("ok_files", 0),
             "ehx_trained": bool(ehx_trained),
             "ehx_reason": ehx_reason,
             "ehx_n_samples": int(len(ehx_samples)),
             "ehx_min_samples": int(ehx_min_samples),
             "ehx_model_path": str(ehx_model_path) if ehx_trained else "",
-            "ehx_meta_path": str(ehx_meta_path) if ehx_trained else "",
+            "ehx_meta_path": str(ehx_meta_path),
             "delta_mae": delta_mae,
             "delta_rmse": delta_rmse,
             "plus_improve_rate": plus_improve_rate,
