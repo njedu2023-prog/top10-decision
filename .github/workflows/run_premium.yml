@@ -22,6 +22,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
   group: premium-follow-decision
@@ -46,13 +47,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Sync with remote (rebase)
+      - name: Sync with remote
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
-          git rebase origin/main || (git rebase --abort && git reset --hard origin/main)
+          git reset --hard origin/main
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -72,8 +73,7 @@ jobs:
           EVENT_NAME="${{ github.event_name }}"
 
           # Premium V3 / E_ret_plus / EHX 阶段：默认跑 all。
-          # train.py 已改成只写 _last_train.txt，不覆盖 _last_run.txt，
-          # 所以这里可以安全地先训练，再预测，推动 coldstart_v1 -> model_v1。
+          # train.py 只写 _last_train.txt，不覆盖 _last_run.txt。
           if [ "$EVENT_NAME" = "workflow_run" ]; then
             CMD="all"
           else
@@ -88,6 +88,7 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}/src"
           TUSHARE_TOKEN: "${{ secrets.TUSHARE_TOKEN }}"
+          PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -e
           python scripts/run_premium.py "$PREMIUM_CMD" --verbose
@@ -141,12 +142,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Premium V3：提交预测产物、EHX 模型产物、报告与真值缓存。
+          # 彻底清理 Python 运行时缓存。
+          # 注意：仓库里如果曾经误跟踪过 pyc，这里用 checkout 恢复；未跟踪的 __pycache__ 用 clean 删除。
+          git checkout -- src || true
+          git clean -fd src || true
+          find src -type d -name "__pycache__" -prune -exec rm -rf {} + || true
+          find src -type f -name "*.pyc" -delete || true
+
+          # 只提交 Premium 输出、模型、报告和 market cache。
           git add outputs/premium || true
           git add docs/reports || true
           git add data/market || true
 
-          echo "=== git status after add ==="
+          echo "=== git status after cleanup + add ==="
           git status --short
 
           if git diff --cached --quiet; then
@@ -154,7 +162,6 @@ jobs:
             exit 0
           fi
 
-          # 从 _last_run.txt 里读取 trade_date；没有则读 target_date；再没有用 unknown。
           TRADE_DATE="$(grep -E '^trade_date:' -m 1 outputs/premium/_last_run.txt | awk '{print $2}' || true)"
           if [ -z "$TRADE_DATE" ]; then
             TRADE_DATE="$(grep -E '^target_date:' -m 1 outputs/premium/_last_run.txt | awk '{print $2}' || true)"
@@ -163,17 +170,9 @@ jobs:
 
           git commit -m "premium: update outputs + market cache (${TRADE_DATE})"
 
-          # push 必须成功。不能再把 push 失败伪装成 workflow success，
-          # 否则页面显示绿灯，但 main 上没有 _last_train / EHX 模型产物。
-          for attempt in 1 2 3; do
-            echo "git push attempt ${attempt}/3"
-            git pull --rebase origin main
-            if git push origin HEAD:main; then
-              echo "git push success."
-              exit 0
-            fi
-            sleep 5
-          done
-
-          echo "ERROR: git push failed after 3 attempts."
-          exit 1
+          # 关键修复：
+          # 不再 commit 后执行 git pull --rebase / git rebase。
+          # 之前失败的根因就是 commit 后仍有 pycache 之类的 unstaged changes，rebase 被卡死。
+          # 这里直接 push；若远端领先，则明确失败，让下一次重新跑即可，不伪装成功。
+          echo "git push origin HEAD:main"
+          git push origin HEAD:main
