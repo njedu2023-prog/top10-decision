@@ -1,10 +1,10 @@
-trade_date: 20260605
-run_id: gh_27282880644
-commit_sha: 5a48fecc38a6
+trade_date: 20260608
+run_id: gh_27283943517
+commit_sha: c3f033e04333
 model_version: premium_v2
-created_at_utc: 2026-06-10T14:20:43Z
+created_at_utc: 2026-06-10T14:37:45Z
 ok: True
-target_date: 20260609
+target_date: 20260610
 pending: False
 pending_reason: trade_cal_ok
 truth_T_ok: True
@@ -18,16 +18,16 @@ ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/
 ehx_load_reason: ok
 ehx_feature_n: 16
 ehx_meta_n_samples: 1432
-ehx_meta_delta_mae: 0.05365796160750347
-ehx_meta_delta_rmse: 0.07294123018339155
-out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260605.csv
-out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260605.csv
-out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260605.csv
-report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260605.md
+ehx_meta_delta_mae: 0.05364454144114638
+ehx_meta_delta_rmse: 0.07300416909513584
+out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260608.csv
+out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260608.csv
+out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260608.csv
+report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260608.md
 degrade_mode: full
 packs_used: ['Pack0', 'Pack1', 'Pack2']
 packs_missing: []
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260605.csv', 'Pack2 enabled (soft mode, fixed)']
+notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260608.csv', 'Pack2 enabled (soft mode, fixed)']
 extra_prefix: factor
