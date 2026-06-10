@@ -1,0 +1,33 @@
+{
+  "kind": "ehx_delta_regressor",
+  "model_version": "premium_v2",
+  "trained": true,
+  "reason": "ok",
+  "source": "ehx_from_premium_verify",
+  "feature_cols": [
+    "turnover_rate",
+    "amount",
+    "vol",
+    "eret_pred_raw",
+    "p_fill_pred",
+    "cost_total",
+    "risk_penalty_total",
+    "ev",
+    "close",
+    "pct_chg",
+    "amplitude",
+    "rank_eret_plus",
+    "eret_plus_conf_score",
+    "r_p50",
+    "in_p10",
+    "in_p50"
+  ],
+  "n_samples": 1432,
+  "n_days": 48,
+  "delta_mae": 0.054207309409267025,
+  "delta_rmse": 0.07404662454275023,
+  "plus_improve_rate": 0.6501396648044693,
+  "created_at_utc": "2026-06-10T14:05:55Z",
+  "commit_sha": "bb14dd1f7889",
+  "run_id": "gh_27281950958"
+}
