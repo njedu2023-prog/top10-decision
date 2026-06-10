@@ -5,7 +5,7 @@
 - 预测日（T）：**20260608**
 - 预测到期日（T+2）：**20260610**
 - 周期：**2 个交易日（T→T+2）**
-- 生成时间：2026-06-10T14:37:45Z
+- 生成时间：2026-06-10T15:02:21Z
 - 模型版本：**premium_v2**
 
 ## 预测表（Top30）
@@ -13,936 +13,378 @@
 <div><table class="dataframe">
   <thead>
     <tr style="text-align: right;">
-      <th>排名</th>
-      <th>预测日(T)</th>
-      <th>预测到期日(T+2)</th>
+      <th>操作排名</th>
       <th>代码</th>
       <th>名称</th>
-      <th>收盘价(T)</th>
-      <th>E_ret原始值</th>
-      <th>E_ret_plus</th>
-      <th>EHX修正值</th>
-      <th>EHX方向</th>
-      <th>EHX置信度</th>
-      <th>EHX置信分</th>
-      <th>EHX来源</th>
-      <th>T+2价分位05</th>
-      <th>T+2价分位25</th>
-      <th>T+2价分位50</th>
-      <th>T+2价分位75</th>
-      <th>T+2价分位95</th>
-      <th>E_ret_plus排名</th>
-      <th>ln中位排名</th>
-      <th>上涨概率</th>
-      <th>原始E_ret</th>
-      <th>综合评分</th>
-      <th>决策排名</th>
-      <th>决策权重</th>
-      <th>可买</th>
-      <th>可成交概率</th>
-      <th>决策原因</th>
+      <th>收盘价</th>
+      <th>T+2预期收益</th>
+      <th>预期价格区间</th>
+      <th>T+2上涨概率</th>
+      <th>模型置信度</th>
+      <th>操作结论</th>
+      <th>风险提示</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>1</td>
-      <td>20260608</td>
-      <td>20260610</td>
       <td>000517.SZ</td>
       <td>荣安地产</td>
       <td>2.33</td>
-      <td>+0.00%</td>
       <td>+12.00%</td>
-      <td>+12.00%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>2.404</td>
-      <td>2.523</td>
-      <td>2.610</td>
-      <td>2.699</td>
-      <td>2.833</td>
-      <td>1</td>
-      <td>1</td>
+      <td>2.52 ~ 2.70，中位 2.61</td>
       <td>26.52%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>优先观察</td>
+      <td>无明显风险</td>
     </tr>
     <tr>
       <td>2</td>
-      <td>20260608</td>
-      <td>20260610</td>
       <td>601588.SH</td>
       <td>北辰实业</td>
       <td>2.22</td>
-      <td>+0.00%</td>
       <td>+12.00%</td>
-      <td>+12.00%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>2.290</td>
-      <td>2.404</td>
-      <td>2.486</td>
-      <td>2.572</td>
-      <td>2.700</td>
-      <td>2</td>
-      <td>2</td>
+      <td>2.40 ~ 2.57，中位 2.49</td>
       <td>13.34%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
     </tr>
     <tr>
       <td>3</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>600280.SH</td>
+      <td>中央商场</td>
+      <td>3.74</td>
+      <td>+12.00%</td>
+      <td>4.05 ~ 4.33，中位 4.19</td>
+      <td>18.89%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>4</td>
       <td>000785.SZ</td>
       <td>居然智家</td>
       <td>2.72</td>
-      <td>+0.00%</td>
-      <td>+11.13%</td>
-      <td>+11.13%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>2.784</td>
-      <td>2.922</td>
-      <td>3.023</td>
-      <td>3.126</td>
-      <td>3.282</td>
-      <td>3</td>
-      <td>3</td>
+      <td>+12.00%</td>
+      <td>2.95 ~ 3.15，中位 3.05</td>
       <td>6.58%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>4</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603186.SH</td>
-      <td>华正新材</td>
-      <td>136.03</td>
-      <td>+0.00%</td>
-      <td>+9.73%</td>
-      <td>+9.73%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>137.483</td>
-      <td>144.318</td>
-      <td>149.268</td>
-      <td>154.388</td>
-      <td>162.063</td>
-      <td>4</td>
-      <td>4</td>
-      <td>9.33%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
     </tr>
     <tr>
       <td>5</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>600539.SH</td>
-      <td>狮头股份</td>
-      <td>15.40</td>
-      <td>+0.00%</td>
-      <td>+9.42%</td>
-      <td>+9.42%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>15.520</td>
-      <td>16.292</td>
-      <td>16.850</td>
-      <td>17.428</td>
-      <td>18.295</td>
-      <td>5</td>
-      <td>5</td>
-      <td>10.94%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>6</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603135.SH</td>
-      <td>中重科技</td>
-      <td>15.43</td>
-      <td>+0.00%</td>
-      <td>+9.42%</td>
-      <td>+9.42%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>15.550</td>
-      <td>16.323</td>
-      <td>16.883</td>
-      <td>17.462</td>
-      <td>18.330</td>
-      <td>6</td>
-      <td>6</td>
-      <td>8.63%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>7</td>
-      <td>20260608</td>
-      <td>20260610</td>
       <td>000068.SZ</td>
       <td>华控赛格</td>
       <td>3.92</td>
-      <td>+0.00%</td>
-      <td>+9.07%</td>
-      <td>+9.07%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>3.938</td>
-      <td>4.134</td>
-      <td>4.275</td>
-      <td>4.422</td>
-      <td>4.642</td>
-      <td>7</td>
-      <td>7</td>
+      <td>+12.00%</td>
+      <td>4.24 ~ 4.54，中位 4.39</td>
       <td>9.87%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
     </tr>
     <tr>
-      <td>8</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603877.SH</td>
-      <td>太平鸟</td>
-      <td>14.06</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>14.049</td>
-      <td>14.747</td>
-      <td>15.253</td>
-      <td>15.776</td>
-      <td>16.560</td>
-      <td>8</td>
-      <td>8</td>
-      <td>15.45%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>6</td>
+      <td>603186.SH</td>
+      <td>华正新材</td>
+      <td>136.03</td>
+      <td>+11.16%</td>
+      <td>146.19 ~ 156.39，中位 151.21</td>
+      <td>9.33%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
     </tr>
     <tr>
-      <td>9</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002982.SZ</td>
-      <td>湘佳股份</td>
-      <td>13.48</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>13.469</td>
-      <td>14.139</td>
-      <td>14.624</td>
-      <td>15.125</td>
-      <td>15.877</td>
-      <td>9</td>
-      <td>9</td>
-      <td>7.39%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>10</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603500.SH</td>
-      <td>祥和实业</td>
-      <td>13.45</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>13.439</td>
-      <td>14.107</td>
-      <td>14.591</td>
-      <td>15.091</td>
-      <td>15.842</td>
-      <td>10</td>
-      <td>10</td>
-      <td>9.94%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>11</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603278.SH</td>
-      <td>大业股份</td>
-      <td>14.14</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>14.128</td>
-      <td>14.831</td>
-      <td>15.340</td>
-      <td>15.866</td>
-      <td>16.654</td>
-      <td>11</td>
-      <td>11</td>
-      <td>15.41%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>12</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>000970.SZ</td>
-      <td>中科三环</td>
-      <td>12.63</td>
-      <td>+0.00%</td>
-      <td>+7.50%</td>
-      <td>+7.50%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>12.505</td>
-      <td>13.127</td>
-      <td>13.577</td>
-      <td>14.043</td>
-      <td>14.741</td>
-      <td>12</td>
-      <td>12</td>
-      <td>14.86%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>13</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>301302.SZ</td>
-      <td>华如科技</td>
-      <td>30.12</td>
-      <td>+0.00%</td>
-      <td>+7.42%</td>
-      <td>+7.42%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>29.800</td>
-      <td>31.281</td>
-      <td>32.354</td>
-      <td>33.464</td>
-      <td>35.128</td>
-      <td>13</td>
-      <td>13</td>
-      <td>12.39%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>14</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>001696.SZ</td>
-      <td>宗申动力</td>
-      <td>15.95</td>
-      <td>+0.00%</td>
-      <td>+7.28%</td>
-      <td>+7.28%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>15.760</td>
-      <td>16.543</td>
-      <td>17.110</td>
-      <td>17.697</td>
-      <td>18.577</td>
-      <td>14</td>
-      <td>14</td>
-      <td>7.58%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>15</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603669.SH</td>
-      <td>灵康药业</td>
-      <td>4.48</td>
-      <td>+0.00%</td>
-      <td>+7.09%</td>
-      <td>+7.09%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>4.419</td>
-      <td>4.638</td>
-      <td>4.798</td>
-      <td>4.962</td>
-      <td>5.209</td>
-      <td>15</td>
-      <td>15</td>
-      <td>3.59%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>16</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002747.SZ</td>
-      <td>埃斯顿</td>
-      <td>34.12</td>
-      <td>+0.00%</td>
-      <td>+7.00%</td>
-      <td>+7.00%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>33.625</td>
-      <td>35.297</td>
-      <td>36.508</td>
-      <td>37.760</td>
-      <td>39.637</td>
-      <td>16</td>
-      <td>16</td>
-      <td>11.92%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>17</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>301195.SZ</td>
-      <td>北路智控</td>
-      <td>33.13</td>
-      <td>+0.00%</td>
-      <td>+7.00%</td>
-      <td>+7.00%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>32.650</td>
-      <td>34.273</td>
-      <td>35.448</td>
-      <td>36.664</td>
-      <td>38.487</td>
-      <td>17</td>
-      <td>17</td>
-      <td>14.87%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>18</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>7</td>
       <td>002354.SZ</td>
       <td>天娱数科</td>
       <td>7.33</td>
-      <td>+0.00%</td>
-      <td>+6.78%</td>
-      <td>+6.78%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>7.209</td>
-      <td>7.568</td>
-      <td>7.827</td>
-      <td>8.096</td>
-      <td>8.498</td>
-      <td>18</td>
-      <td>18</td>
+      <td>+11.13%</td>
+      <td>7.88 ~ 8.42，中位 8.15</td>
       <td>10.64%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
     </tr>
     <tr>
-      <td>19</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002490.SZ</td>
-      <td>山东墨龙</td>
-      <td>8.23</td>
-      <td>+0.00%</td>
-      <td>+6.78%</td>
-      <td>+6.78%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>8.094</td>
-      <td>8.497</td>
-      <td>8.788</td>
-      <td>9.090</td>
-      <td>9.542</td>
-      <td>19</td>
-      <td>19</td>
-      <td>12.91%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>20</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>8</td>
       <td>600721.SH</td>
       <td>百花医药</td>
       <td>7.79</td>
-      <td>+0.00%</td>
-      <td>+6.78%</td>
-      <td>+6.78%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>7.662</td>
-      <td>8.043</td>
-      <td>8.318</td>
-      <td>8.604</td>
-      <td>9.031</td>
-      <td>20</td>
-      <td>20</td>
+      <td>+11.13%</td>
+      <td>8.37 ~ 8.95，中位 8.66</td>
       <td>18.52%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
     </tr>
     <tr>
-      <td>21</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>600403.SH</td>
-      <td>大有能源</td>
-      <td>8.95</td>
-      <td>+0.00%</td>
-      <td>+6.61%</td>
-      <td>+6.61%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>8.788</td>
-      <td>9.225</td>
-      <td>9.541</td>
-      <td>9.869</td>
-      <td>10.359</td>
-      <td>21</td>
-      <td>21</td>
-      <td>16.98%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>9</td>
+      <td>603669.SH</td>
+      <td>灵康药业</td>
+      <td>4.48</td>
+      <td>+10.99%</td>
+      <td>4.81 ~ 5.14，中位 4.97</td>
+      <td>3.59%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
     </tr>
     <tr>
-      <td>22</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002164.SZ</td>
-      <td>宁波东力</td>
-      <td>14.66</td>
-      <td>+0.00%</td>
-      <td>+6.55%</td>
-      <td>+6.55%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>14.387</td>
-      <td>15.102</td>
-      <td>15.620</td>
-      <td>16.156</td>
-      <td>16.959</td>
-      <td>22</td>
-      <td>22</td>
-      <td>9.99%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>23</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>600505.SH</td>
-      <td>西昌电力</td>
-      <td>14.92</td>
-      <td>+0.00%</td>
-      <td>+6.55%</td>
-      <td>+6.55%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>14.642</td>
-      <td>15.370</td>
-      <td>15.897</td>
-      <td>16.442</td>
-      <td>17.260</td>
-      <td>23</td>
-      <td>23</td>
-      <td>5.79%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>24</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>10</td>
       <td>300105.SZ</td>
       <td>龙源技术</td>
       <td>7.18</td>
-      <td>+0.00%</td>
-      <td>+6.47%</td>
-      <td>+6.47%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>7.041</td>
-      <td>7.391</td>
-      <td>7.645</td>
-      <td>7.907</td>
-      <td>8.300</td>
-      <td>24</td>
-      <td>24</td>
+      <td>+10.88%</td>
+      <td>7.70 ~ 8.23，中位 7.96</td>
       <td>11.58%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>000970.SZ</td>
+      <td>中科三环</td>
+      <td>12.63</td>
+      <td>+10.63%</td>
+      <td>13.51 ~ 14.45，中位 13.97</td>
+      <td>14.86%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>002490.SZ</td>
+      <td>山东墨龙</td>
+      <td>8.23</td>
+      <td>+10.62%</td>
+      <td>8.80 ~ 9.42，中位 9.10</td>
+      <td>12.91%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>000759.SZ</td>
+      <td>中百集团</td>
+      <td>6.27</td>
+      <td>+10.42%</td>
+      <td>6.69 ~ 7.16，中位 6.92</td>
+      <td>10.57%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>300376.SZ</td>
+      <td>易事特</td>
+      <td>5.94</td>
+      <td>+10.42%</td>
+      <td>6.34 ~ 6.78，中位 6.56</td>
+      <td>10.79%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>600825.SH</td>
+      <td>新华传媒</td>
+      <td>5.45</td>
+      <td>+10.42%</td>
+      <td>5.82 ~ 6.22，中位 6.02</td>
+      <td>8.60%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>002613.SZ</td>
+      <td>北玻股份</td>
+      <td>5.46</td>
+      <td>+10.42%</td>
+      <td>5.83 ~ 6.24，中位 6.03</td>
+      <td>5.48%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>600488.SH</td>
+      <td>津药药业</td>
+      <td>5.69</td>
+      <td>+10.42%</td>
+      <td>6.07 ~ 6.50，中位 6.28</td>
+      <td>11.52%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>002421.SZ</td>
+      <td>达实智能</td>
+      <td>5.73</td>
+      <td>+10.42%</td>
+      <td>6.12 ~ 6.54，中位 6.33</td>
+      <td>36.58%</td>
+      <td>高（1.000）</td>
+      <td>优先观察</td>
+      <td>无明显风险</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>603616.SH</td>
+      <td>韩建河山</td>
+      <td>6.63</td>
+      <td>+10.42%</td>
+      <td>7.08 ~ 7.57，中位 7.32</td>
+      <td>80.25%</td>
+      <td>高（1.000）</td>
+      <td>优先观察</td>
+      <td>无明显风险</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>603278.SH</td>
+      <td>大业股份</td>
+      <td>14.14</td>
+      <td>+10.08%</td>
+      <td>15.05 ~ 16.10，中位 15.57</td>
+      <td>15.41%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>21</td>
+      <td>603877.SH</td>
+      <td>太平鸟</td>
+      <td>14.06</td>
+      <td>+10.08%</td>
+      <td>14.96 ~ 16.01，中位 15.48</td>
+      <td>15.45%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>22</td>
+      <td>603500.SH</td>
+      <td>祥和实业</td>
+      <td>13.45</td>
+      <td>+9.96%</td>
+      <td>14.30 ~ 15.30，中位 14.79</td>
+      <td>9.94%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>23</td>
+      <td>002982.SZ</td>
+      <td>湘佳股份</td>
+      <td>13.48</td>
+      <td>+9.96%</td>
+      <td>14.33 ~ 15.33，中位 14.82</td>
+      <td>7.39%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>24</td>
+      <td>603929.SH</td>
+      <td>亚翔集成</td>
+      <td>187.10</td>
+      <td>+9.04%</td>
+      <td>197.25 ~ 211.02，中位 204.02</td>
+      <td>14.96%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
     </tr>
     <tr>
       <td>25</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603859.SH</td>
-      <td>能科科技</td>
-      <td>49.87</td>
-      <td>+0.00%</td>
-      <td>+5.90%</td>
-      <td>+5.90%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>48.644</td>
-      <td>51.062</td>
-      <td>52.814</td>
-      <td>54.625</td>
-      <td>57.341</td>
-      <td>25</td>
-      <td>25</td>
-      <td>14.60%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>600505.SH</td>
+      <td>西昌电力</td>
+      <td>14.92</td>
+      <td>+8.81%</td>
+      <td>15.70 ~ 16.79，中位 16.23</td>
+      <td>5.79%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
     </tr>
     <tr>
       <td>26</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>300197.SZ</td>
+      <td>节能铁汉</td>
+      <td>3.02</td>
+      <td>+8.63%</td>
+      <td>3.17 ~ 3.39，中位 3.28</td>
+      <td>14.26%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>27</td>
+      <td>002164.SZ</td>
+      <td>宁波东力</td>
+      <td>14.66</td>
+      <td>+8.61%</td>
+      <td>15.39 ~ 16.47，中位 15.92</td>
+      <td>9.99%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
+    </tr>
+    <tr>
+      <td>28</td>
       <td>000833.SZ</td>
       <td>粤桂股份</td>
       <td>23.68</td>
-      <td>+0.00%</td>
-      <td>+5.86%</td>
-      <td>+5.86%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>23.088</td>
-      <td>24.235</td>
-      <td>25.067</td>
-      <td>25.927</td>
-      <td>27.215</td>
-      <td>26</td>
-      <td>26</td>
+      <td>+8.45%</td>
+      <td>24.83 ~ 26.56，中位 25.68</td>
       <td>16.35%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>27</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>920578.BJ</td>
-      <td>巨能股份</td>
-      <td>22.75</td>
-      <td>+0.00%</td>
-      <td>+5.82%</td>
-      <td>+5.82%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>22.174</td>
-      <td>23.276</td>
-      <td>24.075</td>
-      <td>24.900</td>
-      <td>26.138</td>
-      <td>27</td>
-      <td>27</td>
-      <td>10.27%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-    </tr>
-    <tr>
-      <td>28</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>001317.SZ</td>
-      <td>三羊马</td>
-      <td>56.86</td>
-      <td>+0.00%</td>
-      <td>+5.81%</td>
-      <td>+5.81%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>55.411</td>
-      <td>58.166</td>
-      <td>60.161</td>
-      <td>62.224</td>
-      <td>65.318</td>
-      <td>28</td>
-      <td>28</td>
-      <td>9.32%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
     </tr>
     <tr>
       <td>29</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>003009.SZ</td>
-      <td>中天火箭</td>
-      <td>60.94</td>
-      <td>+0.00%</td>
-      <td>+5.81%</td>
-      <td>+5.81%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>59.387</td>
-      <td>62.339</td>
-      <td>64.478</td>
-      <td>66.689</td>
-      <td>70.005</td>
-      <td>29</td>
-      <td>29</td>
-      <td>22.00%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>000620.SZ</td>
+      <td>盈新发展</td>
+      <td>3.17</td>
+      <td>+8.42%</td>
+      <td>3.32 ~ 3.55，中位 3.44</td>
+      <td>13.44%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率一般；高收益低胜率</td>
     </tr>
     <tr>
       <td>30</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002046.SZ</td>
-      <td>国机精工</td>
-      <td>60.37</td>
-      <td>+0.00%</td>
-      <td>+5.81%</td>
-      <td>+5.81%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>1.000</td>
-      <td>ehx:model_v1</td>
-      <td>58.832</td>
-      <td>61.756</td>
-      <td>63.875</td>
-      <td>66.065</td>
-      <td>69.350</td>
-      <td>30</td>
-      <td>30</td>
-      <td>10.29%</td>
-      <td>+0.00%</td>
-      <td>0.0000</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
-      <td>-</td>
-      <td>&lt;NA&gt;</td>
+      <td>688549.SH</td>
+      <td>中巨芯-U</td>
+      <td>19.19</td>
+      <td>+8.32%</td>
+      <td>20.10 ~ 21.50，中位 20.79</td>
+      <td>1.10%</td>
+      <td>高（1.000）</td>
+      <td>高收益低胜率，谨慎</td>
+      <td>上涨概率偏低；高收益低胜率</td>
     </tr>
   </tbody>
 </table></div>
@@ -952,779 +394,406 @@
 <div><table class="dataframe">
   <thead>
     <tr style="text-align: right;">
-      <th>排名</th>
-      <th>预测日(T)</th>
-      <th>预测到期日(T+2)</th>
+      <th>操作排名</th>
       <th>代码</th>
       <th>名称</th>
-      <th>收盘价(T)</th>
-      <th>收盘价(T+2)</th>
-      <th>实际ln收益</th>
-      <th>E_ret原始值</th>
-      <th>E_ret_plus</th>
-      <th>EHX修正值</th>
-      <th>EHX方向</th>
-      <th>EHX置信度</th>
-      <th>命中P10</th>
-      <th>命中P50</th>
-      <th>ln误差(中位)</th>
-      <th>价误差(中位)</th>
-      <th>实际收益</th>
-      <th>Raw绝对误差</th>
-      <th>Plus绝对误差</th>
-      <th>Plus优于Raw</th>
-      <th>是否上涨</th>
+      <th>收盘价</th>
+      <th>T+2预期收益</th>
+      <th>预期价格区间</th>
+      <th>T+2上涨概率</th>
+      <th>模型置信度</th>
+      <th>操作结论</th>
+      <th>风险提示</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>1</td>
-      <td>20260608</td>
-      <td>20260610</td>
       <td>000517.SZ</td>
       <td>荣安地产</td>
       <td>2.33</td>
-      <td>1.97</td>
-      <td>-0.1678</td>
-      <td>+0.00%</td>
       <td>+12.00%</td>
-      <td>+12.00%</td>
-      <td>上修</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.2812</td>
-      <td>-0.640</td>
-      <td>-15.45%</td>
-      <td>+15.45%</td>
-      <td>+27.45%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>2</td>
-      <td>20260608</td>
-      <td>20260610</td>
       <td>601588.SH</td>
       <td>北辰实业</td>
       <td>2.22</td>
-      <td>1.98</td>
-      <td>-0.1144</td>
-      <td>+0.00%</td>
       <td>+12.00%</td>
-      <td>+12.00%</td>
-      <td>上修</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.2277</td>
-      <td>-0.506</td>
-      <td>-10.81%</td>
-      <td>+10.81%</td>
-      <td>+22.81%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>3</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>000785.SZ</td>
-      <td>居然智家</td>
-      <td>2.72</td>
-      <td>2.37</td>
-      <td>-0.1377</td>
-      <td>+0.00%</td>
-      <td>+11.13%</td>
-      <td>+11.13%</td>
-      <td>上修</td>
+      <td>600280.SH</td>
+      <td>中央商场</td>
+      <td>3.74</td>
+      <td>+12.00%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.2433</td>
-      <td>-0.653</td>
-      <td>-12.87%</td>
-      <td>+12.87%</td>
-      <td>+24.00%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>4</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603186.SH</td>
-      <td>华正新材</td>
-      <td>136.03</td>
-      <td>163.32</td>
-      <td>0.1828</td>
-      <td>+0.00%</td>
-      <td>+9.73%</td>
-      <td>+9.73%</td>
-      <td>上修</td>
+      <td>000785.SZ</td>
+      <td>居然智家</td>
+      <td>2.72</td>
+      <td>+12.00%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>0.0900</td>
-      <td>14.052</td>
-      <td>+20.06%</td>
-      <td>+20.06%</td>
-      <td>+10.33%</td>
-      <td>✅</td>
-      <td>是</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>5</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>600539.SH</td>
-      <td>狮头股份</td>
-      <td>15.40</td>
-      <td>14.87</td>
-      <td>-0.0350</td>
-      <td>+0.00%</td>
-      <td>+9.42%</td>
-      <td>+9.42%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1250</td>
-      <td>-1.980</td>
-      <td>-3.44%</td>
-      <td>+3.44%</td>
-      <td>+12.86%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>6</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603135.SH</td>
-      <td>中重科技</td>
-      <td>15.43</td>
-      <td>14.22</td>
-      <td>-0.0817</td>
-      <td>+0.00%</td>
-      <td>+9.42%</td>
-      <td>+9.42%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1717</td>
-      <td>-2.663</td>
-      <td>-7.84%</td>
-      <td>+7.84%</td>
-      <td>+17.26%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>7</td>
-      <td>20260608</td>
-      <td>20260610</td>
       <td>000068.SZ</td>
       <td>华控赛格</td>
       <td>3.92</td>
-      <td>3.54</td>
-      <td>-0.1020</td>
-      <td>+0.00%</td>
-      <td>+9.07%</td>
-      <td>+9.07%</td>
-      <td>上修</td>
+      <td>+12.00%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1888</td>
-      <td>-0.735</td>
-      <td>-9.69%</td>
-      <td>+9.69%</td>
-      <td>+18.76%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
-      <td>8</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603877.SH</td>
-      <td>太平鸟</td>
-      <td>14.06</td>
-      <td>13.38</td>
-      <td>-0.0496</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
+      <td>6</td>
+      <td>603186.SH</td>
+      <td>华正新材</td>
+      <td>136.03</td>
+      <td>+11.16%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1310</td>
-      <td>-1.873</td>
-      <td>-4.84%</td>
-      <td>+4.84%</td>
-      <td>+13.32%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>验证较好</td>
+      <td>未命中核心区间</td>
     </tr>
     <tr>
-      <td>9</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002982.SZ</td>
-      <td>湘佳股份</td>
-      <td>13.48</td>
-      <td>12.80</td>
-      <td>-0.0518</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1332</td>
-      <td>-1.824</td>
-      <td>-5.04%</td>
-      <td>+5.04%</td>
-      <td>+13.53%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>10</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603500.SH</td>
-      <td>祥和实业</td>
-      <td>13.45</td>
-      <td>12.64</td>
-      <td>-0.0621</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1435</td>
-      <td>-1.951</td>
-      <td>-6.02%</td>
-      <td>+6.02%</td>
-      <td>+14.51%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>11</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603278.SH</td>
-      <td>大业股份</td>
-      <td>14.14</td>
-      <td>12.89</td>
-      <td>-0.0926</td>
-      <td>+0.00%</td>
-      <td>+8.48%</td>
-      <td>+8.48%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1740</td>
-      <td>-2.450</td>
-      <td>-8.84%</td>
-      <td>+8.84%</td>
-      <td>+17.32%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>12</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>000970.SZ</td>
-      <td>中科三环</td>
-      <td>12.63</td>
-      <td>14.52</td>
-      <td>0.1395</td>
-      <td>+0.00%</td>
-      <td>+7.50%</td>
-      <td>+7.50%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>✅</td>
-      <td>❌</td>
-      <td>0.0672</td>
-      <td>0.943</td>
-      <td>+14.96%</td>
-      <td>+14.96%</td>
-      <td>+7.47%</td>
-      <td>✅</td>
-      <td>是</td>
-    </tr>
-    <tr>
-      <td>13</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>301302.SZ</td>
-      <td>华如科技</td>
-      <td>30.12</td>
-      <td>32.37</td>
-      <td>0.0720</td>
-      <td>+0.00%</td>
-      <td>+7.42%</td>
-      <td>+7.42%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0005</td>
-      <td>0.016</td>
-      <td>+7.47%</td>
-      <td>+7.47%</td>
-      <td>+0.05%</td>
-      <td>✅</td>
-      <td>是</td>
-    </tr>
-    <tr>
-      <td>14</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>001696.SZ</td>
-      <td>宗申动力</td>
-      <td>15.95</td>
-      <td>19.05</td>
-      <td>0.1776</td>
-      <td>+0.00%</td>
-      <td>+7.28%</td>
-      <td>+7.28%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>0.1074</td>
-      <td>1.940</td>
-      <td>+19.44%</td>
-      <td>+19.44%</td>
-      <td>+12.16%</td>
-      <td>✅</td>
-      <td>是</td>
-    </tr>
-    <tr>
-      <td>15</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603669.SH</td>
-      <td>灵康药业</td>
-      <td>4.48</td>
-      <td>4.61</td>
-      <td>0.0286</td>
-      <td>+0.00%</td>
-      <td>+7.09%</td>
-      <td>+7.09%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>✅</td>
-      <td>❌</td>
-      <td>-0.0399</td>
-      <td>-0.188</td>
-      <td>+2.90%</td>
-      <td>+2.90%</td>
-      <td>+4.19%</td>
-      <td>❌</td>
-      <td>是</td>
-    </tr>
-    <tr>
-      <td>16</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002747.SZ</td>
-      <td>埃斯顿</td>
-      <td>34.12</td>
-      <td>35.80</td>
-      <td>0.0481</td>
-      <td>+0.00%</td>
-      <td>+7.00%</td>
-      <td>+7.00%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>-0.0196</td>
-      <td>-0.708</td>
-      <td>+4.92%</td>
-      <td>+4.92%</td>
-      <td>+2.07%</td>
-      <td>✅</td>
-      <td>是</td>
-    </tr>
-    <tr>
-      <td>17</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>301195.SZ</td>
-      <td>北路智控</td>
-      <td>33.13</td>
-      <td>35.39</td>
-      <td>0.0660</td>
-      <td>+0.00%</td>
-      <td>+7.00%</td>
-      <td>+7.00%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>-0.0016</td>
-      <td>-0.058</td>
-      <td>+6.82%</td>
-      <td>+6.82%</td>
-      <td>+0.18%</td>
-      <td>✅</td>
-      <td>是</td>
-    </tr>
-    <tr>
-      <td>18</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>7</td>
       <td>002354.SZ</td>
       <td>天娱数科</td>
       <td>7.33</td>
-      <td>8.87</td>
-      <td>0.1907</td>
-      <td>+0.00%</td>
-      <td>+6.78%</td>
-      <td>+6.78%</td>
-      <td>上修</td>
+      <td>+11.13%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>0.1251</td>
-      <td>1.043</td>
-      <td>+21.01%</td>
-      <td>+21.01%</td>
-      <td>+14.23%</td>
-      <td>✅</td>
-      <td>是</td>
+      <td>验证较好</td>
+      <td>分布未命中P10</td>
     </tr>
     <tr>
-      <td>19</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002490.SZ</td>
-      <td>山东墨龙</td>
-      <td>8.23</td>
-      <td>7.78</td>
-      <td>-0.0562</td>
-      <td>+0.00%</td>
-      <td>+6.78%</td>
-      <td>+6.78%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1219</td>
-      <td>-1.008</td>
-      <td>-5.47%</td>
-      <td>+5.47%</td>
-      <td>+12.25%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>20</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>8</td>
       <td>600721.SH</td>
       <td>百花医药</td>
       <td>7.79</td>
-      <td>8.02</td>
-      <td>0.0291</td>
-      <td>+0.00%</td>
-      <td>+6.78%</td>
-      <td>+6.78%</td>
-      <td>上修</td>
+      <td>+11.13%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>✅</td>
-      <td>❌</td>
-      <td>-0.0365</td>
-      <td>-0.298</td>
-      <td>+2.95%</td>
-      <td>+2.95%</td>
-      <td>+3.83%</td>
-      <td>❌</td>
-      <td>是</td>
+      <td>方向命中</td>
+      <td>未命中核心区间；Plus未优于Raw</td>
     </tr>
     <tr>
-      <td>21</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>600403.SH</td>
-      <td>大有能源</td>
-      <td>8.95</td>
-      <td>7.65</td>
-      <td>-0.1569</td>
-      <td>+0.00%</td>
-      <td>+6.61%</td>
-      <td>+6.61%</td>
-      <td>上修</td>
+      <td>9</td>
+      <td>603669.SH</td>
+      <td>灵康药业</td>
+      <td>4.48</td>
+      <td>+10.99%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.2209</td>
-      <td>-1.891</td>
-      <td>-14.53%</td>
-      <td>+14.53%</td>
-      <td>+21.13%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>方向命中</td>
+      <td>未命中核心区间；Plus未优于Raw</td>
     </tr>
     <tr>
-      <td>22</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002164.SZ</td>
-      <td>宁波东力</td>
-      <td>14.66</td>
-      <td>13.94</td>
-      <td>-0.0504</td>
-      <td>+0.00%</td>
-      <td>+6.55%</td>
-      <td>+6.55%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1138</td>
-      <td>-1.680</td>
-      <td>-4.91%</td>
-      <td>+4.91%</td>
-      <td>+11.46%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>23</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>600505.SH</td>
-      <td>西昌电力</td>
-      <td>14.92</td>
-      <td>14.38</td>
-      <td>-0.0369</td>
-      <td>+0.00%</td>
-      <td>+6.55%</td>
-      <td>+6.55%</td>
-      <td>上修</td>
-      <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1003</td>
-      <td>-1.517</td>
-      <td>-3.62%</td>
-      <td>+3.62%</td>
-      <td>+10.17%</td>
-      <td>❌</td>
-      <td>否</td>
-    </tr>
-    <tr>
-      <td>24</td>
-      <td>20260608</td>
-      <td>20260610</td>
+      <td>10</td>
       <td>300105.SZ</td>
       <td>龙源技术</td>
       <td>7.18</td>
-      <td>6.86</td>
-      <td>-0.0456</td>
-      <td>+0.00%</td>
-      <td>+6.47%</td>
-      <td>+6.47%</td>
-      <td>上修</td>
+      <td>+10.88%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1083</td>
-      <td>-0.785</td>
-      <td>-4.46%</td>
-      <td>+4.46%</td>
-      <td>+10.93%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>000970.SZ</td>
+      <td>中科三环</td>
+      <td>12.63</td>
+      <td>+10.63%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>验证较好</td>
+      <td>未命中核心区间</td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>002490.SZ</td>
+      <td>山东墨龙</td>
+      <td>8.23</td>
+      <td>+10.62%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>000759.SZ</td>
+      <td>中百集团</td>
+      <td>6.27</td>
+      <td>+10.42%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>300376.SZ</td>
+      <td>易事特</td>
+      <td>5.94</td>
+      <td>+10.42%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>验证较好</td>
+      <td>未命中核心区间</td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>600825.SH</td>
+      <td>新华传媒</td>
+      <td>5.45</td>
+      <td>+10.42%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>002613.SZ</td>
+      <td>北玻股份</td>
+      <td>5.46</td>
+      <td>+10.42%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td>600488.SH</td>
+      <td>津药药业</td>
+      <td>5.69</td>
+      <td>+10.42%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td>002421.SZ</td>
+      <td>达实智能</td>
+      <td>5.73</td>
+      <td>+10.42%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>603616.SH</td>
+      <td>韩建河山</td>
+      <td>6.63</td>
+      <td>+10.42%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>验证较好</td>
+      <td>无明显风险</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>603278.SH</td>
+      <td>大业股份</td>
+      <td>14.14</td>
+      <td>+10.08%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>21</td>
+      <td>603877.SH</td>
+      <td>太平鸟</td>
+      <td>14.06</td>
+      <td>+10.08%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>22</td>
+      <td>603500.SH</td>
+      <td>祥和实业</td>
+      <td>13.45</td>
+      <td>+9.96%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>23</td>
+      <td>002982.SZ</td>
+      <td>湘佳股份</td>
+      <td>13.48</td>
+      <td>+9.96%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
+    </tr>
+    <tr>
+      <td>24</td>
+      <td>603929.SH</td>
+      <td>亚翔集成</td>
+      <td>187.10</td>
+      <td>+9.04%</td>
+      <td>-</td>
+      <td>-</td>
+      <td>高</td>
+      <td>验证较好</td>
+      <td>分布未命中P10</td>
     </tr>
     <tr>
       <td>25</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>603859.SH</td>
-      <td>能科科技</td>
-      <td>49.87</td>
-      <td>57.65</td>
-      <td>0.1450</td>
-      <td>+0.00%</td>
-      <td>+5.90%</td>
-      <td>+5.90%</td>
-      <td>上修</td>
+      <td>600505.SH</td>
+      <td>西昌电力</td>
+      <td>14.92</td>
+      <td>+8.81%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>0.0876</td>
-      <td>4.836</td>
-      <td>+15.60%</td>
-      <td>+15.60%</td>
-      <td>+9.70%</td>
-      <td>✅</td>
-      <td>是</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>26</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>000833.SZ</td>
-      <td>粤桂股份</td>
-      <td>23.68</td>
-      <td>25.54</td>
-      <td>0.0756</td>
-      <td>+0.00%</td>
-      <td>+5.86%</td>
-      <td>+5.86%</td>
-      <td>上修</td>
+      <td>300197.SZ</td>
+      <td>节能铁汉</td>
+      <td>3.02</td>
+      <td>+8.63%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>✅</td>
-      <td>✅</td>
-      <td>0.0187</td>
-      <td>0.473</td>
-      <td>+7.85%</td>
-      <td>+7.85%</td>
-      <td>+2.00%</td>
-      <td>✅</td>
-      <td>是</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>27</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>920578.BJ</td>
-      <td>巨能股份</td>
-      <td>22.75</td>
-      <td>23.23</td>
-      <td>0.0209</td>
-      <td>+0.00%</td>
-      <td>+5.82%</td>
-      <td>+5.82%</td>
-      <td>上修</td>
+      <td>002164.SZ</td>
+      <td>宁波东力</td>
+      <td>14.66</td>
+      <td>+8.61%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>✅</td>
-      <td>❌</td>
-      <td>-0.0357</td>
-      <td>-0.845</td>
-      <td>+2.11%</td>
-      <td>+2.11%</td>
-      <td>+3.71%</td>
-      <td>❌</td>
-      <td>是</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>28</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>001317.SZ</td>
-      <td>三羊马</td>
-      <td>56.86</td>
-      <td>58.10</td>
-      <td>0.0216</td>
-      <td>+0.00%</td>
-      <td>+5.81%</td>
-      <td>+5.81%</td>
-      <td>上修</td>
+      <td>000833.SZ</td>
+      <td>粤桂股份</td>
+      <td>23.68</td>
+      <td>+8.45%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>✅</td>
-      <td>❌</td>
-      <td>-0.0349</td>
-      <td>-2.061</td>
-      <td>+2.18%</td>
-      <td>+2.18%</td>
-      <td>+3.62%</td>
-      <td>❌</td>
-      <td>是</td>
+      <td>验证较好</td>
+      <td>无明显风险</td>
     </tr>
     <tr>
       <td>29</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>003009.SZ</td>
-      <td>中天火箭</td>
-      <td>60.94</td>
-      <td>56.87</td>
-      <td>-0.0691</td>
-      <td>+0.00%</td>
-      <td>+5.81%</td>
-      <td>+5.81%</td>
-      <td>上修</td>
+      <td>000620.SZ</td>
+      <td>盈新发展</td>
+      <td>3.17</td>
+      <td>+8.42%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>❌</td>
-      <td>❌</td>
-      <td>-0.1256</td>
-      <td>-7.608</td>
-      <td>-6.68%</td>
-      <td>+6.68%</td>
-      <td>+12.48%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>模型高估</td>
+      <td>实际收益为负；Plus误差偏大；分布未命中P10</td>
     </tr>
     <tr>
       <td>30</td>
-      <td>20260608</td>
-      <td>20260610</td>
-      <td>002046.SZ</td>
-      <td>国机精工</td>
-      <td>60.37</td>
-      <td>59.18</td>
-      <td>-0.0199</td>
-      <td>+0.00%</td>
-      <td>+5.81%</td>
-      <td>+5.81%</td>
-      <td>上修</td>
+      <td>688549.SH</td>
+      <td>中巨芯-U</td>
+      <td>19.19</td>
+      <td>+8.32%</td>
+      <td>-</td>
+      <td>-</td>
       <td>高</td>
-      <td>✅</td>
-      <td>❌</td>
-      <td>-0.0763</td>
-      <td>-4.695</td>
-      <td>-1.97%</td>
-      <td>+1.97%</td>
-      <td>+7.78%</td>
-      <td>❌</td>
-      <td>否</td>
+      <td>验证较好</td>
+      <td>Plus误差偏大；分布未命中P10</td>
     </tr>
   </tbody>
 </table></div>
 
-- 命中（旧口径：actual_ret>0）：13/30（43.33%）
-- 覆盖率（V2：in_p10，r_actual ∈ [p05,p95]）：33.33%
-- 覆盖率（V2：in_p50，r_actual ∈ [p25,p75]）：13.33%
-- MAE（V2：|err_r_p50|）：0.111700
-- MAE（V2：|err_close_p50|）：2.063963
+- 命中（旧口径：actual_ret>0）：10/30（33.33%）
+- 覆盖率（V2：in_p10，r_actual ∈ [p05,p95]）：23.33%
+- 覆盖率（V2：in_p50，r_actual ∈ [p25,p75]）：6.67%
+- MAE（V2：|err_r_p50|）：0.145552
+- MAE（V2：|err_close_p50|）：2.076744
 
 ## E_ret_plus / EHX 验证摘要
 
-- Raw MAE：8.4922%
-- Plus MAE：11.3852%
-- MAE 改善：-2.8929%
-- Plus 优于 Raw 比例：30.00%
+- Raw MAE：9.8851%
+- Plus MAE：14.9135%
+- MAE 改善：-5.0284%
+- Plus 优于 Raw 比例：26.67%
 
-## 字段说明（V3 核心）
+## 字段说明（V3 人类操作口径）
 
-- E_ret原始值：进入 EHX 前的原始溢价预测值。
-- E_ret_plus：EHX 残差增强后的溢价预测值，当前 Premium 主线优先围绕它排序和展示。
-- EHX修正值：E_ret_plus - E_ret原始值，正数表示上修，负数表示下修。
-- EHX方向 / EHX置信度 / EHX来源：用于判断增强层是否真实接入、是否处于模型态或冷启动态。
-- Raw绝对误差 / Plus绝对误差 / Plus优于Raw：T+2 真值出来后，用于验证 EHX 是否真的改善。
-- close_T2_pXX：预测到期日（T+2）收盘价的价格分位点（展示字段）。
-- in_p10：r_actual 是否落在 [p05, p95]。
-- in_p50：r_actual 是否落在 [p25, p75]。
+- 操作排名：优先使用 E_ret_plus 排名。
+- T+2预期收益：EHX 残差增强后的 E_ret_plus。
+- 预期价格区间：使用 T+2 价格分位 p25 ~ p75，并展示 p50 中位价。
+- T+2上涨概率：预测到期日 T+2 收盘上涨概率。
+- 模型置信度：EHX 置信度标签及置信分。
+- 操作结论：面向人类执行的简化判断，不等于强制买入。
+- 风险提示：根据上涨概率、E_ret_plus、验证误差与分布命中情况生成。
 
-> 注：r_pXX（log-return 分位点，r = ln(Close[T+2]/Close[T])）为内部计算字段，当前报告不在预测表展示。
+> 注：E_ret原始值、EHX修正值、EHX来源、Raw/Plus误差等工程审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。
 
 ---
 ## 审计（Factor Packs / Degrade）
