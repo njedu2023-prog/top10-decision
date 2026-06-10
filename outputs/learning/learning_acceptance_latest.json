@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-10T14:36:51+00:00",
+  "generated_at_utc": "2026-06-10T15:35:57+00:00",
   "current_run_date": "20260610",
   "pfill": {
     "anchor_trade_date": "20260609",
@@ -10,8 +10,8 @@
     "metrics_valid": {
       "lr": {
         "auc": 0.9376,
-        "logloss": 0.20435049511128378,
-        "brier": 0.06398925956092444
+        "logloss": 0.20381260293968761,
+        "brier": 0.06378933897807229
       },
       "lgbm": {
         "auc": 0.9712000000000001,
@@ -25,11 +25,11 @@
         "trend": "improved"
       },
       "lr_logloss": {
-        "delta": 0.02842937474734991,
+        "delta": 0.027891482575753745,
         "trend": "worse"
       },
       "lr_brier": {
-        "delta": 0.012926592076011607,
+        "delta": 0.01272667149315946,
         "trend": "worse"
       },
       "lgbm_auc": {
