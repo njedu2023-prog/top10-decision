@@ -11,7 +11,7 @@ A) ✅ 新口径（Premium V3 主线，锁死）：
 - 验证表顺序必须与预测表 Top30 完全一致（由上游保证）。
 - 报告主表面向人类操作，不再展示工程字段长表头。
 - 预测表与验证表统一展示：
-  操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度｜操作结论｜风险提示
+  操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度
 
 入口函数：
 - render_premium_report_md(...)
@@ -161,8 +161,6 @@ _OPER_COLS = [
     "预期价格区间",
     "T+2上涨概率",
     "模型置信度",
-    "操作结论",
-    "风险提示",
 ]
 
 
@@ -204,86 +202,10 @@ def _op_rank(row: pd.Series) -> object:
     return "-"
 
 
-def _operation_conclusion(row: pd.Series, verify: bool = False) -> str:
-    erp = _num(row, "eret_plus_value")
-    prob = _num(row, "p_premium")
-    conf = _str_val(row, "eret_plus_conf", "").lower()
-
-    if verify:
-        hit_up = _str_val(row, "hit_up", "")
-        improve = _str_val(row, "improve_flag", "")
-        actual_ret = _num(row, "actual_ret")
-        plus_abs = abs(_num(row, "plus_abs_err"))
-
-        if hit_up == "是" and improve in ("True", "true", "1", "✅"):
-            return "验证较好"
-        if hit_up == "是" and np.isfinite(actual_ret) and actual_ret > 0:
-            return "方向命中"
-        if np.isfinite(plus_abs) and plus_abs >= 0.10:
-            return "模型高估"
-        if hit_up == "否":
-            return "实际走弱"
-        return "待复盘"
-
-    if not np.isfinite(erp):
-        return "暂不判断"
-
-    if erp >= 0.08 and prob >= 0.20 and conf == "high":
-        return "优先观察"
-    if erp >= 0.08 and prob < 0.20:
-        return "高收益低胜率，谨慎"
-    if erp >= 0.05 and prob >= 0.15:
-        return "稳健观察"
-    if erp >= 0.05:
-        return "谨慎观察"
-    return "暂不优先"
-
-
-def _risk_hint(row: pd.Series, verify: bool = False) -> str:
-    hints: List[str] = []
-
-    erp = _num(row, "eret_plus_value")
-    prob = _num(row, "p_premium")
-    conf = _str_val(row, "eret_plus_conf", "").lower()
-
-    if np.isfinite(prob) and prob < 0.10:
-        hints.append("上涨概率偏低")
-    elif np.isfinite(prob) and prob < 0.20:
-        hints.append("上涨概率一般")
-
-    if np.isfinite(erp) and erp >= 0.08 and np.isfinite(prob) and prob < 0.20:
-        hints.append("高收益低胜率")
-
-    if conf == "low":
-        hints.append("模型置信度低")
-
-    if verify:
-        actual_ret = _num(row, "actual_ret")
-        plus_abs = _num(row, "plus_abs_err")
-        in_p10 = _str_val(row, "in_p10", "")
-        in_p50 = _str_val(row, "in_p50", "")
-        improve = _str_val(row, "improve_flag", "")
-
-        if np.isfinite(actual_ret) and actual_ret < 0:
-            hints.append("实际收益为负")
-        if np.isfinite(plus_abs) and plus_abs >= 0.10:
-            hints.append("Plus误差偏大")
-        if in_p10 in ("False", "false", "0", "❌"):
-            hints.append("分布未命中P10")
-        elif in_p50 in ("False", "false", "0", "❌"):
-            hints.append("未命中核心区间")
-        if improve in ("False", "false", "0", "❌"):
-            hints.append("Plus未优于Raw")
-
-    if not hints:
-        return "无明显风险"
-    return "；".join(hints[:3])
-
-
 def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFrame:
     """
     预测表与验证表统一使用人类操作表头：
-    操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度｜操作结论｜风险提示
+    操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=_OPER_COLS)
@@ -299,8 +221,6 @@ def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFr
             "预期价格区间": _expected_range(row),
             "T+2上涨概率": _fmt_prob(_num(row, "p_premium"), 2),
             "模型置信度": _confidence_text(row),
-            "操作结论": _operation_conclusion(row, verify=verify),
-            "风险提示": _risk_hint(row, verify=verify),
         })
 
     return pd.DataFrame(rows, columns=_OPER_COLS)
@@ -430,8 +350,6 @@ def render_premium_report_md(
     parts.append("- 预期价格区间：使用 T+2 价格分位 p25 ~ p75，并展示 p50 中位价。")
     parts.append("- T+2上涨概率：预测到期日 T+2 收盘上涨概率。")
     parts.append("- 模型置信度：EHX 置信度标签及置信分。")
-    parts.append("- 操作结论：面向人类执行的简化判断，不等于强制买入。")
-    parts.append("- 风险提示：根据上涨概率、E_ret_plus、验证误差与分布命中情况生成。")
     parts.append("")
     parts.append("> 注：E_ret原始值、EHX修正值、EHX来源、Raw/Plus误差等工程审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。")
     parts.append("")
@@ -563,7 +481,7 @@ def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str
     lines.append(df_show.to_markdown(index=False))
     lines.append("")
 
-    lines.append("## 风险提示摘要")
+    lines.append("## 风险摘要")
     lines.append("")
     lines.extend(risk_summary if risk_summary else ["- （暂无）"])
     lines.append("")
