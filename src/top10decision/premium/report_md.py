@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Markdown 报告渲染（V3.1：E_ret_plus / EHX 展示增强版）
+Premium 子系统 — Markdown 报告渲染（V3.2：人类操作表头版）
 
 A) ✅ 新口径（Premium V3 主线，锁死）：
 - 报告包含两张表：预测表 + 验证表（输出为 Markdown + 内嵌 HTML table）。
 - 不依赖 PremiumA.html / PremiumB.html（彻底去模板化）。
 - 若 T+2 行情未到：pending（不得报错卡死），验证表显示 PENDING 原因。
 - 验证表顺序必须与预测表 Top30 完全一致（由上游保证）。
-- 新增展示 E_ret_plus / EHX：raw、plus、delta、方向、置信度、来源。
-- 新增 raw_abs_err / plus_abs_err / improve_flag，用于验证 EHX 是否真的改善。
+- 报告主表面向人类操作，不再展示工程字段长表头。
+- 预测表与验证表统一展示：
+  操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度｜操作结论｜风险提示
 
 入口函数：
 - render_premium_report_md(...)
@@ -67,7 +68,7 @@ def _fmt_float(x: object, digits: int = 4) -> str:
         return "-"
 
 
-def _fmt_price(x: object, digits: int = 3) -> str:
+def _fmt_price(x: object, digits: int = 2) -> str:
     try:
         v = float(x)
         if np.isnan(v):
@@ -107,85 +108,31 @@ def _fmt_conf_label(x: object) -> str:
     return str(x) if str(x).strip() else "-"
 
 
-def _detect_quantile_cols(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
-    """
-    当前报告只展示 T+2 价格分位 close_T2_pXX。
-    r_pXX 为内部 log-return 分位，不在预测表中展示，避免页面过宽与读者误解。
-    """
-    r_cols: List[str] = []
-    p_cols = [c for c in df.columns if isinstance(c, str) and c.startswith("close_T2_p")]
+def _num(row: pd.Series, col: str, default: float = np.nan) -> float:
+    if col not in row.index:
+        return default
+    try:
+        v = float(row.get(col))
+        return v if np.isfinite(v) else default
+    except Exception:
+        return default
 
-    def _key(c: str) -> int:
-        digits = "".join([ch for ch in c if ch.isdigit()])
-        try:
-            return int(digits[-2:]) if len(digits) >= 2 else int(digits)
-        except Exception:
-            return 999
 
-    return r_cols, sorted(p_cols, key=_key)
+def _str_val(row: pd.Series, col: str, default: str = "") -> str:
+    if col not in row.index:
+        return default
+    s = str(row.get(col, default)).strip()
+    if s.lower() in ("nan", "none", "<na>"):
+        return default
+    return s
 
 
 def _select_cols_exist(df: pd.DataFrame, cols: Sequence[str]) -> List[str]:
     return [c for c in cols if c in df.columns]
 
 
-# =========================
-# 展示层：中文表头（仅影响报告渲染，不影响计算/CSV）
-# =========================
-
-_CN_FIXED = {
-    "rank": "排名",
-    "trade_date": "预测日(T)",
-    "target_date": "预测到期日(T+2)",
-    "ts_code": "代码",
-    "name": "名称",
-    "close_T": "收盘价(T)",
-    "close_T2_actual": "收盘价(T+2)",
-    "r_actual": "实际ln收益",
-    "rank_r_p50": "ln中位排名",
-    "rank_eret_plus": "E_ret_plus排名",
-    "p_premium": "上涨概率",
-    "e_premium": "原始E_ret",
-    "score_ev": "综合评分",
-    "eret_pred_raw": "E_ret原始值",
-    "eret_plus_value": "E_ret_plus",
-    "eret_plus_delta": "EHX修正值",
-    "eret_plus_direction": "EHX方向",
-    "eret_plus_conf": "EHX置信度",
-    "eret_plus_conf_score": "EHX置信分",
-    "eret_plus_src": "EHX来源",
-    "dec_rank": "决策排名",
-    "dec_weight": "决策权重",
-    "dec_can_buy": "可买",
-    "dec_p_fill": "可成交概率",
-    "dec_reason": "决策原因",
-    "in_p10": "命中P10",
-    "in_p50": "命中P50",
-    "err_r_p50": "ln误差(中位)",
-    "err_close_p50": "价误差(中位)",
-    "actual_ret": "实际收益",
-    "raw_abs_err": "Raw绝对误差",
-    "plus_abs_err": "Plus绝对误差",
-    "improve_flag": "Plus优于Raw",
-    "hit_up": "是否上涨",
-}
-
-
 def _cn_col(col: str) -> str:
-    c = str(col)
-    if c in _CN_FIXED:
-        return _CN_FIXED[c]
-
-    # r_pXX 已不在预测表展示，这里保留映射，避免未来误入时表头变脏。
-    m = re.match(r"^r_p(\d{2})$", c)
-    if m:
-        return f"ln分位{m.group(1)}"
-
-    m = re.match(r"^close_T2_p(\d{2})$", c)
-    if m:
-        return f"T+2价分位{m.group(1)}"
-
-    return c
+    return str(col)
 
 
 def _df_to_html_table(df: pd.DataFrame) -> str:
@@ -201,112 +148,170 @@ def _df_to_html_table(df: pd.DataFrame) -> str:
     return f"<div>{html}</div>"
 
 
+# =========================
+# 人类操作表：字段生成
+# =========================
+
+_OPER_COLS = [
+    "操作排名",
+    "代码",
+    "名称",
+    "收盘价",
+    "T+2预期收益",
+    "预期价格区间",
+    "T+2上涨概率",
+    "模型置信度",
+    "操作结论",
+    "风险提示",
+]
+
+
+def _expected_range(row: pd.Series) -> str:
+    """
+    预期价格区间：优先展示 p25~p75，中位 p50。
+    若分位列缺失，返回 '-'。
+    """
+    p25 = _num(row, "close_T2_p25")
+    p50 = _num(row, "close_T2_p50")
+    p75 = _num(row, "close_T2_p75")
+
+    if np.isfinite(p25) and np.isfinite(p75) and np.isfinite(p50):
+        return f"{p25:.2f} ~ {p75:.2f}，中位 {p50:.2f}"
+    if np.isfinite(p25) and np.isfinite(p75):
+        return f"{p25:.2f} ~ {p75:.2f}"
+    if np.isfinite(p50):
+        return f"中位 {p50:.2f}"
+    return "-"
+
+
+def _confidence_text(row: pd.Series) -> str:
+    label = _fmt_conf_label(_str_val(row, "eret_plus_conf", ""))
+    score = _num(row, "eret_plus_conf_score")
+    if label != "-" and np.isfinite(score):
+        return f"{label}（{score:.3f}）"
+    if label != "-":
+        return label
+    return "-"
+
+
+def _op_rank(row: pd.Series) -> object:
+    for c in ("rank_eret_plus", "rank", "rank_r_p50"):
+        if c in row.index and pd.notna(row.get(c)):
+            try:
+                return int(float(row.get(c)))
+            except Exception:
+                return row.get(c)
+    return "-"
+
+
+def _operation_conclusion(row: pd.Series, verify: bool = False) -> str:
+    erp = _num(row, "eret_plus_value")
+    prob = _num(row, "p_premium")
+    conf = _str_val(row, "eret_plus_conf", "").lower()
+
+    if verify:
+        hit_up = _str_val(row, "hit_up", "")
+        improve = _str_val(row, "improve_flag", "")
+        actual_ret = _num(row, "actual_ret")
+        plus_abs = abs(_num(row, "plus_abs_err"))
+
+        if hit_up == "是" and improve in ("True", "true", "1", "✅"):
+            return "验证较好"
+        if hit_up == "是" and np.isfinite(actual_ret) and actual_ret > 0:
+            return "方向命中"
+        if np.isfinite(plus_abs) and plus_abs >= 0.10:
+            return "模型高估"
+        if hit_up == "否":
+            return "实际走弱"
+        return "待复盘"
+
+    if not np.isfinite(erp):
+        return "暂不判断"
+
+    if erp >= 0.08 and prob >= 0.20 and conf == "high":
+        return "优先观察"
+    if erp >= 0.08 and prob < 0.20:
+        return "高收益低胜率，谨慎"
+    if erp >= 0.05 and prob >= 0.15:
+        return "稳健观察"
+    if erp >= 0.05:
+        return "谨慎观察"
+    return "暂不优先"
+
+
+def _risk_hint(row: pd.Series, verify: bool = False) -> str:
+    hints: List[str] = []
+
+    erp = _num(row, "eret_plus_value")
+    prob = _num(row, "p_premium")
+    conf = _str_val(row, "eret_plus_conf", "").lower()
+
+    if np.isfinite(prob) and prob < 0.10:
+        hints.append("上涨概率偏低")
+    elif np.isfinite(prob) and prob < 0.20:
+        hints.append("上涨概率一般")
+
+    if np.isfinite(erp) and erp >= 0.08 and np.isfinite(prob) and prob < 0.20:
+        hints.append("高收益低胜率")
+
+    if conf == "low":
+        hints.append("模型置信度低")
+
+    if verify:
+        actual_ret = _num(row, "actual_ret")
+        plus_abs = _num(row, "plus_abs_err")
+        in_p10 = _str_val(row, "in_p10", "")
+        in_p50 = _str_val(row, "in_p50", "")
+        improve = _str_val(row, "improve_flag", "")
+
+        if np.isfinite(actual_ret) and actual_ret < 0:
+            hints.append("实际收益为负")
+        if np.isfinite(plus_abs) and plus_abs >= 0.10:
+            hints.append("Plus误差偏大")
+        if in_p10 in ("False", "false", "0", "❌"):
+            hints.append("分布未命中P10")
+        elif in_p50 in ("False", "false", "0", "❌"):
+            hints.append("未命中核心区间")
+        if improve in ("False", "false", "0", "❌"):
+            hints.append("Plus未优于Raw")
+
+    if not hints:
+        return "无明显风险"
+    return "；".join(hints[:3])
+
+
+def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFrame:
+    """
+    预测表与验证表统一使用人类操作表头：
+    操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度｜操作结论｜风险提示
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=_OPER_COLS)
+
+    rows = []
+    for _, row in df.iterrows():
+        rows.append({
+            "操作排名": _op_rank(row),
+            "代码": _str_val(row, "ts_code", "-"),
+            "名称": _str_val(row, "name", "-"),
+            "收盘价": _fmt_price(_num(row, "close_T"), 2),
+            "T+2预期收益": _fmt_pct_ratio(_num(row, "eret_plus_value"), 2),
+            "预期价格区间": _expected_range(row),
+            "T+2上涨概率": _fmt_prob(_num(row, "p_premium"), 2),
+            "模型置信度": _confidence_text(row),
+            "操作结论": _operation_conclusion(row, verify=verify),
+            "风险提示": _risk_hint(row, verify=verify),
+        })
+
+    return pd.DataFrame(rows, columns=_OPER_COLS)
+
+
 def _format_pred_table(df_top30: pd.DataFrame) -> pd.DataFrame:
-    df = df_top30.copy()
-    r_cols, p_cols = _detect_quantile_cols(df)
-
-    base_cols = [
-        "rank", "trade_date", "target_date", "ts_code", "name", "close_T",
-    ]
-    cols = base_cols
-    cols += _select_cols_exist(
-        df,
-        [
-            "eret_pred_raw",
-            "eret_plus_value",
-            "eret_plus_delta",
-            "eret_plus_direction",
-            "eret_plus_conf",
-            "eret_plus_conf_score",
-            "eret_plus_src",
-        ],
-    )
-    cols += r_cols + p_cols
-    cols += _select_cols_exist(df, ["rank_eret_plus", "rank_r_p50"])
-    cols += _select_cols_exist(df, ["p_premium", "e_premium", "score_ev"])
-    cols += _select_cols_exist(df, ["dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"])
-
-    cols = _select_cols_exist(df, cols)
-    out = df[cols].copy()
-
-    for c in ["eret_pred_raw", "eret_plus_value", "eret_plus_delta", "e_premium"]:
-        if c in out.columns:
-            out[c] = out[c].map(lambda x: _fmt_pct_ratio(x, 2))
-
-    if "eret_plus_direction" in out.columns:
-        out["eret_plus_direction"] = out["eret_plus_direction"].map(_fmt_direction)
-    if "eret_plus_conf" in out.columns:
-        out["eret_plus_conf"] = out["eret_plus_conf"].map(_fmt_conf_label)
-    if "eret_plus_conf_score" in out.columns:
-        out["eret_plus_conf_score"] = out["eret_plus_conf_score"].map(lambda x: _fmt_float(x, 3))
-
-    if "p_premium" in out.columns:
-        out["p_premium"] = out["p_premium"].map(lambda x: _fmt_prob(x, 2))
-
-    if "close_T" in out.columns:
-        out["close_T"] = out["close_T"].map(lambda x: _fmt_price(x, 2))
-
-    for c in r_cols:
-        if c in out.columns:
-            out[c] = out[c].map(lambda x: _fmt_float(x, 4))
-
-    for c in p_cols:
-        if c in out.columns:
-            out[c] = out[c].map(lambda x: _fmt_price(x, 3))
-
-    if "score_ev" in out.columns:
-        out["score_ev"] = out["score_ev"].map(lambda x: _fmt_float(x, 4))
-    if "dec_weight" in out.columns:
-        out["dec_weight"] = out["dec_weight"].map(lambda x: _fmt_float(x, 4))
-    if "dec_p_fill" in out.columns:
-        out["dec_p_fill"] = out["dec_p_fill"].map(lambda x: _fmt_prob(x, 2))
-
-    return out
+    return _format_operation_table(df_top30, verify=False)
 
 
 def _format_verify_table(df_verify: pd.DataFrame) -> pd.DataFrame:
-    df = df_verify.copy()
-
-    cols = [
-        "rank", "trade_date", "target_date", "ts_code", "name",
-        "close_T", "close_T2_actual", "r_actual",
-        "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
-        "in_p10", "in_p50",
-        "err_r_p50", "err_close_p50",
-        "actual_ret", "raw_abs_err", "plus_abs_err", "improve_flag", "hit_up",
-    ]
-    cols = _select_cols_exist(df, cols)
-    out = df[cols].copy()
-
-    if "close_T" in out.columns:
-        out["close_T"] = out["close_T"].map(lambda x: _fmt_price(x, 2))
-    if "close_T2_actual" in out.columns:
-        out["close_T2_actual"] = out["close_T2_actual"].map(lambda x: _fmt_price(x, 2))
-    if "r_actual" in out.columns:
-        out["r_actual"] = out["r_actual"].map(lambda x: _fmt_float(x, 4))
-
-    for c in ["eret_pred_raw", "eret_plus_value", "eret_plus_delta", "actual_ret", "raw_abs_err", "plus_abs_err"]:
-        if c in out.columns:
-            out[c] = out[c].map(lambda x: _fmt_pct_ratio(x, 2))
-
-    if "eret_plus_direction" in out.columns:
-        out["eret_plus_direction"] = out["eret_plus_direction"].map(_fmt_direction)
-    if "eret_plus_conf" in out.columns:
-        out["eret_plus_conf"] = out["eret_plus_conf"].map(_fmt_conf_label)
-
-    if "in_p10" in out.columns:
-        out["in_p10"] = out["in_p10"].map(_fmt_bool)
-    if "in_p50" in out.columns:
-        out["in_p50"] = out["in_p50"].map(_fmt_bool)
-    if "improve_flag" in out.columns:
-        out["improve_flag"] = out["improve_flag"].map(_fmt_bool)
-
-    if "err_r_p50" in out.columns:
-        out["err_r_p50"] = out["err_r_p50"].map(lambda x: _fmt_float(x, 4))
-    if "err_close_p50" in out.columns:
-        out["err_close_p50"] = out["err_close_p50"].map(lambda x: _fmt_price(x, 3))
-
-    return out
+    return _format_operation_table(df_verify, verify=True)
 
 
 def _append_ehx_summary(parts: List[str], df_verify: pd.DataFrame) -> None:
@@ -348,8 +353,8 @@ def render_premium_report_md(
     """
     ✅ 新口径：生成 Premium V3 报告（Markdown + 内嵌 HTML table）
     - 不输出 <style>（GitHub 会过滤/转义）。
-    - 中文表头：预测日/预测到期日（无歧义）。
-    - 展示 E_ret_plus / EHX 的增强结果与后验误差对比。
+    - 预测表与验证表统一为人类操作表头。
+    - 工程字段不再进入主表，避免实盘阅读负担。
     """
     cfg = PremiumConfig.load()
 
@@ -418,18 +423,17 @@ def render_premium_report_md(
         _append_ehx_summary(parts, df_verify)
 
     parts.append("")
-    parts.append("## 字段说明（V3 核心）")
+    parts.append("## 字段说明（V3 人类操作口径）")
     parts.append("")
-    parts.append("- E_ret原始值：进入 EHX 前的原始溢价预测值。")
-    parts.append("- E_ret_plus：EHX 残差增强后的溢价预测值，当前 Premium 主线优先围绕它排序和展示。")
-    parts.append("- EHX修正值：E_ret_plus - E_ret原始值，正数表示上修，负数表示下修。")
-    parts.append("- EHX方向 / EHX置信度 / EHX来源：用于判断增强层是否真实接入、是否处于模型态或冷启动态。")
-    parts.append("- Raw绝对误差 / Plus绝对误差 / Plus优于Raw：T+2 真值出来后，用于验证 EHX 是否真的改善。")
-    parts.append("- close_T2_pXX：预测到期日（T+2）收盘价的价格分位点（展示字段）。")
-    parts.append("- in_p10：r_actual 是否落在 [p05, p95]。")
-    parts.append("- in_p50：r_actual 是否落在 [p25, p75]。")
+    parts.append("- 操作排名：优先使用 E_ret_plus 排名。")
+    parts.append("- T+2预期收益：EHX 残差增强后的 E_ret_plus。")
+    parts.append("- 预期价格区间：使用 T+2 价格分位 p25 ~ p75，并展示 p50 中位价。")
+    parts.append("- T+2上涨概率：预测到期日 T+2 收盘上涨概率。")
+    parts.append("- 模型置信度：EHX 置信度标签及置信分。")
+    parts.append("- 操作结论：面向人类执行的简化判断，不等于强制买入。")
+    parts.append("- 风险提示：根据上涨概率、E_ret_plus、验证误差与分布命中情况生成。")
     parts.append("")
-    parts.append("> 注：r_pXX（log-return 分位点，r = ln(Close[T+2]/Close[T])）为内部计算字段，当前报告不在预测表展示。")
+    parts.append("> 注：E_ret原始值、EHX修正值、EHX来源、Raw/Plus误差等工程审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。")
     parts.append("")
 
     return "\n".join(parts)
