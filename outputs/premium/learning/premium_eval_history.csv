@@ -1,2 +1,3 @@
 ﻿trade_date,next_trade_date,n,topk,hit_rate_at_k,mean_ret_at_k,rank_ic,ehx_trained,ehx_reason,ehx_n_samples,ehx_min_samples,delta_mae,delta_rmse,plus_improve_rate,model_version,run_id,commit_sha,created_at_utc
-20260605,,1432,10,,,,1,ok:ehx_from_premium_verify,1432,30,0.054207309409267025,0.07404662454275023,0.6501396648044693,premium_v2,gh_27281950958,bb14dd1f7889,2026-06-10T14:05:55Z
+20260605,,1432,10,,,,1,ok:ehx_from_premium_verify,1432,30,0.054207309409267,0.0740466245427502,0.6501396648044693,premium_v2,gh_27281950958,bb14dd1f7889,2026-06-10T14:05:55Z
+20260605,,1432,10,,,,1,ok:ehx_from_premium_verify,1432,30,0.05365796160750347,0.07294123018339155,0.6452513966480447,premium_v2,gh_27282880644,5a48fecc38a6,2026-06-10T14:20:41Z
