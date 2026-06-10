@@ -10,7 +10,7 @@ on:
       cmd:
         description: "执行命令：predict / train / all"
         required: false
-        default: "predict"
+        default: "all"
         type: choice
         options:
           - predict
@@ -29,8 +29,8 @@ concurrency:
 
 jobs:
   premium:
-    # 自动触发：仅当上游成功才跑；手动触发：直接跑
-    # 只跑 main 分支，避免 PR/分支触发混乱
+    # 自动触发：仅当上游成功才跑；手动触发：直接跑。
+    # 只跑 main 分支，避免 PR/分支触发混乱。
     if: >-
       ${{
         (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
@@ -66,26 +66,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Resolve Premium command
+        run: |
+          set -e
+          EVENT_NAME="${{ github.event_name }}"
+
+          # Premium V3 / E_ret_plus / EHX 阶段：默认跑 all。
+          # train.py 已改成只写 _last_train.txt，不覆盖 _last_run.txt，
+          # 所以这里可以安全地先训练，再预测，推动 coldstart_v1 -> model_v1。
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            CMD="all"
+          else
+            CMD="${{ github.event.inputs.cmd }}"
+            if [ -z "$CMD" ]; then CMD="all"; fi
+          fi
+
+          echo "PREMIUM_CMD=$CMD" >> "$GITHUB_ENV"
+          echo "[run_premium] event=$EVENT_NAME cmd=$CMD"
+
       - name: Run Premium
         env:
           PYTHONPATH: "${{ github.workspace }}/src"
           TUSHARE_TOKEN: "${{ secrets.TUSHARE_TOKEN }}"
         run: |
           set -e
-
-          EVENT_NAME="${{ github.event_name }}"
-
-          # 当前 Premium V3 验收阶段以 predict 产物为主，避免 train 样本不足时
-          # 覆盖 outputs/premium/_last_run.txt，导致验收入口变成训练摘要。
-          if [ "$EVENT_NAME" = "workflow_run" ]; then
-            CMD="predict"
-          else
-            CMD="${{ github.event.inputs.cmd }}"
-            if [ -z "$CMD" ]; then CMD="predict"; fi
-          fi
-
-          echo "[run_premium] event=$EVENT_NAME cmd=$CMD"
-          python scripts/run_premium.py "$CMD" --verbose
+          python scripts/run_premium.py "$PREMIUM_CMD" --verbose
 
       - name: Sanity check outputs
         run: |
@@ -115,23 +120,41 @@ jobs:
           grep -E '^out_verify:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
           grep -E '^report_md:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
 
+          if [ "$PREMIUM_CMD" != "predict" ]; then
+            echo "=== _last_train.txt ==="
+            test -f outputs/premium/_last_train.txt
+            cat outputs/premium/_last_train.txt || true
+
+            echo "=== EHX meta contract ==="
+            test -f outputs/premium/models/ehx_meta.json
+            python -m json.tool outputs/premium/models/ehx_meta.json >/dev/null
+
+            # 如果本轮训练已经声明 ehx_trained=True，则模型文件必须存在且非空。
+            if grep -E '^ehx_trained:[[:space:]]*True' outputs/premium/_last_train.txt; then
+              test -s outputs/premium/models/ehx_delta.joblib
+            fi
+          fi
+
       - name: Commit outputs + market cache (if changed)
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Premium V3：提交预测产物、EHX 模型产物、报告与真值缓存
+          # Premium V3：提交预测产物、EHX 模型产物、报告与真值缓存。
           git add outputs/premium || true
           git add docs/reports || true
           git add data/market || true
+
+          echo "=== git status after add ==="
+          git status --short
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
             exit 0
           fi
 
-          # 从 _last_run.txt 里读取 trade_date；没有则读 target_date；再没有用 unknown
+          # 从 _last_run.txt 里读取 trade_date；没有则读 target_date；再没有用 unknown。
           TRADE_DATE="$(grep -E '^trade_date:' -m 1 outputs/premium/_last_run.txt | awk '{print $2}' || true)"
           if [ -z "$TRADE_DATE" ]; then
             TRADE_DATE="$(grep -E '^target_date:' -m 1 outputs/premium/_last_run.txt | awk '{print $2}' || true)"
@@ -140,15 +163,17 @@ jobs:
 
           git commit -m "premium: update outputs + market cache (${TRADE_DATE})"
 
-          # 不在 commit 后再 pull --rebase，避免脏工作区冲突
-          # push 遇到临时远端故障时，不让产物生成流程失败
-          set +e
-          git push origin HEAD:main
-          RC=$?
-          set -e
+          # push 必须成功。不能再把 push 失败伪装成 workflow success，
+          # 否则页面显示绿灯，但 main 上没有 _last_train / EHX 模型产物。
+          for attempt in 1 2 3; do
+            echo "git push attempt ${attempt}/3"
+            git pull --rebase origin main
+            if git push origin HEAD:main; then
+              echo "git push success."
+              exit 0
+            fi
+            sleep 5
+          done
 
-          if [ $RC -ne 0 ]; then
-            echo "WARNING: git push failed (likely transient remote issue)."
-            echo "The workflow will exit 0 to keep outputs generation green."
-            exit 0
-          fi
+          echo "ERROR: git push failed after 3 attempts."
+          exit 1
