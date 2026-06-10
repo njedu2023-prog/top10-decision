@@ -1,23 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Premium 子系统 — Train（训练闭环｜V3.2：E_ret_plus / EHX 残差增强版）
+Premium 子系统 — Train（训练闭环｜V3.3：E_ret_plus / EHX 残差增强闭环版）
 
 本文件只负责训练链：
 - 保留旧 Premium LR / LGBM 训练链；
-- 新增/增强 EHX 残差训练链；
-- train 不再覆盖 outputs/premium/_last_run.txt，避免覆盖 predict 的验收摘要；
+- 增强 EHX 残差训练链；
+- train 不覆盖 outputs/premium/_last_run.txt，避免覆盖 predict 验收摘要；
 - train 状态写入 outputs/premium/_last_train.txt；
-- 当 decision 样本不足时，允许从 premium_verify_*.csv 回收已验证样本训练 EHX。
+- 当 decision 样本不足时，允许从 premium_verify_*.csv 回收已验证样本训练 EHX；
+- 增加直接执行入口，方便 workflow / 手工命令验证训练结果。
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# 允许 python src/top10decision/premium/train.py 直接执行。
+if __package__ in (None, ""):
+    _SRC = Path(__file__).resolve().parents[2]
+    if str(_SRC) not in sys.path:
+        sys.path.insert(0, str(_SRC))
+    __package__ = "top10decision.premium"
 
 import joblib
 import numpy as np
@@ -110,27 +120,28 @@ def _read_csv_smart(path: Path) -> pd.DataFrame:
 
 
 def _json_safe(v):
+    """递归转成 JSON 可写类型，避免 numpy/pandas/nan 把 meta 写崩。"""
+    if isinstance(v, dict):
+        return {str(k): _json_safe(val) for k, val in v.items()}
+    if isinstance(v, (list, tuple, set)):
+        return [_json_safe(x) for x in v]
     if isinstance(v, (np.integer,)):
         return int(v)
     if isinstance(v, (np.floating,)):
-        if np.isfinite(float(v)):
-            return float(v)
-        return None
+        return float(v) if np.isfinite(float(v)) else None
     if isinstance(v, float):
-        if np.isfinite(v):
-            return v
-        return None
-    if pd.isna(v):
-        return None
+        return v if np.isfinite(v) else None
+    try:
+        if pd.isna(v):
+            return None
+    except Exception:
+        pass
     return v
 
 
 def _write_train_state(cfg: PremiumConfig, trade_date: str = "unknown", extra: Optional[Dict] = None) -> Path:
     """
     写训练态摘要，不覆盖 predict 生成的 outputs/premium/_last_run.txt。
-
-    之前 train.py 在 no_samples / min_train_days_not_met / train ok 时会写 _last_run.txt，
-    这会把 Premium V3 predict 验收入口覆盖成训练摘要。这里改为只写 _last_train.txt。
     """
     extra = extra or {}
     p = cfg.out_root() / "_last_train.txt"
@@ -363,7 +374,7 @@ def _filter_recent_days(samples: pd.DataFrame, cfg: PremiumConfig) -> pd.DataFra
     if not dates:
         return samples
 
-    keep_dates = dates[-int(cfg.train_window_days):]
+    keep_dates = dates[-int(getattr(cfg, "train_window_days", 60)):]
     return samples[samples["trade_date"].isin(keep_dates)].reset_index(drop=True)
 
 
@@ -387,14 +398,15 @@ def _real_ret_from_verify_df(df: pd.DataFrame) -> pd.Series:
             "truth_ret",
             "t2_ret",
             "close_t2_ret",
+            "r_actual",
         ],
         default=np.nan,
     )
     if y.notna().any():
         return y
 
-    c2 = _safe_numeric_series(df, ["close_2", "close_t1", "buy_close", "entry_close", "close_buy"], default=np.nan)
-    c3 = _safe_numeric_series(df, ["close_3", "close_t2", "sell_close", "exit_close", "close_sell"], default=np.nan)
+    c2 = _safe_numeric_series(df, ["close_T", "close_2", "close_t1", "buy_close", "entry_close", "close_buy"], default=np.nan)
+    c3 = _safe_numeric_series(df, ["close_T2_actual", "close_3", "close_t2", "sell_close", "exit_close", "close_sell"], default=np.nan)
     with np.errstate(divide="ignore", invalid="ignore"):
         derived = c3 / c2 - 1.0
     return pd.to_numeric(derived, errors="coerce")
@@ -447,7 +459,7 @@ def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.Dat
         ts_col = _first_existing_col(df, ["ts_code", "code", "symbol"])
         name_col = _first_existing_col(df, ["name", "名称", "stock_name"])
         td_col = _first_existing_col(df, ["trade_date", "target_date", "date"])
-        ntd_col = _first_existing_col(df, ["next_trade_date", "verify_date", "t2_date"])
+        ntd_col = _first_existing_col(df, ["next_trade_date", "verify_date", "target_date", "t2_date"])
 
         out["trade_date"] = df[td_col].astype(str).map(_to_yyyymmdd) if td_col else _infer_trade_date_from_path(path)
         out["next_trade_date"] = df[ntd_col].astype(str).map(_to_yyyymmdd) if ntd_col else pd.NA
@@ -465,14 +477,22 @@ def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.Dat
             "turnover_rate": ["turnover_rate", "换手率"],
             "amount": ["amount", "成交额"],
             "vol": ["vol", "volume", "成交量"],
-            "close": ["close", "close_t", "收盘价", "close_2", "close_t1"],
+            "close": ["close", "close_t", "收盘价", "close_T", "close_2", "close_t1"],
             "pct_chg": ["pct_chg", "pct_change", "涨跌幅"],
             "amplitude": ["amplitude", "range_1d", "振幅"],
-            "rank_eret_plus": ["rank_eret_plus", "E_ret_plus排名"],
+            "rank_eret_plus": ["rank_eret_plus", "rank", "E_ret_plus排名"],
             "eret_plus_conf_score": ["eret_plus_conf_score", "EHX置信分"],
+            "r_p50": ["r_p50"],
+            "in_p10": ["in_p10"],
+            "in_p50": ["in_p50"],
         }
         for target, candidates in feature_candidates.items():
-            out[target] = _safe_numeric_series(df, candidates, default=np.nan)
+            s = _safe_numeric_series(df, candidates, default=np.nan)
+            if s.isna().all() and target in ("in_p10", "in_p50"):
+                col = _first_existing_col(df, candidates)
+                if col:
+                    s = df[col].astype(str).str.lower().isin(["true", "1", "yes", "是"]).astype(float)
+            out[target] = s
 
         out["delta_ret"] = out["real_premium_ret"] - out["eret_pred_raw"]
         out = out[out["real_premium_ret"].notna() & out["eret_pred_raw"].notna()].reset_index(drop=True)
@@ -520,6 +540,9 @@ def _build_ehx_feature_cols(samples: pd.DataFrame) -> List[str]:
         "amplitude",
         "rank_eret_plus",
         "eret_plus_conf_score",
+        "r_p50",
+        "in_p10",
+        "in_p50",
     ]:
         if c in samples.columns:
             cols.append(c)
@@ -585,8 +608,7 @@ def save_ehx(bundle, model_path: str) -> None:
 
 def _save_ehx_meta(meta_path: Path, payload: Dict) -> None:
     meta_path.parent.mkdir(parents=True, exist_ok=True)
-    clean_payload = {k: _json_safe(v) for k, v in payload.items()}
-    meta_path.write_text(json.dumps(clean_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    meta_path.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -605,6 +627,11 @@ def _rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(np.sqrt(np.nanmean((y_true - y_pred) ** 2)))
 
 
+def _ehx_min_samples(cfg: PremiumConfig) -> int:
+    # 一份 Top30 verify 文件就能启动第一版 model_v1，避免长期停在 coldstart_v1。
+    return max(10, min(30, int(getattr(cfg, "min_train_days", 3)) * 5))
+
+
 def _train_ehx_only(
     cfg: PremiumConfig,
     ehx_samples: pd.DataFrame,
@@ -621,7 +648,7 @@ def _train_ehx_only(
 
     n_samples = int(len(ehx_samples))
     n_days = int(ehx_samples["trade_date"].nunique()) if "trade_date" in ehx_samples.columns else 0
-    ehx_min_samples = max(10, min(30, int(getattr(cfg, "min_train_days", 3)) * 5))
+    ehx_min_samples = _ehx_min_samples(cfg)
     ehx_model_path = cfg.out_root() / "models" / "ehx_delta.joblib"
     ehx_meta_path = cfg.out_root() / "models" / "ehx_meta.json"
 
@@ -673,13 +700,14 @@ def _train_ehx_only(
     delta_mae = _mae(delta_true, delta_pred)
     delta_rmse = _rmse(delta_true, delta_pred)
 
-    last_td = sorted(ehx_samples["trade_date"].dropna().astype(str).unique())[-1] if n_days > 0 else "unknown"
     raw_ret = pd.to_numeric(ehx_samples["eret_pred_raw"], errors="coerce").values
     real_ret = pd.to_numeric(ehx_samples["real_premium_ret"], errors="coerce").values
     plus_ret = raw_ret + delta_pred
     raw_abs_err = np.abs(real_ret - raw_ret)
     plus_abs_err = np.abs(real_ret - plus_ret)
     plus_improve_rate = float(np.mean(plus_abs_err < raw_abs_err)) if len(raw_abs_err) > 0 else float("nan")
+
+    last_td = sorted(ehx_samples["trade_date"].dropna().astype(str).unique())[-1] if n_days > 0 else "unknown"
 
     _save_ehx_meta(
         ehx_meta_path,
@@ -705,7 +733,7 @@ def _train_ehx_only(
         "trade_date": str(last_td),
         "next_trade_date": pd.NA,
         "n": n_samples,
-        "topk": int(getattr(cfg, "topk", 30)),
+        "topk": int(getattr(cfg, "topk", getattr(cfg, "top_n", 30))),
         "hit_rate_at_k": float("nan"),
         "mean_ret_at_k": float("nan"),
         "rank_ic": float("nan"),
@@ -806,7 +834,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     n_samples = int(len(samples))
     n_days = int(samples["trade_date"].nunique()) if "trade_date" in samples.columns else 0
 
-    if n_days < int(cfg.min_train_days):
+    if n_days < int(getattr(cfg, "min_train_days", 3)):
         if not verify_samples.empty:
             return _train_ehx_only(
                 cfg,
@@ -824,14 +852,14 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
                 "reason": "min_train_days_not_met",
                 "n_samples": n_samples,
                 "n_days": n_days,
-                "min_train_days": int(cfg.min_train_days),
+                "min_train_days": int(getattr(cfg, "min_train_days", 3)),
                 "pending_days": stats.get("pending_days", 0),
                 "ok_days": stats.get("ok_days", 0),
             },
         )
         return TrainResult(
             trained=False,
-            reason=f"可训练天数不足：n_days={n_days} < min_train_days={cfg.min_train_days}",
+            reason=f"可训练天数不足：n_days={n_days} < min_train_days={getattr(cfg, 'min_train_days', 3)}",
             n_samples=n_samples,
             n_days=n_days,
             model_version=cfg.model_version,
@@ -881,11 +909,11 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
 
     X_train = _prepare_numeric_matrix(samples, feature_cols)
 
-    y_cls = build_y_from_real_ret(samples["real_premium_ret"], threshold=cfg.up_threshold)
+    y_cls = build_y_from_real_ret(samples["real_premium_ret"], threshold=getattr(cfg, "up_threshold", 0.0))
     lr_bundle = fit_lr_classifier(
         X_train,
         y_cls,
-        threshold=cfg.up_threshold,
+        threshold=getattr(cfg, "up_threshold", 0.0),
         feature_cols=list(X_train.columns),
     )
     save_lr(lr_bundle, str(cfg.lr_model_path()))
@@ -894,7 +922,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
         X_train,
         samples["real_premium_ret"],
         feature_cols=list(X_train.columns),
-        min_samples=max(30, int(cfg.min_train_days) * 5),
+        min_samples=max(30, int(getattr(cfg, "min_train_days", 3)) * 5),
     )
     save_lgbm(lgbm_bundle, str(cfg.lgbm_model_path()))
 
@@ -906,12 +934,11 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     ].reset_index(drop=True)
 
     if not verify_samples.empty:
-        # 用 verify 样本补充 EHX。列不一致没关系，矩阵阶段会 reindex/fillna。
         ehx_samples = pd.concat([ehx_samples, verify_samples], ignore_index=True, sort=False)
         ehx_samples = ehx_samples.drop_duplicates(subset=["trade_date", "ts_code"], keep="last").reset_index(drop=True)
 
     ehx_feature_cols = _build_ehx_feature_cols(ehx_samples)
-    ehx_min_samples = max(10, min(30, int(cfg.min_train_days) * 5))
+    ehx_min_samples = _ehx_min_samples(cfg)
     ehx_trained = False
     ehx_reason = "not_run"
     delta_mae = float("nan")
@@ -987,7 +1014,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     pred_ev = pred_up * pred_ret
 
     real = pd.to_numeric(df_last["real_premium_ret"], errors="coerce").values
-    k = int(cfg.topk)
+    k = int(getattr(cfg, "topk", getattr(cfg, "top_n", 30)))
     idx = np.argsort(-pred_ev)[: max(1, min(k, len(pred_ev)))]
     real_topk = real[idx]
     hit = float(np.mean(real_topk > 0.0)) if len(real_topk) > 0 else float("nan")
@@ -1072,4 +1099,41 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     )
 
 
+def _main() -> int:
+    parser = argparse.ArgumentParser(description="Train Premium models, including EHX delta regressor.")
+    parser.add_argument("--json", action="store_true", help="输出 JSON 格式训练结果")
+    args = parser.parse_args()
+
+    cfg = PremiumConfig.load()
+    result = train_models(cfg)
+    payload = {
+        "trained": bool(result.trained),
+        "reason": result.reason,
+        "n_samples": int(result.n_samples),
+        "n_days": int(result.n_days),
+        "model_version": result.model_version,
+        "last_train": str(cfg.out_root() / "_last_train.txt"),
+        "ehx_model": str(cfg.out_root() / "models" / "ehx_delta.joblib"),
+        "ehx_meta": str(cfg.out_root() / "models" / "ehx_meta.json"),
+    }
+    if args.json:
+        print(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2))
+    else:
+        print(
+            "[premium][train] "
+            f"trained={payload['trained']} "
+            f"n_days={payload['n_days']} "
+            f"n_samples={payload['n_samples']} "
+            f"reason={payload['reason']}"
+        )
+        print(f"[premium][train] last_train={payload['last_train']}")
+        print(f"[premium][train] ehx_model={payload['ehx_model']}")
+        print(f"[premium][train] ehx_meta={payload['ehx_meta']}")
+    return 0 if result.trained or "不足" in result.reason or "没有可用样本" in result.reason else 1
+
+
 __all__ = ["TrainResult", "train_models", "collect_training_samples", "fit_ehx_delta_regressor", "save_ehx"]
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())
