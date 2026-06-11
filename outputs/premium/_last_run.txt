@@ -1,8 +1,8 @@
 trade_date: 20260609
-run_id: gh_27360889684
-commit_sha: c4ee0cde7abd
+run_id: gh_27363751992
+commit_sha: af40f4ceb790
 model_version: premium_v2
-created_at_utc: 2026-06-11T16:14:11Z
+created_at_utc: 2026-06-11T17:03:05Z
 ok: True
 target_date: 20260611
 pending: False
@@ -17,9 +17,9 @@ ehx_reason: ok
 ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
 ehx_load_reason: ok
 ehx_feature_n: 16
-ehx_meta_n_samples: 1462
-ehx_meta_delta_mae: 0.05382694348521131
-ehx_meta_delta_rmse: 0.07327782410206848
+ehx_meta_n_samples: 1491
+ehx_meta_delta_mae: 0.05358456473477575
+ehx_meta_delta_rmse: 0.07316893525973338
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260609.csv
 out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260609.csv
 out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260609.csv
