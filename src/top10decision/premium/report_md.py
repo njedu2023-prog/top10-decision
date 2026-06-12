@@ -10,7 +10,7 @@ Premium 子系统 — Markdown 报告渲染（V3.5：涨停接力实盘表头版
 - T+1：买入后的预测到期 / 盘中择时卖出日
 
 主表只展示人工下隔夜单最需要的 9 列：
-操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T+1建议买入方式
+操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T日建议买入方式
 
 说明：
 - 操作排名 = 上游 predict.py 已按“涨停接力评分”降序重排后的 rank。
@@ -110,17 +110,51 @@ def _cn_col(col: str) -> str:
     return str(col)
 
 
+def _html_escape(x: object) -> str:
+    import html
+
+    if x is None:
+        return ""
+    s = str(x)
+    if s.lower() in ("nan", "none", "<na>", "nat"):
+        s = ""
+    return html.escape(s, quote=True)
+
+
 def _df_to_html_table(df: pd.DataFrame) -> str:
     """
-    GitHub Markdown 对 <style> 会过滤/转义，导致样式内容被打印出来；
-    这里只输出可渲染的 <table>，不输出 <style>。
+    输出横向撑开的 HTML 表格。
+
+    GitHub 会过滤 <style> 块，所以使用内联 style + nowrap 双保险：
+    - table 使用 width:max-content，允许内容自然撑开；
+    - th/td 使用 white-space:nowrap 和 nowrap，避免中文表头/名称被强制换行；
+    - 外层 div 使用 overflow-x:auto，列多时横向滚动。
     """
     if df is None or df.empty:
         return ""
+
     show = df.copy()
     show.columns = [_cn_col(c) for c in show.columns]
-    html = show.to_html(index=False, escape=True, border=0)
-    return f"<div>{html}</div>"
+
+    table_style = "width:max-content;min-width:100%;border-collapse:collapse;white-space:nowrap;"
+    cell_style = "white-space:nowrap;padding:6px 10px;"
+    div_style = "overflow-x:auto;width:100%;"
+
+    rows: List[str] = []
+    header = "".join(
+        f'<th nowrap="nowrap" style="{cell_style}">{_html_escape(c)}</th>'
+        for c in show.columns
+    )
+    rows.append(f"<tr>{header}</tr>")
+
+    for _, r in show.iterrows():
+        cells = "".join(
+            f'<td nowrap="nowrap" style="{cell_style}">{_html_escape(r.get(c, ""))}</td>'
+            for c in show.columns
+        )
+        rows.append(f"<tr>{cells}</tr>")
+
+    return f'<div style="{div_style}"><table style="{table_style}">' + "".join(rows) + "</table></div>"
 
 
 # =========================
@@ -201,7 +235,7 @@ _OPER_COLS = [
     "T日涨停强度",
     "T+1延续上涨率",
     "涨停接力评分",
-    "T+1建议买入方式",
+    "T日建议买入方式",
 ]
 
 
@@ -216,8 +250,12 @@ def _op_rank(row: pd.Series) -> object:
     return "-"
 
 
-def _t1_buy_method(row: pd.Series) -> str:
-    return _first_existing_str(row, ["T+1建议买入方式", "t1_buy_method", "buy_method", "t_buy_method"])
+def _t_buy_method(row: pd.Series) -> str:
+    # 报告展示为 T日建议买入方式；兼容上游 CSV 旧字段 T+1建议买入方式。
+    return _first_existing_str(
+        row,
+        ["T日建议买入方式", "T+1建议买入方式", "t_buy_method", "t1_buy_method", "buy_method"],
+    )
 
 
 def _limitup_prob_text(row: pd.Series) -> str:
@@ -251,7 +289,7 @@ def _continuation_score_text(row: pd.Series) -> str:
 def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFrame:
     """
     预测表与验证表统一使用涨停接力实盘表头：
-    操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T+1建议买入方式
+    操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T日建议买入方式
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=_OPER_COLS)
@@ -268,7 +306,7 @@ def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFr
                 "T日涨停强度": _limitup_strength_text(row),
                 "T+1延续上涨率": _continue_up_text(row),
                 "涨停接力评分": _continuation_score_text(row),
-                "T+1建议买入方式": _t1_buy_method(row),
+                "T日建议买入方式": _t_buy_method(row),
             }
         )
 
@@ -406,7 +444,7 @@ def render_premium_report_md(
     parts.append("- T日涨停强度：衡量 T 日涨停攻击质量与封板强弱的 0~100 分。")
     parts.append("- T+1延续上涨率：T 日走强/涨停后，T+1 继续上涨并给出溢价的倾向率。")
     parts.append("- 涨停接力评分：综合 T日涨停概率、T日涨停强度、T+1延续上涨率与执行安全分后的核心排序分。")
-    parts.append("- T+1建议买入方式：面向 T 日集合竞价的买入方式建议。")
+    parts.append("- T日建议买入方式：面向 T 日集合竞价的买入方式建议。")
     parts.append("")
     parts.append(
         "> 注：E_ret_plus、价格区间、置信度、买入价、卖出计划、Raw/Plus误差等辅助/审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。"
