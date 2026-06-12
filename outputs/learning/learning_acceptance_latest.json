@@ -1,106 +1,106 @@
 {
-  "generated_at_utc": "2026-06-12T16:30:00+00:00",
-  "current_run_date": "20260612",
+  "generated_at_utc": "2026-06-12T16:35:45+00:00",
+  "current_run_date": "20260609",
   "pfill": {
-    "anchor_trade_date": "20260611",
+    "anchor_trade_date": "20260608",
     "status": "trained",
-    "loaded_trade_dates": 69,
+    "loaded_trade_dates": 66,
     "missing_trade_dates": 2,
-    "previous_anchor_trade_date": "20260610",
+    "previous_anchor_trade_date": "20260605",
     "metrics_valid": {
       "lr": {
-        "auc": 0.9015151515151515,
-        "logloss": 0.38883724554300303,
-        "brier": 0.11076526460943192
+        "auc": 0.8950617283950618,
+        "logloss": 0.17592112036393387,
+        "brier": 0.05106266748491283
       },
       "lgbm": {
-        "auc": 0.9696969696969697,
-        "logloss": 0.11829965197462321,
-        "brier": 0.03975710736881419
+        "auc": 0.6975308641975309,
+        "logloss": 0.1844026219596366,
+        "brier": 0.03443227565819321
       }
     },
     "compare_to_previous": {
       "lr_auc": {
-        "delta": -0.09848484848484851,
-        "trend": "worse"
+        "delta": 0.1851050184383518,
+        "trend": "improved"
       },
       "lr_logloss": {
-        "delta": 0.17106252129069438,
-        "trend": "worse"
+        "delta": -0.10768287277023952,
+        "trend": "improved"
       },
       "lr_brier": {
-        "delta": 0.04721622007300258,
-        "trend": "worse"
+        "delta": -0.03297668789575097,
+        "trend": "improved"
       },
       "lgbm_auc": {
-        "delta": -0.02305665349143604,
+        "delta": -0.145050796565948,
         "trend": "worse"
       },
       "lgbm_logloss": {
-        "delta": 0.0802747935602591,
+        "delta": 0.07909949333620955,
         "trend": "worse"
       },
       "lgbm_brier": {
-        "delta": 0.02835345970319402,
+        "delta": 0.008905435925223009,
         "trend": "worse"
       }
     },
     "acceptance_pass": false
   },
   "eret": {
-    "anchor_trade_date": "20260610",
+    "anchor_trade_date": "20260605",
     "status": "trained",
-    "loaded_trade_dates": 68,
+    "loaded_trade_dates": 65,
     "missing_trade_dates": 2,
-    "previous_anchor_trade_date": "20260609",
+    "previous_anchor_trade_date": "20260604",
     "metrics_valid": {
       "lr": {
-        "mae": 0.05737888184130221,
-        "rmse": 0.07364448128451796,
-        "r2": 0.015207428439416248,
-        "corr": 0.17640696888334081,
-        "directional_acc": 0.5942028985507246
+        "mae": 0.06476394360721355,
+        "rmse": 0.08743814439958215,
+        "r2": -0.10428545799135991,
+        "corr": 0.037247859106372065,
+        "directional_acc": 0.5394736842105263
       },
       "lgbm": {
-        "mae": 0.06398685233535104,
-        "rmse": 0.07879267964099229,
-        "r2": -0.1272911303969344,
-        "corr": 0.22749515953751662,
-        "directional_acc": 0.42028985507246375
+        "mae": 0.0672471299539545,
+        "rmse": 0.09490017511081886,
+        "r2": -0.30080894802560953,
+        "corr": -0.014033534899192878,
+        "directional_acc": 0.5394736842105263
       }
     },
     "compare_to_previous": {
       "lr_mae": {
-        "delta": -0.002173561419361633,
+        "delta": -0.012692633704734349,
         "trend": "improved"
       },
       "lr_rmse": {
-        "delta": -0.0029932853552064598,
+        "delta": -0.006099977855266739,
         "trend": "improved"
       },
       "lr_corr": {
-        "delta": 0.2351135900768535,
+        "delta": 0.021250529354872403,
         "trend": "improved"
       },
       "lr_directional_acc": {
-        "delta": 0.07000935016362786,
+        "delta": 0.05229419703103916,
         "trend": "improved"
       },
       "lgbm_mae": {
-        "delta": 0.0018130709935258935,
-        "trend": "worse"
+        "delta": -0.012776144992444921,
+        "trend": "improved"
       },
       "lgbm_rmse": {
-        "delta": -0.0014639052136148356,
+        "delta": -0.0030121490227777714,
         "trend": "improved"
       },
       "lgbm_corr": {
-        "delta": 0.26654194018005256,
-        "trend": "improved"
+        "delta": -0.024800238732451796,
+        "trend": "worse"
       },
       "lgbm_directional_acc": {
-        "delta": -0.12809724170172976,
-        "trend": "worse"
+        "delta": 0.07793522267206476,
+        "trend": "improved"
       }
     },
     "acceptance_pass": false
