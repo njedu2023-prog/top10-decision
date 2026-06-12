@@ -1,8 +1,8 @@
 trade_date: 20260609
-run_id: gh_27417070606
-commit_sha: 1f782ff4a8a6
+run_id: gh_27418216768
+commit_sha: a62e4fe80de9
 model_version: premium_v2
-created_at_utc: 2026-06-12T12:57:38Z
+created_at_utc: 2026-06-12T13:19:38Z
 ok: True
 target_date: 20260611
 pending: False
@@ -17,9 +17,9 @@ ehx_reason: ok
 ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
 ehx_load_reason: ok
 ehx_feature_n: 16
-ehx_meta_n_samples: 1492
-ehx_meta_delta_mae: 0.054202281966612656
-ehx_meta_delta_rmse: 0.0743973311818872
+ehx_meta_n_samples: 1491
+ehx_meta_delta_mae: 0.05376169305093826
+ehx_meta_delta_rmse: 0.07326257734662239
 exec_fields: T+1建议买入方式|T+1可接受买入价|T+2卖出计划
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260609.csv
 out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260609.csv
