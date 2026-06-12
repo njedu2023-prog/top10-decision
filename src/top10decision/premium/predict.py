@@ -2,26 +2,32 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Predict（V3.1：E_ret_plus / EHX 推理接线增强版）
+Premium 子系统 — Predict（V3.3：实盘执行层增强版）
 
 当前锁死契约（Premium Contract V3）：
+
 - 主目标不再是“好看报告”，而是围绕 E_ret 生成更强的 E_ret_plus。
 - 当前只动 premium 线，不动 decision 主线文件。
 - 旧 V2 分位链保留，但中心值优先围绕 eret_plus_value 展开。
 - 必须保留 raw / plus 后验误差对比，支撑闭环验收。
 
-本版关键修复：
+本版关键修复 / 增强：
+
 - 与 train.py 对齐原始 E_ret 字段识别口径，避免训练能识别、推理识别不到。
 - EHX 推理优先加载 outputs/premium/models/ehx_delta.joblib。
 - EHX 加载/预测失败不阻断主流程，但会在 eret_plus_src 与 _last_run.txt 中追溯失败原因。
 - eret_pred_raw / eret_plus_value / eret_plus_delta 全链路落盘，供 report / verify / 后续 decision 接线使用。
 - 修复 _write_last_run 前 eret_plus_src 兜底 Series 长度不匹配问题。
 - 修复 _zscore 全空输入触发 RuntimeWarning 的问题。
+- 新增实盘执行字段，先进入 premium_top30 / premium_full / premium_verify CSV：
+  T+1建议买入方式、T+1可接受买入价、T+2卖出计划。
 
 主输入：
+
 - data/pred/pred_source_latest.csv（a-top10 全量源表，候选=全量，不过滤）
 
 输出：
+
 - outputs/premium/premium_top30_{T}.csv
 - outputs/premium/premium_full_{T}.csv
 - outputs/premium/premium_verify_{T}.csv
@@ -52,7 +58,6 @@ from .factor_builders import build_features_by_packs
 from .factor_registry import detect_factor_packs
 from .market_truth import ensure_daily_cached, load_daily
 from .report_md import render_premium_report_md
-
 
 _TD_RE = re.compile(r"^\d{8}$")
 
@@ -181,9 +186,9 @@ def _norm_ppf(q: float) -> float:
     b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572]
     c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783]
     d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416]
-
     plow = 0.02425
     phigh = 1 - plow
+
     if q <= 0.0 or q >= 1.0:
         return float("nan")
     if q < plow:
@@ -260,6 +265,7 @@ def _advance_trade_days_by_trade_cal(trade_date: str, steps: int) -> Tuple[Optio
     td = _to_yyyymmdd(trade_date)
     if not _TD_RE.match(td):
         return None, "bad_trade_date"
+
     token = _get_tushare_token()
     if not token:
         return None, "missing_TUSHARE_TOKEN"
@@ -281,6 +287,7 @@ def _advance_trade_days_by_trade_cal(trade_date: str, steps: int) -> Tuple[Optio
         i0 = days.index(td)
     except ValueError:
         return None, "trade_cal_index_fail"
+
     i1 = i0 + int(steps)
     if i1 >= len(days):
         return None, "trade_cal_out_of_range"
@@ -323,6 +330,7 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
     c_date = pick("trade_date", "date", "dt", "交易日期", "日期")
     c_code = pick("ts_code", "code", "symbol", "ticker", "股票代码", "代码")
     c_name = pick("name", "stock_name", "股票名称", "名称")
+
     if c_date:
         df["trade_date"] = df[c_date].astype(str).map(_to_yyyymmdd)
     if c_code:
@@ -384,14 +392,11 @@ def _pick_pred_fields(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, pd.Series
 
     p = pd.to_numeric(df[c_prob], errors="coerce") if c_prob else pd.Series([np.nan] * len(df), index=df.index)
     p = p.fillna(0.5).clip(0.0, 1.0)
-
     e = _extract_raw_eret(df).fillna(0.0)
-
     if c_score:
         s = pd.to_numeric(df[c_score], errors="coerce").fillna(p * e)
     else:
         s = (p * e).astype(float)
-
     conf = pd.to_numeric(df[c_conf], errors="coerce") if c_conf else pd.Series([pd.NA] * len(df), index=df.index)
     dq = pd.to_numeric(df[c_dq], errors="coerce") if c_dq else pd.Series([pd.NA] * len(df), index=df.index)
     risk = df[c_risk].astype(str) if c_risk else pd.Series([""] * len(df), index=df.index)
@@ -419,6 +424,7 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
                 hit.append(d)
         except Exception:
             continue
+
     if not hit:
         return pd.DataFrame()
 
@@ -467,7 +473,6 @@ def _load_ehx_bundle(cfg: PremiumConfig) -> Tuple[Optional[dict], str]:
         feature_cols = obj.get("feature_cols")
         if model is None or not isinstance(feature_cols, (list, tuple)) or not feature_cols:
             return None, "ehx_model_missing_model_or_features"
-
         meta = {}
         mp = _ehx_meta_path(cfg)
         if mp.exists():
@@ -521,9 +526,24 @@ def _infer_conf_from_inputs(out: pd.DataFrame, eret_raw: pd.Series) -> Tuple[pd.
 
     amount_dev = (amount_z_5d - 1.0).abs().clip(0.0, 3.0)
     crowded_penalty = (close_pos_n - 0.70).clip(lower=0.0)
-    input_cols = pd.DataFrame({"eret_raw": eret_raw, "p_fill": p_fill, "ev": ev, "cost": cost, "risk_pen": risk_pen, "ret_5d": ret_5d, "vol_10d": vol_10d, "range_1d": range_1d})
+    input_cols = pd.DataFrame({
+        "eret_raw": eret_raw,
+        "p_fill": p_fill,
+        "ev": ev,
+        "cost": cost,
+        "risk_pen": risk_pen,
+        "ret_5d": ret_5d,
+        "vol_10d": vol_10d,
+        "range_1d": range_1d,
+    })
     completeness = input_cols.notna().mean(axis=1).astype(float)
-    stability = (1.0 - 0.45 * vol_10d.clip(lower=0.0, upper=0.25) - 0.30 * range_1d.clip(lower=0.0, upper=0.20) - 0.10 * amount_dev.clip(lower=0.0, upper=1.0) - 0.10 * crowded_penalty.clip(lower=0.0, upper=1.0)).clip(lower=0.0, upper=1.0)
+    stability = (
+        1.0
+        - 0.45 * vol_10d.clip(lower=0.0, upper=0.25)
+        - 0.30 * range_1d.clip(lower=0.0, upper=0.20)
+        - 0.10 * amount_dev.clip(lower=0.0, upper=1.0)
+        - 0.10 * crowded_penalty.clip(lower=0.0, upper=1.0)
+    ).clip(lower=0.0, upper=1.0)
     conf_score = (0.55 * completeness + 0.45 * stability).clip(lower=0.0, upper=1.0)
 
     def to_conf_label(x: float) -> str:
@@ -544,6 +564,7 @@ def _build_ehx_v1(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, D
 
     bundle, load_reason = _load_ehx_bundle(cfg)
     trace["ehx_load_reason"] = load_reason
+
     if bundle is not None:
         try:
             X_ehx = _build_ehx_feature_frame(out, bundle["feature_cols"])
@@ -561,7 +582,6 @@ def _build_ehx_v1(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, D
             out["eret_plus_conf"] = conf_label
             out["eret_plus_conf_score"] = conf_score
             out["eret_plus_src"] = "ehx:model_v1"
-
             trace.update({
                 "ehx_mode": "model_v1",
                 "ehx_reason": "ok",
@@ -633,7 +653,6 @@ def _build_mu_sigma(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.Series, pd
     e_raw = _extract_raw_eret(df)
     e_core = e_plus.where(e_plus.notna(), e_raw)
     mu_from_e = np.log1p(e_core.clip(lower=-0.99))
-
     z_prob = _zscore(df.get("f_prob", df.get("p_premium", pd.Series([np.nan] * len(df), index=df.index))))
     z_strength = _zscore(df.get("f_strength", pd.Series([np.nan] * len(df), index=df.index)))
     z_theme = _zscore(df.get("f_theme", pd.Series([np.nan] * len(df), index=df.index)))
@@ -646,7 +665,12 @@ def _build_mu_sigma(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.Series, pd
     range1 = pd.to_numeric(df.get("range_1d", pd.Series([np.nan] * len(df), index=df.index)), errors="coerce")
     az5 = pd.to_numeric(df.get("amount_z_5d", pd.Series([np.nan] * len(df), index=df.index)), errors="coerce")
     az_dev = (az5 - 1.0).abs()
-    sigma = base_sigma * (1.0 + 2.0 * vol10.fillna(0.0).clip(lower=0.0, upper=0.25) + 1.2 * range1.fillna(0.0).clip(lower=0.0, upper=0.20) + 0.6 * az_dev.fillna(0.0).clip(lower=0.0, upper=3.0))
+    sigma = base_sigma * (
+        1.0
+        + 2.0 * vol10.fillna(0.0).clip(lower=0.0, upper=0.25)
+        + 1.2 * range1.fillna(0.0).clip(lower=0.0, upper=0.20)
+        + 0.6 * az_dev.fillna(0.0).clip(lower=0.0, upper=3.0)
+    )
     sigma = sigma.clip(lower=1e-6, upper=0.5)
     return mu.astype(float), sigma.astype(float)
 
@@ -658,10 +682,104 @@ def _compute_quantile_returns(cfg: PremiumConfig, df: pd.DataFrame) -> pd.DataFr
     for q in qs:
         z = _norm_ppf(float(q))
         out[f"r_p{int(round(q * 100)):02d}"] = mu + sigma * z
+
     close_T = pd.to_numeric(out.get("close_T", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     for q in qs:
         key = f"r_p{int(round(q * 100)):02d}"
         out[f"close_T2_p{int(round(q * 100)):02d}"] = close_T * np.exp(pd.to_numeric(out[key], errors="coerce"))
+    return out
+
+
+# ========= 实盘执行层 =========
+
+def _fmt_price_value(x: object) -> str:
+    try:
+        v = float(x)
+    except Exception:
+        return ""
+    if not np.isfinite(v) or v <= 0:
+        return ""
+    if v >= 100:
+        return f"{v:.2f}"
+    return f"{v:.2f}"
+
+
+def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """基于 T 日收盘、T+2收益/价格区间/上涨概率，生成 T+1 买入与 T+2 卖出执行字段。"""
+    out = df.copy()
+
+    close_t = pd.to_numeric(out.get("close_T", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
+    eret_plus = pd.to_numeric(out.get("eret_plus_value", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
+    p_up = pd.to_numeric(out.get("p_premium", pd.Series([0.5] * len(out), index=out.index)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    conf_score = pd.to_numeric(out.get("eret_plus_conf_score", pd.Series([0.5] * len(out), index=out.index)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    p25 = pd.to_numeric(out.get("close_T2_p25", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
+    p50 = pd.to_numeric(out.get("close_T2_p50", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
+    p75 = pd.to_numeric(out.get("close_T2_p75", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
+
+    # 安全边际：收益越高、概率越高、置信度越高，可接受高开越多；弱票严格限价或放弃。
+    edge = eret_plus.fillna(0.0)
+    max_open_premium = (0.18 * edge + 0.035 * (p_up - 0.5) + 0.025 * (conf_score - 0.5)).clip(lower=-0.03, upper=0.08)
+    max_buy_px = close_t * (1.0 + max_open_premium)
+
+    methods = []
+    max_buy_labels = []
+    sell_plans = []
+
+    for idx in out.index:
+        ct = close_t.loc[idx]
+        ep = edge.loc[idx]
+        pu = p_up.loc[idx]
+        cf = conf_score.loc[idx]
+        mp = max_open_premium.loc[idx]
+        mb = max_buy_px.loc[idx]
+        q25 = p25.loc[idx]
+        q50 = p50.loc[idx]
+        q75 = p75.loc[idx]
+
+        if pd.isna(ct) or ct <= 0:
+            methods.append("只观察不追")
+            max_buy_labels.append("")
+            sell_plans.append("缺少T日收盘价，先不生成价格计划")
+            continue
+
+        if ep <= -0.005 or pu < 0.48:
+            methods.append("放弃")
+            max_buy_labels.append("不建议买入")
+        elif ep < 0.015 or pu < 0.55 or cf < 0.50:
+            methods.append("只观察不追")
+            max_buy_labels.append(f"≤{_fmt_price_value(min(mb, ct * 1.01))}")
+        elif ep < 0.035 or pu < 0.62 or cf < 0.65:
+            methods.append("限价竞价")
+            max_buy_labels.append(f"≤{_fmt_price_value(mb)}")
+        else:
+            methods.append("市价竞价")
+            if mp >= 0.05:
+                max_buy_labels.append(f"≤{_fmt_price_value(mb)}；高开>5%谨慎追")
+            else:
+                max_buy_labels.append(f"≤{_fmt_price_value(mb)}")
+
+        q25_s = _fmt_price_value(q25)
+        q50_s = _fmt_price_value(q50)
+        q75_s = _fmt_price_value(q75)
+        stop_px = _fmt_price_value(min(q25 if pd.notna(q25) and q25 > 0 else ct * 0.97, ct * 0.985))
+
+        if ep <= -0.005 or pu < 0.48:
+            sell_plans.append("未建议买入；若误买，弱于T日收盘价立即减仓")
+        elif q50_s and q75_s:
+            sell_plans.append(f"冲高至{q50_s}附近优先兑现；强势放量再看{q75_s}；弱于{stop_px}止损")
+        elif q50_s:
+            sell_plans.append(f"接近{q50_s}优先兑现；开盘不强则减仓；弱于{stop_px}止损")
+        else:
+            sell_plans.append(f"按盘中强弱分批卖；弱于{stop_px}止损")
+
+    out["T+1建议买入方式"] = pd.Series(methods, index=out.index, dtype="object")
+    out["T+1可接受买入价"] = pd.Series(max_buy_labels, index=out.index, dtype="object")
+    out["T+2卖出计划"] = pd.Series(sell_plans, index=out.index, dtype="object")
+
+    # 英文字段同步保留，方便后续程序化消费；中文字段用于报告展示。
+    out["t1_buy_method"] = out["T+1建议买入方式"]
+    out["t1_max_buy_price"] = out["T+1可接受买入价"]
+    out["t2_sell_plan"] = out["T+2卖出计划"]
     return out
 
 
@@ -701,7 +819,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         df0["name"] = pd.NA
 
     pack_status = detect_factor_packs(cfg, trade_date)
-
     r_t = ensure_daily_cached(cfg, trade_date)
     if not r_t.ok:
         pending_truth_T = True
@@ -767,19 +884,33 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         df["rank_r_p50"] = pd.to_numeric(df[mid_key], errors="coerce").rank(method="first", ascending=False).astype("Int64")
 
     df = _rebuild_rank_front(df)
+    df = _build_execution_fields(df)
+
     topn = int(cfg.top_n)
     df_top = df.head(topn).copy()
     df_full = df.copy()
 
     v_cols = [f"r_p{int(round(float(q) * 100)):02d}" for q in qs]
     v_cols += [f"close_T2_p{int(round(float(q) * 100)):02d}" for q in qs]
+
+    exec_cols = [
+        "T+1建议买入方式",
+        "T+1可接受买入价",
+        "T+2卖出计划",
+        "t1_buy_method",
+        "t1_max_buy_price",
+        "t2_sell_plan",
+    ]
+
     out_cols = [
         "rank", "trade_date", "target_date", "ts_code", "name", "close_T",
+        *exec_cols,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf", "eret_plus_conf_score", "eret_plus_src",
         *v_cols,
         "rank_eret_plus", "rank_r_p50", "p_premium", "e_premium", "score_ev", "risk_flags", "confidence", "data_quality",
         "dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason",
     ]
+
     for c in out_cols:
         if c not in df_top.columns:
             df_top[c] = pd.NA
@@ -788,16 +919,21 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     out_top = df_top[out_cols].copy()
     out_full = df_full[out_cols].copy()
+
     p_top = _write_csv(cfg.out_top30_csv(trade_date), out_top)
     p_full = _write_csv(cfg.out_full_csv(trade_date), out_full)
 
     verify_pending = True
     verify_reason = "pending"
     verify_cols = [
-        "rank", "trade_date", "target_date", "ts_code", "name", "close_T", "close_T2_actual", "r_actual", mid_key,
+        "rank", "trade_date", "target_date", "ts_code", "name", "close_T",
+        "T+1建议买入方式", "T+1可接受买入价", "T+2卖出计划",
+        "t1_buy_method", "t1_max_buy_price", "t2_sell_plan",
+        "close_T2_actual", "r_actual", mid_key,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
         "in_p10", "in_p50", "err_r_p50", "err_close_p50", "actual_ret", "raw_abs_err", "plus_abs_err", "improve_flag", "hit_up",
     ]
+
     df_verify = out_top[["rank", "trade_date", "target_date", "ts_code", "name"]].copy()
     for c in verify_cols:
         if c not in df_verify.columns:
@@ -817,6 +953,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         q75 = min(qs, key=lambda x: abs(float(x) - 0.75))
         lo50 = f"r_p{int(round(float(q25) * 100)):02d}"
         hi50 = f"r_p{int(round(float(q75) * 100)):02d}"
+
         tmp["in_p10"] = (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo10), errors="coerce")) & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi10), errors="coerce"))
         tmp["in_p50"] = (pd.to_numeric(tmp["r_actual"], errors="coerce") >= pd.to_numeric(tmp.get(lo50), errors="coerce")) & (pd.to_numeric(tmp["r_actual"], errors="coerce") <= pd.to_numeric(tmp.get(hi50), errors="coerce"))
         tmp["err_r_p50"] = pd.to_numeric(tmp["r_actual"], errors="coerce") - pd.to_numeric(tmp.get(mid_key), errors="coerce")
@@ -827,6 +964,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         tmp["plus_abs_err"] = (pd.to_numeric(tmp["actual_ret"], errors="coerce") - pd.to_numeric(tmp.get("eret_plus_value"), errors="coerce")).abs()
         tmp["improve_flag"] = np.where(pd.to_numeric(tmp["plus_abs_err"], errors="coerce") < pd.to_numeric(tmp["raw_abs_err"], errors="coerce"), 1, 0)
         tmp["hit_up"] = tmp["actual_ret"].apply(lambda x: "是" if pd.notna(x) and float(x) > 0 else ("否" if pd.notna(x) else ""))
+
         keep = [c for c in verify_cols if c in tmp.columns]
         df_verify = tmp[keep].copy()
         verify_pending = False
@@ -886,6 +1024,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "verify_reason": verify_reason,
             "eret_plus_src": eret_plus_src,
             **ehx_trace,
+            "exec_fields": "T+1建议买入方式|T+1可接受买入价|T+2卖出计划",
             "out_top30": str(p_top),
             "out_full": str(p_full),
             "out_verify": str(p_verify),
