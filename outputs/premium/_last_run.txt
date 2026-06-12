@@ -1,8 +1,8 @@
 trade_date: 20260609
-run_id: gh_27422160658
-commit_sha: e58ab342fc4d
+run_id: gh_27423468492
+commit_sha: 0f6c5fea3a22
 model_version: premium_v2
-created_at_utc: 2026-06-12T14:30:26Z
+created_at_utc: 2026-06-12T14:53:20Z
 ok: True
 buy_date: 20260610
 target_date: 20260611
@@ -18,10 +18,15 @@ ehx_reason: ok
 ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
 ehx_load_reason: ok
 ehx_feature_n: 16
-ehx_meta_n_samples: 1492
-ehx_meta_delta_mae: 0.05355180932891919
-ehx_meta_delta_rmse: 0.07338989741037677
+ehx_meta_n_samples: 1491
+ehx_meta_delta_mae: 0.05370653856916301
+ehx_meta_delta_rmse: 0.07347386198688691
+limitup_model_src: rule_fallback:model_missing
+limitup_model_mode: rule_fallback
+limitup_model_reason: limitup_model_missing
+limitup_model_path: 
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T+1建议买入方式
+limitup_model_fields: t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260609.csv
 out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260609.csv
 out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260609.csv
