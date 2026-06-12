@@ -2,16 +2,18 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Markdown 报告渲染（V3.2：人类操作表头版）
+Premium 子系统 — Markdown 报告渲染（V3.3：隔夜实盘 D/T/T+1 口径版）
 
 A) ✅ 新口径（Premium V3 主线，锁死）：
 - 报告包含两张表：预测表 + 验证表（输出为 Markdown + 内嵌 HTML table）。
 - 不依赖 PremiumA.html / PremiumB.html（彻底去模板化）。
-- 若 T+2 行情未到：pending（不得报错卡死），验证表显示 PENDING 原因。
+- 若 T+1 行情未到：pending（不得报错卡死），验证表显示 PENDING 原因。
 - 验证表顺序必须与预测表 Top30 完全一致（由上游保证）。
-- 报告主表面向人类操作，不再展示工程字段长表头。
+- 报告主表面向人类隔夜实盘操作，不再展示工程字段长表头。
+- 时间轴统一为：
+  D：分析基准日；T：下一交易日集合竞价买入日；T+1：买入后的预测到期/盘中卖出日。
 - 预测表与验证表统一展示：
-  操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度
+  操作排名｜代码｜名称｜D日收盘价｜T+1建议买入方式｜T+1可接受买入价｜T+1预期收益｜T+1预期价格区间｜T+1上涨率｜模型置信度｜T+1卖出计划
 
 入口函数：
 - render_premium_report_md(...)
@@ -22,8 +24,8 @@ B) ♻️ 旧口径（PredEV/TopK/RankIC）：
 
 from __future__ import annotations
 
-from typing import List, Sequence, Tuple
-import re
+from datetime import datetime, timedelta
+from typing import Iterable, List, Sequence
 
 import numpy as np
 import pandas as pd
@@ -32,7 +34,7 @@ from .config import PremiumConfig
 
 
 # =========================
-# 新口径（V3 报告：去模板化 + 内嵌 HTML）
+# 基础格式化
 # =========================
 
 def _fmt_prob(x: object, digits: int = 2) -> str:
@@ -46,9 +48,7 @@ def _fmt_prob(x: object, digits: int = 2) -> str:
 
 
 def _fmt_pct_ratio(x: object, digits: int = 2) -> str:
-    """
-    x 是 ratio（例如 0.0911 表示 +9.11%）
-    """
+    """x 是 ratio（例如 0.0911 表示 +9.11%）。"""
     try:
         v = float(x)
         if np.isnan(v):
@@ -122,9 +122,17 @@ def _str_val(row: pd.Series, col: str, default: str = "") -> str:
     if col not in row.index:
         return default
     s = str(row.get(col, default)).strip()
-    if s.lower() in ("nan", "none", "<na>"):
+    if s.lower() in ("nan", "none", "<na>", "nat", ""):
         return default
     return s
+
+
+def _first_existing_str(row: pd.Series, cols: Sequence[str], default: str = "-") -> str:
+    for c in cols:
+        v = _str_val(row, c, "")
+        if v:
+            return v
+    return default
 
 
 def _select_cols_exist(df: pd.DataFrame, cols: Sequence[str]) -> List[str]:
@@ -149,6 +157,86 @@ def _df_to_html_table(df: pd.DataFrame) -> str:
 
 
 # =========================
+# A股交易日口径显示
+# =========================
+
+def _clean_yyyymmdd(x: object) -> str:
+    s = str(x or "").strip()
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if len(digits) >= 8:
+        return digits[:8]
+    return ""
+
+
+def _parse_yyyymmdd(x: object) -> datetime | None:
+    s = _clean_yyyymmdd(x)
+    if len(s) != 8:
+        return None
+    try:
+        return datetime.strptime(s, "%Y%m%d")
+    except Exception:
+        return None
+
+
+def _fmt_yyyymmdd(dt: datetime | None) -> str:
+    return dt.strftime("%Y%m%d") if dt is not None else "-"
+
+
+def _next_weekday_yyyymmdd(base_date: str) -> str:
+    """
+    兜底函数：只有在上游没有提供买入日字段时使用。
+    注意：真正严格的 A 股交易日应由上游交易日历给出；本函数只做周末兜底。
+    """
+    dt = _parse_yyyymmdd(base_date)
+    if dt is None:
+        return "-"
+    dt = dt + timedelta(days=1)
+    while dt.weekday() >= 5:
+        dt = dt + timedelta(days=1)
+    return _fmt_yyyymmdd(dt)
+
+
+def _extract_date_from_frames(frames: Iterable[pd.DataFrame], cols: Sequence[str]) -> str:
+    for df in frames:
+        if df is None or df.empty:
+            continue
+        for c in cols:
+            if c not in df.columns:
+                continue
+            vals = df[c].dropna().astype(str).map(_clean_yyyymmdd)
+            vals = vals[vals.str.len() == 8]
+            if not vals.empty:
+                return str(vals.iloc[0])
+    return ""
+
+
+def _resolve_buy_date(trade_date: str, target_date: str, df_top30: pd.DataFrame, df_verify: pd.DataFrame) -> str:
+    """
+    T = 竞价买入日。
+    优先使用上游/CSV 已经按中国 A 股交易日历算好的字段；没有时，才用工作日兜底。
+    """
+    frames = [df_top30, df_verify]
+    buy_date = _extract_date_from_frames(
+        frames,
+        [
+            "buy_date",
+            "t_buy_date",
+            "T_date",
+            "t_date",
+            "next_trade_date",
+            "next_td",
+            "trade_date_T",
+        ],
+    )
+    if buy_date:
+        return buy_date
+
+    # 如果上游只传入 D 和 target_date，且 target_date 是 D 后第二个交易日，
+    # report_md 无法凭空知道节假日，只能做周末兜底；严格交易日历建议在 predict.py 输出 buy_date。
+    return _next_weekday_yyyymmdd(trade_date)
+
+
+# =========================
 # 人类操作表：字段生成
 # =========================
 
@@ -156,22 +244,30 @@ _OPER_COLS = [
     "操作排名",
     "代码",
     "名称",
-    "收盘价",
-    "T+2预期收益",
-    "预期价格区间",
-    "T+2上涨概率",
+    "D日收盘价",
+    "T+1建议买入方式",
+    "T+1可接受买入价",
+    "T+1预期收益",
+    "T+1预期价格区间",
+    "T+1上涨率",
     "模型置信度",
+    "T+1卖出计划",
 ]
 
 
 def _expected_range(row: pd.Series) -> str:
     """
-    预期价格区间：优先展示 p25~p75，中位 p50。
-    若分位列缺失，返回 '-'。
+    T+1 预期价格区间：底层仍兼容旧列 close_T2_p25/p50/p75。
+    这里的 T+1 指：D 日分析、T 日竞价买入后的下一个卖出交易日。
     """
-    p25 = _num(row, "close_T2_p25")
-    p50 = _num(row, "close_T2_p50")
-    p75 = _num(row, "close_T2_p75")
+    p25 = _num(row, "close_T1_p25")
+    p50 = _num(row, "close_T1_p50")
+    p75 = _num(row, "close_T1_p75")
+
+    if not (np.isfinite(p25) or np.isfinite(p50) or np.isfinite(p75)):
+        p25 = _num(row, "close_T2_p25")
+        p50 = _num(row, "close_T2_p50")
+        p75 = _num(row, "close_T2_p75")
 
     if np.isfinite(p25) and np.isfinite(p75) and np.isfinite(p50):
         return f"{p25:.2f} ~ {p75:.2f}，中位 {p50:.2f}"
@@ -202,26 +298,62 @@ def _op_rank(row: pd.Series) -> object:
     return "-"
 
 
+def _t1_buy_method(row: pd.Series) -> str:
+    return _first_existing_str(row, ["T+1建议买入方式", "t1_buy_method", "buy_method", "t_buy_method"])
+
+
+def _t1_max_buy_price(row: pd.Series) -> str:
+    s = _first_existing_str(row, ["T+1可接受买入价", "t1_max_buy_price", "max_buy_price", "t_buy_price"], "")
+    if s:
+        if s.startswith("≤") or s.startswith("<") or "放弃" in s or "观察" in s:
+            return s
+        try:
+            return f"≤{float(s):.2f}"
+        except Exception:
+            return s
+    return "-"
+
+
+def _t1_sell_plan(row: pd.Series) -> str:
+    return _first_existing_str(row, ["T+1卖出计划", "T+2卖出计划", "t1_sell_plan", "t2_sell_plan", "sell_plan"])
+
+
+def _up_rate_text(row: pd.Series) -> str:
+    """
+    当前 p_premium 旧字段在历史报告中与 E_ret_plus/价格分布存在口径不一致。
+    展示层先改名为“上涨率”，底层仍兼容 p_premium；后续建议在 predict.py 中修正计算口径。
+    """
+    for c in ("t1_up_rate", "T+1上涨率", "p_premium", "pred_up_prob"):
+        if c in row.index:
+            return _fmt_prob(_num(row, c), 2)
+    return "-"
+
+
 def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFrame:
     """
-    预测表与验证表统一使用人类操作表头：
-    操作排名｜代码｜名称｜收盘价｜T+2预期收益｜预期价格区间｜T+2上涨概率｜模型置信度
+    预测表与验证表统一使用人类隔夜实盘口径表头：
+    操作排名｜代码｜名称｜D日收盘价｜T+1建议买入方式｜T+1可接受买入价｜T+1预期收益｜T+1预期价格区间｜T+1上涨率｜模型置信度｜T+1卖出计划
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=_OPER_COLS)
 
     rows = []
     for _, row in df.iterrows():
-        rows.append({
-            "操作排名": _op_rank(row),
-            "代码": _str_val(row, "ts_code", "-"),
-            "名称": _str_val(row, "name", "-"),
-            "收盘价": _fmt_price(_num(row, "close_T"), 2),
-            "T+2预期收益": _fmt_pct_ratio(_num(row, "eret_plus_value"), 2),
-            "预期价格区间": _expected_range(row),
-            "T+2上涨概率": _fmt_prob(_num(row, "p_premium"), 2),
-            "模型置信度": _confidence_text(row),
-        })
+        rows.append(
+            {
+                "操作排名": _op_rank(row),
+                "代码": _str_val(row, "ts_code", "-"),
+                "名称": _str_val(row, "name", "-"),
+                "D日收盘价": _fmt_price(_num(row, "close_T"), 2),
+                "T+1建议买入方式": _t1_buy_method(row),
+                "T+1可接受买入价": _t1_max_buy_price(row),
+                "T+1预期收益": _fmt_pct_ratio(_num(row, "eret_plus_value"), 2),
+                "T+1预期价格区间": _expected_range(row),
+                "T+1上涨率": _up_rate_text(row),
+                "模型置信度": _confidence_text(row),
+                "T+1卖出计划": _t1_sell_plan(row),
+            }
+        )
 
     return pd.DataFrame(rows, columns=_OPER_COLS)
 
@@ -273,22 +405,28 @@ def render_premium_report_md(
     """
     ✅ 新口径：生成 Premium V3 报告（Markdown + 内嵌 HTML table）
     - 不输出 <style>（GitHub 会过滤/转义）。
-    - 预测表与验证表统一为人类操作表头。
+    - 预测表与验证表统一为人类隔夜实盘表头。
     - 工程字段不再进入主表，避免实盘阅读负担。
     """
     cfg = PremiumConfig.load()
 
-    trade_date = str(trade_date or "").strip()
-    target_date = str(target_date or trade_date).strip()
+    trade_date = _clean_yyyymmdd(trade_date) or str(trade_date or "").strip()
+    target_date = _clean_yyyymmdd(target_date) or str(target_date or trade_date).strip()
+    buy_date = _resolve_buy_date(trade_date, target_date, df_top30, df_verify)
 
     parts: List[str] = []
-    parts.append("# Premium（溢价预测）V3（E_ret_plus / Close[T+2] 分布预测）")
+    parts.append("# Premium（隔夜实盘溢价预测）V3（E_ret_plus / D→T+1 分布预测）")
     parts.append("")
-    parts.append("> 注：T 为本次预测的**基准交易日**（使用 Close[T]）；T+2 为**预测到期交易日**（预测 Close[T+2] 的分布）。")
+    parts.append(
+        "> 注：D 为本次预测的**分析基准日**（使用 Close[D]）；"
+        "T 为下一交易日**集合竞价买入日**；"
+        "T+1 为买入后的**预测到期/盘中择时卖出日**。"
+    )
     parts.append("")
-    parts.append(f"- 预测日（T）：**{trade_date}**")
-    parts.append(f"- 预测到期日（T+2）：**{target_date}**")
-    parts.append(f"- 周期：**2 个交易日（T→T+2）**")
+    parts.append(f"- 预测日（D）：**{trade_date}**")
+    parts.append(f"- 竞价买入日（T）：**{buy_date}**")
+    parts.append(f"- 预测到期日（T+1）：**{target_date}**")
+    parts.append("- 周期：**2 个交易日（D→T+1）**")
     parts.append(f"- 生成时间：{gen_ts}")
     parts.append(f"- 模型版本：**{getattr(cfg, 'model_version', '-') }**")
     parts.append("")
@@ -307,7 +445,7 @@ def render_premium_report_md(
     if verify_pending:
         parts.append(f"**状态：PENDING**（原因：{verify_reason}）")
         parts.append("")
-        parts.append("说明：这属于正常状态（T+2 真值未到）。系统仍会持续输出预测表并落盘缓存。")
+        parts.append("说明：这属于正常状态（T+1 真值未到）。系统仍会持续输出预测表并落盘缓存。")
         parts.append("")
         verify_show = _format_verify_table(df_verify) if df_verify is not None else pd.DataFrame()
         if verify_show is not None and not verify_show.empty:
@@ -343,15 +481,25 @@ def render_premium_report_md(
         _append_ehx_summary(parts, df_verify)
 
     parts.append("")
-    parts.append("## 字段说明（V3 人类操作口径）")
+    parts.append("## 字段说明（V3 人类隔夜实盘口径）")
     parts.append("")
     parts.append("- 操作排名：优先使用 E_ret_plus 排名。")
-    parts.append("- T+2预期收益：EHX 残差增强后的 E_ret_plus。")
-    parts.append("- 预期价格区间：使用 T+2 价格分位 p25 ~ p75，并展示 p50 中位价。")
-    parts.append("- T+2上涨概率：预测到期日 T+2 收盘上涨概率。")
+    parts.append("- D日收盘价：分析基准日 D 的收盘价。")
+    parts.append("- T+1建议买入方式：面向 T 日集合竞价的买入方式建议，来源于上游执行字段。")
+    parts.append("- T+1可接受买入价：T 日集合竞价/开盘阶段可接受的买入上限，来源于上游执行字段。")
+    parts.append("- T+1预期收益：EHX 残差增强后的 E_ret_plus，展示口径为 D→T+1。")
+    parts.append("- T+1预期价格区间：使用预测到期日价格分位 p25 ~ p75，并展示 p50 中位价。")
+    parts.append("- T+1上涨率：沿用上游 p_premium 字段的上涨倾向率；当前不再称为严格概率，后续建议在 predict.py 中统一口径。")
     parts.append("- 模型置信度：EHX 置信度标签及置信分。")
+    parts.append("- T+1卖出计划：面向预测到期日盘中择时卖出的执行计划，来源于上游执行字段。")
     parts.append("")
-    parts.append("> 注：E_ret原始值、EHX修正值、EHX来源、Raw/Plus误差等工程审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。")
+    parts.append(
+        "> 注：E_ret原始值、EHX修正值、EHX来源、Raw/Plus误差等工程审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。"
+    )
+    if buy_date == _next_weekday_yyyymmdd(trade_date):
+        parts.append(
+            "> 注：竞价买入日优先读取上游交易日历字段；若 CSV 暂无 buy_date/next_trade_date，则本报告用工作日兜底。严格 A 股节假日口径建议由 predict.py 输出 buy_date。"
+        )
     parts.append("")
 
     return "\n".join(parts)
