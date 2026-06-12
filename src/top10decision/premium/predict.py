@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Predict（V3.3：实盘执行层增强版）
+Premium 子系统 — Predict（V3.5：涨停接力评分排序版）
 
 当前锁死契约（Premium Contract V3）：
 
@@ -20,7 +20,7 @@ Premium 子系统 — Predict（V3.3：实盘执行层增强版）
 - 修复 _write_last_run 前 eret_plus_src 兜底 Series 长度不匹配问题。
 - 修复 _zscore 全空输入触发 RuntimeWarning 的问题。
 - 新增实盘执行字段，先进入 premium_top30 / premium_full / premium_verify CSV：
-  T+1建议买入方式、T+1可接受买入价、T+2卖出计划。
+  buy_date、T日涨停概率、T日涨停强度、T+1延续上涨率、涨停接力评分、T+1建议买入方式。
 
 主输入：
 
@@ -202,6 +202,21 @@ def _norm_ppf(q: float) -> float:
         s = r * r
         x = (((((a[0] * s + a[1]) * s + a[2]) * s + a[3]) * s + a[4]) * s + a[5]) * r / (((((b[0] * s + b[1]) * s + b[2]) * s + b[3]) * s + b[4]) * s + 1)
     return float(x)
+
+
+
+
+def _norm_cdf(x: object) -> float:
+    """标准正态分布 CDF，避免引入 scipy 依赖。"""
+    import math
+
+    try:
+        v = float(x)
+    except Exception:
+        return float("nan")
+    if not math.isfinite(v):
+        return float("nan")
+    return float(0.5 * (1.0 + math.erf(v / math.sqrt(2.0))))
 
 
 def _first_existing_col(df: pd.DataFrame, *names: str) -> Optional[str]:
@@ -679,6 +694,13 @@ def _compute_quantile_returns(cfg: PremiumConfig, df: pd.DataFrame) -> pd.DataFr
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     mu, sigma = _build_mu_sigma(cfg, df)
     out = df.copy()
+
+    # T+1上涨率使用同一套 D→T+1 分布口径计算：P(r_target > 0)。
+    # 不再直接沿用 p_premium，避免出现“预期收益和价格区间明显上涨，但上涨率很低”的口径冲突。
+    z_up = (mu / sigma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+    out["t1_up_rate"] = z_up.map(_norm_cdf).clip(lower=0.0, upper=1.0).fillna(0.5)
+    out["T+1上涨率"] = out["t1_up_rate"]
+
     for q in qs:
         z = _norm_ppf(float(q))
         out[f"r_p{int(round(q * 100)):02d}"] = mu + sigma * z
@@ -686,6 +708,7 @@ def _compute_quantile_returns(cfg: PremiumConfig, df: pd.DataFrame) -> pd.DataFr
     close_T = pd.to_numeric(out.get("close_T", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     for q in qs:
         key = f"r_p{int(round(q * 100)):02d}"
+        # 底层保留 close_T2_* 旧列名兼容历史代码；报告层展示为 T+1 预测到期价格。
         out[f"close_T2_p{int(round(q * 100)):02d}"] = close_T * np.exp(pd.to_numeric(out[key], errors="coerce"))
     return out
 
@@ -704,14 +727,132 @@ def _fmt_price_value(x: object) -> str:
     return f"{v:.2f}"
 
 
+
+
+def _rank_pct(s: pd.Series, neutral: float = 0.50) -> pd.Series:
+    """把任意连续因子转成 0~1 横截面分位分。全空/常数时回到 neutral。"""
+    x = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    if len(x) == 0 or x.notna().sum() == 0:
+        return pd.Series([neutral] * len(x), index=x.index, dtype="float64")
+    if x.nunique(dropna=True) <= 1:
+        return pd.Series([neutral] * len(x), index=x.index, dtype="float64")
+    return x.rank(method="average", pct=True).fillna(neutral).clip(0.0, 1.0).astype(float)
+
+
+def _sigmoid_series(s: pd.Series) -> pd.Series:
+    """稳定 sigmoid，输出 0~1。"""
+    x = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-8.0, 8.0)
+    return (1.0 / (1.0 + np.exp(-x))).clip(0.0, 1.0)
+
+
+def _build_limitup_continuation_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Premium 涨停接力增强层 V1。
+
+    目标：从“D 日分析 -> T 日竞价买入 -> T+1 卖出”的实盘路径出发，
+    优先筛出 T 日具备涨停攻击性、且 T+1 仍有延续上涨能力的标的。
+
+    说明：第一版为规则评分层，不改变 EHX 模型训练，不回头改 Decision。
+    """
+    out = df.copy()
+    idx = out.index
+
+    eret_plus = pd.to_numeric(out.get("eret_plus_value", pd.Series([0.0] * len(out), index=idx)), errors="coerce").fillna(0.0)
+    t1_up = pd.to_numeric(out.get("t1_up_rate", out.get("p_premium", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    old_prob = pd.to_numeric(out.get("p_premium", pd.Series([0.5] * len(out), index=idx)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    conf_score = pd.to_numeric(out.get("eret_plus_conf_score", pd.Series([0.5] * len(out), index=idx)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+
+    f_strength = _num_series(out, "f_strength", "strength", "momentum_score", default=np.nan)
+    f_theme = _num_series(out, "f_theme", "theme_score", default=np.nan)
+    ret_5d = _num_series(out, "ret_5d", "return_5d", default=np.nan)
+    pct_chg = _num_series(out, "pct_chg", "pct_change", "涨跌幅", default=np.nan)
+    amount_z_5d = _num_series(out, "amount_z_5d", "amount_z", default=np.nan)
+    close_pos = _num_series(out, "close_pos_n", "close_pos_10d", "close_pos_20d", default=np.nan)
+    p_fill = _num_series(out, "p_fill_pred", "p_fill_pred_final", "p_fill", "dec_p_fill", default=np.nan).fillna(0.5).clip(0.0, 1.0)
+    risk_pen = _num_series(out, "risk_penalty_total", "risk_penalty", "risk_score", default=np.nan).fillna(0.0)
+    cost_total = _num_series(out, "cost_total", "cost", "trade_cost", default=np.nan).fillna(0.0)
+    vol_10d = _num_series(out, "vol_10d", default=np.nan).fillna(0.0)
+    range_1d = _num_series(out, "range_1d", "amplitude", default=np.nan).fillna(0.0)
+
+    eret_rank = _rank_pct(eret_plus)
+    strength_rank = _rank_pct(f_strength)
+    theme_rank = _rank_pct(f_theme)
+    ret_rank = _rank_pct(ret_5d)
+    pct_rank = _rank_pct(pct_chg)
+    amount_rank = _rank_pct(amount_z_5d)
+    close_pos_n = pd.to_numeric(close_pos, errors="coerce").fillna(_rank_pct(close_pos).median() if len(close_pos) else 0.5).clip(0.0, 1.0)
+
+    # T 日涨停概率：第一版为 0~1 规则概率分，偏重 T 日攻击性，不把 E_ret_plus 单独当核心。
+    attack_logit = (
+        -1.10
+        + 1.25 * _zscore(old_prob).fillna(0.0).clip(-3, 3)
+        + 1.15 * _zscore(eret_plus).fillna(0.0).clip(-3, 3)
+        + 0.85 * _zscore(f_strength).fillna(0.0).clip(-3, 3)
+        + 0.45 * _zscore(ret_5d).fillna(0.0).clip(-3, 3)
+        + 0.35 * _zscore(amount_z_5d).fillna(0.0).clip(-3, 3)
+        + 0.25 * (close_pos_n - 0.50)
+        - 0.65 * pd.to_numeric(vol_10d, errors="coerce").fillna(0.0).clip(0.0, 0.35)
+        - 0.45 * pd.to_numeric(range_1d, errors="coerce").fillna(0.0).clip(0.0, 0.30)
+        - 0.80 * pd.to_numeric(risk_pen, errors="coerce").fillna(0.0).clip(0.0, 1.0)
+    )
+    t_limitup_prob = _sigmoid_series(attack_logit).clip(0.01, 0.99)
+
+    # T 日涨停强度：0~100，衡量“能不能封得强、攻击质量够不够”。
+    t_limitup_strength_ratio = (
+        0.30 * t_limitup_prob
+        + 0.22 * strength_rank
+        + 0.14 * theme_rank
+        + 0.14 * ret_rank
+        + 0.10 * amount_rank
+        + 0.10 * close_pos_n
+    ).clip(0.0, 1.0)
+
+    # T+1 延续上涨率：T 日若走强/涨停后，次日仍继续给溢价的倾向。
+    continuation_core = (
+        0.52 * t1_up
+        + 0.18 * eret_rank
+        + 0.12 * strength_rank
+        + 0.10 * theme_rank
+        + 0.08 * conf_score
+    )
+    crowding_penalty = ((close_pos_n - 0.82).clip(lower=0.0) * 0.25 + pd.to_numeric(range_1d, errors="coerce").fillna(0.0).clip(0.0, 0.30) * 0.35)
+    t1_continue_up_rate = (continuation_core - crowding_penalty).clip(0.01, 0.99)
+
+    # 执行安全分：用于压制高成本、低成交概率、风险惩罚大的标的。
+    exec_safety = (
+        0.55 * p_fill
+        + 0.25 * conf_score
+        + 0.20 * (1.0 - _rank_pct(cost_total, neutral=0.35))
+        - 0.25 * pd.to_numeric(risk_pen, errors="coerce").fillna(0.0).clip(0.0, 1.0)
+    ).clip(0.0, 1.0)
+
+    score_ratio = (
+        0.40 * t_limitup_prob
+        + 0.25 * t_limitup_strength_ratio
+        + 0.25 * t1_continue_up_rate
+        + 0.10 * exec_safety
+    ).clip(0.0, 1.0)
+
+    out["t_limitup_prob"] = t_limitup_prob.round(6)
+    out["T日涨停概率"] = out["t_limitup_prob"]
+    out["t_limitup_strength"] = (t_limitup_strength_ratio * 100.0).round(4)
+    out["T日涨停强度"] = out["t_limitup_strength"]
+    out["t1_continue_up_rate"] = t1_continue_up_rate.round(6)
+    out["T+1延续上涨率"] = out["t1_continue_up_rate"]
+    out["limitup_continuation_score"] = (score_ratio * 100.0).round(4)
+    out["涨停接力评分"] = out["limitup_continuation_score"]
+    return out
+
 def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
-    """基于 T 日收盘、T+2收益/价格区间/上涨概率，生成 T+1 买入与 T+2 卖出执行字段。"""
+    """基于 D 日收盘、D→T+1收益/价格区间/上涨率，生成 T 日买入与 T+1 卖出执行字段。"""
     out = df.copy()
 
     close_t = pd.to_numeric(out.get("close_T", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     eret_plus = pd.to_numeric(out.get("eret_plus_value", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
-    p_up = pd.to_numeric(out.get("p_premium", pd.Series([0.5] * len(out), index=out.index)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    p_up = pd.to_numeric(out.get("t1_continue_up_rate", out.get("t1_up_rate", out.get("p_premium", pd.Series([0.5] * len(out), index=out.index)))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
     conf_score = pd.to_numeric(out.get("eret_plus_conf_score", pd.Series([0.5] * len(out), index=out.index)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    limitup_prob = pd.to_numeric(out.get("t_limitup_prob", pd.Series([0.5] * len(out), index=out.index)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    continuation_score = pd.to_numeric(out.get("limitup_continuation_score", pd.Series([50.0] * len(out), index=out.index)), errors="coerce").fillna(50.0).clip(0.0, 100.0)
     p25 = pd.to_numeric(out.get("close_T2_p25", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     p50 = pd.to_numeric(out.get("close_T2_p50", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     p75 = pd.to_numeric(out.get("close_T2_p75", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
@@ -730,6 +871,8 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
         ep = edge.loc[idx]
         pu = p_up.loc[idx]
         cf = conf_score.loc[idx]
+        lp = limitup_prob.loc[idx]
+        cs = continuation_score.loc[idx]
         mp = max_open_premium.loc[idx]
         mb = max_buy_px.loc[idx]
         q25 = p25.loc[idx]
@@ -742,13 +885,13 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
             sell_plans.append("缺少T日收盘价，先不生成价格计划")
             continue
 
-        if ep <= -0.005 or pu < 0.48:
+        if ep <= -0.005 or pu < 0.48 or lp < 0.35 or cs < 42:
             methods.append("放弃")
             max_buy_labels.append("不建议买入")
-        elif ep < 0.015 or pu < 0.55 or cf < 0.50:
+        elif ep < 0.015 or pu < 0.56 or lp < 0.48 or cs < 55 or cf < 0.50:
             methods.append("只观察不追")
             max_buy_labels.append(f"≤{_fmt_price_value(min(mb, ct * 1.01))}")
-        elif ep < 0.035 or pu < 0.62 or cf < 0.65:
+        elif ep < 0.035 or pu < 0.64 or lp < 0.60 or cs < 68 or cf < 0.62:
             methods.append("限价竞价")
             max_buy_labels.append(f"≤{_fmt_price_value(mb)}")
         else:
@@ -774,12 +917,15 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
 
     out["T+1建议买入方式"] = pd.Series(methods, index=out.index, dtype="object")
     out["T+1可接受买入价"] = pd.Series(max_buy_labels, index=out.index, dtype="object")
-    out["T+2卖出计划"] = pd.Series(sell_plans, index=out.index, dtype="object")
+    out["T+1卖出计划"] = pd.Series(sell_plans, index=out.index, dtype="object")
 
     # 英文字段同步保留，方便后续程序化消费；中文字段用于报告展示。
     out["t1_buy_method"] = out["T+1建议买入方式"]
     out["t1_max_buy_price"] = out["T+1可接受买入价"]
-    out["t2_sell_plan"] = out["T+2卖出计划"]
+    out["t1_sell_plan"] = out["T+1卖出计划"]
+    # 旧别名保留，避免 report_md / 历史链路未同步时断裂。
+    out["T+2卖出计划"] = out["T+1卖出计划"]
+    out["t2_sell_plan"] = out["T+1卖出计划"]
     return out
 
 
@@ -829,9 +975,10 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         pending_truth_reason_T = "ok"
         d0 = load_daily(cfg, trade_date)[["ts_code", "close"]].rename(columns={"close": "close_T"})
 
+    buy_date, buy_reason = _advance_trade_days(cfg, trade_date, 1)
     target_date, td_reason = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
-    pending = (td_reason != "trade_cal_ok") or pending_truth_T
-    pending_reason = td_reason
+    pending = (td_reason != "trade_cal_ok") or (buy_reason != "trade_cal_ok") or pending_truth_T
+    pending_reason = f"buy_date:{buy_reason};target_date:{td_reason}"
 
     dec = _load_decision_merge(cfg, trade_date)
     df = df0.copy()
@@ -854,6 +1001,8 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df["risk_flags"] = risk
 
     df = df.merge(d0, on="ts_code", how="left")
+    df["base_date"] = trade_date
+    df["buy_date"] = buy_date
     df["target_date"] = target_date
 
     feats = build_features_by_packs(cfg, trade_date, df0, pack_status.packs_used)
@@ -862,6 +1011,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     df, ehx_trace = _build_ehx_v1(cfg, df)
     df = _compute_quantile_returns(cfg, df)
+    df = _build_limitup_continuation_fields(df)
 
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     q_mid = min(qs, key=lambda x: abs(float(x) - 0.50))
@@ -869,21 +1019,30 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     df["rank_eret_plus"] = pd.NA
     df["rank_r_p50"] = pd.NA
+    df["rank_limitup_continuation"] = pd.NA
+
     if "eret_plus_value" in df.columns and pd.to_numeric(df["eret_plus_value"], errors="coerce").notna().any():
+        df["rank_eret_plus"] = pd.to_numeric(df["eret_plus_value"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+    if mid_key in df.columns and pd.to_numeric(df[mid_key], errors="coerce").notna().any():
+        df["rank_r_p50"] = pd.to_numeric(df[mid_key], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+    if "limitup_continuation_score" in df.columns and pd.to_numeric(df["limitup_continuation_score"], errors="coerce").notna().any():
+        df["rank_limitup_continuation"] = pd.to_numeric(df["limitup_continuation_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+        df = df.sort_values(
+            by=["limitup_continuation_score", "t_limitup_prob", "t1_continue_up_rate", "t_limitup_strength"],
+            ascending=[False, False, False, False],
+            na_position="last",
+        ).reset_index(drop=True)
+    elif "eret_plus_value" in df.columns and pd.to_numeric(df["eret_plus_value"], errors="coerce").notna().any():
         df = df.sort_values(by=["eret_plus_value"], ascending=False, na_position="last").reset_index(drop=True)
-        df["rank_eret_plus"] = np.arange(1, len(df) + 1)
     elif mid_key in df.columns and pd.to_numeric(df[mid_key], errors="coerce").notna().any():
         df = df.sort_values(by=[mid_key], ascending=False, na_position="last").reset_index(drop=True)
-        df["rank_r_p50"] = np.arange(1, len(df) + 1)
     elif "p_premium" in df.columns and pd.to_numeric(df["p_premium"], errors="coerce").notna().any():
         df = df.sort_values(by=["p_premium"], ascending=False, na_position="last").reset_index(drop=True)
     else:
         df = df.reset_index(drop=True)
 
-    if pd.isna(df["rank_r_p50"]).all() and mid_key in df.columns and pd.to_numeric(df[mid_key], errors="coerce").notna().any():
-        df["rank_r_p50"] = pd.to_numeric(df[mid_key], errors="coerce").rank(method="first", ascending=False).astype("Int64")
-
     df = _rebuild_rank_front(df)
+    # 操作排名 = 涨停接力评分降序后的名次；保留 rank_limitup_continuation 作为审计字段。
     df = _build_execution_fields(df)
 
     topn = int(cfg.top_n)
@@ -896,18 +1055,23 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     exec_cols = [
         "T+1建议买入方式",
         "T+1可接受买入价",
+        "T+1卖出计划",
         "T+2卖出计划",
         "t1_buy_method",
         "t1_max_buy_price",
+        "t1_sell_plan",
         "t2_sell_plan",
     ]
 
     out_cols = [
-        "rank", "trade_date", "target_date", "ts_code", "name", "close_T",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "close_T",
         *exec_cols,
+        "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
+        "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf", "eret_plus_conf_score", "eret_plus_src",
         *v_cols,
-        "rank_eret_plus", "rank_r_p50", "p_premium", "e_premium", "score_ev", "risk_flags", "confidence", "data_quality",
+        "t1_up_rate", "T+1上涨率",
+        "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50", "p_premium", "e_premium", "score_ev", "risk_flags", "confidence", "data_quality",
         "dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason",
     ]
 
@@ -926,18 +1090,22 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     verify_pending = True
     verify_reason = "pending"
     verify_cols = [
-        "rank", "trade_date", "target_date", "ts_code", "name", "close_T",
-        "T+1建议买入方式", "T+1可接受买入价", "T+2卖出计划",
-        "t1_buy_method", "t1_max_buy_price", "t2_sell_plan",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "close_T",
+        "T+1建议买入方式", "T+1可接受买入价", "T+1卖出计划", "T+2卖出计划",
+        "t1_buy_method", "t1_max_buy_price", "t1_sell_plan", "t2_sell_plan",
+        "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
+        "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
+        "t1_up_rate", "T+1上涨率",
         "close_T2_actual", "r_actual", mid_key,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
         "in_p10", "in_p50", "err_r_p50", "err_close_p50", "actual_ret", "raw_abs_err", "plus_abs_err", "improve_flag", "hit_up",
     ]
 
-    df_verify = out_top[["rank", "trade_date", "target_date", "ts_code", "name"]].copy()
+    df_verify = out_top[[c for c in verify_cols if c in out_top.columns]].copy()
     for c in verify_cols:
         if c not in df_verify.columns:
             df_verify[c] = pd.NA
+    df_verify = df_verify[verify_cols].copy()
 
     r_t2 = ensure_daily_cached(cfg, target_date)
     if (not pending_truth_T) and r_t2.ok:
@@ -1015,6 +1183,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         trade_date,
         {
             "ok": True,
+            "buy_date": buy_date,
             "target_date": target_date,
             "pending": bool(pending or verify_pending),
             "pending_reason": pending_reason,
@@ -1024,7 +1193,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "verify_reason": verify_reason,
             "eret_plus_src": eret_plus_src,
             **ehx_trace,
-            "exec_fields": "T+1建议买入方式|T+1可接受买入价|T+2卖出计划",
+            "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T+1建议买入方式",
             "out_top30": str(p_top),
             "out_full": str(p_full),
             "out_verify": str(p_verify),
