@@ -1,8 +1,8 @@
 trade_date: 20260609
-run_id: gh_27419470016
-commit_sha: 163546894f08
+run_id: gh_27422160658
+commit_sha: e58ab342fc4d
 model_version: premium_v2
-created_at_utc: 2026-06-12T13:42:40Z
+created_at_utc: 2026-06-12T14:30:26Z
 ok: True
 buy_date: 20260610
 target_date: 20260611
@@ -18,9 +18,9 @@ ehx_reason: ok
 ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
 ehx_load_reason: ok
 ehx_feature_n: 16
-ehx_meta_n_samples: 1491
-ehx_meta_delta_mae: 0.053556014567729834
-ehx_meta_delta_rmse: 0.07335835690485164
+ehx_meta_n_samples: 1492
+ehx_meta_delta_mae: 0.05355180932891919
+ehx_meta_delta_rmse: 0.07338989741037677
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T+1建议买入方式
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260609.csv
 out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260609.csv

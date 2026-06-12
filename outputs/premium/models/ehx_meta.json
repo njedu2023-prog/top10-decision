@@ -22,12 +22,12 @@
     "in_p10",
     "in_p50"
   ],
-  "n_samples": 1491,
+  "n_samples": 1492,
   "n_days": 50,
-  "delta_mae": 0.053556014567729834,
-  "delta_rmse": 0.07335835690485164,
-  "plus_improve_rate": 0.6505700871898055,
-  "created_at_utc": "2026-06-12T13:42:37Z",
-  "commit_sha": "163546894f08",
-  "run_id": "gh_27419470016"
+  "delta_mae": 0.05355180932891919,
+  "delta_rmse": 0.07338989741037677,
+  "plus_improve_rate": 0.6554959785522788,
+  "created_at_utc": "2026-06-12T14:30:24Z",
+  "commit_sha": "e58ab342fc4d",
+  "run_id": "gh_27422160658"
 }
