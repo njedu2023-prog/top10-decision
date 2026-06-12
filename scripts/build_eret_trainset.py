@@ -16,23 +16,10 @@ build_eret_trainset.py
 - data/market/eret_trainset_{trade_date}.csv
 - data/market/eret_trainset_{trade_date}.meta.json
 
-当前只做“样本拼装层”：
-- 统一主键 trade_date + ts_code
-- 清理重复列 / 冲突列
-- 审计 coverage / prior 来源 / 标签分布
-- 只保留 E_ret 可训练样本（不是全候选池）
-
-不负责：
-- 模型训练
-- 模型推理
-- run_v2.py 接入
-
-锚定原则：
-1. E_ret 训练样本仍以 pred_source 候选池为对象集合，不得反向扩池
-2. 时间成熟口径不另起一套，依赖上游 build_eret_truth.py 已消费的 sample_maturity
-3. E_ret 训练目标服务 EV，因此当前保留“条件收益”口径：
-   只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本
-4. 买入价口径沿用 fill_truth / entry_price_proxy_t1，不在此文件重复发明
+本版修复重点：
+- 强制保护 Feature Store V2 历史滚动字段，避免进入 E_ret 训练集后继续全空。
+- 合并后对 ret_2d/ret_5d/ret_10d、volatility、atr、downside_vol、max_drawdown、tail_risk、bid_ask/spread 做专项审计。
+- 若 trainset 中字段为空但 features_base 中有值，自动用 features_base 的非空字段回填。
 """
 
 from __future__ import annotations
@@ -44,6 +31,26 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
+
+
+# =========================================================
+# Feature Store V2 关键字段
+# =========================================================
+
+FS_V2_HISTORY_FEATURES: List[str] = [
+    "ret_2d",
+    "ret_5d",
+    "ret_10d",
+    "volatility_5d",
+    "volatility_10d",
+    "volatility_20d",
+    "atr",
+    "downside_vol",
+    "max_drawdown_20d",
+    "tail_risk_score",
+    "bid_ask_proxy",
+    "spread_proxy",
+]
 
 
 # =========================================================
@@ -128,6 +135,12 @@ def add_missing_indicator(df: pd.DataFrame, cols: Sequence[str]) -> pd.DataFrame
     return out
 
 
+def nonnull_ratio(df: pd.DataFrame, col: str) -> float:
+    if col not in df.columns or len(df) == 0:
+        return 0.0
+    return round(float(df[col].notna().mean()), 6)
+
+
 # =========================================================
 # 路径
 # =========================================================
@@ -173,11 +186,7 @@ class PriorSource:
 
 
 def candidate_prior_paths(root: Path, trade_date: str) -> List[Tuple[str, Path]]:
-    """
-    尽量兼容旧链路与新链路。
-    优先 trade_date 归档，其次 latest。
-    """
-    cands: List[Tuple[str, Path]] = [
+    return [
         ("dated_pred_source_archive", root / "data" / "pred" / "archive" / f"pred_source_{trade_date}.csv"),
         ("dated_pred_source", root / "data" / "pred" / f"pred_source_{trade_date}.csv"),
         ("latest_pred_source", root / "data" / "pred" / "pred_source_latest.csv"),
@@ -190,7 +199,6 @@ def candidate_prior_paths(root: Path, trade_date: str) -> List[Tuple[str, Path]]
         ("dated_decision_rank", root / "outputs" / "decision" / f"pred_decision_{trade_date}.csv"),
         ("latest_decision_rank", root / "outputs" / "decision" / "pred_decision_latest.csv"),
     ]
-    return cands
 
 
 def pick_prior_source(root: Path, trade_date: str) -> PriorSource:
@@ -205,7 +213,6 @@ def pick_prior_source(root: Path, trade_date: str) -> PriorSource:
         df = ensure_trade_date(df, trade_date)
         df = dedupe_by_key(df, ["trade_date", "ts_code"])
         return PriorSource(path=path, mode=mode, df=df)
-
     return PriorSource(path=None, mode="missing", df=pd.DataFrame(columns=["trade_date", "ts_code"]))
 
 
@@ -313,7 +320,7 @@ def choose_prior_columns(df: pd.DataFrame) -> pd.DataFrame:
     protected = {"trade_date", "ts_code", "name", "rank"}
     final_rename: Dict[str, str] = {}
     for c in out.columns:
-        if c in protected or c.startswith("prior_"):
+        if c in protected or str(c).startswith("prior_"):
             continue
         final_rename[c] = f"prior_{c}"
     out = out.rename(columns=final_rename)
@@ -338,6 +345,79 @@ def choose_truth_columns(df: pd.DataFrame) -> pd.DataFrame:
     ]
     keep = [c for c in keep if c in df.columns]
     return df[keep].copy()
+
+
+# =========================================================
+# Feature Store V2 字段保护与审计
+# =========================================================
+
+def fs_v2_nonnull_report(df: pd.DataFrame) -> Dict[str, float]:
+    return {c: nonnull_ratio(df, c) for c in FS_V2_HISTORY_FEATURES}
+
+
+def restore_fs_v2_features_from_base(train: pd.DataFrame, base_df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    """
+    强制让 E_ret trainset 吃到 features_base 的 V2 历史滚动字段。
+
+    设计原则：
+    - 不修改样本集合，只按 trade_date + ts_code 补字段。
+    - 若 train 中同名字段已存在且有值，保留。
+    - 若 train 中同名字段不存在或全空，而 base 中有值，用 base 回填。
+    - 若 train/base 都没有值，只记录审计，不伪造数据。
+    """
+    out = train.copy()
+    audit: Dict[str, object] = {
+        "protected_cols": list(FS_V2_HISTORY_FEATURES),
+        "base_nonnull_rate": fs_v2_nonnull_report(base_df),
+        "before_nonnull_rate": fs_v2_nonnull_report(out),
+        "restored_cols": [],
+        "missing_in_base": [],
+        "still_all_null_after_restore": [],
+    }
+
+    key_cols = ["trade_date", "ts_code"]
+    if not all(c in base_df.columns for c in key_cols) or not all(c in out.columns for c in key_cols):
+        audit["key_error"] = "train/base 缺少 trade_date 或 ts_code，无法执行 FS V2 回填。"
+        return out, audit
+
+    available = [c for c in FS_V2_HISTORY_FEATURES if c in base_df.columns]
+    audit["missing_in_base"] = [c for c in FS_V2_HISTORY_FEATURES if c not in base_df.columns]
+
+    if not available:
+        audit["after_nonnull_rate"] = fs_v2_nonnull_report(out)
+        return out, audit
+
+    fs_part = base_df[key_cols + available].copy()
+    fs_part = dedupe_by_key(fs_part, key_cols)
+
+    for c in available:
+        src = f"{c}__fs_v2_base"
+        if src in out.columns:
+            out = out.drop(columns=[src])
+        out = out.merge(fs_part[key_cols + [c]].rename(columns={c: src}), on=key_cols, how="left")
+
+        before = nonnull_ratio(out, c)
+        src_rate = nonnull_ratio(out, src)
+
+        if c not in out.columns:
+            out[c] = out[src]
+            restored = src_rate > 0
+        elif before <= 0 and src_rate > 0:
+            out[c] = out[src]
+            restored = True
+        else:
+            out[c] = out[c].combine_first(out[src])
+            restored = nonnull_ratio(out, c) > before
+
+        if restored:
+            audit["restored_cols"].append(c)
+
+        out = out.drop(columns=[src])
+
+    after_report = fs_v2_nonnull_report(out)
+    audit["after_nonnull_rate"] = after_report
+    audit["still_all_null_after_restore"] = [c for c, rate in after_report.items() if rate <= 0]
+    return out, audit
 
 
 # =========================================================
@@ -393,6 +473,9 @@ def build_trainset(
         suffixes=("", "__dup_base"),
     )
 
+    # 二次保险：合并后立刻从 features_base 强制恢复 FS V2 字段。
+    train, fs_v2_audit = restore_fs_v2_features_from_base(train, base_df)
+
     limit_add_cols = [c for c in limit_df.columns if c not in {"trade_date", "ts_code"} and c not in train.columns]
     limit_overlap_cols = [c for c in limit_df.columns if c not in {"trade_date", "ts_code"} and c in train.columns]
 
@@ -420,9 +503,16 @@ def build_trainset(
             suffixes=("", "__dup_prior"),
         )
 
-    dup_cols = [c for c in train.columns if c.endswith("__dup_base") or c.endswith("__dup_limit") or c.endswith("__dup_prior")]
+    dup_cols = [
+        c for c in train.columns
+        if c.endswith("__dup_base") or c.endswith("__dup_limit") or c.endswith("__dup_prior")
+    ]
     if dup_cols:
         train = train.drop(columns=dup_cols)
+
+    # 三次保险：limit/prior 合并后再次恢复，防止后续同名覆盖。
+    train, fs_v2_audit_final = restore_fs_v2_features_from_base(train, base_df)
+    fs_v2_audit["final_after_all_merges"] = fs_v2_audit_final
 
     train = dedupe_by_key(train, ["trade_date", "ts_code"])
 
@@ -448,7 +538,10 @@ def build_trainset(
     label_q = train["eret_label_quality"].astype(str) if "eret_label_quality" in train.columns else pd.Series([], dtype=str)
     prior_core_cols = [c for c in ["prior_prob_prior", "prior_strength_score", "prior_theme_boost", "rank"] if c in train.columns]
     if prior_core_cols:
-        train["is_cold_start"] = (label_q.str.contains("weak|missing", case=False, na=False) | train[prior_core_cols].isna().all(axis=1)).astype(int)
+        train["is_cold_start"] = (
+            label_q.str.contains("weak|missing", case=False, na=False) |
+            train[prior_core_cols].isna().all(axis=1)
+        ).astype(int)
     else:
         train["is_cold_start"] = 1
 
@@ -475,7 +568,7 @@ def build_trainset(
             "open_times_t1", "seal_amount_t1", "limit_type_t1", "is_suspended_t1",
             "prior_prob_prior", "prior_strength_score", "prior_theme_boost",
             "pct_chg_t2", "amount_t2",
-        ]
+        ] + FS_V2_HISTORY_FEATURES
         train = add_missing_indicator(train, [c for c in important_missing_cols if c in train.columns])
 
     front = [
@@ -504,6 +597,7 @@ def build_trainset(
         truth_df=truth_df,
         prior_df=prior_df,
         split_cols=split_feature_columns(base_df, limit_df, truth_df, prior_df),
+        fs_v2_audit=fs_v2_audit,
     )
     return train, meta
 
@@ -511,12 +605,6 @@ def build_trainset(
 # =========================================================
 # meta
 # =========================================================
-
-def nonnull_ratio(df: pd.DataFrame, col: str) -> float:
-    if col not in df.columns or len(df) == 0:
-        return 0.0
-    return round(float(df[col].notna().mean()), 6)
-
 
 def build_meta(
     trade_date: str,
@@ -528,6 +616,7 @@ def build_meta(
     truth_df: pd.DataFrame,
     prior_df: pd.DataFrame,
     split_cols: Dict[str, List[str]],
+    fs_v2_audit: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     coverage_cols = [
         "realized_ret_t1_to_t2", "premium_ret_t1_to_t2",
@@ -535,7 +624,7 @@ def build_meta(
         "y_fill", "fill_label_quality",
         "open_t1", "open_times_t1", "seal_amount_t1",
         "prior_prob_prior", "prior_strength_score", "prior_theme_boost", "rank",
-    ]
+    ] + FS_V2_HISTORY_FEATURES
     coverage = {c: nonnull_ratio(train_df, c) for c in coverage_cols if c in train_df.columns}
 
     y_fill_dist = {str(k): int(v) for k, v in train_df["y_fill"].value_counts(dropna=False).to_dict().items()} if "y_fill" in train_df.columns else {}
@@ -554,6 +643,9 @@ def build_meta(
             "max": round(float(s.max()), 6) if s.notna().any() else None,
             "positive_rate": round(float((s > 0).mean()), 6) if s.notna().any() else None,
         }
+
+    fs_v2_trainset_nonnull = fs_v2_nonnull_report(train_df)
+    fs_v2_base_nonnull = fs_v2_nonnull_report(base_df)
 
     meta: Dict[str, object] = {
         "trade_date": trade_date,
@@ -576,6 +668,14 @@ def build_meta(
             "prior": int(len(prior_df)),
         },
         "coverage": coverage,
+        "fs_v2_history_feature_audit": {
+            "base_nonnull_rate": fs_v2_base_nonnull,
+            "trainset_nonnull_rate": fs_v2_trainset_nonnull,
+            "all_core_fields_present_in_trainset": all(c in train_df.columns for c in FS_V2_HISTORY_FEATURES),
+            "all_core_fields_present_in_base": all(c in base_df.columns for c in FS_V2_HISTORY_FEATURES),
+            "still_all_null_in_trainset": [c for c, rate in fs_v2_trainset_nonnull.items() if rate <= 0],
+            "restore_detail": fs_v2_audit or {},
+        },
         "y_fill_distribution": y_fill_dist,
         "eret_quality_distribution": eret_quality_dist,
         "fill_quality_distribution": fill_quality_dist,
@@ -596,6 +696,7 @@ def build_meta(
             "当前 realized_ret_t1_to_t2 / premium_ret_t1_to_t2 口径来自 build_eret_truth.py。",
             "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_eret.py 再做。",
             "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。",
+            "FS V2 历史滚动字段已做强制保护与专项审计，防止 E_ret 训练窗口继续吃空特征。",
         ],
     }
     return meta
@@ -635,6 +736,7 @@ def main() -> int:
     print(f"[build_eret_trainset] out={paths.out_csv}")
     print(f"[build_eret_trainset] meta={paths.out_meta}")
     print(f"[build_eret_trainset] prior_mode={meta['source']['prior_mode']}")
+    print(f"[build_eret_trainset] fs_v2_trainset_nonnull={meta['fs_v2_history_feature_audit']['trainset_nonnull_rate']}")
     return 0
 
 
