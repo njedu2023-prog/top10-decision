@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Predict（V3.5：涨停接力评分排序版）
+Premium 子系统 — Predict（V3.6：涨停接力专业概率引擎接线版）
 
 当前锁死契约（Premium Contract V3）：
 
@@ -21,6 +21,8 @@ Premium 子系统 — Predict（V3.5：涨停接力评分排序版）
 - 修复 _zscore 全空输入触发 RuntimeWarning 的问题。
 - 新增实盘执行字段，先进入 premium_top30 / premium_full / premium_verify CSV：
   buy_date、T日涨停概率、T日涨停强度、T+1延续上涨率、涨停接力评分、T+1建议买入方式。
+- V3.6 新增：接入 limitup_probability_engine.py 专业概率模型。
+  有模型时输出模型概率并参与排序；无模型/加载失败时自动回退 V3.5 规则评分，不阻断 Premium 主流程。
 
 主输入：
 
@@ -58,6 +60,11 @@ from .factor_builders import build_features_by_packs
 from .factor_registry import detect_factor_packs
 from .market_truth import ensure_daily_cached, load_daily
 from .report_md import render_premium_report_md
+
+try:
+    from .limitup_probability_engine import load_bundle as _load_limitup_probability_bundle
+except Exception:  # pragma: no cover
+    _load_limitup_probability_bundle = None  # type: ignore
 
 _TD_RE = re.compile(r"^\d{8}$")
 
@@ -202,8 +209,6 @@ def _norm_ppf(q: float) -> float:
         s = r * r
         x = (((((a[0] * s + a[1]) * s + a[2]) * s + a[3]) * s + a[4]) * s + a[5]) * r / (((((b[0] * s + b[1]) * s + b[2]) * s + b[3]) * s + b[4]) * s + 1)
     return float(x)
-
-
 
 
 def _norm_cdf(x: object) -> float:
@@ -727,8 +732,6 @@ def _fmt_price_value(x: object) -> str:
     return f"{v:.2f}"
 
 
-
-
 def _rank_pct(s: pd.Series, neutral: float = 0.50) -> pd.Series:
     """把任意连续因子转成 0~1 横截面分位分。全空/常数时回到 neutral。"""
     x = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan)
@@ -752,7 +755,7 @@ def _build_limitup_continuation_fields(df: pd.DataFrame) -> pd.DataFrame:
     目标：从“D 日分析 -> T 日竞价买入 -> T+1 卖出”的实盘路径出发，
     优先筛出 T 日具备涨停攻击性、且 T+1 仍有延续上涨能力的标的。
 
-    说明：第一版为规则评分层，不改变 EHX 模型训练，不回头改 Decision。
+    说明：规则评分层保留为模型缺失/加载失败时的安全兜底。
     """
     out = df.copy()
     idx = out.index
@@ -778,11 +781,9 @@ def _build_limitup_continuation_fields(df: pd.DataFrame) -> pd.DataFrame:
     strength_rank = _rank_pct(f_strength)
     theme_rank = _rank_pct(f_theme)
     ret_rank = _rank_pct(ret_5d)
-    pct_rank = _rank_pct(pct_chg)
     amount_rank = _rank_pct(amount_z_5d)
     close_pos_n = pd.to_numeric(close_pos, errors="coerce").fillna(_rank_pct(close_pos).median() if len(close_pos) else 0.5).clip(0.0, 1.0)
 
-    # T 日涨停概率：第一版为 0~1 规则概率分，偏重 T 日攻击性，不把 E_ret_plus 单独当核心。
     attack_logit = (
         -1.10
         + 1.25 * _zscore(old_prob).fillna(0.0).clip(-3, 3)
@@ -797,7 +798,6 @@ def _build_limitup_continuation_fields(df: pd.DataFrame) -> pd.DataFrame:
     )
     t_limitup_prob = _sigmoid_series(attack_logit).clip(0.01, 0.99)
 
-    # T 日涨停强度：0~100，衡量“能不能封得强、攻击质量够不够”。
     t_limitup_strength_ratio = (
         0.30 * t_limitup_prob
         + 0.22 * strength_rank
@@ -807,7 +807,6 @@ def _build_limitup_continuation_fields(df: pd.DataFrame) -> pd.DataFrame:
         + 0.10 * close_pos_n
     ).clip(0.0, 1.0)
 
-    # T+1 延续上涨率：T 日若走强/涨停后，次日仍继续给溢价的倾向。
     continuation_core = (
         0.52 * t1_up
         + 0.18 * eret_rank
@@ -818,7 +817,6 @@ def _build_limitup_continuation_fields(df: pd.DataFrame) -> pd.DataFrame:
     crowding_penalty = ((close_pos_n - 0.82).clip(lower=0.0) * 0.25 + pd.to_numeric(range_1d, errors="coerce").fillna(0.0).clip(0.0, 0.30) * 0.35)
     t1_continue_up_rate = (continuation_core - crowding_penalty).clip(0.01, 0.99)
 
-    # 执行安全分：用于压制高成本、低成交概率、风险惩罚大的标的。
     exec_safety = (
         0.55 * p_fill
         + 0.25 * conf_score
@@ -833,15 +831,125 @@ def _build_limitup_continuation_fields(df: pd.DataFrame) -> pd.DataFrame:
         + 0.10 * exec_safety
     ).clip(0.0, 1.0)
 
-    out["t_limitup_prob"] = t_limitup_prob.round(6)
+    out["t_limitup_prob_rule"] = t_limitup_prob.round(6)
+    out["t_limitup_strength_rule"] = (t_limitup_strength_ratio * 100.0).round(4)
+    out["t1_continue_up_rate_rule"] = t1_continue_up_rate.round(6)
+    out["limitup_continuation_score_rule"] = (score_ratio * 100.0).round(4)
+
+    out["t_limitup_prob"] = out["t_limitup_prob_rule"]
     out["T日涨停概率"] = out["t_limitup_prob"]
-    out["t_limitup_strength"] = (t_limitup_strength_ratio * 100.0).round(4)
+    out["t_limitup_strength"] = out["t_limitup_strength_rule"]
     out["T日涨停强度"] = out["t_limitup_strength"]
-    out["t1_continue_up_rate"] = t1_continue_up_rate.round(6)
+    out["t1_continue_up_rate"] = out["t1_continue_up_rate_rule"]
     out["T+1延续上涨率"] = out["t1_continue_up_rate"]
-    out["limitup_continuation_score"] = (score_ratio * 100.0).round(4)
+    out["limitup_continuation_score"] = out["limitup_continuation_score_rule"]
     out["涨停接力评分"] = out["limitup_continuation_score"]
     return out
+
+
+# ========= V3.6 涨停接力专业概率引擎 =========
+
+def _limitup_model_candidate_paths(cfg: PremiumConfig) -> List[Path]:
+    """兼容多个可能的模型落盘名，避免工作流命名差异导致模型接不上。"""
+    root = cfg.out_root()
+    return [
+        root / "models" / "limitup_probability_engine.joblib",
+        root / "models" / "limitup_model.joblib",
+        root / "models" / "limitup_probability_model.joblib",
+        root / "limitup_probability_engine.joblib",
+    ]
+
+
+def _find_limitup_model_path(cfg: PremiumConfig) -> Tuple[Optional[Path], str]:
+    for p in _limitup_model_candidate_paths(cfg):
+        if p.exists():
+            return p, "ok"
+    return None, "limitup_model_missing"
+
+
+def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    """
+    接入 limitup_probability_engine.py。
+
+    安全原则：
+    1）模型存在且可预测：模型概率参与最终排序字段；
+    2）模型缺失或失败：保留 V3.5 规则评分，不阻断主流程；
+    3）所有模型字段落盘，便于验收“是否真正用起来”。
+    """
+    out = df.copy()
+    model_path, path_reason = _find_limitup_model_path(cfg)
+    trace: Dict[str, object] = {
+        "limitup_model_mode": "rule_fallback",
+        "limitup_model_reason": path_reason,
+        "limitup_model_path": str(model_path) if model_path is not None else "",
+    }
+
+    model_cols = [
+        "t_limitup_prob_model",
+        "t_touch_limitup_prob_model",
+        "t1_up_prob_model",
+        "t1_high_profit_prob_model",
+        "t1_close_ret_pred",
+        "t1_high_ret_pred",
+        "limitup_model_score",
+    ]
+    for c in model_cols:
+        if c not in out.columns:
+            out[c] = pd.NA
+
+    if _load_limitup_probability_bundle is None:
+        out["limitup_model_src"] = "rule_fallback:import_failed"
+        trace["limitup_model_reason"] = "limitup_engine_import_failed"
+        return out, trace
+
+    if model_path is None:
+        out["limitup_model_src"] = "rule_fallback:model_missing"
+        return out, trace
+
+    try:
+        bundle = _load_limitup_probability_bundle(model_path)
+        pred = bundle.predict(out)
+        for c in model_cols:
+            if c in pred.columns:
+                out[c] = pred[c]
+
+        rule_t_limitup = pd.to_numeric(out.get("t_limitup_prob_rule", out.get("t_limitup_prob")), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+        rule_t_strength = pd.to_numeric(out.get("t_limitup_strength_rule", out.get("t_limitup_strength")), errors="coerce").fillna(50.0).clip(0.0, 100.0)
+        rule_t1_continue = pd.to_numeric(out.get("t1_continue_up_rate_rule", out.get("t1_continue_up_rate")), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+        rule_score = pd.to_numeric(out.get("limitup_continuation_score_rule", out.get("limitup_continuation_score")), errors="coerce").fillna(50.0).clip(0.0, 100.0)
+
+        m_t_limitup = pd.to_numeric(out["t_limitup_prob_model"], errors="coerce").fillna(rule_t_limitup).clip(0.0, 1.0)
+        m_touch = pd.to_numeric(out["t_touch_limitup_prob_model"], errors="coerce").fillna(m_t_limitup).clip(0.0, 1.0)
+        m_t1_up = pd.to_numeric(out["t1_up_prob_model"], errors="coerce").fillna(rule_t1_continue).clip(0.0, 1.0)
+        m_high_profit = pd.to_numeric(out["t1_high_profit_prob_model"], errors="coerce").fillna(m_t1_up).clip(0.0, 1.0)
+        m_score = pd.to_numeric(out["limitup_model_score"], errors="coerce").fillna(
+            0.35 * m_t_limitup + 0.25 * m_touch + 0.25 * m_t1_up + 0.15 * m_high_profit
+        ).clip(0.0, 1.0)
+
+        # 最终生产字段：模型为主、规则为辅，避免模型早期样本不足时突然漂移。
+        out["t_limitup_prob"] = (0.70 * m_t_limitup + 0.30 * rule_t_limitup).clip(0.01, 0.99).round(6)
+        out["T日涨停概率"] = out["t_limitup_prob"]
+        out["t_limitup_strength"] = (0.60 * (100.0 * m_touch) + 0.40 * rule_t_strength).clip(0.0, 100.0).round(4)
+        out["T日涨停强度"] = out["t_limitup_strength"]
+        out["t1_continue_up_rate"] = (0.70 * m_t1_up + 0.30 * rule_t1_continue).clip(0.01, 0.99).round(6)
+        out["T+1延续上涨率"] = out["t1_continue_up_rate"]
+        out["limitup_continuation_score"] = (0.70 * (100.0 * m_score) + 0.30 * rule_score).clip(0.0, 100.0).round(4)
+        out["涨停接力评分"] = out["limitup_continuation_score"]
+        out["limitup_model_src"] = "limitup_probability_engine:model_v1"
+
+        trace.update({
+            "limitup_model_mode": "model_v1_blend_rule",
+            "limitup_model_reason": "ok",
+            "limitup_model_feature_n": len(getattr(bundle, "feature_cols", []) or []),
+            "limitup_model_train_end_date": getattr(bundle, "train_end_date", ""),
+            "limitup_model_valid_start_date": getattr(bundle, "valid_start_date", ""),
+        })
+        return out, trace
+    except Exception as e:
+        out["limitup_model_src"] = f"rule_fallback:predict_error:{type(e).__name__}"
+        trace["limitup_model_reason"] = f"limitup_model_predict_error:{type(e).__name__}"
+        return out, trace
+
 
 def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
     """基于 D 日收盘、D→T+1收益/价格区间/上涨率，生成 T 日买入与 T+1 卖出执行字段。"""
@@ -857,7 +965,6 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
     p50 = pd.to_numeric(out.get("close_T2_p50", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     p75 = pd.to_numeric(out.get("close_T2_p75", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
 
-    # 安全边际：收益越高、概率越高、置信度越高，可接受高开越多；弱票严格限价或放弃。
     edge = eret_plus.fillna(0.0)
     max_open_premium = (0.18 * edge + 0.035 * (p_up - 0.5) + 0.025 * (conf_score - 0.5)).clip(lower=-0.03, upper=0.08)
     max_buy_px = close_t * (1.0 + max_open_premium)
@@ -919,11 +1026,9 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
     out["T+1可接受买入价"] = pd.Series(max_buy_labels, index=out.index, dtype="object")
     out["T+1卖出计划"] = pd.Series(sell_plans, index=out.index, dtype="object")
 
-    # 英文字段同步保留，方便后续程序化消费；中文字段用于报告展示。
     out["t1_buy_method"] = out["T+1建议买入方式"]
     out["t1_max_buy_price"] = out["T+1可接受买入价"]
     out["t1_sell_plan"] = out["T+1卖出计划"]
-    # 旧别名保留，避免 report_md / 历史链路未同步时断裂。
     out["T+2卖出计划"] = out["T+1卖出计划"]
     out["t2_sell_plan"] = out["T+1卖出计划"]
     return out
@@ -1012,6 +1117,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df, ehx_trace = _build_ehx_v1(cfg, df)
     df = _compute_quantile_returns(cfg, df)
     df = _build_limitup_continuation_fields(df)
+    df, limitup_trace = _apply_limitup_probability_engine(cfg, df)
 
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     q_mid = min(qs, key=lambda x: abs(float(x) - 0.50))
@@ -1042,7 +1148,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         df = df.reset_index(drop=True)
 
     df = _rebuild_rank_front(df)
-    # 操作排名 = 涨停接力评分降序后的名次；保留 rank_limitup_continuation 作为审计字段。
     df = _build_execution_fields(df)
 
     topn = int(cfg.top_n)
@@ -1063,11 +1168,18 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t2_sell_plan",
     ]
 
+    limitup_model_cols = [
+        "t_limitup_prob_rule", "t_limitup_strength_rule", "t1_continue_up_rate_rule", "limitup_continuation_score_rule",
+        "t_limitup_prob_model", "t_touch_limitup_prob_model", "t1_up_prob_model", "t1_high_profit_prob_model",
+        "t1_close_ret_pred", "t1_high_ret_pred", "limitup_model_score", "limitup_model_src",
+    ]
+
     out_cols = [
         "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "close_T",
         *exec_cols,
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
+        *limitup_model_cols,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf", "eret_plus_conf_score", "eret_plus_src",
         *v_cols,
         "t1_up_rate", "T+1上涨率",
@@ -1095,6 +1207,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t1_buy_method", "t1_max_buy_price", "t1_sell_plan", "t2_sell_plan",
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
+        *limitup_model_cols,
         "t1_up_rate", "T+1上涨率",
         "close_T2_actual", "r_actual", mid_key,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
@@ -1178,6 +1291,11 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     else:
         eret_plus_src = "ehx_unknown"
 
+    if len(df) > 0 and "limitup_model_src" in df.columns and df["limitup_model_src"].notna().any():
+        limitup_model_src = str(df["limitup_model_src"].dropna().iloc[0])
+    else:
+        limitup_model_src = "rule_fallback:unknown"
+
     _write_last_run(
         cfg,
         trade_date,
@@ -1193,7 +1311,10 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "verify_reason": verify_reason,
             "eret_plus_src": eret_plus_src,
             **ehx_trace,
+            "limitup_model_src": limitup_model_src,
+            **limitup_trace,
             "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T+1建议买入方式",
+            "limitup_model_fields": "t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score",
             "out_top30": str(p_top),
             "out_full": str(p_full),
             "out_verify": str(p_verify),
