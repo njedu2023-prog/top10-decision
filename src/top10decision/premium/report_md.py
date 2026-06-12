@@ -2,24 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """
-Premium 子系统 — Markdown 报告渲染（V3.3：隔夜实盘 D/T/T+1 口径版）
+Premium 子系统 — Markdown 报告渲染（V3.5：涨停接力实盘表头版）
 
-A) ✅ 新口径（Premium V3 主线，锁死）：
-- 报告包含两张表：预测表 + 验证表（输出为 Markdown + 内嵌 HTML table）。
-- 不依赖 PremiumA.html / PremiumB.html（彻底去模板化）。
-- 若 T+1 行情未到：pending（不得报错卡死），验证表显示 PENDING 原因。
-- 验证表顺序必须与预测表 Top30 完全一致（由上游保证）。
-- 报告主表面向人类隔夜实盘操作，不再展示工程字段长表头。
-- 时间轴统一为：
-  D：分析基准日；T：下一交易日集合竞价买入日；T+1：买入后的预测到期/盘中卖出日。
-- 预测表与验证表统一展示：
-  操作排名｜代码｜名称｜D日收盘价｜T+1建议买入方式｜T+1可接受买入价｜T+1预期收益｜T+1预期价格区间｜T+1上涨率｜模型置信度｜T+1卖出计划
+当前锁死口径：
+- D：分析基准日，使用 Close[D]
+- T：下一交易日集合竞价买入日
+- T+1：买入后的预测到期 / 盘中择时卖出日
 
-入口函数：
-- render_premium_report_md(...)
+主表只展示人工下隔夜单最需要的 9 列：
+操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T+1建议买入方式
 
-B) ♻️ 旧口径（PredEV/TopK/RankIC）：
-- 保留 render_premium_md(...)，避免旧链路引用时炸裂。
+说明：
+- 操作排名 = 上游 predict.py 已按“涨停接力评分”降序重排后的 rank。
+- E_ret_plus、价格区间、卖出计划、置信度等工程/辅助字段仍保留在 CSV，不在主报告表展开。
+- 保留 render_premium_md(...) 旧入口，避免历史链路引用时报错。
 """
 
 from __future__ import annotations
@@ -38,32 +34,37 @@ from .config import PremiumConfig
 # =========================
 
 def _fmt_prob(x: object, digits: int = 2) -> str:
+    """x 是 0~1 概率 / 比率。"""
     try:
         v = float(x)
-        if np.isnan(v):
+        if not np.isfinite(v):
             return "-"
+        # 兼容已经传入 0~100 的分值，但主概率字段标准应为 0~1。
+        if v > 1.0 and v <= 100.0:
+            return f"{v:.{digits}f}%"
         return f"{v * 100:.{digits}f}%"
     except Exception:
         return "-"
 
 
-def _fmt_pct_ratio(x: object, digits: int = 2) -> str:
-    """x 是 ratio（例如 0.0911 表示 +9.11%）。"""
+def _fmt_score(x: object, digits: int = 2) -> str:
+    """x 是 0~100 分值。"""
     try:
         v = float(x)
-        if np.isnan(v):
+        if not np.isfinite(v):
             return "-"
-        return f"{v * 100:+.{digits}f}%"
+        return f"{v:.{digits}f}"
     except Exception:
         return "-"
 
 
-def _fmt_float(x: object, digits: int = 4) -> str:
+def _fmt_pct_ratio(x: object, digits: int = 2) -> str:
+    """x 是 ratio（例如 0.0911 表示 +9.11%）。保留给旧摘要/旧入口。"""
     try:
         v = float(x)
-        if np.isnan(v):
+        if not np.isfinite(v):
             return "-"
-        return f"{v:.{digits}f}"
+        return f"{v * 100:+.{digits}f}%"
     except Exception:
         return "-"
 
@@ -71,41 +72,11 @@ def _fmt_float(x: object, digits: int = 4) -> str:
 def _fmt_price(x: object, digits: int = 2) -> str:
     try:
         v = float(x)
-        if np.isnan(v):
+        if not np.isfinite(v):
             return "-"
         return f"{v:.{digits}f}"
     except Exception:
         return "-"
-
-
-def _fmt_bool(x: object) -> str:
-    if x is True or str(x).lower() == "true" or str(x) == "1":
-        return "✅"
-    if x is False or str(x).lower() == "false" or str(x) == "0":
-        return "❌"
-    return "-"
-
-
-def _fmt_direction(x: object) -> str:
-    s = str(x or "").strip().lower()
-    if s == "up":
-        return "上修"
-    if s == "down":
-        return "下修"
-    if s == "flat":
-        return "持平"
-    return str(x) if str(x).strip() else "-"
-
-
-def _fmt_conf_label(x: object) -> str:
-    s = str(x or "").strip().lower()
-    if s == "high":
-        return "高"
-    if s == "mid":
-        return "中"
-    if s == "low":
-        return "低"
-    return str(x) if str(x).strip() else "-"
 
 
 def _num(row: pd.Series, col: str, default: float = np.nan) -> float:
@@ -133,10 +104,6 @@ def _first_existing_str(row: pd.Series, cols: Sequence[str], default: str = "-")
         if v:
             return v
     return default
-
-
-def _select_cols_exist(df: pd.DataFrame, cols: Sequence[str]) -> List[str]:
-    return [c for c in cols if c in df.columns]
 
 
 def _cn_col(col: str) -> str:
@@ -185,7 +152,7 @@ def _fmt_yyyymmdd(dt: datetime | None) -> str:
 def _next_weekday_yyyymmdd(base_date: str) -> str:
     """
     兜底函数：只有在上游没有提供买入日字段时使用。
-    注意：真正严格的 A 股交易日应由上游交易日历给出；本函数只做周末兜底。
+    严格 A 股交易日历应由 predict.py 输出 buy_date。
     """
     dt = _parse_yyyymmdd(base_date)
     if dt is None:
@@ -211,33 +178,18 @@ def _extract_date_from_frames(frames: Iterable[pd.DataFrame], cols: Sequence[str
 
 
 def _resolve_buy_date(trade_date: str, target_date: str, df_top30: pd.DataFrame, df_verify: pd.DataFrame) -> str:
-    """
-    T = 竞价买入日。
-    优先使用上游/CSV 已经按中国 A 股交易日历算好的字段；没有时，才用工作日兜底。
-    """
-    frames = [df_top30, df_verify]
+    """T = 竞价买入日。优先读取上游按中国 A 股交易日历算好的字段。"""
     buy_date = _extract_date_from_frames(
-        frames,
-        [
-            "buy_date",
-            "t_buy_date",
-            "T_date",
-            "t_date",
-            "next_trade_date",
-            "next_td",
-            "trade_date_T",
-        ],
+        [df_top30, df_verify],
+        ["buy_date", "t_buy_date", "T_date", "t_date", "next_trade_date", "next_td", "trade_date_T"],
     )
     if buy_date:
         return buy_date
-
-    # 如果上游只传入 D 和 target_date，且 target_date 是 D 后第二个交易日，
-    # report_md 无法凭空知道节假日，只能做周末兜底；严格交易日历建议在 predict.py 输出 buy_date。
     return _next_weekday_yyyymmdd(trade_date)
 
 
 # =========================
-# 人类操作表：字段生成
+# 涨停接力实盘主表
 # =========================
 
 _OPER_COLS = [
@@ -245,51 +197,17 @@ _OPER_COLS = [
     "代码",
     "名称",
     "D日收盘价",
+    "T日涨停概率",
+    "T日涨停强度",
+    "T+1延续上涨率",
+    "涨停接力评分",
     "T+1建议买入方式",
-    "T+1可接受买入价",
-    "T+1预期收益",
-    "T+1预期价格区间",
-    "T+1上涨率",
-    "模型置信度",
-    "T+1卖出计划",
 ]
 
 
-def _expected_range(row: pd.Series) -> str:
-    """
-    T+1 预期价格区间：底层仍兼容旧列 close_T2_p25/p50/p75。
-    这里的 T+1 指：D 日分析、T 日竞价买入后的下一个卖出交易日。
-    """
-    p25 = _num(row, "close_T1_p25")
-    p50 = _num(row, "close_T1_p50")
-    p75 = _num(row, "close_T1_p75")
-
-    if not (np.isfinite(p25) or np.isfinite(p50) or np.isfinite(p75)):
-        p25 = _num(row, "close_T2_p25")
-        p50 = _num(row, "close_T2_p50")
-        p75 = _num(row, "close_T2_p75")
-
-    if np.isfinite(p25) and np.isfinite(p75) and np.isfinite(p50):
-        return f"{p25:.2f} ~ {p75:.2f}，中位 {p50:.2f}"
-    if np.isfinite(p25) and np.isfinite(p75):
-        return f"{p25:.2f} ~ {p75:.2f}"
-    if np.isfinite(p50):
-        return f"中位 {p50:.2f}"
-    return "-"
-
-
-def _confidence_text(row: pd.Series) -> str:
-    label = _fmt_conf_label(_str_val(row, "eret_plus_conf", ""))
-    score = _num(row, "eret_plus_conf_score")
-    if label != "-" and np.isfinite(score):
-        return f"{label}（{score:.3f}）"
-    if label != "-":
-        return label
-    return "-"
-
-
 def _op_rank(row: pd.Series) -> object:
-    for c in ("rank_eret_plus", "rank", "rank_r_p50"):
+    # 注意：rank 已由 predict.py 按“涨停接力评分”重排，报告层必须优先使用 rank。
+    for c in ("rank", "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50"):
         if c in row.index and pd.notna(row.get(c)):
             try:
                 return int(float(row.get(c)))
@@ -302,37 +220,38 @@ def _t1_buy_method(row: pd.Series) -> str:
     return _first_existing_str(row, ["T+1建议买入方式", "t1_buy_method", "buy_method", "t_buy_method"])
 
 
-def _t1_max_buy_price(row: pd.Series) -> str:
-    s = _first_existing_str(row, ["T+1可接受买入价", "t1_max_buy_price", "max_buy_price", "t_buy_price"], "")
-    if s:
-        if s.startswith("≤") or s.startswith("<") or "放弃" in s or "观察" in s:
-            return s
-        try:
-            return f"≤{float(s):.2f}"
-        except Exception:
-            return s
-    return "-"
-
-
-def _t1_sell_plan(row: pd.Series) -> str:
-    return _first_existing_str(row, ["T+1卖出计划", "T+2卖出计划", "t1_sell_plan", "t2_sell_plan", "sell_plan"])
-
-
-def _up_rate_text(row: pd.Series) -> str:
-    """
-    当前 p_premium 旧字段在历史报告中与 E_ret_plus/价格分布存在口径不一致。
-    展示层先改名为“上涨率”，底层仍兼容 p_premium；后续建议在 predict.py 中修正计算口径。
-    """
-    for c in ("t1_up_rate", "T+1上涨率", "p_premium", "pred_up_prob"):
+def _limitup_prob_text(row: pd.Series) -> str:
+    for c in ("T日涨停概率", "t_limitup_prob", "limitup_prob", "t_limit_up_prob"):
         if c in row.index:
             return _fmt_prob(_num(row, c), 2)
     return "-"
 
 
+def _limitup_strength_text(row: pd.Series) -> str:
+    for c in ("T日涨停强度", "t_limitup_strength", "limitup_strength", "t_limit_up_strength"):
+        if c in row.index:
+            return _fmt_score(_num(row, c), 2)
+    return "-"
+
+
+def _continue_up_text(row: pd.Series) -> str:
+    for c in ("T+1延续上涨率", "t1_continue_up_rate", "continue_up_rate", "t1_up_rate"):
+        if c in row.index:
+            return _fmt_prob(_num(row, c), 2)
+    return "-"
+
+
+def _continuation_score_text(row: pd.Series) -> str:
+    for c in ("涨停接力评分", "limitup_continuation_score", "continuation_score"):
+        if c in row.index:
+            return _fmt_score(_num(row, c), 2)
+    return "-"
+
+
 def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFrame:
     """
-    预测表与验证表统一使用人类隔夜实盘口径表头：
-    操作排名｜代码｜名称｜D日收盘价｜T+1建议买入方式｜T+1可接受买入价｜T+1预期收益｜T+1预期价格区间｜T+1上涨率｜模型置信度｜T+1卖出计划
+    预测表与验证表统一使用涨停接力实盘表头：
+    操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T+1建议买入方式
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=_OPER_COLS)
@@ -345,13 +264,11 @@ def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFr
                 "代码": _str_val(row, "ts_code", "-"),
                 "名称": _str_val(row, "name", "-"),
                 "D日收盘价": _fmt_price(_num(row, "close_T"), 2),
+                "T日涨停概率": _limitup_prob_text(row),
+                "T日涨停强度": _limitup_strength_text(row),
+                "T+1延续上涨率": _continue_up_text(row),
+                "涨停接力评分": _continuation_score_text(row),
                 "T+1建议买入方式": _t1_buy_method(row),
-                "T+1可接受买入价": _t1_max_buy_price(row),
-                "T+1预期收益": _fmt_pct_ratio(_num(row, "eret_plus_value"), 2),
-                "T+1预期价格区间": _expected_range(row),
-                "T+1上涨率": _up_rate_text(row),
-                "模型置信度": _confidence_text(row),
-                "T+1卖出计划": _t1_sell_plan(row),
             }
         )
 
@@ -403,10 +320,10 @@ def render_premium_report_md(
     gen_ts: str,
 ) -> str:
     """
-    ✅ 新口径：生成 Premium V3 报告（Markdown + 内嵌 HTML table）
-    - 不输出 <style>（GitHub 会过滤/转义）。
-    - 预测表与验证表统一为人类隔夜实盘表头。
-    - 工程字段不再进入主表，避免实盘阅读负担。
+    生成 Premium V3.5 报告（Markdown + 内嵌 HTML table）
+    - 不输出 <style>，避免 GitHub 过滤/转义。
+    - 主表只展示涨停接力实盘 9 列。
+    - 工程字段不进入主表，继续保留在 CSV 与验证摘要中。
     """
     cfg = PremiumConfig.load()
 
@@ -415,12 +332,12 @@ def render_premium_report_md(
     buy_date = _resolve_buy_date(trade_date, target_date, df_top30, df_verify)
 
     parts: List[str] = []
-    parts.append("# Premium（隔夜实盘溢价预测）V3（E_ret_plus / D→T+1 分布预测）")
+    parts.append("# Premium（涨停接力实盘预测）V3.5（D→T→T+1）")
     parts.append("")
     parts.append(
         "> 注：D 为本次预测的**分析基准日**（使用 Close[D]）；"
         "T 为下一交易日**集合竞价买入日**；"
-        "T+1 为买入后的**预测到期/盘中择时卖出日**。"
+        "T+1 为买入后的**延续上涨验证/盘中择时卖出日**。"
     )
     parts.append("")
     parts.append(f"- 预测日（D）：**{trade_date}**")
@@ -481,20 +398,18 @@ def render_premium_report_md(
         _append_ehx_summary(parts, df_verify)
 
     parts.append("")
-    parts.append("## 字段说明（V3 人类隔夜实盘口径）")
+    parts.append("## 字段说明（V3.5 涨停接力实盘口径）")
     parts.append("")
-    parts.append("- 操作排名：优先使用 E_ret_plus 排名。")
+    parts.append("- 操作排名：按上游 `涨停接力评分` 降序排列后的名次；同分再参考 T日涨停概率、T+1延续上涨率、T日涨停强度。")
     parts.append("- D日收盘价：分析基准日 D 的收盘价。")
-    parts.append("- T+1建议买入方式：面向 T 日集合竞价的买入方式建议，来源于上游执行字段。")
-    parts.append("- T+1可接受买入价：T 日集合竞价/开盘阶段可接受的买入上限，来源于上游执行字段。")
-    parts.append("- T+1预期收益：EHX 残差增强后的 E_ret_plus，展示口径为 D→T+1。")
-    parts.append("- T+1预期价格区间：使用预测到期日价格分位 p25 ~ p75，并展示 p50 中位价。")
-    parts.append("- T+1上涨率：沿用上游 p_premium 字段的上涨倾向率；当前不再称为严格概率，后续建议在 predict.py 中统一口径。")
-    parts.append("- 模型置信度：EHX 置信度标签及置信分。")
-    parts.append("- T+1卖出计划：面向预测到期日盘中择时卖出的执行计划，来源于上游执行字段。")
+    parts.append("- T日涨停概率：模型/规则层对 T 日冲击涨停可能性的评分化概率。")
+    parts.append("- T日涨停强度：衡量 T 日涨停攻击质量与封板强弱的 0~100 分。")
+    parts.append("- T+1延续上涨率：T 日走强/涨停后，T+1 继续上涨并给出溢价的倾向率。")
+    parts.append("- 涨停接力评分：综合 T日涨停概率、T日涨停强度、T+1延续上涨率与执行安全分后的核心排序分。")
+    parts.append("- T+1建议买入方式：面向 T 日集合竞价的买入方式建议。")
     parts.append("")
     parts.append(
-        "> 注：E_ret原始值、EHX修正值、EHX来源、Raw/Plus误差等工程审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。"
+        "> 注：E_ret_plus、价格区间、置信度、买入价、卖出计划、Raw/Plus误差等辅助/审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。"
     )
     if buy_date == _next_weekday_yyyymmdd(trade_date):
         parts.append(
@@ -512,7 +427,7 @@ def render_premium_report_md(
 def _fmt_pct(x: object, digits: int = 2) -> str:
     try:
         v = float(x)
-        if np.isnan(v):
+        if not np.isfinite(v):
             return "-"
         return f"{v*100:.{digits}f}%"
     except Exception:
@@ -545,7 +460,7 @@ def _spearman_rank_ic(a: np.ndarray, b: np.ndarray) -> float:
 def _fmt_float_old(x: object, digits: int = 4) -> str:
     try:
         v = float(x)
-        if np.isnan(v):
+        if not np.isfinite(v):
             return "-"
         return f"{v:.{digits}f}"
     except Exception:
@@ -554,8 +469,8 @@ def _fmt_float_old(x: object, digits: int = 4) -> str:
 
 def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str) -> str:
     """
-    ♻️ 旧口径：渲染 Premium 报告（Markdown）
-    （保留用于历史链路；新主线请用 render_premium_report_md）
+    旧口径：渲染 Premium 报告（Markdown）。
+    保留用于历史链路；新主线请用 render_premium_report_md。
     """
     topk = int(getattr(cfg, "topk", 10))
     df = df_rank.copy()
@@ -565,7 +480,6 @@ def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str
         next_td = str(df["next_trade_date"].dropna().iloc[0])
 
     df_top = df.head(topk).copy()
-
     show_cols = [
         "rank_pred_ev",
         "ts_code",
@@ -602,11 +516,9 @@ def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str
         rr = pd.to_numeric(df_top["real_premium_ret"], errors="coerce").values
         hit = float(np.nanmean(rr > 0.0)) if len(rr) > 0 else float("nan")
         mean_ret = float(np.nanmean(rr)) if len(rr) > 0 else float("nan")
-
         pred_ev = pd.to_numeric(df["pred_ev"], errors="coerce").values
         real_all = pd.to_numeric(df["real_premium_ret"], errors="coerce").values
         ric = _spearman_rank_ic(pred_ev, real_all)
-
         eval_lines += [
             f"- HitRate@{topk}（Top{topk} 真实收益>0 比例）：{hit*100:.1f}%",
             f"- Top{topk} 真实平均收益：{mean_ret*100:.2f}%",
@@ -618,22 +530,19 @@ def render_premium_md(df_rank: pd.DataFrame, cfg: PremiumConfig, trade_date: str
     lines = []
     lines.append(f"# Premium 溢价预测排序（{trade_date}）")
     lines.append("")
-    lines.append("- （旧口径报告渲染，保留用于历史链路；新主线已迁移至 V3）")
+    lines.append("- （旧口径报告渲染，保留用于历史链路；新主线已迁移至 V3.5）")
     lines.append(f"- trade_date：**{trade_date}**")
     lines.append(f"- next_trade_date：**{next_td}**")
     lines.append(f"- 模型版本：**{getattr(cfg, 'model_version', '-') }**")
     lines.append("")
-
     lines.append("## Top 排序（按 PredEV）")
     lines.append("")
-    lines.append(df_show.to_markdown(index=False))
+    lines.append(df_show.to_markdown(index=False) if not df_show.empty else "（暂无）")
     lines.append("")
-
     lines.append("## 风险摘要")
     lines.append("")
     lines.extend(risk_summary if risk_summary else ["- （暂无）"])
     lines.append("")
-
     lines.append("## 评估（若有真实对照）")
     lines.append("")
     lines.extend(eval_lines)
