@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       trade_date:
-        description: "手动指定交易日 YYYYMMDD（Decision: 留空=使用 a-top10 decisio latest；Learning: 留空=自动选择已成熟 trade_date）"
+        description: "手动指定交易日 YYYYMMDD（留空=自动使用最新 raw/pred 快照）"
         required: false
         type: string
 
@@ -22,9 +22,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  decision:
+  decision_initial:
+    name: Build FS and Initial Decision
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -50,19 +51,14 @@ jobs:
       - name: Ensure output dirs
         run: |
           set -e
-          mkdir -p data/pred
-          mkdir -p data/pred/archive
-          mkdir -p data/market
-          mkdir -p data/market/raw
+          mkdir -p data/pred data/pred/archive
+          mkdir -p data/market data/market/raw
           mkdir -p data/decision
-          mkdir -p docs/signals
-          mkdir -p docs/reports
-          mkdir -p docs/weights
-          mkdir -p outputs/decision
-          mkdir -p outputs/learning
+          mkdir -p docs/signals docs/reports docs/weights
+          mkdir -p outputs/decision outputs/learning
           mkdir -p models
 
-      - name: Sync pred source snapshot (to data/pred/pred_source_latest.csv)
+      - name: Sync pred source snapshot
         env:
           TRADE_DATE: ${{ inputs.trade_date }}
           A_TOP10_OWNER: njedu2023-prog
@@ -73,29 +69,20 @@ jobs:
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
             echo "[sync-pred] manual trade_date=${TRADE_DATE}"
-
             if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
-              echo "[sync-pred] invalid trade_date: ${TRADE_DATE} (expect YYYYMMDD)"
+              echo "[sync-pred] invalid trade_date=${TRADE_DATE} (expect YYYYMMDD)"
               exit 1
             fi
-
             FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
             RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
-            echo "[sync-pred] TOP10_PRED_URL=${RAW_URL}"
-
             TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
           else
             RAW_URL="https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv"
-            echo "[sync-pred] TOP10_PRED_URL=${RAW_URL}"
-
             TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
           fi
 
-          echo "[sync-pred] snapshot saved -> data/pred/pred_source_latest.csv"
-          head -n 3 data/pred/pred_source_latest.csv || true
-          wc -l data/pred/pred_source_latest.csv || true
-
-          echo "[sync-pred] archive tree:"
+          echo "[sync-pred] generated:"
+          ls -lah data/pred || true
           find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Sync market raw snapshots
@@ -116,9 +103,8 @@ jobs:
             python scripts/sync_market_raw.py
           fi
 
-          echo "[sync-market-raw] tree:"
+          echo "[sync-market-raw] dirs:"
           find data/market/raw -maxdepth 3 -type d | sort || true
-
           echo "[sync-market-raw] files:"
           find data/market/raw -maxdepth 3 -type f | sort || true
 
@@ -127,40 +113,39 @@ jobs:
           TRADE_DATE: ${{ inputs.trade_date }}
         run: |
           set -e
-
-          echo "[fs] precheck raw tree:"
+          echo "[fs] precheck raw files:"
           find data/market/raw -maxdepth 3 -type f | sort || true
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
-            echo "[fs] build with manual trade_date=${TRADE_DATE}"
+            echo "[fs] manual trade_date=${TRADE_DATE}"
             python scripts/build_market_fs.py --trade-date "${TRADE_DATE}"
           else
-            echo "[fs] build with latest raw snapshot"
+            echo "[fs] auto latest raw snapshot"
             python scripts/build_market_fs.py
           fi
 
-          echo "[fs] generated files:"
+          echo "[fs] generated market files:"
           ls -lah data/market || true
 
-      - name: Run decision pipeline (V2 orchestrator)
+      - name: Run decision pipeline before learning
         env:
           TRADE_DATE: ${{ inputs.trade_date }}
         run: |
           set -e
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
-            echo "[run_v2] manual trade_date=${TRADE_DATE}"
+            echo "[run_v2-initial] manual trade_date=${TRADE_DATE}"
             python scripts/run_v2.py --trade-date "${TRADE_DATE}"
           else
-            echo "[run_v2] auto mode"
+            echo "[run_v2-initial] auto mode"
             python scripts/run_v2.py
           fi
 
-      - name: Validate IO contract (must pass)
+      - name: Validate IO contract
         run: |
           set -e
           python scripts/validate_io_contract.py
 
-      - name: Commit & push outputs (safe)
+      - name: Commit initial decision outputs
         run: |
           set -e
           git config user.name "github-actions[bot]"
@@ -168,7 +153,6 @@ jobs:
 
           find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
           find . -type f -name "*.pyc" -delete || true
-
           mkdir -p .git/info
           grep -qxF "__pycache__/" .git/info/exclude 2>/dev/null || echo "__pycache__/" >> .git/info/exclude
           grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
@@ -176,80 +160,67 @@ jobs:
           git add data/pred/pred_source_latest.csv || true
           git add data/pred/archive/*.csv || true
           git add -A data/pred/archive || true
-
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
-
           git add -A data/market/raw || true
-
           git add data/market/features_base_*.csv || true
           git add data/market/features_limit_*.csv || true
           git add data/market/truth_close_*.csv || true
           git add data/market/_meta_*.json || true
-
           git add docs/weights/weights_latest.csv || true
           git add docs/weights/weights_*.csv || true
-
           git add outputs/decision/* || true
           git add outputs/decision/**/*.md || true
           git add outputs/decision/**/*.json || true
-
           git add data/decision/decision_candidates_*.csv || true
           git add data/decision/decision_execution_*.csv || true
           git add data/decision/decision_learning.csv || true
-
           git add docs/signals/top10_latest.csv || true
           git add docs/signals/top10_*.csv || true
           git add docs/signals/TopEVR_latest.csv || true
           git add docs/signals/TopEVR_*.csv || true
-
           git add docs/reports/*.md || true
           git add -A docs/reports || true
 
-          echo "[git] status after add:"
+          echo "[git-initial] status after add:"
           git status --porcelain | sed -n '1,200p' || true
 
           if git diff --cached --quiet; then
-            echo "[push] no staged changes"
+            echo "[git-initial] no staged changes"
             exit 0
           fi
 
           git commit -m "auto: sync market raw, build fs, update decision outputs"
 
-          echo "[git] status after commit:"
-          git status --porcelain | sed -n '1,50p' || true
-
           if [ -n "$(git status --porcelain)" ]; then
-            echo "[push] worktree dirty after commit; reset to HEAD before rebase"
             git reset --hard HEAD
           fi
 
           pushed=0
           for attempt in 1 2 3; do
-            echo "[push] attempt=${attempt}"
+            echo "[push-initial] attempt=${attempt}"
             git fetch origin main
             if git rebase origin/main; then
               if git push origin HEAD:main; then
-                echo "[push] done"
                 pushed=1
                 break
               fi
             else
-              echo "[push] rebase conflict on attempt=${attempt}, abort and retry"
               git rebase --abort || true
             fi
             sleep 2
           done
 
           if [ "${pushed}" != "1" ]; then
-            echo "[push] failed after retries"
+            echo "[push-initial] failed after retries"
             exit 1
           fi
 
   pfill_learning:
-    needs: decision
+    name: Train P_fill and E_ret
+    needs: decision_initial
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Checkout latest main
@@ -283,8 +254,7 @@ jobs:
       - name: Ensure learning dirs
         run: |
           set -e
-          mkdir -p data/pred
-          mkdir -p data/pred/archive
+          mkdir -p data/pred data/pred/archive
           mkdir -p data/market
           mkdir -p outputs/learning
           mkdir -p models
@@ -295,24 +265,20 @@ jobs:
           TRADE_DATE_INPUT: ${{ inputs.trade_date }}
         run: |
           set -e
-
           if [ -n "${TRADE_DATE_INPUT}" ]; then
             CURRENT_RUN_DATE="${TRADE_DATE_INPUT}"
           else
             CURRENT_RUN_DATE="$(python - <<'PY'
           from pathlib import Path
           import re
-
-          raw_root = Path("data/market/raw")
+          raw_root = Path('data/market/raw')
           raw_dates = []
-
           if raw_root.exists():
-              for p in raw_root.rglob("*"):
-                  if p.is_dir() and re.fullmatch(r"\d{8}", p.name):
+              for p in raw_root.rglob('*'):
+                  if p.is_dir() and re.fullmatch(r'\d{8}', p.name):
                       raw_dates.append(p.name)
-
           raw_dates = sorted(set(raw_dates))
-          print(raw_dates[-1] if raw_dates else "")
+          print(raw_dates[-1] if raw_dates else '')
           PY
           )"
           fi
@@ -327,61 +293,48 @@ jobs:
             echo "has_current_run_date=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build candidate trade_date list for maturity resolver
+      - name: Build candidate trade_date list
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
-
           python - <<'PY'
           from pathlib import Path
           import csv
           import re
 
-          out_path = Path("data/market/sample_maturity_candidates.csv")
+          out_path = Path('data/market/sample_maturity_candidates.csv')
           out_path.parent.mkdir(parents=True, exist_ok=True)
-
           candidates = set()
 
-          market_dir = Path("data/market")
-          for p in market_dir.glob("features_limit_*.csv"):
-              m = re.fullmatch(r"features_limit_(\d{8})\.csv", p.name)
+          market_dir = Path('data/market')
+          for p in market_dir.glob('features_limit_*.csv'):
+              m = re.fullmatch(r'features_limit_(\d{8})\.csv', p.name)
               if m:
                   candidates.add(m.group(1))
 
-          pred_archive = Path("data/pred/archive")
+          pred_archive = Path('data/pred/archive')
           if pred_archive.exists():
-              for p in pred_archive.rglob("*.csv"):
-                  m = re.search(r"(\d{8})", p.name)
+              for p in pred_archive.rglob('*.csv'):
+                  m = re.search(r'(\d{8})', p.name)
                   if m:
                       candidates.add(m.group(1))
 
           rows = sorted(candidates)
-
-          with out_path.open("w", encoding="utf-8-sig", newline="") as f:
-              writer = csv.DictWriter(
-                  f,
-                  fieldnames=["trade_date", "candidate_type"],
-              )
+          with out_path.open('w', encoding='utf-8-sig', newline='') as f:
+              writer = csv.DictWriter(f, fieldnames=['trade_date', 'candidate_type'])
               writer.writeheader()
               for td in rows:
-                  writer.writerow(
-                      {
-                          "trade_date": td,
-                          "candidate_type": "PFILL_ERET",
-                      }
-                  )
+                  writer.writerow({'trade_date': td, 'candidate_type': 'PFILL_ERET'})
 
-          print(f"[learning] candidate trade_dates={len(rows)}")
-          print(f"[learning] candidate file={out_path}")
+          print(f'[learning] candidate trade_dates={len(rows)}')
+          print(f'[learning] candidate file={out_path}')
           PY
-
           cat data/market/sample_maturity_candidates.csv || true
 
       - name: Resolve sample maturity
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
-
           python scripts/resolve_sample_maturity.py \
             --current-run-date "${{ steps.resolve_current_run_date.outputs.current_run_date }}" \
             --raw-root "data/market/raw" \
@@ -389,97 +342,41 @@ jobs:
             --trade-date-column "trade_date" \
             --output-csv "data/market/sample_maturity_latest.csv" \
             --output-json "data/market/sample_maturity_latest.json"
-
-          echo "[learning] resolved sample maturity:"
           cat data/market/sample_maturity_latest.csv || true
 
-      - name: Resolve matured trade_date for P_fill learning
+      - name: Resolve latest PFILL_READY trade_date
         id: resolve_pfill_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
-
           TD="$(python - <<'PY'
           from pathlib import Path
           import csv
-          import json
-
-          maturity_path = Path("data/market/sample_maturity_latest.csv")
-          meta_path = Path("models/pfill_meta.json")
-
-          if not maturity_path.exists():
-              print("")
-              raise SystemExit(0)
-
-          ready_dates = []
-          with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
-              reader = csv.DictReader(f)
-              for row in reader:
-                  td = (row.get("trade_date") or "").strip()
-                  pfill_ready = (row.get("PFILL_READY") or "").strip()
-                  if td and pfill_ready == "1":
-                      ready_dates.append(td)
-          ready_dates = sorted(set(ready_dates))
-
-          missing_dates = []
-          if meta_path.exists():
-              try:
-                  meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                  missing_dates = sorted(set(meta.get("window", {}).get("missing_trade_dates", []) or []))
-              except Exception:
-                  missing_dates = []
-
-          repairable_missing = [td for td in missing_dates if td in ready_dates]
-          print(ready_dates[-1] if ready_dates else "")
-          PY
-          )"
-
-          REPAIR_INFO="$(python - <<'PY'
-          from pathlib import Path
-          import csv
-          import json
-
-          maturity_path = Path("data/market/sample_maturity_latest.csv")
-          meta_path = Path("models/pfill_meta.json")
-
-          ready_dates = []
-          if maturity_path.exists():
-              with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
+          path = Path('data/market/sample_maturity_latest.csv')
+          dates = []
+          if path.exists():
+              with path.open('r', encoding='utf-8-sig', newline='') as f:
                   reader = csv.DictReader(f)
                   for row in reader:
-                      td = (row.get("trade_date") or "").strip()
-                      pfill_ready = (row.get("PFILL_READY") or "").strip()
-                      if td and pfill_ready == "1":
-                          ready_dates.append(td)
-          ready_dates = sorted(set(ready_dates))
-
-          missing_dates = []
-          if meta_path.exists():
-              try:
-                  meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                  missing_dates = sorted(set(meta.get("window", {}).get("missing_trade_dates", []) or []))
-              except Exception:
-                  missing_dates = []
-
-          repairable_missing = [td for td in missing_dates if td in ready_dates]
-          print(f"repairable_missing_count={len(repairable_missing)}")
-          print(f"repairable_missing_latest={repairable_missing[-1] if repairable_missing else ''}")
+                      td = (row.get('trade_date') or '').strip()
+                      ready = (row.get('PFILL_READY') or '').strip()
+                      if td and ready == '1':
+                          dates.append(td)
+          dates = sorted(set(dates))
+          print(dates[-1] if dates else '')
           PY
           )"
-
-          echo "${REPAIR_INFO}"
-
           if echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            echo "[learning] resolved latest READY P_fill trade_date=${TD}"
+            echo "[learning] P_fill READY trade_date=${TD}"
             echo "trade_date=${TD}" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=true" >> "$GITHUB_OUTPUT"
           else
-            echo "[learning] no PFILL_READY trade_date found; skip P_fill learning"
+            echo "[learning] no PFILL_READY trade_date found"
             echo "trade_date=" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Sync pred source snapshot for P_fill trade_date
+      - name: Sync pred source for P_fill trade_date
         if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
         env:
           TRADE_DATE: ${{ steps.resolve_pfill_learning_td.outputs.trade_date }}
@@ -488,20 +385,9 @@ jobs:
           A_TOP10_BRANCH: main
         run: |
           set -e
-
-          if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            echo "[sync-pred-pfill] invalid trade_date=${TRADE_DATE}"
-            exit 1
-          fi
-
           FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
           RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
-          echo "[sync-pred-pfill] TOP10_PRED_URL=${RAW_URL}"
-
           TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
-
-          echo "[sync-pred-pfill] archive tree:"
-          find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Build fill truth
         if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
@@ -521,93 +407,39 @@ jobs:
           set -e
           python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
 
-      - name: Resolve matured trade_date for E_ret learning
+      - name: Resolve latest ERET_READY trade_date
         id: resolve_eret_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
-
           TD="$(python - <<'PY'
           from pathlib import Path
           import csv
-          import json
-
-          maturity_path = Path("data/market/sample_maturity_latest.csv")
-          meta_path = Path("models/eret_meta.json")
-
-          if not maturity_path.exists():
-              print("")
-              raise SystemExit(0)
-
-          ready_dates = []
-          with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
-              reader = csv.DictReader(f)
-              for row in reader:
-                  td = (row.get("trade_date") or "").strip()
-                  eret_ready = (row.get("ERET_READY") or "").strip()
-                  if td and eret_ready == "1":
-                      ready_dates.append(td)
-          ready_dates = sorted(set(ready_dates))
-
-          missing_dates = []
-          if meta_path.exists():
-              try:
-                  meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                  missing_dates = sorted(set(meta.get("window", {}).get("missing_trade_dates", []) or []))
-              except Exception:
-                  missing_dates = []
-
-          repairable_missing = [td for td in missing_dates if td in ready_dates]
-          print(ready_dates[-1] if ready_dates else "")
-          PY
-          )"
-
-          REPAIR_INFO="$(python - <<'PY'
-          from pathlib import Path
-          import csv
-          import json
-
-          maturity_path = Path("data/market/sample_maturity_latest.csv")
-          meta_path = Path("models/eret_meta.json")
-
-          ready_dates = []
-          if maturity_path.exists():
-              with maturity_path.open("r", encoding="utf-8-sig", newline="") as f:
+          path = Path('data/market/sample_maturity_latest.csv')
+          dates = []
+          if path.exists():
+              with path.open('r', encoding='utf-8-sig', newline='') as f:
                   reader = csv.DictReader(f)
                   for row in reader:
-                      td = (row.get("trade_date") or "").strip()
-                      eret_ready = (row.get("ERET_READY") or "").strip()
-                      if td and eret_ready == "1":
-                          ready_dates.append(td)
-          ready_dates = sorted(set(ready_dates))
-
-          missing_dates = []
-          if meta_path.exists():
-              try:
-                  meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                  missing_dates = sorted(set(meta.get("window", {}).get("missing_trade_dates", []) or []))
-              except Exception:
-                  missing_dates = []
-
-          repairable_missing = [td for td in missing_dates if td in ready_dates]
-          print(f"repairable_missing_count={len(repairable_missing)}")
-          print(f"repairable_missing_latest={repairable_missing[-1] if repairable_missing else ''}")
+                      td = (row.get('trade_date') or '').strip()
+                      ready = (row.get('ERET_READY') or '').strip()
+                      if td and ready == '1':
+                          dates.append(td)
+          dates = sorted(set(dates))
+          print(dates[-1] if dates else '')
           PY
           )"
-
-          echo "${REPAIR_INFO}"
-
           if echo "${TD}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            echo "[learning] resolved latest READY E_ret trade_date=${TD}"
+            echo "[learning] E_ret READY trade_date=${TD}"
             echo "trade_date=${TD}" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=true" >> "$GITHUB_OUTPUT"
           else
-            echo "[learning] no ERET_READY trade_date found; skip E_ret learning"
+            echo "[learning] no ERET_READY trade_date found"
             echo "trade_date=" >> "$GITHUB_OUTPUT"
             echo "has_trade_date=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Sync pred source snapshot for E_ret trade_date
+      - name: Sync pred source for E_ret trade_date
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
         env:
           TRADE_DATE: ${{ steps.resolve_eret_learning_td.outputs.trade_date }}
@@ -616,20 +448,9 @@ jobs:
           A_TOP10_BRANCH: main
         run: |
           set -e
-
-          if ! echo "${TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
-            echo "[sync-pred-eret] invalid trade_date=${TRADE_DATE}"
-            exit 1
-          fi
-
           FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${TRADE_DATE}.csv"
           RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
-          echo "[sync-pred-eret] TOP10_PRED_URL=${RAW_URL}"
-
           TRADE_DATE="${TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py
-
-          echo "[sync-pred-eret] archive tree:"
-          find data/pred -maxdepth 3 -type f | sort || true
 
       - name: Build fill truth for E_ret trade_date
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
@@ -655,244 +476,96 @@ jobs:
           set -e
           python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
 
-      - name: Show learning artifacts (focused)
-        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
-        run: |
-          set -e
-          echo "[learning] pfill_trade_date=${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
-          echo "[learning] eret_trade_date=${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
-
-          python - <<'PY'
-          from pathlib import Path
-          import json
-
-          for name in ["pfill_meta.json", "eret_meta.json"]:
-              path = Path("models") / name
-              print(f"[learning] meta_exists {name}={path.exists()}")
-              if not path.exists():
-                  continue
-              try:
-                  meta = json.loads(path.read_text(encoding="utf-8"))
-                  window = meta.get("window", {}) or {}
-                  print(
-                      f"[learning] {name} anchor={meta.get('anchor_trade_date','')} "
-                      f"status={meta.get('status','')} "
-                      f"loaded={len(window.get('loaded_trade_dates', []) or [])} "
-                      f"missing={len(window.get('missing_trade_dates', []) or [])}"
-                  )
-              except Exception as e:
-                  print(f"[learning] {name} parse_error={e}")
-
-          print("[learning] recent market artifacts:")
-          market_patterns = [
-              "sample_maturity_*",
-              "fill_truth_*.csv",
-              "fill_truth_*.meta.json",
-              "pfill_trainset_*.csv",
-              "pfill_trainset_*.meta.json",
-              "eret_truth_*.csv",
-              "eret_truth_*.meta.json",
-              "eret_trainset_*.csv",
-              "eret_trainset_*.meta.json",
-          ]
-          market_files = []
-          market_dir = Path("data/market")
-          for pattern in market_patterns:
-              market_files.extend(market_dir.glob(pattern))
-          for path in sorted({p for p in market_files})[-120:]:
-              print(path.as_posix())
-
-          print("[learning] model artifacts:")
-          model_patterns = [
-              "pfill_*.joblib",
-              "pfill_*.json",
-              "eret_*.joblib",
-              "eret_*.json",
-          ]
-          model_files = []
-          models_dir = Path("models")
-          for pattern in model_patterns:
-              model_files.extend(models_dir.glob(pattern))
-          for path in sorted({p for p in model_files}):
-              print(path.as_posix())
-          PY
-
       - name: Build learning acceptance artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
           mkdir -p outputs/learning
-
           python - <<'PY'
           from pathlib import Path
           import json
           from datetime import datetime, timezone
 
-          out_dir = Path("outputs/learning")
-          models_dir = Path("models")
-
-          def utc_now_iso() -> str:
-              return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+          out_dir = Path('outputs/learning')
+          models_dir = Path('models')
 
           def load_json(path: Path):
               if not path.exists():
-                  return None
-              return json.loads(path.read_text(encoding="utf-8"))
+                  return {}
+              try:
+                  return json.loads(path.read_text(encoding='utf-8'))
+              except Exception:
+                  return {}
 
-          def pick_previous_meta(prefix: str, current_anchor: str):
-              candidates = []
-              for path in models_dir.glob(f"{prefix}_meta_*.json"):
-                  suffix = path.stem.split("_")[-1]
-                  if len(suffix) == 8 and suffix.isdigit() and suffix < current_anchor:
-                      candidates.append((suffix, path))
-              if not candidates:
-                  return None, None
-              prev_anchor, prev_path = sorted(candidates)[-1]
-              return prev_anchor, load_json(prev_path)
+          pfill = load_json(models_dir / 'pfill_meta.json')
+          eret = load_json(models_dir / 'eret_meta.json')
+          pfill_window = pfill.get('window', {}) or {}
+          eret_window = eret.get('window', {}) or {}
 
-          def delta(curr, prev, higher_is_better=True):
-              if curr is None or prev is None:
-                  return None
-              d = curr - prev
-              if higher_is_better:
-                  trend = "improved" if d > 0 else ("worse" if d < 0 else "flat")
-              else:
-                  trend = "improved" if d < 0 else ("worse" if d > 0 else "flat")
-              return {"delta": d, "trend": trend}
-
-          pfill = load_json(models_dir / "pfill_meta.json") or {}
-          eret = load_json(models_dir / "eret_meta.json") or {}
-
-          pfill_anchor = str(pfill.get("anchor_trade_date", ""))
-          eret_anchor = str(eret.get("anchor_trade_date", ""))
-
-          pfill_prev_anchor, pfill_prev = pick_previous_meta("pfill", pfill_anchor) if pfill_anchor else (None, None)
-          eret_prev_anchor, eret_prev = pick_previous_meta("eret", eret_anchor) if eret_anchor else (None, None)
-
-          def get_window(meta):
-              return (meta or {}).get("window", {}) or {}
-
-          def get_metrics(meta):
-              return (meta or {}).get("metrics_valid", {}) or {}
-
-          pfill_window = get_window(pfill)
-          eret_window = get_window(eret)
-          pfill_prev_metrics = get_metrics(pfill_prev)
-          eret_prev_metrics = get_metrics(eret_prev)
-          pfill_metrics = get_metrics(pfill)
-          eret_metrics = get_metrics(eret)
+          core_fs_v2 = [
+              'ret_2d', 'ret_5d', 'ret_10d',
+              'volatility_5d', 'volatility_10d', 'volatility_20d',
+              'atr', 'downside_vol', 'max_drawdown_20d', 'tail_risk_score',
+              'bid_ask_proxy', 'spread_proxy',
+          ]
+          eret_missing = eret.get('missing_ratio', {}) or {}
+          still_all_missing = [c for c in core_fs_v2 if eret_missing.get(c) == 1.0]
 
           acceptance = {
-              "generated_at_utc": utc_now_iso(),
-              "current_run_date": "${{ steps.resolve_current_run_date.outputs.current_run_date }}",
-              "pfill": {
-                  "anchor_trade_date": pfill_anchor,
-                  "status": pfill.get("status", ""),
-                  "loaded_trade_dates": len(pfill_window.get("loaded_trade_dates", []) or []),
-                  "missing_trade_dates": len(pfill_window.get("missing_trade_dates", []) or []),
-                  "previous_anchor_trade_date": pfill_prev_anchor or "",
-                  "metrics_valid": pfill_metrics,
-                  "compare_to_previous": {
-                      "lr_auc": delta((pfill_metrics.get("lr") or {}).get("auc"), (pfill_prev_metrics.get("lr") or {}).get("auc"), True),
-                      "lr_logloss": delta((pfill_metrics.get("lr") or {}).get("logloss"), (pfill_prev_metrics.get("lr") or {}).get("logloss"), False),
-                      "lr_brier": delta((pfill_metrics.get("lr") or {}).get("brier"), (pfill_prev_metrics.get("lr") or {}).get("brier"), False),
-                      "lgbm_auc": delta((pfill_metrics.get("lgbm") or {}).get("auc"), (pfill_prev_metrics.get("lgbm") or {}).get("auc"), True),
-                      "lgbm_logloss": delta((pfill_metrics.get("lgbm") or {}).get("logloss"), (pfill_prev_metrics.get("lgbm") or {}).get("logloss"), False),
-                      "lgbm_brier": delta((pfill_metrics.get("lgbm") or {}).get("brier"), (pfill_prev_metrics.get("lgbm") or {}).get("brier"), False),
-                  },
-                  "acceptance_pass": bool(pfill_anchor) and (pfill.get("status") == "trained") and len(pfill_window.get("missing_trade_dates", []) or []) == 0,
+              'generated_at_utc': datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+              'current_run_date': '${{ steps.resolve_current_run_date.outputs.current_run_date }}',
+              'pfill': {
+                  'anchor_trade_date': pfill.get('anchor_trade_date', ''),
+                  'status': pfill.get('status', ''),
+                  'loaded_trade_dates': len(pfill_window.get('loaded_trade_dates', []) or []),
+                  'missing_trade_dates': len(pfill_window.get('missing_trade_dates', []) or []),
+                  'metrics_valid': pfill.get('metrics_valid', {}) or {},
+                  'acceptance_pass': bool(pfill.get('anchor_trade_date')) and pfill.get('status') == 'trained',
               },
-              "eret": {
-                  "anchor_trade_date": eret_anchor,
-                  "status": eret.get("status", ""),
-                  "loaded_trade_dates": len(eret_window.get("loaded_trade_dates", []) or []),
-                  "missing_trade_dates": len(eret_window.get("missing_trade_dates", []) or []),
-                  "previous_anchor_trade_date": eret_prev_anchor or "",
-                  "metrics_valid": eret_metrics,
-                  "compare_to_previous": {
-                      "lr_mae": delta((eret_metrics.get("lr") or {}).get("mae"), (eret_prev_metrics.get("lr") or {}).get("mae"), False),
-                      "lr_rmse": delta((eret_metrics.get("lr") or {}).get("rmse"), (eret_prev_metrics.get("lr") or {}).get("rmse"), False),
-                      "lr_corr": delta((eret_metrics.get("lr") or {}).get("corr"), (eret_prev_metrics.get("lr") or {}).get("corr"), True),
-                      "lr_directional_acc": delta((eret_metrics.get("lr") or {}).get("directional_acc"), (eret_prev_metrics.get("lr") or {}).get("directional_acc"), True),
-                      "lgbm_mae": delta((eret_metrics.get("lgbm") or {}).get("mae"), (eret_prev_metrics.get("lgbm") or {}).get("mae"), False),
-                      "lgbm_rmse": delta((eret_metrics.get("lgbm") or {}).get("rmse"), (eret_prev_metrics.get("lgbm") or {}).get("rmse"), False),
-                      "lgbm_corr": delta((eret_metrics.get("lgbm") or {}).get("corr"), (eret_prev_metrics.get("lgbm") or {}).get("corr"), True),
-                      "lgbm_directional_acc": delta((eret_metrics.get("lgbm") or {}).get("directional_acc"), (eret_prev_metrics.get("lgbm") or {}).get("directional_acc"), True),
-                  },
-                  "acceptance_pass": bool(eret_anchor) and (eret.get("status") == "trained") and len(eret_window.get("missing_trade_dates", []) or []) == 0,
+              'eret': {
+                  'anchor_trade_date': eret.get('anchor_trade_date', ''),
+                  'status': eret.get('status', ''),
+                  'loaded_trade_dates': len(eret_window.get('loaded_trade_dates', []) or []),
+                  'missing_trade_dates': len(eret_window.get('missing_trade_dates', []) or []),
+                  'metrics_valid': eret.get('metrics_valid', {}) or {},
+                  'fs_v2_still_all_missing': still_all_missing,
+                  'acceptance_pass': bool(eret.get('anchor_trade_date')) and eret.get('status') == 'trained' and len(still_all_missing) == 0,
               },
           }
-          acceptance["overall_pass"] = bool(acceptance["pfill"]["acceptance_pass"] and acceptance["eret"]["acceptance_pass"])
+          acceptance['overall_pass'] = bool(acceptance['pfill']['acceptance_pass'] and acceptance['eret']['acceptance_pass'])
 
-          json_path = out_dir / "learning_acceptance_latest.json"
-          md_path = out_dir / "learning_acceptance_latest.md"
-          json_path.write_text(json.dumps(acceptance, ensure_ascii=False, indent=2), encoding="utf-8")
+          json_path = out_dir / 'learning_acceptance_latest.json'
+          md_path = out_dir / 'learning_acceptance_latest.md'
+          json_path.write_text(json.dumps(acceptance, ensure_ascii=False, indent=2), encoding='utf-8')
 
-          def fmt(v):
-              if v is None:
-                  return ""
-              if isinstance(v, float):
-                  return f"{v:.6f}"
-              return str(v)
-
-          def fmt_delta(obj):
-              if not obj:
-                  return ""
-              return f"{obj['trend']} ({obj['delta']:+.6f})"
-
-          lines = []
-          lines.append("# Learning Acceptance Latest")
-          lines.append("")
-          lines.append(f"- generated_at_utc: {acceptance['generated_at_utc']}")
-          lines.append(f"- current_run_date: {acceptance['current_run_date']}")
-          lines.append(f"- overall_pass: {'PASS' if acceptance['overall_pass'] else 'FAIL'}")
-          lines.append("")
-          lines.append("## P_fill")
-          lines.append("")
-          lines.append(f"- anchor_trade_date: {acceptance['pfill']['anchor_trade_date']}")
-          lines.append(f"- status: {acceptance['pfill']['status']}")
-          lines.append(f"- loaded_trade_dates: {acceptance['pfill']['loaded_trade_dates']}")
-          lines.append(f"- missing_trade_dates: {acceptance['pfill']['missing_trade_dates']}")
-          lines.append(f"- previous_anchor_trade_date: {acceptance['pfill']['previous_anchor_trade_date']}")
-          lines.append(f"- acceptance_pass: {'PASS' if acceptance['pfill']['acceptance_pass'] else 'FAIL'}")
-          lines.append("")
-          lines.append("| 指标 | 当前 | 对比上次 |")
-          lines.append("|---|---:|---|")
-          for model_name, metric_name in [
-              ("lr", "auc"), ("lr", "logloss"), ("lr", "brier"),
-              ("lgbm", "auc"), ("lgbm", "logloss"), ("lgbm", "brier"),
-          ]:
-              key = f"{model_name}_{metric_name}"
-              curr = (pfill_metrics.get(model_name) or {}).get(metric_name)
-              cmp_obj = acceptance['pfill']['compare_to_previous'].get(key)
-              lines.append(f"| {key} | {fmt(curr)} | {fmt_delta(cmp_obj)} |")
-          lines.append("")
-          lines.append("## E_ret")
-          lines.append("")
-          lines.append(f"- anchor_trade_date: {acceptance['eret']['anchor_trade_date']}")
-          lines.append(f"- status: {acceptance['eret']['status']}")
-          lines.append(f"- loaded_trade_dates: {acceptance['eret']['loaded_trade_dates']}")
-          lines.append(f"- missing_trade_dates: {acceptance['eret']['missing_trade_dates']}")
-          lines.append(f"- previous_anchor_trade_date: {acceptance['eret']['previous_anchor_trade_date']}")
-          lines.append(f"- acceptance_pass: {'PASS' if acceptance['eret']['acceptance_pass'] else 'FAIL'}")
-          lines.append("")
-          lines.append("| 指标 | 当前 | 对比上次 |")
-          lines.append("|---|---:|---|")
-          for model_name, metric_name in [
-              ("lr", "mae"), ("lr", "rmse"), ("lr", "corr"), ("lr", "directional_acc"),
-              ("lgbm", "mae"), ("lgbm", "rmse"), ("lgbm", "corr"), ("lgbm", "directional_acc"),
-          ]:
-              key = f"{model_name}_{metric_name}"
-              curr = (eret_metrics.get(model_name) or {}).get(metric_name)
-              cmp_obj = acceptance['eret']['compare_to_previous'].get(key)
-              lines.append(f"| {key} | {fmt(curr)} | {fmt_delta(cmp_obj)} |")
-          lines.append("")
-          md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-          print(f"[learning-acceptance] json={json_path.as_posix()}")
-          print(f"[learning-acceptance] md={md_path.as_posix()}")
-          print(f"[learning-acceptance] overall_pass={acceptance['overall_pass']}")
+          lines = [
+              '# Learning Acceptance Latest',
+              '',
+              f"- generated_at_utc: {acceptance['generated_at_utc']}",
+              f"- current_run_date: {acceptance['current_run_date']}",
+              f"- overall_pass: {'PASS' if acceptance['overall_pass'] else 'FAIL'}",
+              '',
+              '## P_fill',
+              f"- anchor_trade_date: {acceptance['pfill']['anchor_trade_date']}",
+              f"- status: {acceptance['pfill']['status']}",
+              f"- loaded_trade_dates: {acceptance['pfill']['loaded_trade_dates']}",
+              f"- missing_trade_dates: {acceptance['pfill']['missing_trade_dates']}",
+              f"- acceptance_pass: {'PASS' if acceptance['pfill']['acceptance_pass'] else 'FAIL'}",
+              '',
+              '## E_ret',
+              f"- anchor_trade_date: {acceptance['eret']['anchor_trade_date']}",
+              f"- status: {acceptance['eret']['status']}",
+              f"- loaded_trade_dates: {acceptance['eret']['loaded_trade_dates']}",
+              f"- missing_trade_dates: {acceptance['eret']['missing_trade_dates']}",
+              f"- fs_v2_still_all_missing: {acceptance['eret']['fs_v2_still_all_missing']}",
+              f"- acceptance_pass: {'PASS' if acceptance['eret']['acceptance_pass'] else 'FAIL'}",
+              '',
+          ]
+          md_path.write_text('\n'.join(lines), encoding='utf-8')
+          print(f'[learning-acceptance] overall_pass={acceptance["overall_pass"]}')
+          print(f'[learning-acceptance] eret_fs_v2_still_all_missing={still_all_missing}')
           PY
+
       - name: Commit learning artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
@@ -902,7 +575,6 @@ jobs:
 
           find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
           find . -type f -name "*.pyc" -delete || true
-
           mkdir -p .git/info
           grep -qxF "__pycache__/" .git/info/exclude 2>/dev/null || echo "__pycache__/" >> .git/info/exclude
           grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
@@ -910,24 +582,19 @@ jobs:
           git add data/pred/pred_source_latest.csv || true
           git add data/pred/archive/*.csv || true
           git add -A data/pred/archive || true
-
           git add data/market/sample_maturity_candidates.csv || true
           git add data/market/sample_maturity_*.csv || true
           git add data/market/sample_maturity_*.json || true
-
           git add data/market/fill_truth_*.csv || true
           git add data/market/fill_truth_*.meta.json || true
           git add data/market/pfill_trainset_*.csv || true
           git add data/market/pfill_trainset_*.meta.json || true
-
           git add data/market/eret_truth_*.csv || true
           git add data/market/eret_truth_*.meta.json || true
           git add data/market/eret_trainset_*.csv || true
           git add data/market/eret_trainset_*.meta.json || true
-
           git add outputs/learning/learning_acceptance_latest.md || true
           git add outputs/learning/learning_acceptance_latest.json || true
-
           git add models/pfill_*.joblib || true
           git add models/pfill_*.json || true
           git add models/eret_*.joblib || true
@@ -937,20 +604,13 @@ jobs:
           git status --porcelain | sed -n '1,200p' || true
 
           if git diff --cached --quiet; then
-            echo "[push-learning] no staged changes"
+            echo "[git-learning] no staged changes"
             exit 0
           fi
 
           git commit -m "auto: resolve sample maturity and update pfill + eret learning artifacts"
 
-          echo "[git-learning] last commit:"
-          git log -1 --stat --oneline || true
-
-          echo "[git-learning] status after commit:"
-          git status --porcelain | sed -n '1,50p' || true
-
           if [ -n "$(git status --porcelain)" ]; then
-            echo "[push-learning] worktree dirty after commit; reset to HEAD before rebase"
             git reset --hard HEAD
           fi
 
@@ -960,12 +620,10 @@ jobs:
             git fetch origin main
             if git rebase origin/main; then
               if git push origin HEAD:main; then
-                echo "[push-learning] done"
                 pushed=1
                 break
               fi
             else
-              echo "[push-learning] rebase conflict on attempt=${attempt}, abort and retry"
               git rebase --abort || true
             fi
             sleep 2
@@ -973,5 +631,146 @@ jobs:
 
           if [ "${pushed}" != "1" ]; then
             echo "[push-learning] failed after retries"
+            exit 1
+          fi
+
+  decision_refresh_after_learning:
+    name: Refresh Decision With Latest Learning Models
+    needs: pfill_learning
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: ${{ needs.pfill_learning.result == 'success' }}
+
+    steps:
+      - name: Checkout latest main after learning
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Reset to latest remote main
+        run: |
+          set -e
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install deps
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> "$GITHUB_ENV"
+
+      - name: Ensure output dirs
+        run: |
+          set -e
+          mkdir -p data/decision docs/signals docs/reports docs/weights outputs/decision
+
+      - name: Run decision pipeline after learning
+        env:
+          TRADE_DATE: ${{ inputs.trade_date }}
+        run: |
+          set -e
+          echo "[refresh] using latest committed models after learning"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
+            echo "[run_v2-refresh] manual trade_date=${TRADE_DATE}"
+            python scripts/run_v2.py --trade-date "${TRADE_DATE}"
+          else
+            echo "[run_v2-refresh] auto mode"
+            python scripts/run_v2.py
+          fi
+
+      - name: Validate IO contract after refresh
+        run: |
+          set -e
+          python scripts/validate_io_contract.py
+
+      - name: Show refresh status
+        run: |
+          set -e
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          meta_path = Path('models/eret_meta.json')
+          if meta_path.exists():
+              meta = json.loads(meta_path.read_text(encoding='utf-8'))
+              print('[refresh] eret_anchor=', meta.get('anchor_trade_date'))
+              print('[refresh] eret_status=', meta.get('status'))
+              mr = meta.get('missing_ratio', {}) or {}
+              core = ['ret_2d','ret_5d','ret_10d','volatility_5d','volatility_10d','volatility_20d','atr','downside_vol','max_drawdown_20d','tail_risk_score','bid_ask_proxy','spread_proxy']
+              print('[refresh] eret_fs_v2_missing_ratio=', {c: mr.get(c) for c in core})
+
+          for p in sorted(Path('outputs/decision').glob('decision_report_*.md'))[-5:]:
+              print('[refresh] report=', p.as_posix())
+          PY
+
+      - name: Commit refreshed decision outputs
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          find . -type d -name "__pycache__" -prune -exec rm -rf {} + || true
+          find . -type f -name "*.pyc" -delete || true
+          mkdir -p .git/info
+          grep -qxF "__pycache__/" .git/info/exclude 2>/dev/null || echo "__pycache__/" >> .git/info/exclude
+          grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
+
+          git add outputs/decision/* || true
+          git add outputs/decision/**/*.md || true
+          git add outputs/decision/**/*.json || true
+          git add data/decision/decision_candidates_*.csv || true
+          git add data/decision/decision_execution_*.csv || true
+          git add data/decision/decision_learning.csv || true
+          git add docs/weights/weights_latest.csv || true
+          git add docs/weights/weights_*.csv || true
+          git add docs/signals/top10_latest.csv || true
+          git add docs/signals/top10_*.csv || true
+          git add docs/signals/TopEVR_latest.csv || true
+          git add docs/signals/TopEVR_*.csv || true
+          git add docs/reports/*.md || true
+          git add -A docs/reports || true
+
+          echo "[git-refresh] status after add:"
+          git status --porcelain | sed -n '1,200p' || true
+
+          if git diff --cached --quiet; then
+            echo "[git-refresh] no staged changes"
+            exit 0
+          fi
+
+          git commit -m "auto: refresh decision outputs after learning models"
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git reset --hard HEAD
+          fi
+
+          pushed=0
+          for attempt in 1 2 3; do
+            echo "[push-refresh] attempt=${attempt}"
+            git fetch origin main
+            if git rebase origin/main; then
+              if git push origin HEAD:main; then
+                pushed=1
+                break
+              fi
+            else
+              git rebase --abort || true
+            fi
+            sleep 2
+          done
+
+          if [ "${pushed}" != "1" ]; then
+            echo "[push-refresh] failed after retries"
             exit 1
           fi
