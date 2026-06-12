@@ -218,6 +218,175 @@ def _load_raw_table(stem: str, trade_date: str) -> pd.DataFrame:
     return _read_csv_any(_raw_path(stem, trade_date))
 
 
+HISTORY_FEATURE_COLS = [
+    "volatility_5d",
+    "volatility_10d",
+    "volatility_20d",
+    "atr",
+    "downside_vol",
+    "max_drawdown_20d",
+    "tail_risk_score",
+    "ret_2d",
+    "ret_5d",
+    "ret_10d",
+    "bid_ask_proxy",
+    "spread_proxy",
+]
+
+
+def _pct_to_decimal_series(s: Any) -> pd.Series:
+    """
+    Tushare daily.pct_chg is normally stored in percentage points.
+    Example: 10.0 means +10%, not +1000%.
+    Keep the original pct_chg column unchanged, but use decimal returns for
+    pre_close and rolling feature calculations.
+    """
+    return pd.to_numeric(s, errors="coerce") / 100.0
+
+
+def _list_available_raw_trade_dates_until(trade_date: str, max_dates: int = 45) -> list[str]:
+    if not trade_date or not RAW_DIR.exists():
+        return []
+
+    vals: set[str] = set()
+
+    # 新结构：data/market/raw/{YYYY}/{YYYYMMDD}/daily.csv
+    for year_dir in RAW_DIR.iterdir():
+        if not year_dir.is_dir() or year_dir.name == "latest":
+            continue
+        for day_dir in year_dir.iterdir():
+            if not day_dir.is_dir():
+                continue
+            td = _normalize_trade_date(day_dir.name)
+            if td and td <= trade_date and (day_dir / "daily.csv").exists():
+                vals.add(td)
+
+    # 旧结构兼容：data/market/raw/daily_{trade_date}.csv
+    for p in RAW_DIR.glob("daily_*.csv"):
+        td = _extract_trade_date_from_name(p, "daily")
+        if td and td <= trade_date and p.exists():
+            vals.add(td)
+
+    dates = sorted(vals)
+    if max_dates and max_dates > 0:
+        dates = dates[-max_dates:]
+    return dates
+
+
+def _load_history_daily(trade_date: str, max_dates: int = 45) -> pd.DataFrame:
+    """
+    读取 anchor trade_date 之前的历史 daily.csv，用于计算滚动收益和波动特征。
+    只依赖 raw daily.csv，不影响现有多源合并链路。
+    """
+    dates = _list_available_raw_trade_dates_until(trade_date, max_dates=max_dates)
+    frames: list[pd.DataFrame] = []
+
+    for td in dates:
+        raw = _load_raw_table("daily", td)
+        if raw is None or raw.empty:
+            continue
+        try:
+            std = _std_daily(raw, td)
+        except Exception:
+            continue
+        if std is not None and not std.empty:
+            frames.append(std)
+
+    if not frames:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    hist = pd.concat(frames, ignore_index=True)
+    hist["trade_date"] = hist["trade_date"].apply(lambda x: _normalize_trade_date(x, fallback=""))
+    hist["ts_code"] = hist["ts_code"].apply(_normalize_ts_code)
+    hist = hist.dropna(subset=["trade_date", "ts_code"]).copy()
+    hist = hist.drop_duplicates(subset=KEY_COLS, keep="last").reset_index(drop=True)
+    return hist
+
+
+def _rolling_max_drawdown(close: pd.Series) -> float:
+    s = pd.to_numeric(close, errors="coerce").dropna()
+    if len(s) < 2:
+        return float("nan")
+    running_max = s.cummax()
+    dd = s / running_max - 1.0
+    return float(dd.min())
+
+
+def _rolling_downside_vol(ret: pd.Series) -> float:
+    s = pd.to_numeric(ret, errors="coerce")
+    s = s[s < 0]
+    if len(s) < 2:
+        return 0.0 if len(ret.dropna()) >= 2 else float("nan")
+    return float(s.std(ddof=0))
+
+
+def _compute_history_features(trade_date: str) -> pd.DataFrame:
+    """
+    计算当前 trade_date 可用的真实历史特征。
+    输出主键：trade_date + ts_code。
+    """
+    cols = KEY_COLS + HISTORY_FEATURE_COLS
+    hist = _load_history_daily(trade_date, max_dates=45)
+    if hist is None or hist.empty:
+        return pd.DataFrame(columns=cols)
+
+    x = hist.copy()
+    for c in ["open", "high", "low", "close", "vol", "amount", "pct_chg", "pre_close_est"]:
+        if c in x.columns:
+            x[c] = pd.to_numeric(x[c], errors="coerce")
+        else:
+            x[c] = pd.NA
+
+    x = x.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+    g = x.groupby("ts_code", group_keys=False)
+
+    prev_close = g["close"].shift(1)
+    x["daily_ret_calc"] = g["close"].pct_change()
+
+    # 多周期累计收益，统一使用 decimal return。
+    for n in (2, 5, 10):
+        x[f"ret_{n}d"] = g["close"].transform(lambda s, n=n: s / s.shift(n) - 1.0)
+
+    # 波动率，统一使用 decimal daily return。
+    for n in (5, 10, 20):
+        min_periods = max(2, min(n, n // 2))
+        x[f"volatility_{n}d"] = g["daily_ret_calc"].transform(
+            lambda s, n=n, min_periods=min_periods: s.rolling(n, min_periods=min_periods).std(ddof=0)
+        )
+
+    tr_abs = pd.concat(
+        [
+            (x["high"] - x["low"]).abs(),
+            (x["high"] - prev_close).abs(),
+            (x["low"] - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    base_close = prev_close.where(prev_close > 0, x["close"])
+    x["true_range_pct"] = tr_abs / base_close.replace(0, pd.NA)
+    x["atr"] = g["true_range_pct"].transform(lambda s: s.rolling(14, min_periods=5).mean())
+
+    x["downside_vol"] = g["daily_ret_calc"].transform(
+        lambda s: s.rolling(20, min_periods=5).apply(_rolling_downside_vol, raw=False)
+    )
+    x["max_drawdown_20d"] = g["close"].transform(
+        lambda s: s.rolling(20, min_periods=5).apply(_rolling_max_drawdown, raw=False)
+    )
+    x["tail_risk_score"] = (
+        x["max_drawdown_20d"].abs().fillna(0.0)
+        + x["downside_vol"].fillna(0.0)
+        + x["volatility_20d"].fillna(0.0)
+    )
+
+    # 没有真实盘口数据时，使用日内高低区间作为可解释代理。
+    x["bid_ask_proxy"] = (x["high"] - x["low"]) / x["close"].replace(0, pd.NA)
+    x["spread_proxy"] = (x["high"] - x["low"]) / x["pre_close_est"].replace(0, pd.NA)
+
+    out = x.loc[x["trade_date"] == trade_date, cols].copy()
+    out = out.drop_duplicates(subset=KEY_COLS, keep="last").reset_index(drop=True)
+    return out
+
+
 def _ensure_keys(df: pd.DataFrame, trade_date_fallback: str) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
@@ -260,7 +429,9 @@ def _std_daily(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     ts_code, trade_date, open, high, low, close, vol, amount, pct_chg
 
     注意：
-    - pct_chg 根据你截图示例是 0.0925 这种“小数收益率”，不是 9.25。
+    - pct_chg 原样保留为上游字段；Tushare 常见口径是百分比点，
+      例如 10.0 表示 +10%。
+    - pre_close_est 使用 pct_chg / 100 反推，避免把 +10% 误当成 +1000%。
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
@@ -277,8 +448,8 @@ def _std_daily(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     std["pct_chg"] = _to_numeric(out["pct_chg"]) if "pct_chg" in out.columns else None
 
     close = std["close"]
-    pct = std["pct_chg"]
-    std["pre_close_est"] = close / (1.0 + pct)
+    pct_decimal = _pct_to_decimal_series(std["pct_chg"])
+    std["pre_close_est"] = close / (1.0 + pct_decimal)
     return std
 
 
@@ -643,14 +814,18 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     out["volume_ratio"] = _to_numeric(df.get("volume_ratio"))
     out["amihud_illiquidity"] = out["pct_chg"].abs() / out["amount"]
 
-    # 波动骨架
-    out["volatility_5d"] = None
-    out["volatility_10d"] = None
-    out["volatility_20d"] = None
-    out["atr"] = None
-    out["downside_vol"] = None
-    out["max_drawdown_20d"] = None
-    out["tail_risk_score"] = None
+    # 历史收益 / 波动 / 尾部风险特征
+    trade_date_for_history = ""
+    if "trade_date" in out.columns and not out["trade_date"].dropna().empty:
+        trade_date_for_history = _normalize_trade_date(out["trade_date"].dropna().iloc[0], fallback="") or ""
+
+    history_features = _compute_history_features(trade_date_for_history) if trade_date_for_history else pd.DataFrame()
+    if history_features is not None and not history_features.empty:
+        out = out.merge(history_features, on=KEY_COLS, how="left")
+
+    for c in HISTORY_FEATURE_COLS:
+        if c not in out.columns:
+            out[c] = pd.NA
 
     # 估值市值
     out["total_mv"] = _to_numeric(df.get("total_mv"))
@@ -685,13 +860,6 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     # 名称变更辅助
     out["has_namechange_record"] = _to_numeric(df.get("has_namechange_record"))
     out["latest_change_reason"] = df.get("latest_change_reason")
-
-    # 多周期占位
-    out["ret_2d"] = None
-    out["ret_5d"] = None
-    out["ret_10d"] = None
-    out["bid_ask_proxy"] = None
-    out["spread_proxy"] = None
 
     return out
 
@@ -846,6 +1014,9 @@ def build_meta(
     base_required = [
         "open", "high", "low", "close", "pre_close_est", "returns_1d",
         "vol", "amount", "turnover_rate", "volume_ratio",
+        "volatility_5d", "volatility_10d", "volatility_20d",
+        "atr", "downside_vol", "max_drawdown_20d", "tail_risk_score",
+        "ret_2d", "ret_5d", "ret_10d", "bid_ask_proxy", "spread_proxy",
         "total_mv", "float_mv",
         "north_money_market", "south_money_market",
         "hot_boards_score", "board_crowding_rank",
@@ -874,7 +1045,7 @@ def build_meta(
         "trade_date": trade_date,
         "created_at_utc": _now_utc(),
         "commit_sha": sha,
-        "fs_version": "v0.4-real-header-plus-tag-meta",
+        "fs_version": "v0.5-history-roll-features",
         "richness_target": 0.75,
         "richness_estimate": richness_estimate,
         "raw_inputs": _raw_input_stats(bundle, trade_date),
@@ -892,8 +1063,9 @@ def build_meta(
         },
         "notes": [
             "本版本已按真实上游表头修正 raw -> FS 的字段映射。",
-            "daily.csv 无 pre_close，当前使用 close 和 pct_chg 反推 pre_close_est。",
-            "pct_chg 当前按小数收益率处理，不做 /100。",
+            "daily.csv 无 pre_close，当前使用 close 和 pct_chg/100 反推 pre_close_est。",
+            "已接入历史 daily.csv，计算 ret_2d/5d/10d 与 volatility_5d/10d/20d。",
+            "已新增 atr/downside_vol/max_drawdown_20d/tail_risk_score 作为风险骨架特征。",
             "moneyflow_hsgt 当前按市场级数据处理，并按 trade_date 广播到个股特征层。",
             "limit_up_tags 当前已按真实个股热板属性表接入。",
             "namechange 当前作为审计/风险辅助层接入。",
