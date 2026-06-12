@@ -1,44 +1,20 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-06-12T16:35:45+00:00
-- current_run_date: 20260609
+- generated_at_utc: 2026-06-12T16:47:02+00:00
+- current_run_date: 20260612
 - overall_pass: FAIL
 
 ## P_fill
-
-- anchor_trade_date: 20260608
+- anchor_trade_date: 20260611
 - status: trained
-- loaded_trade_dates: 66
+- loaded_trade_dates: 69
 - missing_trade_dates: 2
-- previous_anchor_trade_date: 20260605
-- acceptance_pass: FAIL
-
-| 指标 | 当前 | 对比上次 |
-|---|---:|---|
-| lr_auc | 0.895062 | improved (+0.185105) |
-| lr_logloss | 0.175921 | improved (-0.107683) |
-| lr_brier | 0.051063 | improved (-0.032977) |
-| lgbm_auc | 0.697531 | worse (-0.145051) |
-| lgbm_logloss | 0.184403 | worse (+0.079099) |
-| lgbm_brier | 0.034432 | worse (+0.008905) |
+- acceptance_pass: PASS
 
 ## E_ret
-
-- anchor_trade_date: 20260605
+- anchor_trade_date: 20260610
 - status: trained
-- loaded_trade_dates: 65
+- loaded_trade_dates: 68
 - missing_trade_dates: 2
-- previous_anchor_trade_date: 20260604
+- fs_v2_still_all_missing: ['ret_2d', 'ret_5d', 'ret_10d', 'volatility_5d', 'volatility_10d', 'volatility_20d', 'atr', 'downside_vol', 'max_drawdown_20d', 'tail_risk_score', 'bid_ask_proxy', 'spread_proxy']
 - acceptance_pass: FAIL
-
-| 指标 | 当前 | 对比上次 |
-|---|---:|---|
-| lr_mae | 0.064764 | improved (-0.012693) |
-| lr_rmse | 0.087438 | improved (-0.006100) |
-| lr_corr | 0.037248 | improved (+0.021251) |
-| lr_directional_acc | 0.539474 | improved (+0.052294) |
-| lgbm_mae | 0.067247 | improved (-0.012776) |
-| lgbm_rmse | 0.094900 | improved (-0.003012) |
-| lgbm_corr | -0.014034 | worse (-0.024800) |
-| lgbm_directional_acc | 0.539474 | improved (+0.077935) |
-
