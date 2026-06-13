@@ -1,1 +1,426 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
+"""
+Rebuild Premium HTML report archive.
+
+Purpose:
+  Historical HTML files are static. When the report UI template improves,
+  old files will not inherit the new navigation/tabs/history panels unless
+  they are regenerated. This script rebuilds every premium_YYYYMMDD.html
+  from saved Premium CSV artifacts using the current renderer.
+
+Inputs:
+  outputs/premium/premium_full_YYYYMMDD.csv
+  outputs/premium/premium_top30_YYYYMMDD.csv
+  outputs/premium/premium_verify_YYYYMMDD.csv
+  outputs/premium/learning/limitup_probability_training_samples.csv
+
+Outputs:
+  docs/reports/premium_YYYYMMDD.html
+  docs/reports/premium_latest.html
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence
+
+import numpy as np
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+
+
+def _load_symbol(module_name: str, file_path: Path, symbol: str):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load module: {file_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return getattr(module, symbol)
+
+
+PremiumConfig = _load_symbol(
+    "premium_rebuild_config",
+    SRC / "top10decision" / "premium" / "config.py",
+    "PremiumConfig",
+)
+render_premium_report_html = _load_symbol(
+    "premium_rebuild_views",
+    SRC / "top10decision" / "premium" / "premium_views.py",
+    "render_premium_report_html",
+)
+
+DATE_RE = re.compile(r"(20\d{6})")
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _read_csv_smart(path: Path) -> pd.DataFrame:
+    for enc in ("utf-8", "utf-8-sig", "gbk"):
+        try:
+            return pd.read_csv(path, encoding=enc)
+        except Exception:
+            continue
+    return pd.read_csv(path)
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _date_from_path(path: Path) -> Optional[str]:
+    m = DATE_RE.search(path.name)
+    return m.group(1) if m else None
+
+
+def _first_existing_col(df: pd.DataFrame, names: Sequence[str]) -> Optional[str]:
+    lower = {str(c).strip().lower(): c for c in df.columns}
+    for name in names:
+        hit = lower.get(str(name).strip().lower())
+        if hit is not None:
+            return str(hit)
+    return None
+
+
+def _to_yyyymmdd(x: object) -> str:
+    s = str(x or "").strip()
+    if len(s) == 10 and s[4] == "-" and s[7] == "-":
+        s = s.replace("-", "")
+    m = DATE_RE.search(s)
+    return m.group(1) if m else s[:8]
+
+
+def _norm_ts_code(x: object) -> str:
+    s = str(x or "").strip()
+    if not s or s.lower() == "nan":
+        return ""
+    if "." in s:
+        left, right = s.split(".", 1)
+        digits = "".join(ch for ch in left if ch.isdigit()).zfill(6)
+        return f"{digits}.{right.upper()}"
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if len(digits) >= 6:
+        digits = digits[-6:]
+        if digits.startswith(("60", "68", "90")):
+            return f"{digits}.SH"
+        if digits.startswith(("00", "30", "20")):
+            return f"{digits}.SZ"
+        if digits.startswith(("43", "83", "87", "88", "92")):
+            return f"{digits}.BJ"
+        return digits
+    return s
+
+
+def _first_value(df: pd.DataFrame, names: Sequence[str], default: str = "") -> str:
+    col = _first_existing_col(df, names)
+    if not col:
+        return default
+    for value in df[col].dropna().astype(str).tolist():
+        s = value.strip()
+        if s and s.lower() not in {"nan", "none", "<na>", "nat"}:
+            return s
+    return default
+
+
+def _read_optional_csv(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        return _read_csv_smart(path)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _artifact_dates(cfg: PremiumConfig) -> List[str]:
+    dates = set()
+    for pattern in ("premium_full_*.csv", "premium_top30_*.csv", "premium_verify_*.csv"):
+        for path in cfg.out_root().glob(pattern):
+            d = _date_from_path(path)
+            if d:
+                dates.add(d)
+    return sorted(dates)
+
+
+def _load_training_labels(cfg: PremiumConfig) -> pd.DataFrame:
+    path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    df = _read_optional_csv(path)
+    if df.empty:
+        return df
+
+    date_col = _first_existing_col(df, ["d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"])
+    code_col = _first_existing_col(df, ["ts_code", "code", "symbol"])
+    if not date_col or not code_col:
+        return pd.DataFrame()
+
+    out = pd.DataFrame(index=df.index)
+    out["_hist_date"] = df[date_col].map(_to_yyyymmdd)
+    out["_hist_code"] = df[code_col].map(_norm_ts_code)
+    out["t_limitup_actual_hist"] = pd.to_numeric(
+        df[_first_existing_col(df, ["t_limitup_hit", "t_limitup_actual"])],
+        errors="coerce",
+    ) if _first_existing_col(df, ["t_limitup_hit", "t_limitup_actual"]) else np.nan
+    out["t_touch_limitup_actual_hist"] = pd.to_numeric(
+        df[_first_existing_col(df, ["t_touch_limitup", "t_touch_limitup_actual"])],
+        errors="coerce",
+    ) if _first_existing_col(df, ["t_touch_limitup", "t_touch_limitup_actual"]) else np.nan
+    out["t_limitup_verify_ready_hist"] = pd.to_numeric(
+        df[_first_existing_col(df, ["label_matured", "t_limitup_verify_ready"])],
+        errors="coerce",
+    ) if _first_existing_col(df, ["label_matured", "t_limitup_verify_ready"]) else 1
+    out["t1_close_ret_hist"] = pd.to_numeric(df.get("t1_close_ret"), errors="coerce") if "t1_close_ret" in df.columns else np.nan
+    out["t1_high_ret_hist"] = pd.to_numeric(df.get("t1_high_ret"), errors="coerce") if "t1_high_ret" in df.columns else np.nan
+    out = out.dropna(subset=["_hist_date", "_hist_code"])
+    return out.drop_duplicates(subset=["_hist_date", "_hist_code"], keep="last").reset_index(drop=True)
+
+
+def _patch_verify_from_training_labels(df_verify: pd.DataFrame, labels: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df_verify.empty or labels.empty:
+        return df_verify
+    code_col = _first_existing_col(df_verify, ["ts_code", "code", "symbol"])
+    if not code_col:
+        return df_verify
+
+    out = df_verify.copy()
+    out["_hist_date"] = str(trade_date)
+    out["_hist_code"] = out[code_col].map(_norm_ts_code)
+    labels_one_day = labels[labels["_hist_date"].astype(str) == str(trade_date)].copy()
+    if labels_one_day.empty:
+        return out.drop(columns=["_hist_date", "_hist_code"], errors="ignore")
+
+    out = out.merge(labels_one_day, on=["_hist_date", "_hist_code"], how="left")
+    fill_map = {
+        "t_limitup_actual": "t_limitup_actual_hist",
+        "t_touch_limitup_actual": "t_touch_limitup_actual_hist",
+        "t_limitup_verify_ready": "t_limitup_verify_ready_hist",
+        "t1_close_ret": "t1_close_ret_hist",
+        "t1_high_ret": "t1_high_ret_hist",
+    }
+    for dst, src in fill_map.items():
+        if src not in out.columns:
+            continue
+        if dst not in out.columns:
+            out[dst] = out[src]
+        else:
+            dst_num = pd.to_numeric(out[dst], errors="coerce")
+            out[dst] = dst_num.where(dst_num.notna(), out[src])
+    if "t_limitup_verify_reason" not in out.columns:
+        out["t_limitup_verify_reason"] = ""
+    ready = pd.to_numeric(out.get("t_limitup_verify_ready"), errors="coerce").fillna(0).eq(1)
+    reason = out["t_limitup_verify_reason"].astype(str)
+    out["t_limitup_verify_reason"] = np.where(ready & reason.isin(["", "nan", "None", "<NA>"]), "ok_from_training_archive", reason)
+    return out.drop(columns=[c for c in out.columns if c.endswith("_hist")] + ["_hist_date", "_hist_code"], errors="ignore")
+
+
+def _num_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
+    col = _first_existing_col(df, names)
+    if not col:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+    return pd.to_numeric(df[col], errors="coerce")
+
+
+def _bool_like_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
+    col = _first_existing_col(df, names)
+    if not col:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+    num = pd.to_numeric(df[col], errors="coerce")
+    if num.notna().any():
+        return num.clip(lower=0, upper=1)
+    raw = df[col].astype(str).str.strip().str.lower()
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    out.loc[raw.isin({"1", "true", "yes", "y", "是", "命中", "hit", "up"})] = 1.0
+    out.loc[raw.isin({"0", "false", "no", "n", "否", "未命中", "miss", "down"})] = 0.0
+    return out.fillna(default)
+
+
+def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str, object]:
+    if df is None or df.empty:
+        return {"ready": False, "reason": "history_empty", "source": source}
+
+    rank = _num_series(df, ["rank", "dec_rank"], default=np.nan)
+    actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
+    ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
+    valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & actual.notna() & rank.notna()
+    if not valid.any():
+        return {"ready": False, "reason": "no_ready_history_rows", "source": source}
+
+    def calc(n: int) -> tuple[int, int, float]:
+        m = valid & (rank <= n)
+        total = int(m.sum())
+        hits = int(actual[m].eq(1).sum())
+        rate = float(hits) / float(total) if total else float("nan")
+        return total, hits, rate
+
+    top10_total, top10_hits, top10_rate = calc(10)
+    top20_total, top20_hits, top20_rate = calc(20)
+
+    date_col = _first_existing_col(df, ["d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"])
+    n_days = 0
+    if date_col:
+        dates = df.loc[valid, date_col].map(_to_yyyymmdd)
+        n_days = int(dates[dates.astype(str).str.match(r"^20\d{6}$", na=False)].nunique())
+
+    return {
+        "ready": bool(top10_total > 0 or top20_total > 0),
+        "reason": "ok",
+        "source": source,
+        "n_days": n_days,
+        "top10_total": top10_total,
+        "top10_hits": top10_hits,
+        "top10_hit_rate": top10_rate,
+        "top20_total": top20_total,
+        "top20_hits": top20_hits,
+        "top20_hit_rate": top20_rate,
+    }
+
+
+def _collect_historical_limitup_stats(cfg: PremiumConfig) -> Dict[str, object]:
+    trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+    if trainset_path.exists():
+        df = _read_optional_csv(trainset_path)
+        stats = _historical_limitup_stats_from_df(df, "limitup_probability_training_samples.csv")
+        if stats.get("ready"):
+            return stats
+
+    rows: List[pd.DataFrame] = []
+    for path in sorted(cfg.out_root().glob("premium_verify_*.csv")):
+        df = _read_optional_csv(path)
+        if df.empty:
+            continue
+        if "d_trade_date" not in df.columns:
+            df["d_trade_date"] = _date_from_path(path) or ""
+        rows.append(df)
+    if not rows:
+        return {"ready": False, "reason": "no_history_verify_files", "source": "premium_verify_*.csv"}
+    return _historical_limitup_stats_from_df(pd.concat(rows, ignore_index=True, sort=False), "premium_verify_*.csv")
+
+
+def _top_frame_for_date(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
+    for path in (
+        cfg.out_full_csv(trade_date),
+        cfg.out_top30_csv(trade_date),
+        cfg.out_top20_csv(trade_date),
+        cfg.out_top10_csv(trade_date),
+    ):
+        df = _read_optional_csv(path)
+        if not df.empty:
+            return df
+    return pd.DataFrame()
+
+
+def _render_one(
+    cfg: PremiumConfig,
+    trade_date: str,
+    report_dates: Sequence[str],
+    historical_stats: Dict[str, object],
+    training_labels: pd.DataFrame,
+) -> Optional[Path]:
+    df_top = _top_frame_for_date(cfg, trade_date)
+    if df_top.empty:
+        return None
+
+    verify_path = cfg.out_verify_csv(trade_date)
+    df_verify = _read_optional_csv(verify_path)
+    if df_verify.empty:
+        df_verify = df_top.copy()
+    df_verify = _patch_verify_from_training_labels(df_verify, training_labels, trade_date)
+
+    buy_date = _first_value(df_top, ["buy_date", "t_trade_date"], "")
+    target_date = _first_value(df_top, ["target_date", "t1_trade_date", "next_trade_date"], "")
+    if not buy_date:
+        buy_date = _first_value(df_verify, ["buy_date", "t_trade_date"], "")
+    if not target_date:
+        target_date = _first_value(df_verify, ["target_date", "t1_trade_date", "next_trade_date"], "")
+
+    ready = pd.to_numeric(df_verify.get("t_limitup_verify_ready", pd.Series(dtype=float)), errors="coerce").fillna(0)
+    verify_pending = bool(ready.sum() <= 0)
+    verify_reason = "ok" if not verify_pending else "historical_truth_not_ready"
+
+    html = render_premium_report_html(
+        trade_date=trade_date,
+        buy_date=buy_date or "-",
+        target_date=target_date or "-",
+        df_top=df_top,
+        df_verify=df_verify,
+        verify_pending=verify_pending,
+        verify_reason=verify_reason,
+        gen_ts=_utc_now_iso(),
+        model_version=str(getattr(cfg, "model_version", "-")),
+        audit_notes=[
+            "archive_rebuilt=True",
+            f"history_source={historical_stats.get('source', '-')}",
+        ],
+        report_dates=report_dates,
+        historical_limitup_stats=historical_stats,
+    )
+    out_path = cfg.report_html_path(trade_date)
+    _write_text(out_path, html)
+    return out_path
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Rebuild all Premium HTML reports using the current UI template.")
+    p.add_argument("--latest-date", default="", help="Optional YYYYMMDD to use for premium_latest.html; default=max artifact date.")
+    p.add_argument("--verbose", action="store_true")
+    return p.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
+    cfg = PremiumConfig.load()
+    dates = _artifact_dates(cfg)
+    if not dates:
+        print("[premium-report-rebuild] no premium artifacts found; skipped")
+        return 0
+
+    if args.latest_date:
+        latest_date = _to_yyyymmdd(args.latest_date)
+        if latest_date not in dates:
+            print(f"[premium-report-rebuild] latest_date={latest_date} not in artifacts; using {dates[-1]}")
+            latest_date = dates[-1]
+    else:
+        latest_date = dates[-1]
+
+    historical_stats = _collect_historical_limitup_stats(cfg)
+    training_labels = _load_training_labels(cfg)
+
+    built: List[Path] = []
+    skipped: List[str] = []
+    for trade_date in dates:
+        out_path = _render_one(cfg, trade_date, dates, historical_stats, training_labels)
+        if out_path is None:
+            skipped.append(trade_date)
+            continue
+        built.append(out_path)
+        if args.verbose:
+            print(f"[premium-report-rebuild] built {out_path}")
+
+    latest_path = cfg.report_html_path(latest_date)
+    if latest_path.exists():
+        _write_text(cfg.report_latest_html_path(), latest_path.read_text(encoding="utf-8"))
+
+    print(
+        "[premium-report-rebuild] "
+        f"built={len(built)} skipped={len(skipped)} latest={latest_date} "
+        f"history_top10={historical_stats.get('top10_hits', 0)}/{historical_stats.get('top10_total', 0)}"
+    )
+    if skipped and args.verbose:
+        print("[premium-report-rebuild] skipped_dates=" + ",".join(skipped))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
