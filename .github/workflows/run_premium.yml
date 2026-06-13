@@ -119,6 +119,14 @@ jobs:
           set -e
           python scripts/run_premium.py "$PREMIUM_CMD" --verbose
 
+      - name: Rebuild Premium HTML report archive
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -e
+          python scripts/rebuild_premium_reports.py --verbose
+
       - name: Sanity check outputs
         run: |
           set -e
@@ -190,6 +198,8 @@ jobs:
           find src -type f -name "*.pyc" -delete || true
 
           # 只提交 Premium 输出、模型、报告和 market cache。
+          git add data/pred/pred_source_latest.csv || true
+          git add data/pred/archive || true
           git add outputs/premium || true
           git add docs/reports || true
           git add data/market || true
