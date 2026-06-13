@@ -15,6 +15,7 @@ Premium 子系统 — Train（训练闭环｜V3.3：E_ret_plus / EHX 残差增�
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import re
 import sys
@@ -103,6 +104,19 @@ def _safe_numeric_series(df: pd.DataFrame, candidates: List[str], default: float
         if hit is not None:
             return pd.to_numeric(df[hit], errors="coerce")
     return pd.Series([default] * len(df), index=df.index, dtype="float64")
+
+
+def _price_numeric_series(df: pd.DataFrame, candidates: List[str], default: float = np.nan) -> pd.Series:
+    """解析价格列，兼容 “≤11.97”“冲高至12.78” 这类展示字符串。"""
+    col = _first_existing_col(df, candidates)
+    if not col:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+
+    num = pd.to_numeric(df[col], errors="coerce")
+    raw = df[col].astype(str).str.replace(",", "", regex=False).str.strip()
+    extracted = raw.str.extract(r"(-?\d+(?:\.\d+)?)", expand=False)
+    parsed = pd.to_numeric(extracted, errors="coerce")
+    return num.where(num.notna(), parsed).fillna(default)
 
 
 def _first_existing_col(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
@@ -435,6 +449,216 @@ def _bool_numeric_series(df: pd.DataFrame, candidates: List[str], default: float
     return out.fillna(default)
 
 
+def _norm_ts_code_for_market(x: object) -> str:
+    s = str(x).strip()
+    if not s or s.lower() == "nan":
+        return ""
+    if "." in s:
+        left, right = s.split(".", 1)
+        return f"{''.join(ch for ch in left if ch.isdigit()).zfill(6)}.{right.upper()}"
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if len(digits) >= 6:
+        digits = digits[-6:]
+        if digits.startswith(("60", "68", "90")):
+            return f"{digits}.SH"
+        if digits.startswith(("00", "30", "20")):
+            return f"{digits}.SZ"
+        if digits.startswith(("43", "83", "87", "88", "92")):
+            return f"{digits}.BJ"
+        return digits
+    return s
+
+
+def _limit_rate_for_code(ts_code: object) -> float:
+    code = _norm_ts_code_for_market(ts_code)
+    raw = code.split(".")[0]
+    suffix = code.split(".")[-1] if "." in code else ""
+    if suffix == "BJ" or raw.startswith(("43", "83", "87", "88", "92")):
+        return 0.30
+    if raw.startswith(("300", "301", "688", "689")):
+        return 0.20
+    return 0.10
+
+
+def _valid_trade_date(x: object) -> Optional[str]:
+    s = _to_yyyymmdd(x)
+    return s if re.fullmatch(r"20\d{6}", s) else None
+
+
+def _first_nonempty_date(df: pd.DataFrame, candidates: List[str], fallback: str = "") -> Optional[str]:
+    col = _first_existing_col(df, candidates)
+    if col:
+        for v in df[col].dropna().astype(str).tolist():
+            hit = _valid_trade_date(v)
+            if hit:
+                return hit
+    return _valid_trade_date(fallback) if fallback else None
+
+
+def _infer_next_market_trade_dates(
+    cfg: PremiumConfig,
+    trade_date: str,
+    max_probe_days: int = 20,
+) -> Tuple[Optional[str], Optional[str], str]:
+    """
+    用真实 daily 数据存在性探测 D 后两个 A 股交易日。
+
+    训练回填阶段用于历史文件修复：只接受有全市场 daily 的日期，避免把周末/节假日误当交易日。
+    """
+    trade_date = _to_yyyymmdd(trade_date)
+    try:
+        d0 = dt.datetime.strptime(trade_date, "%Y%m%d").date()
+    except Exception:
+        return None, None, f"bad_trade_date:{trade_date}"
+
+    found: List[str] = []
+    reasons: List[str] = []
+    for i in range(1, int(max_probe_days) + 1):
+        cand = (d0 + dt.timedelta(days=i)).strftime("%Y%m%d")
+        r = ensure_daily_cached(cfg, cand)
+        if r.ok:
+            found.append(cand)
+            if len(found) >= 2:
+                return found[0], found[1], "ok:market_daily_probe"
+        else:
+            if len(reasons) < 3:
+                reasons.append(f"{cand}:{r.reason}")
+    return (found[0] if found else None), None, "next_trade_dates_not_ready:" + "|".join(reasons)
+
+
+def _has_complete_limitup_truth(df: pd.DataFrame) -> bool:
+    ready = _bool_numeric_series(df, ["t_limitup_verify_ready", "label_matured"], default=np.nan)
+    t_limitup = _bool_numeric_series(df, ["t_limitup_actual", "t_limitup_hit"], default=np.nan)
+    t_touch = _bool_numeric_series(df, ["t_touch_limitup_actual", "t_touch_limitup"], default=np.nan)
+    close_ret = _t1_close_ret_from_verify_df(df)
+    high_ret = _t1_high_ret_from_verify_df(df, close_ret)
+    valid = (
+        pd.to_numeric(ready, errors="coerce").fillna(0).eq(1)
+        & t_limitup.notna()
+        & t_touch.notna()
+        & close_ret.notna()
+        & high_ret.notna()
+    )
+    return bool(valid.any())
+
+
+def _backfill_limitup_truth_from_market(
+    cfg: PremiumConfig,
+    df: pd.DataFrame,
+    path: Path,
+) -> Tuple[pd.DataFrame, str]:
+    """
+    历史 premium_verify 文件没有涨停标签时，用 T/T+1 日频行情补齐训练标签。
+
+    日频条件下，T 日竞价买入收益用 T 日 open 做近似；涨停/触板用 T 日 close/high 与
+    D 日 close 推算的制度涨停价校验。
+    """
+    if df.empty or _has_complete_limitup_truth(df):
+        return df, "already_labeled"
+
+    ts_col = _first_existing_col(df, ["ts_code", "code", "symbol"])
+    if not ts_col:
+        return df, "missing_ts_code"
+
+    d_trade_date = _first_nonempty_date(
+        df,
+        ["d_analysis_trade_date", "base_date", "trade_date", "date"],
+        fallback=_infer_trade_date_from_path(path),
+    )
+    if not d_trade_date:
+        return df, "missing_d_trade_date"
+
+    t_trade_date = _first_nonempty_date(df, ["buy_date", "t_trade_date"])
+    t1_trade_date = _first_nonempty_date(df, ["target_date", "t1_trade_date", "next_trade_date"])
+    if not t_trade_date or not t1_trade_date:
+        t_probe, t1_probe, reason = _infer_next_market_trade_dates(cfg, d_trade_date)
+        t_trade_date = t_trade_date or t_probe
+        t1_trade_date = t1_trade_date or t1_probe
+        if not t_trade_date or not t1_trade_date:
+            return df, reason
+
+    r_t = ensure_daily_cached(cfg, t_trade_date)
+    if not r_t.ok:
+        return df, f"t_daily_not_ready:{t_trade_date}:{r_t.reason}"
+    r_t1 = ensure_daily_cached(cfg, t1_trade_date)
+    if not r_t1.ok:
+        return df, f"t1_daily_not_ready:{t1_trade_date}:{r_t1.reason}"
+
+    try:
+        daily_t = load_daily(cfg, t_trade_date)[["ts_code", "open", "high", "close"]].copy()
+        daily_t1 = load_daily(cfg, t1_trade_date)[["ts_code", "high", "close"]].copy()
+    except Exception as e:
+        return df, f"daily_load_error:{type(e).__name__}:{e}"
+
+    out = df.copy()
+    out["_join_ts_code"] = out[ts_col].map(_norm_ts_code_for_market)
+    daily_t["ts_code"] = daily_t["ts_code"].map(_norm_ts_code_for_market)
+    daily_t1["ts_code"] = daily_t1["ts_code"].map(_norm_ts_code_for_market)
+
+    daily_t = daily_t.rename(
+        columns={
+            "ts_code": "_join_ts_code",
+            "open": "_bf_open_T_actual",
+            "high": "_bf_high_T_actual",
+            "close": "_bf_close_T_actual",
+        }
+    )
+    daily_t1 = daily_t1.rename(
+        columns={
+            "ts_code": "_join_ts_code",
+            "high": "_bf_high_T2_actual",
+            "close": "_bf_close_T2_actual",
+        }
+    )
+    out = out.merge(daily_t, on="_join_ts_code", how="left")
+    out = out.merge(daily_t1, on="_join_ts_code", how="left")
+
+    d_close = _safe_numeric_series(out, ["close_T", "d_close", "close", "收盘价"], default=np.nan)
+    t_open = pd.to_numeric(out["_bf_open_T_actual"], errors="coerce")
+    t_high = pd.to_numeric(out["_bf_high_T_actual"], errors="coerce")
+    t_close = pd.to_numeric(out["_bf_close_T_actual"], errors="coerce")
+    t1_high = pd.to_numeric(out["_bf_high_T2_actual"], errors="coerce")
+    t1_close = pd.to_numeric(out["_bf_close_T2_actual"], errors="coerce")
+
+    limit_rates = out["_join_ts_code"].map(_limit_rate_for_code).astype(float)
+    limit_price = (d_close * (1.0 + limit_rates)).round(2)
+    entry_price = t_open.where(t_open > 0, _price_numeric_series(
+        out,
+        ["t_max_buy_price", "T日可接受买入价", "entry_price_t1", "entry_price_proxy_t1"],
+        default=np.nan,
+    ))
+    entry_price = entry_price.where(entry_price > 0, t_close)
+
+    ready = t_close.notna() & t_high.notna() & t1_close.notna() & t1_high.notna() & (entry_price > 0) & limit_price.notna()
+
+    out["trade_date"] = d_trade_date
+    out["d_analysis_trade_date"] = d_trade_date
+    out["buy_date"] = t_trade_date
+    out["target_date"] = t1_trade_date
+    out["t_trade_date"] = t_trade_date
+    out["t1_trade_date"] = t1_trade_date
+    out["open_T_actual"] = t_open
+    out["high_T_actual"] = t_high
+    out["close_T_actual"] = t_close
+    out["high_T2_actual"] = t1_high
+    out["close_T2_actual"] = t1_close
+    out["t_limit_price_est"] = limit_price
+    out["t_limitup_actual"] = np.where(ready, (t_close >= limit_price * 0.9985).astype(int), np.nan)
+    out["t_touch_limitup_actual"] = np.where(ready, (t_high >= limit_price * 0.9985).astype(int), np.nan)
+    out["t_limitup_verify_ready"] = ready.astype(int)
+    out["t_limitup_verify_reason"] = np.where(ready, "ok_backfilled_daily", "missing_daily_row")
+    out["t_limitup_verify_trade_date"] = t_trade_date
+    out["t1_close_ret"] = np.where(ready, t1_close / entry_price - 1.0, np.nan)
+    out["t1_high_ret"] = np.where(ready, t1_high / entry_price - 1.0, np.nan)
+    out["t1_up_hit"] = np.where(ready, (out["t1_close_ret"] > 0).astype(int), np.nan)
+    out["t1_high_profit_hit"] = np.where(ready, (out["t1_high_ret"] >= 0.02).astype(int), np.nan)
+
+    tmp_cols = [c for c in out.columns if str(c).startswith("_bf_")]
+    out = out.drop(columns=tmp_cols + ["_join_ts_code"], errors="ignore")
+    valid_n = int(pd.to_numeric(out["t_limitup_verify_ready"], errors="coerce").fillna(0).sum())
+    return out, f"backfilled:{valid_n}/{len(out)}:{t_trade_date}->{t1_trade_date}"
+
+
 def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
     """
     从 outputs/premium/premium_verify_*.csv 回收 EHX 已验证样本。
@@ -589,6 +813,8 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         "n_verify_files": len(files),
         "ok_files": 0,
         "skipped_files": 0,
+        "backfilled_files": 0,
+        "backfill_failed": 0,
         "notes": [],
     }
     rows: List[pd.DataFrame] = []
@@ -604,6 +830,14 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             stats["skipped_files"] += 1
             stats["notes"].append(f"skip {path.name}: empty")
             continue
+
+        df, backfill_reason = _backfill_limitup_truth_from_market(cfg, df, path)
+        if str(backfill_reason).startswith("backfilled:"):
+            stats["backfilled_files"] += 1
+            stats["notes"].append(f"{path.name}: {backfill_reason}")
+        elif backfill_reason not in ("already_labeled",):
+            stats["backfill_failed"] += 1
+            stats["notes"].append(f"{path.name}: backfill skipped: {backfill_reason}")
 
         ts_col = _first_existing_col(df, ["ts_code", "code", "symbol"])
         if not ts_col:
