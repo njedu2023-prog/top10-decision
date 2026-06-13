@@ -187,6 +187,15 @@ def _rate_from_hits(hits: int, total: int) -> float:
     return float(hits) / float(total) if int(total) > 0 else float("nan")
 
 
+def _prob_series(df: pd.DataFrame, names: List[str], default: float = np.nan) -> pd.Series:
+    c = _first_existing_col(df, *names)
+    if c is None:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+    x = pd.to_numeric(df[c], errors="coerce")
+    x = x.where(~(x > 1.0), x / 100.0)
+    return x.clip(lower=0.0, upper=1.0)
+
+
 def _bool_like_series(df: pd.DataFrame, names: List[str], default: float = np.nan) -> pd.Series:
     c = _first_existing_col(df, *names)
     if c is None:
@@ -209,6 +218,7 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     rank = _num_series(df, "rank", "dec_rank", default=np.nan)
     actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
     ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
+    prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
     if ready.notna().any():
         valid = ready.fillna(0).eq(1) & actual.notna() & rank.notna()
     else:
@@ -232,6 +242,37 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         dates = df.loc[valid, date_col].astype(str).map(_to_yyyymmdd)
         n_days = int(dates[dates.str.match(r"^20\d{6}$", na=False)].nunique())
 
+    rolling: Dict[str, object] = {}
+    if date_col is not None:
+        date_s = df[date_col].astype(str).map(_to_yyyymmdd)
+        all_dates = sorted(date_s[valid & date_s.str.match(r"^20\d{6}$", na=False)].unique().tolist())
+        for win in (5, 20, 60):
+            keep_dates = set(all_dates[-win:])
+            m = valid & date_s.isin(keep_dates) & (rank <= 10)
+            total = int(m.sum())
+            hits = int(actual[m].eq(1).sum())
+            rolling[f"top10_hit_rate_{win}d"] = _rate_from_hits(hits, total)
+            rolling[f"top10_hits_{win}d"] = hits
+            rolling[f"top10_total_{win}d"] = total
+
+    cal_valid = valid & prob.notna()
+    brier = float(np.nanmean((prob[cal_valid] - actual[cal_valid]) ** 2)) if cal_valid.any() else float("nan")
+    ece = float("nan")
+    bucket_rows: List[str] = []
+    if cal_valid.any():
+        total_cal = int(cal_valid.sum())
+        err_sum = 0.0
+        for lo, hi in [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.000001)]:
+            m = cal_valid & (prob >= lo) & (prob < hi)
+            n = int(m.sum())
+            if n <= 0:
+                continue
+            avg_pred = float(prob[m].mean())
+            hit_rate = float(actual[m].mean())
+            err_sum += (n / total_cal) * abs(avg_pred - hit_rate)
+            bucket_rows.append(f"{lo:.1f}-{min(hi, 1.0):.1f}:{hit_rate:.3f}/{avg_pred:.3f}/{n}")
+        ece = float(err_sum)
+
     return {
         "ready": bool(top10_total > 0 or top20_total > 0),
         "reason": "ok",
@@ -243,6 +284,11 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         "top20_total": top20_total,
         "top20_hits": top20_hits,
         "top20_hit_rate": top20_rate,
+        "calibration_rows": int(cal_valid.sum()),
+        "calibration_brier": brier,
+        "calibration_ece": ece,
+        "calibration_bins": " | ".join(bucket_rows),
+        **rolling,
     }
 
 
@@ -275,6 +321,178 @@ def _collect_historical_limitup_stats(cfg: PremiumConfig) -> Dict[str, object]:
     if not rows:
         return {"ready": False, "reason": "no_history_verify_files", "source": "premium_verify_*.csv"}
     return _historical_limitup_stats_from_df(pd.concat(rows, ignore_index=True, sort=False), "premium_verify_*.csv")
+
+
+def _load_limitup_calibration_bins(cfg: PremiumConfig, min_bin_samples: int = 20) -> Tuple[List[Dict[str, float]], str]:
+    trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+    if not trainset_path.exists():
+        return [], "calibration_trainset_missing"
+    try:
+        df = _read_csv_smart(trainset_path)
+    except Exception as e:
+        return [], f"calibration_trainset_read_error:{type(e).__name__}"
+    if df.empty:
+        return [], "calibration_trainset_empty"
+
+    actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
+    prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
+    ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
+    valid = actual.notna() & prob.notna()
+    if ready.notna().any():
+        valid = valid & ready.fillna(0).eq(1)
+    if int(valid.sum()) < int(min_bin_samples):
+        return [], f"calibration_samples_not_enough:{int(valid.sum())}<{int(min_bin_samples)}"
+
+    bins: List[Dict[str, float]] = []
+    for lo, hi in [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.000001)]:
+        m = valid & (prob >= lo) & (prob < hi)
+        n = int(m.sum())
+        if n < int(min_bin_samples):
+            continue
+        bins.append({
+            "lo": float(lo),
+            "hi": float(min(hi, 1.0)),
+            "n": float(n),
+            "avg_pred": float(prob[m].mean()),
+            "hit_rate": float(actual[m].mean()),
+        })
+    if not bins:
+        return [], "calibration_bins_empty"
+    return bins, "ok"
+
+
+def _apply_limitup_probability_calibration(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    out = df.copy()
+    bins, reason = _load_limitup_calibration_bins(cfg)
+    trace: Dict[str, object] = {
+        "limitup_calibration_mode": "off",
+        "limitup_calibration_reason": reason,
+        "limitup_calibration_bins": len(bins),
+    }
+    if not bins or "t_limitup_prob" not in out.columns:
+        out["limitup_calibration_src"] = f"none:{reason}"
+        return out, trace
+
+    p = pd.to_numeric(out["t_limitup_prob"], errors="coerce").clip(0.01, 0.99)
+    calibrated = p.copy()
+    for b in bins:
+        lo = float(b["lo"])
+        hi = float(b["hi"])
+        hit_rate = float(b["hit_rate"])
+        m = (p >= lo) & (p < (hi + 1e-9))
+        # 温和校准：保留 65% 原始排序信息，35% 拉向历史实际命中率。
+        calibrated.loc[m] = (0.65 * p.loc[m] + 0.35 * hit_rate).clip(0.01, 0.99)
+
+    delta = calibrated - p
+    out["t_limitup_prob_raw_before_calibration"] = p
+    out["t_limitup_prob_calibrated"] = calibrated.round(6)
+    out["t_limitup_prob"] = out["t_limitup_prob_calibrated"]
+    out["T日涨停概率"] = out["t_limitup_prob"]
+    if "limitup_continuation_score" in out.columns:
+        score = pd.to_numeric(out["limitup_continuation_score"], errors="coerce")
+        out["limitup_continuation_score"] = (score + 20.0 * delta).clip(0.0, 100.0).round(4)
+        out["涨停接力评分"] = out["limitup_continuation_score"]
+    out["limitup_calibration_src"] = "historical_bin_blend_v1"
+    trace.update({
+        "limitup_calibration_mode": "historical_bin_blend_v1",
+        "limitup_calibration_reason": "ok",
+        "limitup_calibration_avg_delta": float(delta.mean()) if delta.notna().any() else 0.0,
+    })
+    return out, trace
+
+
+def _find_prev_market_trade_date(cfg: PremiumConfig, trade_date: str, max_probe_days: int = 15) -> Tuple[Optional[str], str]:
+    import datetime as dt
+
+    trade_date = _to_yyyymmdd(trade_date)
+    try:
+        d0 = dt.datetime.strptime(trade_date, "%Y%m%d").date()
+    except Exception:
+        return None, f"bad_trade_date:{trade_date}"
+    notes: List[str] = []
+    for i in range(1, int(max_probe_days) + 1):
+        cand = (d0 - dt.timedelta(days=i)).strftime("%Y%m%d")
+        r = ensure_daily_cached(cfg, cand)
+        if r.ok:
+            return cand, "ok"
+        if len(notes) < 3:
+            notes.append(f"{cand}:{r.reason}")
+    return None, "prev_market_daily_not_found:" + "|".join(notes)
+
+
+def _market_sentiment_features(cfg: PremiumConfig, trade_date: str) -> Tuple[Dict[str, float], str]:
+    """
+    Build D-day full-market regime features from daily bars only.
+
+    These are deliberately date-level features. Every candidate on the same D day receives
+    the same market background, letting the model learn when limit-up continuation is easier
+    or harder.
+    """
+    base = {
+        "mkt_stock_count": 0.0,
+        "mkt_up_ratio": np.nan,
+        "mkt_avg_ret": np.nan,
+        "mkt_median_ret": np.nan,
+        "mkt_strong_count": 0.0,
+        "mkt_strong_ratio": np.nan,
+        "mkt_touch_strong_count": 0.0,
+        "mkt_touch_strong_ratio": np.nan,
+        "mkt_amount_sum": np.nan,
+        "mkt_emotion_score": np.nan,
+    }
+    r = ensure_daily_cached(cfg, trade_date)
+    if not r.ok:
+        return base, f"d_daily_not_ready:{r.reason}"
+    prev_date, prev_reason = _find_prev_market_trade_date(cfg, trade_date)
+    if not prev_date:
+        return base, prev_reason
+    try:
+        d = load_daily(cfg, trade_date)[["ts_code", "open", "high", "close", "amount"]].copy()
+        p = load_daily(cfg, prev_date)[["ts_code", "close"]].rename(columns={"close": "prev_close"})
+        m = d.merge(p, on="ts_code", how="inner")
+        for c in ("open", "high", "close", "prev_close", "amount"):
+            m[c] = pd.to_numeric(m[c], errors="coerce")
+        m = m[(m["prev_close"] > 0) & m["close"].notna()].copy()
+        if m.empty:
+            return base, "market_join_empty"
+        ret = m["close"] / m["prev_close"] - 1.0
+        high_ret = m["high"] / m["prev_close"] - 1.0
+        n = int(len(m))
+        strong = ret >= 0.095
+        touch_strong = high_ret >= 0.095
+        up_ratio = float((ret > 0).mean())
+        avg_ret = float(ret.mean())
+        median_ret = float(ret.median())
+        strong_ratio = float(strong.mean())
+        touch_ratio = float(touch_strong.mean())
+        emotion = (
+            0.45 * up_ratio
+            + 0.25 * np.clip((avg_ret + 0.02) / 0.06, 0.0, 1.0)
+            + 0.20 * np.clip(touch_ratio * 8.0, 0.0, 1.0)
+            + 0.10 * np.clip(strong_ratio * 10.0, 0.0, 1.0)
+        )
+        base.update({
+            "mkt_stock_count": float(n),
+            "mkt_up_ratio": up_ratio,
+            "mkt_avg_ret": avg_ret,
+            "mkt_median_ret": median_ret,
+            "mkt_strong_count": float(int(strong.sum())),
+            "mkt_strong_ratio": strong_ratio,
+            "mkt_touch_strong_count": float(int(touch_strong.sum())),
+            "mkt_touch_strong_ratio": touch_ratio,
+            "mkt_amount_sum": float(pd.to_numeric(m["amount"], errors="coerce").sum()),
+            "mkt_emotion_score": float(np.clip(emotion, 0.0, 1.0)),
+        })
+        return base, f"ok:prev={prev_date}"
+    except Exception as e:
+        return base, f"market_sentiment_error:{type(e).__name__}:{e}"
+
+
+def _attach_market_sentiment(df: pd.DataFrame, features: Dict[str, float]) -> pd.DataFrame:
+    out = df.copy()
+    for k, v in features.items():
+        out[k] = v
+    return out
 
 
 def _rebuild_rank_front(df: pd.DataFrame) -> pd.DataFrame:
@@ -1195,6 +1413,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         pending_truth_reason_T = "ok"
         d0 = load_daily(cfg, trade_date)[["ts_code", "close"]].rename(columns={"close": "close_T"})
 
+    market_sentiment, market_sentiment_reason = _market_sentiment_features(cfg, trade_date)
     buy_date, buy_reason = _advance_trade_days(cfg, trade_date, 1)
     target_date, td_reason = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
     if not buy_date or not target_date:
@@ -1236,6 +1455,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df["risk_flags"] = risk
 
     df = df.merge(d0, on="ts_code", how="left")
+    df = _attach_market_sentiment(df, market_sentiment)
     df["base_date"] = trade_date
     df["buy_date"] = buy_date
     df["target_date"] = target_date
@@ -1248,6 +1468,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df = _compute_quantile_returns(cfg, df)
     df = _build_limitup_continuation_fields(df)
     df, limitup_trace = _apply_limitup_probability_engine(cfg, df)
+    df, calibration_trace = _apply_limitup_probability_calibration(cfg, df)
 
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     q_mid = min(qs, key=lambda x: abs(float(x) - 0.50))
@@ -1307,6 +1528,12 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t_limitup_prob_rule", "t_limitup_strength_rule", "t1_continue_up_rate_rule", "limitup_continuation_score_rule",
         "t_limitup_prob_model", "t_touch_limitup_prob_model", "t1_up_prob_model", "t1_high_profit_prob_model",
         "t1_close_ret_pred", "t1_high_ret_pred", "limitup_model_score", "limitup_model_src",
+        "t_limitup_prob_raw_before_calibration", "t_limitup_prob_calibrated", "limitup_calibration_src",
+    ]
+    market_cols = [
+        "mkt_stock_count", "mkt_up_ratio", "mkt_avg_ret", "mkt_median_ret",
+        "mkt_strong_count", "mkt_strong_ratio", "mkt_touch_strong_count",
+        "mkt_touch_strong_ratio", "mkt_amount_sum", "mkt_emotion_score",
     ]
 
     out_cols = [
@@ -1316,6 +1543,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
         *limitup_model_cols,
+        *market_cols,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf", "eret_plus_conf_score", "eret_plus_src",
         *v_cols,
         "t1_up_rate", "T+1上涨率",
@@ -1358,6 +1586,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
         *limitup_model_cols,
+        *market_cols,
         "t1_up_rate", "T+1上涨率",
         "close_T2_actual", "r_actual", mid_key,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
@@ -1501,10 +1730,16 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "truth_T_reason": pending_truth_reason_T,
             "verify_pending": bool(verify_pending),
             "verify_reason": verify_reason,
+            "market_sentiment_reason": market_sentiment_reason,
+            "mkt_up_ratio": market_sentiment.get("mkt_up_ratio", ""),
+            "mkt_strong_count": market_sentiment.get("mkt_strong_count", ""),
+            "mkt_touch_strong_count": market_sentiment.get("mkt_touch_strong_count", ""),
+            "mkt_emotion_score": market_sentiment.get("mkt_emotion_score", ""),
             "eret_plus_src": eret_plus_src,
             **ehx_trace,
             "limitup_model_src": limitup_model_src,
             **limitup_trace,
+            **calibration_trace,
             "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划",
             "limitup_model_fields": "t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score",
             "rank_groups": "TOP10|TOP20",
@@ -1523,6 +1758,12 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "history_top20_limitup_hit_rate": (
                 "" if not historical_limitup_stats.get("ready") else round(float(historical_limitup_stats.get("top20_hit_rate", float("nan"))), 6)
             ),
+            "history_top10_hit_rate_5d": historical_limitup_stats.get("top10_hit_rate_5d", ""),
+            "history_top10_hit_rate_20d": historical_limitup_stats.get("top10_hit_rate_20d", ""),
+            "history_top10_hit_rate_60d": historical_limitup_stats.get("top10_hit_rate_60d", ""),
+            "limitup_calibration_rows": historical_limitup_stats.get("calibration_rows", 0),
+            "limitup_calibration_brier": historical_limitup_stats.get("calibration_brier", ""),
+            "limitup_calibration_ece": historical_limitup_stats.get("calibration_ece", ""),
             "out_top10": str(p_top10),
             "out_top20": str(p_top20),
             "out_top30": str(p_top),
