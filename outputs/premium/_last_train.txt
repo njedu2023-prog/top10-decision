@@ -1,8 +1,8 @@
 trade_date: 20260610
-model_version: premium_v2
-run_id: gh_27454790557
-commit_sha: 5e97d88fd38d
-created_at_utc: 2026-06-13T03:09:46Z
+model_version: premium_v4_a_share_d_t_t1
+run_id: gh_27460347532
+commit_sha: a37206cfdd18
+created_at_utc: 2026-06-13T07:28:24Z
 trained: True
 reason: ok:ehx_from_premium_verify
 n_samples: 1522
@@ -13,6 +13,6 @@ ehx_n_samples: 1522
 ehx_min_samples: 30
 ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
 ehx_meta_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_meta.json
-delta_mae: 0.054212281477238486
-delta_rmse: 0.07397901346447817
-plus_improve_rate: 0.6491458607095927
+delta_mae: 0.05405675159824666
+delta_rmse: 0.07380786120830206
+plus_improve_rate: 0.6458607095926413

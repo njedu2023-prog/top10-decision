@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Premium 涨停接力预测 20260610</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d8dee9; --soft:#f5f7fb;
+      --accent:#b42318; --accent2:#116149; --panel:#ffffff;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; color:var(--ink); background:#f1f4f8; }
+    header { padding:28px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); }
+    .kicker { color:var(--accent); font-weight:700; font-size:13px; letter-spacing:0; }
+    h1 { margin:8px 0 10px; font-size:30px; line-height:1.18; letter-spacing:0; }
+    .sub { margin:0; color:var(--muted); line-height:1.7; max-width:980px; }
+    main { padding:20px 28px 36px; }
+    .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+    .metric { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:96px; }
+    .metric span { display:block; color:var(--muted); font-size:13px; }
+    .metric strong { display:block; margin-top:8px; font-size:22px; line-height:1.2; }
+    .metric small { display:block; margin-top:8px; color:var(--muted); line-height:1.35; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-top:16px; overflow:hidden; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid var(--line); }
+    h2 { margin:0; font-size:18px; letter-spacing:0; }
+    .badge { border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted); white-space:nowrap; }
+    .table-wrap { overflow-x:auto; width:100%; }
+    table { width:100%; border-collapse:collapse; min-width:1100px; }
+    th, td { padding:10px 12px; border-bottom:1px solid #edf0f5; text-align:left; white-space:nowrap; font-size:13px; }
+    th { background:var(--soft); color:#384256; font-weight:700; }
+    tbody tr:nth-child(even) td { background:#fbfcfe; }
+    td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(8) { font-variant-numeric:tabular-nums; }
+    .explain { padding:14px 18px; color:var(--muted); line-height:1.7; }
+    .explain ul { margin:8px 0 0; padding-left:18px; }
+    .empty { margin:0; padding:16px 18px; color:var(--muted); }
+    @media (max-width: 900px) {
+      header, main { padding-left:16px; padding-right:16px; }
+      .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      h1 { font-size:24px; }
+    }
+    @media (max-width: 560px) {
+      .metrics { grid-template-columns:1fr; }
+      .section-head { align-items:flex-start; flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="kicker">Premium V4 Quant Engine</div>
+    <h1>涨停接力 TOP10 / TOP20 预测报告</h1>
+    <p class="sub">D 日收盘后分析，T 日集合竞价买入，T+1 盘中择时卖出。排序优先级为 T 日涨停概率、T+1 继续上涨概率与接力评分的综合结果。</p>
+  </header>
+  <main>
+    <div class="metrics"><div class="metric"><span>D 分析日</span><strong>20260610</strong><small>使用 D 日收盘后信息</small></div><div class="metric"><span>T 竞价买入日</span><strong>20260611</strong><small>严格 A 股交易日历</small></div><div class="metric"><span>T+1 择时卖出日</span><strong>20260612</strong><small>延续上涨与验证日</small></div><div class="metric"><span>TOP10 涨停命中率</span><strong>10.00%</strong><small>1/10，ok</small></div></div>
+    <section>
+      <div class="section-head"><h2>TOP10：T 日涨停概率最高</h2><span class="badge">核心执行榜</span></div>
+      <div class="table-wrap"><table><thead><tr><th>排名</th><th>代码</th><th>名称</th><th>D收盘</th><th>T涨停概率</th><th>T涨停强度</th><th>T+1继续上涨</th><th>接力评分</th><th>T竞价动作</th><th>最高买入价</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td>1</td><td>603065.SH</td><td>宿迁联盛</td><td>11.44</td><td>98.43%</td><td>64.53</td><td>86.24%</td><td>83.61</td><td>市价竞价</td><td>≤11.98</td><td>冲高至12.81附近优先兑现；强势放量再看13.25；弱于11.27止损</td></tr><tr><td>2</td><td>002354.SZ</td><td>天娱数科</td><td>8.87</td><td>96.81%</td><td>64.04</td><td>83.79%</td><td>82.23</td><td>市价竞价</td><td>≤9.28</td><td>冲高至9.92附近优先兑现；强势放量再看10.26；弱于8.74止损</td></tr><tr><td>3</td><td>600058.SH</td><td>五矿发展</td><td>10.34</td><td>83.29%</td><td>59.99</td><td>86.24%</td><td>76.42</td><td>市价竞价</td><td>≤10.82</td><td>冲高至11.58附近优先兑现；强势放量再看11.98；弱于10.18止损</td></tr><tr><td>4</td><td>000029.SZ</td><td>深深房Ａ</td><td>26.99</td><td>87.04%</td><td>61.11</td><td>76.19%</td><td>75.69</td><td>市价竞价</td><td>≤27.99</td><td>冲高至29.32附近优先兑现；强势放量再看30.32；弱于26.59止损</td></tr><tr><td>5</td><td>002119.SZ</td><td>康强电子</td><td>28.36</td><td>79.60%</td><td>58.88</td><td>79.82%</td><td>73.06</td><td>市价竞价</td><td>≤29.49</td><td>冲高至31.05附近优先兑现；强势放量再看32.11；弱于27.93止损</td></tr><tr><td>6</td><td>002830.SZ</td><td>名雕股份</td><td>15.97</td><td>70.25%</td><td>56.07</td><td>86.24%</td><td>70.23</td><td>市价竞价</td><td>≤16.72</td><td>冲高至17.89附近优先兑现；强势放量再看18.50；弱于15.73止损</td></tr><tr><td>7</td><td>600981.SH</td><td>苏豪汇鸿</td><td>2.71</td><td>67.68%</td><td>55.30</td><td>86.24%</td><td>69.01</td><td>市价竞价</td><td>≤2.84</td><td>冲高至3.04附近优先兑现；强势放量再看3.14；弱于2.67止损</td></tr><tr><td>8</td><td>600573.SH</td><td>惠泉啤酒</td><td>13.01</td><td>62.84%</td><td>53.85</td><td>86.24%</td><td>66.71</td><td>限价竞价</td><td>≤13.62</td><td>冲高至14.57附近优先兑现；强势放量再看15.07；弱于12.81止损</td></tr><tr><td>9</td><td>603636.SH</td><td>南威软件</td><td>9.66</td><td>59.04%</td><td>52.71</td><td>86.24%</td><td>64.91</td><td>限价竞价</td><td>≤10.11</td><td>冲高至10.82附近优先兑现；强势放量再看11.19；弱于9.52止损</td></tr><tr><td>10</td><td>002585.SZ</td><td>双星新材</td><td>13.42</td><td>59.03%</td><td>52.71</td><td>86.24%</td><td>64.90</td><td>限价竞价</td><td>≤14.05</td><td>冲高至15.03附近优先兑现；强势放量再看15.55；弱于13.22止损</td></tr></tbody></table></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>TOP20：T+1 继续上涨候选池</h2><span class="badge">扩展观察榜</span></div>
+      <div class="table-wrap"><table><thead><tr><th>排名</th><th>代码</th><th>名称</th><th>D收盘</th><th>T涨停概率</th><th>T涨停强度</th><th>T+1继续上涨</th><th>接力评分</th><th>T竞价动作</th><th>最高买入价</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td>1</td><td>603065.SH</td><td>宿迁联盛</td><td>11.44</td><td>98.43%</td><td>64.53</td><td>86.24%</td><td>83.61</td><td>市价竞价</td><td>≤11.98</td><td>冲高至12.81附近优先兑现；强势放量再看13.25；弱于11.27止损</td></tr><tr><td>2</td><td>002354.SZ</td><td>天娱数科</td><td>8.87</td><td>96.81%</td><td>64.04</td><td>83.79%</td><td>82.23</td><td>市价竞价</td><td>≤9.28</td><td>冲高至9.92附近优先兑现；强势放量再看10.26；弱于8.74止损</td></tr><tr><td>3</td><td>600058.SH</td><td>五矿发展</td><td>10.34</td><td>83.29%</td><td>59.99</td><td>86.24%</td><td>76.42</td><td>市价竞价</td><td>≤10.82</td><td>冲高至11.58附近优先兑现；强势放量再看11.98；弱于10.18止损</td></tr><tr><td>4</td><td>000029.SZ</td><td>深深房Ａ</td><td>26.99</td><td>87.04%</td><td>61.11</td><td>76.19%</td><td>75.69</td><td>市价竞价</td><td>≤27.99</td><td>冲高至29.32附近优先兑现；强势放量再看30.32；弱于26.59止损</td></tr><tr><td>5</td><td>002119.SZ</td><td>康强电子</td><td>28.36</td><td>79.60%</td><td>58.88</td><td>79.82%</td><td>73.06</td><td>市价竞价</td><td>≤29.49</td><td>冲高至31.05附近优先兑现；强势放量再看32.11；弱于27.93止损</td></tr><tr><td>6</td><td>002830.SZ</td><td>名雕股份</td><td>15.97</td><td>70.25%</td><td>56.07</td><td>86.24%</td><td>70.23</td><td>市价竞价</td><td>≤16.72</td><td>冲高至17.89附近优先兑现；强势放量再看18.50；弱于15.73止损</td></tr><tr><td>7</td><td>600981.SH</td><td>苏豪汇鸿</td><td>2.71</td><td>67.68%</td><td>55.30</td><td>86.24%</td><td>69.01</td><td>市价竞价</td><td>≤2.84</td><td>冲高至3.04附近优先兑现；强势放量再看3.14；弱于2.67止损</td></tr><tr><td>8</td><td>600573.SH</td><td>惠泉啤酒</td><td>13.01</td><td>62.84%</td><td>53.85</td><td>86.24%</td><td>66.71</td><td>限价竞价</td><td>≤13.62</td><td>冲高至14.57附近优先兑现；强势放量再看15.07；弱于12.81止损</td></tr><tr><td>9</td><td>603636.SH</td><td>南威软件</td><td>9.66</td><td>59.04%</td><td>52.71</td><td>86.24%</td><td>64.91</td><td>限价竞价</td><td>≤10.11</td><td>冲高至10.82附近优先兑现；强势放量再看11.19；弱于9.52止损</td></tr><tr><td>10</td><td>002585.SZ</td><td>双星新材</td><td>13.42</td><td>59.03%</td><td>52.71</td><td>86.24%</td><td>64.90</td><td>限价竞价</td><td>≤14.05</td><td>冲高至15.03附近优先兑现；强势放量再看15.55；弱于13.22止损</td></tr><tr><td>11</td><td>002636.SZ</td><td>金安国纪</td><td>77.42</td><td>57.49%</td><td>52.25</td><td>82.50%</td><td>63.23</td><td>限价竞价</td><td>≤80.86</td><td>冲高至86.26附近优先兑现；强势放量再看89.22；弱于76.26止损</td></tr><tr><td>12</td><td>000025.SZ</td><td>特  力Ａ</td><td>15.64</td><td>52.81%</td><td>50.84</td><td>86.24%</td><td>61.95</td><td>限价竞价</td><td>≤16.37</td><td>冲高至17.52附近优先兑现；强势放量再看18.12；弱于15.41止损</td></tr><tr><td>13</td><td>600088.SH</td><td>中视传媒</td><td>15.26</td><td>54.33%</td><td>51.30</td><td>83.27%</td><td>61.92</td><td>限价竞价</td><td>≤15.95</td><td>冲高至17.06附近优先兑现；强势放量再看17.65；弱于15.03止损</td></tr><tr><td>14</td><td>002409.SZ</td><td>雅克科技</td><td>122.55</td><td>54.65%</td><td>51.40</td><td>81.33%</td><td>61.59</td><td>限价竞价</td><td>≤127.79</td><td>冲高至135.70附近优先兑现；强势放量再看140.36；弱于120.71止损</td></tr><tr><td>15</td><td>600843.SH</td><td>上工申贝</td><td>8.45</td><td>49.18%</td><td>49.75</td><td>86.24%</td><td>60.22</td><td>限价竞价</td><td>≤8.85</td><td>冲高至9.46附近优先兑现；强势放量再看9.79；弱于8.32止损</td></tr><tr><td>16</td><td>605589.SH</td><td>圣泉集团</td><td>60.10</td><td>52.69%</td><td>50.81</td><td>75.20%</td><td>59.13</td><td>限价竞价</td><td>≤62.30</td><td>冲高至65.23附近优先兑现；强势放量再看67.46；弱于59.20止损</td></tr><tr><td>17</td><td>000970.SZ</td><td>中科三环</td><td>14.52</td><td>48.20%</td><td>49.46</td><td>83.27%</td><td>59.01</td><td>限价竞价</td><td>≤15.18</td><td>冲高至16.24附近优先兑现；强势放量再看16.79；弱于14.30止损</td></tr><tr><td>18</td><td>603886.SH</td><td>元祖股份</td><td>12.25</td><td>45.95%</td><td>48.79</td><td>86.24%</td><td>58.69</td><td>只观察不追</td><td>≤12.37</td><td>冲高至13.72附近优先兑现；强势放量再看14.19；弱于12.07止损</td></tr><tr><td>19</td><td>002459.SZ</td><td>晶澳科技</td><td>9.15</td><td>45.07%</td><td>48.52</td><td>86.24%</td><td>58.27</td><td>只观察不追</td><td>≤9.24</td><td>冲高至10.25附近优先兑现；强势放量再看10.60；弱于9.01止损</td></tr><tr><td>20</td><td>600500.SH</td><td>中化国际</td><td>6.55</td><td>52.68%</td><td>50.81</td><td>70.21%</td><td>57.88</td><td>限价竞价</td><td>≤6.77</td><td>冲高至7.05附近优先兑现；强势放量再看7.30；弱于6.45止损</td></tr></tbody></table></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>验证与学习</h2><span class="badge">READY</span></div>
+      <div class="explain">
+        <div>验证状态：ok</div>
+        <div>TOP10 涨停预测成功率：10.00%（1/10）</div>
+        <div>TOP20 涨停预测成功率：15.00%（3/20）</div>
+        <div>模型版本：premium_v4_a_share_d_t_t1；生成时间：2026-06-13T07:28:27Z</div>
+        <ul><li>factor_degrade_mode=full</li><li>limitup_truth=ok</li></ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
