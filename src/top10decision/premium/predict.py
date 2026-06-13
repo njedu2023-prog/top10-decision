@@ -59,6 +59,7 @@ from .config import PremiumConfig
 from .factor_builders import build_features_by_packs
 from .factor_registry import detect_factor_packs
 from .market_truth import ensure_daily_cached, load_daily
+from .premium_views import add_rank_groups, attach_limitup_validation, render_premium_report_html
 from .report_md import render_premium_report_md
 
 try:
@@ -76,10 +77,13 @@ class PredictResult:
     target_date: Optional[str]
     pending: bool
     reason: str
+    out_top10: Optional[str] = None
+    out_top20: Optional[str] = None
     out_top30: Optional[str] = None
     out_full: Optional[str] = None
     out_verify: Optional[str] = None
     report_md: Optional[str] = None
+    report_html: Optional[str] = None
 
 
 # ========= 通用工具 =========
@@ -331,8 +335,7 @@ def _advance_trade_days(cfg: PremiumConfig, trade_date: str, steps: int) -> Tupl
     td, reason = _advance_trade_days_by_trade_cal(trade_date, steps)
     if td:
         return td, "trade_cal_ok"
-    td2, reason2 = _advance_trade_days_fallback_business_day(trade_date, steps)
-    return td2, f"{reason}|{reason2}"
+    return "", f"strict_a_share_trade_cal_failed:{reason}"
 
 
 # ========= pred_source_latest 读取与字段兜底 =========
@@ -1022,12 +1025,17 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
         else:
             sell_plans.append(f"按盘中强弱分批卖；弱于{stop_px}止损")
 
-    out["T+1建议买入方式"] = pd.Series(methods, index=out.index, dtype="object")
-    out["T+1可接受买入价"] = pd.Series(max_buy_labels, index=out.index, dtype="object")
+    out["T日建议买入方式"] = pd.Series(methods, index=out.index, dtype="object")
+    out["T日可接受买入价"] = pd.Series(max_buy_labels, index=out.index, dtype="object")
     out["T+1卖出计划"] = pd.Series(sell_plans, index=out.index, dtype="object")
 
-    out["t1_buy_method"] = out["T+1建议买入方式"]
-    out["t1_max_buy_price"] = out["T+1可接受买入价"]
+    # Backward-compatible aliases; the canonical contract is D analysis -> T buy -> T+1 sell.
+    out["T+1建议买入方式"] = out["T日建议买入方式"]
+    out["T+1可接受买入价"] = out["T日可接受买入价"]
+    out["t_buy_method"] = out["T日建议买入方式"]
+    out["t_max_buy_price"] = out["T日可接受买入价"]
+    out["t1_buy_method"] = out["T日建议买入方式"]
+    out["t1_max_buy_price"] = out["T日可接受买入价"]
     out["t1_sell_plan"] = out["T+1卖出计划"]
     out["T+2卖出计划"] = out["T+1卖出计划"]
     out["t2_sell_plan"] = out["T+1卖出计划"]
@@ -1082,6 +1090,21 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     buy_date, buy_reason = _advance_trade_days(cfg, trade_date, 1)
     target_date, td_reason = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
+    if not buy_date or not target_date:
+        reason = f"strict_a_share_calendar_unavailable: buy_date={buy_reason}; target_date={td_reason}"
+        _write_last_run(
+            cfg,
+            trade_date,
+            {
+                "ok": False,
+                "reason": reason,
+                "buy_date": buy_date,
+                "target_date": target_date,
+                "pending": True,
+                "calendar_contract": "strict_a_share_trade_calendar_only",
+            },
+        )
+        return PredictResult(False, trade_date, target_date or None, True, reason)
     pending = (td_reason != "trade_cal_ok") or (buy_reason != "trade_cal_ok") or pending_truth_T
     pending_reason = f"buy_date:{buy_reason};target_date:{td_reason}"
 
@@ -1149,6 +1172,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     df = _rebuild_rank_front(df)
     df = _build_execution_fields(df)
+    df = add_rank_groups(df)
 
     topn = int(cfg.top_n)
     df_top = df.head(topn).copy()
@@ -1158,10 +1182,14 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     v_cols += [f"close_T2_p{int(round(float(q) * 100)):02d}" for q in qs]
 
     exec_cols = [
+        "T日建议买入方式",
+        "T日可接受买入价",
         "T+1建议买入方式",
         "T+1可接受买入价",
         "T+1卖出计划",
         "T+2卖出计划",
+        "t_buy_method",
+        "t_max_buy_price",
         "t1_buy_method",
         "t1_max_buy_price",
         "t1_sell_plan",
@@ -1176,6 +1204,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     out_cols = [
         "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "close_T",
+        "rank_group", "is_top10", "is_top20", "榜单分组",
         *exec_cols,
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
@@ -1194,8 +1223,19 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             df_full[c] = pd.NA
 
     out_top = df_top[out_cols].copy()
+    out_top10 = df.head(10).copy()
+    out_top20 = df.head(20).copy()
+    for c in out_cols:
+        if c not in out_top10.columns:
+            out_top10[c] = pd.NA
+        if c not in out_top20.columns:
+            out_top20[c] = pd.NA
+    out_top10 = out_top10[out_cols].copy()
+    out_top20 = out_top20[out_cols].copy()
     out_full = df_full[out_cols].copy()
 
+    p_top10 = _write_csv(cfg.out_top10_csv(trade_date), out_top10)
+    p_top20 = _write_csv(cfg.out_top20_csv(trade_date), out_top20)
     p_top = _write_csv(cfg.out_top30_csv(trade_date), out_top)
     p_full = _write_csv(cfg.out_full_csv(trade_date), out_full)
 
@@ -1203,7 +1243,10 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     verify_reason = "pending"
     verify_cols = [
         "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "close_T",
+        "rank_group", "is_top10", "is_top20", "榜单分组",
+        "T日建议买入方式", "T日可接受买入价",
         "T+1建议买入方式", "T+1可接受买入价", "T+1卖出计划", "T+2卖出计划",
+        "t_buy_method", "t_max_buy_price",
         "t1_buy_method", "t1_max_buy_price", "t1_sell_plan", "t2_sell_plan",
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
@@ -1212,6 +1255,9 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "close_T2_actual", "r_actual", mid_key,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
         "in_p10", "in_p50", "err_r_p50", "err_close_p50", "actual_ret", "raw_abs_err", "plus_abs_err", "improve_flag", "hit_up",
+        "open_T_actual", "high_T_actual", "close_T_actual", "t_limit_price_est",
+        "t_limitup_actual", "t_touch_limitup_actual", "t_limitup_verify_ready",
+        "t_limitup_verify_reason", "t_limitup_verify_trade_date", "d_analysis_trade_date",
     ]
 
     df_verify = out_top[[c for c in verify_cols if c in out_top.columns]].copy()
@@ -1254,6 +1300,24 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         verify_pending = True
         verify_reason = f"truth_not_ready: T_ok={not pending_truth_T} T2_ok={r_t2.ok} ({pending_reason})"
 
+    r_buy = ensure_daily_cached(cfg, buy_date)
+    daily_buy = load_daily(cfg, buy_date) if r_buy.ok else None
+    df_verify, limitup_validation = attach_limitup_validation(
+        df_verify=df_verify,
+        daily_t=daily_buy,
+        trade_date=trade_date,
+        buy_date=buy_date,
+    )
+    if r_buy.ok:
+        limitup_truth_reason = "ok"
+    else:
+        limitup_truth_reason = f"t_truth_not_ready:{r_buy.reason}"
+
+    for c in verify_cols:
+        if c not in df_verify.columns:
+            df_verify[c] = pd.NA
+    df_verify = df_verify[verify_cols].copy()
+
     p_verify = _write_csv(cfg.out_verify_csv(trade_date), df_verify)
 
     gen_ts = _utc_now_iso()
@@ -1276,6 +1340,24 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     p_md = _write_text(cfg.report_md_path(trade_date), md)
     _write_text(cfg.report_latest_md_path(), md)
+
+    html_report = render_premium_report_html(
+        trade_date=trade_date,
+        buy_date=buy_date,
+        target_date=target_date,
+        df_top=out_top,
+        df_verify=df_verify,
+        verify_pending=verify_pending,
+        verify_reason=verify_reason,
+        gen_ts=gen_ts,
+        model_version=str(getattr(cfg, "model_version", "-")),
+        audit_notes=[
+            f"factor_degrade_mode={pack_status.degrade_mode}",
+            f"limitup_truth={limitup_truth_reason}",
+        ],
+    )
+    p_html = _write_text(cfg.report_html_path(trade_date), html_report)
+    _write_text(cfg.report_latest_html_path(), html_report)
 
     audit_kv = make_audit_kv(
         extra_prefix="factor",
@@ -1313,12 +1395,18 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             **ehx_trace,
             "limitup_model_src": limitup_model_src,
             **limitup_trace,
-            "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T+1建议买入方式",
+            "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划",
             "limitup_model_fields": "t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score",
+            "rank_groups": "TOP10|TOP20",
+            "limitup_truth_reason": limitup_truth_reason,
+            **limitup_validation.as_dict(),
+            "out_top10": str(p_top10),
+            "out_top20": str(p_top20),
             "out_top30": str(p_top),
             "out_full": str(p_full),
             "out_verify": str(p_verify),
             "report_md": str(p_md),
+            "report_html": str(p_html),
             **audit_kv,
         },
     )
@@ -1329,10 +1417,13 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         target_date=target_date,
         pending=bool(pending or verify_pending),
         reason="pending" if (pending or verify_pending) else "ok",
+        out_top10=str(p_top10),
+        out_top20=str(p_top20),
         out_top30=str(p_top),
         out_full=str(p_full),
         out_verify=str(p_verify),
         report_md=str(p_md),
+        report_html=str(p_html),
     )
 
 
