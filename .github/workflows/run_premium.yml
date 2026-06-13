@@ -75,6 +75,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Sync latest Premium candidate pool
+        env:
+          A_TOP10_PRED_URL: "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv"
+        run: |
+          set -e
+          mkdir -p data/pred data/pred/archive
+          TOP10_PRED_URL="${A_TOP10_PRED_URL}" python scripts/sync_pred_source.py
+
+          echo "=== synced data/pred/pred_source_latest.csv head ==="
+          python - <<'PY'
+          import pandas as pd
+          p = "data/pred/pred_source_latest.csv"
+          df = pd.read_csv(p)
+          print(df.head(3).to_string(index=False))
+          if "trade_date" in df.columns:
+              print("premium_candidate_trade_date=", sorted(df["trade_date"].astype(str).unique())[-1])
+          PY
+
       - name: Resolve Premium command
         run: |
           set -e
@@ -145,6 +163,16 @@ jobs:
             # 如果本轮训练已经声明 ehx_trained=True，则模型文件必须存在且非空。
             if grep -E '^ehx_trained:[[:space:]]*True' outputs/premium/_last_train.txt; then
               test -s outputs/premium/models/ehx_delta.joblib
+            fi
+
+            echo "=== LimitUp probability engine contract ==="
+            test -f outputs/premium/models/limitup_probability_engine_meta.json
+            python -m json.tool outputs/premium/models/limitup_probability_engine_meta.json >/dev/null
+
+            # 如果本轮训练已经声明 limitup_trained=True，则模型与验证指标必须存在且非空。
+            if grep -E '^limitup_trained:[[:space:]]*True' outputs/premium/_last_train.txt; then
+              test -s outputs/premium/models/limitup_probability_engine.joblib
+              test -s outputs/premium/models/limitup_probability_engine_metrics.csv
             fi
           fi
 
