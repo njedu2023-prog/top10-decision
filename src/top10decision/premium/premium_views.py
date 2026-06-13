@@ -1,0 +1,371 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Premium views and validation helpers.
+
+This module keeps human-facing Top10/Top20 tables and post-trade validation
+out of the core scoring path. The trading date sequence is still produced by
+predict.py through the strict A-share calendar.
+"""
+
+from __future__ import annotations
+
+import html
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Optional, Sequence
+
+import numpy as np
+import pandas as pd
+
+
+@dataclass(frozen=True)
+class LimitupValidationStats:
+    ready: bool
+    reason: str
+    top10_total: int = 0
+    top10_hits: int = 0
+    top10_hit_rate: float = float("nan")
+    top20_total: int = 0
+    top20_hits: int = 0
+    top20_hit_rate: float = float("nan")
+
+    def as_dict(self) -> Dict[str, object]:
+        return {
+            "limitup_validation_ready": self.ready,
+            "limitup_validation_reason": self.reason,
+            "top10_limitup_total": self.top10_total,
+            "top10_limitup_hits": self.top10_hits,
+            "top10_limitup_hit_rate": (
+                "" if not np.isfinite(self.top10_hit_rate) else round(float(self.top10_hit_rate), 6)
+            ),
+            "top20_limitup_total": self.top20_total,
+            "top20_limitup_hits": self.top20_hits,
+            "top20_limitup_hit_rate": (
+                "" if not np.isfinite(self.top20_hit_rate) else round(float(self.top20_hit_rate), 6)
+            ),
+        }
+
+
+def _num(s: object) -> pd.Series:
+    if isinstance(s, pd.Series):
+        return pd.to_numeric(s, errors="coerce")
+    return pd.to_numeric(pd.Series(s), errors="coerce")
+
+
+def _limit_rate_for_code(ts_code: object) -> float:
+    s = str(ts_code or "").strip().upper()
+    raw = s.split(".")[0] if "." in s else "".join(ch for ch in s if ch.isdigit())[-6:]
+    suffix = s.split(".")[-1] if "." in s else ""
+    if suffix == "BJ" or raw.startswith(("43", "83", "87", "88", "92")):
+        return 0.30
+    if raw.startswith(("300", "301", "688", "689")):
+        return 0.20
+    return 0.10
+
+
+def _fmt_pct(x: object, digits: int = 2) -> str:
+    try:
+        v = float(x)
+        if not np.isfinite(v):
+            return "-"
+        return f"{v * 100:.{digits}f}%"
+    except Exception:
+        return "-"
+
+
+def _fmt_num(x: object, digits: int = 2) -> str:
+    try:
+        v = float(x)
+        if not np.isfinite(v):
+            return "-"
+        return f"{v:.{digits}f}"
+    except Exception:
+        return "-"
+
+
+def _clean_text(x: object, default: str = "-") -> str:
+    s = str(x if x is not None else "").strip()
+    if not s or s.lower() in {"nan", "none", "<na>", "nat"}:
+        return default
+    return s
+
+
+def add_rank_groups(df: pd.DataFrame) -> pd.DataFrame:
+    """Add explicit Top10/Top20 group flags to Premium output tables."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    rank = _num(out.get("rank")).reindex(out.index)
+    out["rank_group"] = np.select(
+        [rank <= 10, rank <= 20],
+        ["TOP10", "TOP20"],
+        default="FULL",
+    )
+    out["is_top10"] = (rank <= 10).astype("Int64")
+    out["is_top20"] = (rank <= 20).astype("Int64")
+    out["榜单分组"] = out["rank_group"].map({"TOP10": "TOP10", "TOP20": "TOP20", "FULL": "TOP20以外"})
+    return out
+
+
+def attach_limitup_validation(
+    df_verify: pd.DataFrame,
+    daily_t: Optional[pd.DataFrame],
+    trade_date: str,
+    buy_date: str,
+) -> tuple[pd.DataFrame, LimitupValidationStats]:
+    """
+    Attach real T-day limit-up labels to the verify table.
+
+    The close limit-up threshold is derived from D close and A-share board rules
+    when a formal up-limit column is unavailable in the cached daily file.
+    """
+    if df_verify is None or df_verify.empty:
+        return df_verify, LimitupValidationStats(False, "verify_table_empty")
+    if daily_t is None or daily_t.empty:
+        out = df_verify.copy()
+        out["t_limitup_actual"] = pd.NA
+        out["t_touch_limitup_actual"] = pd.NA
+        out["t_limitup_verify_ready"] = 0
+        out["t_limitup_verify_reason"] = "t_daily_not_ready"
+        return out, LimitupValidationStats(False, "t_daily_not_ready")
+
+    t = daily_t.copy()
+    if "ts_code" not in t.columns:
+        out = df_verify.copy()
+        out["t_limitup_actual"] = pd.NA
+        out["t_touch_limitup_actual"] = pd.NA
+        out["t_limitup_verify_ready"] = 0
+        out["t_limitup_verify_reason"] = "t_daily_missing_ts_code"
+        return out, LimitupValidationStats(False, "t_daily_missing_ts_code")
+
+    rename = {}
+    for c in ("open", "high", "close"):
+        if c in t.columns:
+            rename[c] = f"{c}_T_actual"
+    t = t.rename(columns=rename)
+    keep = ["ts_code", *rename.values()]
+    t = t[[c for c in keep if c in t.columns]].copy()
+
+    out = df_verify.copy().merge(t, on="ts_code", how="left")
+    d_close = _num(out.get("close_T")).reindex(out.index)
+    t_high = _num(out.get("high_T_actual")).reindex(out.index)
+    t_close = _num(out.get("close_T_actual")).reindex(out.index)
+    rates = out["ts_code"].map(_limit_rate_for_code).astype(float)
+    limit_px = (d_close * (1.0 + rates)).round(2)
+
+    ready = d_close.notna() & t_high.notna() & t_close.notna() & (d_close > 0)
+    out["t_limit_price_est"] = limit_px
+    out["t_limitup_actual"] = np.where(ready, (t_close >= limit_px * 0.9985).astype(int), pd.NA)
+    out["t_touch_limitup_actual"] = np.where(ready, (t_high >= limit_px * 0.9985).astype(int), pd.NA)
+    out["t_limitup_verify_ready"] = ready.astype(int)
+    out["t_limitup_verify_reason"] = np.where(ready, "ok", "missing_D_or_T_price")
+    out["t_limitup_verify_trade_date"] = str(buy_date)
+    out["d_analysis_trade_date"] = str(trade_date)
+
+    stats = _limitup_stats(out)
+    return out, stats
+
+
+def _limitup_stats(df_verify: pd.DataFrame) -> LimitupValidationStats:
+    if df_verify is None or df_verify.empty:
+        return LimitupValidationStats(False, "verify_table_empty")
+    if "t_limitup_actual" not in df_verify.columns:
+        return LimitupValidationStats(False, "limitup_actual_missing")
+
+    ready = _num(df_verify.get("t_limitup_verify_ready")).reindex(df_verify.index).fillna(0).astype(int).eq(1)
+    actual = _num(df_verify.get("t_limitup_actual")).reindex(df_verify.index)
+    rank = _num(df_verify.get("rank")).reindex(df_verify.index)
+
+    def calc(n: int) -> tuple[int, int, float]:
+        m = ready & (rank <= n) & actual.notna()
+        total = int(m.sum())
+        hits = int((actual[m] == 1).sum())
+        rate = hits / total if total > 0 else float("nan")
+        return total, hits, rate
+
+    top10_total, top10_hits, top10_rate = calc(10)
+    top20_total, top20_hits, top20_rate = calc(20)
+    return LimitupValidationStats(
+        ready=bool(top10_total > 0 or top20_total > 0),
+        reason="ok" if (top10_total > 0 or top20_total > 0) else "no_ready_limitup_rows",
+        top10_total=top10_total,
+        top10_hits=top10_hits,
+        top10_hit_rate=top10_rate,
+        top20_total=top20_total,
+        top20_hits=top20_hits,
+        top20_hit_rate=top20_rate,
+    )
+
+
+def limitup_stats_from_verify(df_verify: pd.DataFrame) -> LimitupValidationStats:
+    return _limitup_stats(df_verify)
+
+
+def _html_escape(x: object) -> str:
+    return html.escape(_clean_text(x, ""), quote=True)
+
+
+def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+    show = df.head(n).copy()
+    rows: List[Dict[str, object]] = []
+    for _, r in show.iterrows():
+        rows.append(
+            {
+                "排名": _clean_text(r.get("rank")),
+                "代码": _clean_text(r.get("ts_code")),
+                "名称": _clean_text(r.get("name")),
+                "D收盘": _fmt_num(r.get("close_T"), 2),
+                "T涨停概率": _fmt_pct(r.get("t_limitup_prob"), 2),
+                "T涨停强度": _fmt_num(r.get("t_limitup_strength"), 2),
+                "T+1继续上涨": _fmt_pct(r.get("t1_continue_up_rate"), 2),
+                "接力评分": _fmt_num(r.get("limitup_continuation_score"), 2),
+                "T竞价动作": _clean_text(
+                    r.get("T日建议买入方式", r.get("T+1建议买入方式", r.get("t1_buy_method")))
+                ),
+                "最高买入价": _clean_text(
+                    r.get("T日可接受买入价", r.get("T+1可接受买入价", r.get("t1_max_buy_price")))
+                ),
+                "T+1卖出计划": _clean_text(r.get("T+1卖出计划", r.get("t1_sell_plan"))),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _table_html(df: pd.DataFrame) -> str:
+    if df is None or df.empty:
+        return '<p class="empty">暂无数据</p>'
+    head = "".join(f"<th>{_html_escape(c)}</th>" for c in df.columns)
+    body_rows = []
+    for _, r in df.iterrows():
+        cells = "".join(f"<td>{_html_escape(r.get(c, ''))}</td>" for c in df.columns)
+        body_rows.append(f"<tr>{cells}</tr>")
+    return f"<div class=\"table-wrap\"><table><thead><tr>{head}</tr></thead><tbody>{''.join(body_rows)}</tbody></table></div>"
+
+
+def _metric_card(label: str, value: str, note: str = "") -> str:
+    return (
+        f"<div class=\"metric\"><span>{_html_escape(label)}</span>"
+        f"<strong>{_html_escape(value)}</strong><small>{_html_escape(note)}</small></div>"
+    )
+
+
+def render_premium_report_html(
+    trade_date: str,
+    buy_date: str,
+    target_date: str,
+    df_top: pd.DataFrame,
+    df_verify: pd.DataFrame,
+    verify_pending: bool,
+    verify_reason: str,
+    gen_ts: str,
+    model_version: str,
+    audit_notes: Optional[Iterable[str]] = None,
+) -> str:
+    """Render the human-friendly Premium HTML report."""
+    stats = limitup_stats_from_verify(df_verify)
+    top10 = _display_table(df_top, 10)
+    top20 = _display_table(df_top, 20)
+
+    cards = [
+        _metric_card("D 分析日", str(trade_date), "使用 D 日收盘后信息"),
+        _metric_card("T 竞价买入日", str(buy_date), "严格 A 股交易日历"),
+        _metric_card("T+1 择时卖出日", str(target_date), "延续上涨与验证日"),
+        _metric_card(
+            "TOP10 涨停命中率",
+            "-" if not stats.ready or not np.isfinite(stats.top10_hit_rate) else _fmt_pct(stats.top10_hit_rate),
+            f"{stats.top10_hits}/{stats.top10_total}，{stats.reason}",
+        ),
+    ]
+    notes = "".join(f"<li>{_html_escape(x)}</li>" for x in (audit_notes or []))
+    verify_badge = "PENDING" if verify_pending else "READY"
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Premium 涨停接力预测 {html.escape(str(trade_date))}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d8dee9; --soft:#f5f7fb;
+      --accent:#b42318; --accent2:#116149; --panel:#ffffff;
+    }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; color:var(--ink); background:#f1f4f8; }}
+    header {{ padding:28px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); }}
+    .kicker {{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:0; }}
+    h1 {{ margin:8px 0 10px; font-size:30px; line-height:1.18; letter-spacing:0; }}
+    .sub {{ margin:0; color:var(--muted); line-height:1.7; max-width:980px; }}
+    main {{ padding:20px 28px 36px; }}
+    .metrics {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:20px; }}
+    .metric {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:96px; }}
+    .metric span {{ display:block; color:var(--muted); font-size:13px; }}
+    .metric strong {{ display:block; margin-top:8px; font-size:22px; line-height:1.2; }}
+    .metric small {{ display:block; margin-top:8px; color:var(--muted); line-height:1.35; }}
+    section {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-top:16px; overflow:hidden; }}
+    .section-head {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid var(--line); }}
+    h2 {{ margin:0; font-size:18px; letter-spacing:0; }}
+    .badge {{ border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted); white-space:nowrap; }}
+    .table-wrap {{ overflow-x:auto; width:100%; }}
+    table {{ width:100%; border-collapse:collapse; min-width:1100px; }}
+    th, td {{ padding:10px 12px; border-bottom:1px solid #edf0f5; text-align:left; white-space:nowrap; font-size:13px; }}
+    th {{ background:var(--soft); color:#384256; font-weight:700; }}
+    tbody tr:nth-child(even) td {{ background:#fbfcfe; }}
+    td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(8) {{ font-variant-numeric:tabular-nums; }}
+    .explain {{ padding:14px 18px; color:var(--muted); line-height:1.7; }}
+    .explain ul {{ margin:8px 0 0; padding-left:18px; }}
+    .empty {{ margin:0; padding:16px 18px; color:var(--muted); }}
+    @media (max-width: 900px) {{
+      header, main {{ padding-left:16px; padding-right:16px; }}
+      .metrics {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
+      h1 {{ font-size:24px; }}
+    }}
+    @media (max-width: 560px) {{
+      .metrics {{ grid-template-columns:1fr; }}
+      .section-head {{ align-items:flex-start; flex-direction:column; }}
+    }}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="kicker">Premium V4 Quant Engine</div>
+    <h1>涨停接力 TOP10 / TOP20 预测报告</h1>
+    <p class="sub">D 日收盘后分析，T 日集合竞价买入，T+1 盘中择时卖出。排序优先级为 T 日涨停概率、T+1 继续上涨概率与接力评分的综合结果。</p>
+  </header>
+  <main>
+    <div class="metrics">{''.join(cards)}</div>
+    <section>
+      <div class="section-head"><h2>TOP10：T 日涨停概率最高</h2><span class="badge">核心执行榜</span></div>
+      {_table_html(top10)}
+    </section>
+    <section>
+      <div class="section-head"><h2>TOP20：T+1 继续上涨候选池</h2><span class="badge">扩展观察榜</span></div>
+      {_table_html(top20)}
+    </section>
+    <section>
+      <div class="section-head"><h2>验证与学习</h2><span class="badge">{_html_escape(verify_badge)}</span></div>
+      <div class="explain">
+        <div>验证状态：{_html_escape(verify_reason)}</div>
+        <div>TOP10 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top10_hit_rate) else _fmt_pct(stats.top10_hit_rate))}（{stats.top10_hits}/{stats.top10_total}）</div>
+        <div>TOP20 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top20_hit_rate) else _fmt_pct(stats.top20_hit_rate))}（{stats.top20_hits}/{stats.top20_total}）</div>
+        <div>模型版本：{_html_escape(model_version)}；生成时间：{_html_escape(gen_ts)}</div>
+        {('<ul>' + notes + '</ul>') if notes else ''}
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+__all__ = [
+    "LimitupValidationStats",
+    "add_rank_groups",
+    "attach_limitup_validation",
+    "limitup_stats_from_verify",
+    "render_premium_report_html",
+]
