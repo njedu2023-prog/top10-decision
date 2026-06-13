@@ -351,6 +351,18 @@ def render_premium_report_html(
     hist_days = int(hist.get("n_days", 0) or 0)
     hist_source = _clean_text(hist.get("source"), "-")
     hist_reason = _clean_text(hist.get("reason"), "-")
+    hist_5d = pd.to_numeric(pd.Series([hist.get("top10_hit_rate_5d", np.nan)]), errors="coerce").iloc[0]
+    hist_20d = pd.to_numeric(pd.Series([hist.get("top10_hit_rate_20d", np.nan)]), errors="coerce").iloc[0]
+    hist_60d = pd.to_numeric(pd.Series([hist.get("top10_hit_rate_60d", np.nan)]), errors="coerce").iloc[0]
+    cal_brier = pd.to_numeric(pd.Series([hist.get("calibration_brier", np.nan)]), errors="coerce").iloc[0]
+    cal_ece = pd.to_numeric(pd.Series([hist.get("calibration_ece", np.nan)]), errors="coerce").iloc[0]
+    cal_rows = int(hist.get("calibration_rows", 0) or 0)
+    mkt_emotion = pd.to_numeric(df_top.get("mkt_emotion_score", pd.Series([np.nan])), errors="coerce").dropna()
+    mkt_up = pd.to_numeric(df_top.get("mkt_up_ratio", pd.Series([np.nan])), errors="coerce").dropna()
+    mkt_strong = pd.to_numeric(df_top.get("mkt_strong_count", pd.Series([np.nan])), errors="coerce").dropna()
+    mkt_emotion_v = float(mkt_emotion.iloc[0]) if len(mkt_emotion) else float("nan")
+    mkt_up_v = float(mkt_up.iloc[0]) if len(mkt_up) else float("nan")
+    mkt_strong_v = int(mkt_strong.iloc[0]) if len(mkt_strong) else 0
 
     cards = [
         _metric_card("D 分析日", str(trade_date), "使用 D 日收盘后信息"),
@@ -365,6 +377,21 @@ def render_premium_report_html(
             "历史 TOP10 累计命中率",
             "-" if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate),
             f"{hist_top10_hits}/{hist_top10_total}，有效交易日 {hist_days}，{hist_source}",
+        ),
+        _metric_card(
+            "近20日 TOP10 命中率",
+            "-" if not hist_ready or not np.isfinite(hist_20d) else _fmt_pct(hist_20d),
+            f"近5日 {_fmt_pct(hist_5d) if np.isfinite(hist_5d) else '-'}；近60日 {_fmt_pct(hist_60d) if np.isfinite(hist_60d) else '-'}",
+        ),
+        _metric_card(
+            "概率校准质量",
+            "-" if not np.isfinite(cal_brier) else f"Brier {cal_brier:.4f}",
+            f"ECE {_fmt_num(cal_ece, 4) if np.isfinite(cal_ece) else '-'}；样本 {cal_rows}",
+        ),
+        _metric_card(
+            "D日市场情绪",
+            "-" if not np.isfinite(mkt_emotion_v) else _fmt_pct(mkt_emotion_v),
+            f"上涨占比 {_fmt_pct(mkt_up_v) if np.isfinite(mkt_up_v) else '-'}；强势股 {mkt_strong_v}",
         ),
     ]
     notes = "".join(f"<li>{_html_escape(x)}</li>" for x in (audit_notes or []))
@@ -401,7 +428,7 @@ def render_premium_report_html(
     .nav-btn:hover, .date-chip:hover, .tab-btn:hover {{ border-color:#b6c0d0; background:#f8fafc; }}
     .nav-btn.primary, .date-chip.active, .tab-btn.active {{ border-color:#1f6f54; color:#0f5b43; background:#edf8f3; font-weight:700; }}
     .nav-btn.disabled {{ color:#a0a8b5; background:#f4f6f9; cursor:not-allowed; }}
-    .metrics {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }}
+    .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:16px; }}
     .metric {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:98px; box-shadow:var(--shadow); }}
     .metric span {{ display:block; color:var(--muted); font-size:13px; }}
     .metric strong {{ display:block; margin-top:8px; font-size:23px; line-height:1.2; }}
@@ -480,6 +507,9 @@ def render_premium_report_html(
         <div>本期 TOP20 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top20_hit_rate) else _fmt_pct(stats.top20_hit_rate))}（{stats.top20_hits}/{stats.top20_total}）</div>
         <div>历史 TOP10 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate))}（{hist_top10_hits}/{hist_top10_total}）</div>
         <div>历史 TOP20 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top20_rate) else _fmt_pct(hist_top20_rate))}（{hist_top20_hits}/{hist_top20_total}）</div>
+        <div>滚动 TOP10 命中率：近5日 {_html_escape('-' if not np.isfinite(hist_5d) else _fmt_pct(hist_5d))}；近20日 {_html_escape('-' if not np.isfinite(hist_20d) else _fmt_pct(hist_20d))}；近60日 {_html_escape('-' if not np.isfinite(hist_60d) else _fmt_pct(hist_60d))}</div>
+        <div>概率校准：Brier {_html_escape('-' if not np.isfinite(cal_brier) else f'{cal_brier:.4f}')}；ECE {_html_escape('-' if not np.isfinite(cal_ece) else f'{cal_ece:.4f}')}；校准样本 {cal_rows}</div>
+        <div>D日市场情绪：情绪分 {_html_escape('-' if not np.isfinite(mkt_emotion_v) else _fmt_pct(mkt_emotion_v))}；上涨占比 {_html_escape('-' if not np.isfinite(mkt_up_v) else _fmt_pct(mkt_up_v))}；强势股 {mkt_strong_v}</div>
         <div>历史统计样本：有效交易日 {hist_days}；来源：{_html_escape(hist_source)}；状态：{_html_escape(hist_reason)}</div>
         <div>模型版本：{_html_escape(model_version)}；生成时间：{_html_escape(gen_ts)}</div>
         {('<ul>' + notes + '</ul>') if notes else ''}
