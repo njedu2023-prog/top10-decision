@@ -183,6 +183,100 @@ def _list_report_dates(cfg: PremiumConfig, current_trade_date: str) -> List[str]
     return sorted(d for d in dates if _TD_RE.match(str(d)))
 
 
+def _rate_from_hits(hits: int, total: int) -> float:
+    return float(hits) / float(total) if int(total) > 0 else float("nan")
+
+
+def _bool_like_series(df: pd.DataFrame, names: List[str], default: float = np.nan) -> pd.Series:
+    c = _first_existing_col(df, *names)
+    if c is None:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+    num = pd.to_numeric(df[c], errors="coerce")
+    if num.notna().any():
+        return num.clip(lower=0, upper=1)
+    raw = df[c].astype(str).str.strip().str.lower()
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    out.loc[raw.isin({"1", "true", "yes", "y", "是", "命中", "hit", "up"})] = 1.0
+    out.loc[raw.isin({"0", "false", "no", "n", "否", "未命中", "miss", "down"})] = 0.0
+    return out.fillna(default)
+
+
+def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str, object]:
+    """Summarize cumulative historical TOP10/TOP20 limit-up hit rates."""
+    if df is None or df.empty:
+        return {"ready": False, "reason": "history_empty", "source": source}
+
+    rank = _num_series(df, "rank", "dec_rank", default=np.nan)
+    actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
+    ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
+    if ready.notna().any():
+        valid = ready.fillna(0).eq(1) & actual.notna() & rank.notna()
+    else:
+        valid = actual.notna() & rank.notna()
+
+    if not valid.any():
+        return {"ready": False, "reason": "no_ready_history_rows", "source": source}
+
+    def calc(n: int) -> Tuple[int, int, float]:
+        m = valid & (rank <= n)
+        total = int(m.sum())
+        hits = int(actual[m].eq(1).sum())
+        return total, hits, _rate_from_hits(hits, total)
+
+    top10_total, top10_hits, top10_rate = calc(10)
+    top20_total, top20_hits, top20_rate = calc(20)
+
+    date_col = _first_existing_col(df, "d_trade_date", "trade_date", "base_date", "d_analysis_trade_date")
+    n_days = 0
+    if date_col is not None:
+        dates = df.loc[valid, date_col].astype(str).map(_to_yyyymmdd)
+        n_days = int(dates[dates.str.match(r"^20\d{6}$", na=False)].nunique())
+
+    return {
+        "ready": bool(top10_total > 0 or top20_total > 0),
+        "reason": "ok",
+        "source": source,
+        "n_days": n_days,
+        "top10_total": top10_total,
+        "top10_hits": top10_hits,
+        "top10_hit_rate": top10_rate,
+        "top20_total": top20_total,
+        "top20_hits": top20_hits,
+        "top20_hit_rate": top20_rate,
+    }
+
+
+def _collect_historical_limitup_stats(cfg: PremiumConfig) -> Dict[str, object]:
+    """
+    Prefer the limit-up training sample set because it includes backfilled historical labels.
+    Fall back to raw premium_verify files when the training set has not been generated yet.
+    """
+    trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+    if trainset_path.exists():
+        try:
+            df = _read_csv_smart(trainset_path)
+            stats = _historical_limitup_stats_from_df(df, "limitup_probability_training_samples.csv")
+            if stats.get("ready"):
+                return stats
+        except Exception as e:
+            return {"ready": False, "reason": f"trainset_read_error:{type(e).__name__}", "source": str(trainset_path.name)}
+
+    rows: List[pd.DataFrame] = []
+    for p in sorted(cfg.out_root().glob("premium_verify_*.csv")):
+        try:
+            d = _read_csv_smart(p)
+            if not d.empty:
+                if "d_trade_date" not in d.columns:
+                    m = re.search(r"(20\d{6})", p.name)
+                    d["d_trade_date"] = m.group(1) if m else ""
+                rows.append(d)
+        except Exception:
+            continue
+    if not rows:
+        return {"ready": False, "reason": "no_history_verify_files", "source": "premium_verify_*.csv"}
+    return _historical_limitup_stats_from_df(pd.concat(rows, ignore_index=True, sort=False), "premium_verify_*.csv")
+
+
 def _rebuild_rank_front(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if "rank" in df.columns:
@@ -1354,6 +1448,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     p_md = _write_text(cfg.report_md_path(trade_date), md)
     _write_text(cfg.report_latest_md_path(), md)
 
+    historical_limitup_stats = _collect_historical_limitup_stats(cfg)
     html_report = render_premium_report_html(
         trade_date=trade_date,
         buy_date=buy_date,
@@ -1369,6 +1464,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             f"limitup_truth={limitup_truth_reason}",
         ],
         report_dates=_list_report_dates(cfg, trade_date),
+        historical_limitup_stats=historical_limitup_stats,
     )
     p_html = _write_text(cfg.report_html_path(trade_date), html_report)
     _write_text(cfg.report_latest_html_path(), html_report)
@@ -1414,6 +1510,19 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "rank_groups": "TOP10|TOP20",
             "limitup_truth_reason": limitup_truth_reason,
             **limitup_validation.as_dict(),
+            "history_limitup_source": historical_limitup_stats.get("source", ""),
+            "history_limitup_reason": historical_limitup_stats.get("reason", ""),
+            "history_limitup_days": historical_limitup_stats.get("n_days", 0),
+            "history_top10_limitup_total": historical_limitup_stats.get("top10_total", 0),
+            "history_top10_limitup_hits": historical_limitup_stats.get("top10_hits", 0),
+            "history_top10_limitup_hit_rate": (
+                "" if not historical_limitup_stats.get("ready") else round(float(historical_limitup_stats.get("top10_hit_rate", float("nan"))), 6)
+            ),
+            "history_top20_limitup_total": historical_limitup_stats.get("top20_total", 0),
+            "history_top20_limitup_hits": historical_limitup_stats.get("top20_hits", 0),
+            "history_top20_limitup_hit_rate": (
+                "" if not historical_limitup_stats.get("ready") else round(float(historical_limitup_stats.get("top20_hit_rate", float("nan"))), 6)
+            ),
             "out_top10": str(p_top10),
             "out_top20": str(p_top20),
             "out_top30": str(p_top),
