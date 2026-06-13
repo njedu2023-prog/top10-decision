@@ -1,8 +1,8 @@
 trade_date: 20260610
 model_version: premium_v4_a_share_d_t_t1
-run_id: gh_27462077558
-commit_sha: 257951414e83
-created_at_utc: 2026-06-13T08:49:25Z
+run_id: gh_27462652266
+commit_sha: f2d711459e61
+created_at_utc: 2026-06-13T09:23:40Z
 trained: True
 reason: ok:ehx_from_premium_verify
 n_samples: 1522
@@ -16,11 +16,15 @@ ehx_meta_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/m
 delta_mae: 0.05453136911811578
 delta_rmse: 0.0744108108435069
 plus_improve_rate: 0.6465177398160316
-limitup_trained: False
-limitup_reason: limitup_days_not_enough:1<4
-limitup_n_samples: 30
-limitup_n_days: 1
+limitup_trained: True
+limitup_reason: ok
+limitup_n_samples: 1611
+limitup_n_days: 54
 limitup_min_samples: 20
-limitup_model_path: 
-limitup_metrics_path: 
+limitup_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine.joblib
+limitup_metrics_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_metrics.csv
 limitup_meta_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_meta.json
+limitup_trainset_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/learning/limitup_probability_training_samples.csv
+limitup_feature_n: 14
+limitup_train_end_date: 20260521
+limitup_valid_start_date: 20260522
