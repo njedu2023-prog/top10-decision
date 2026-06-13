@@ -106,7 +106,11 @@ def main() -> int:
         reason = _safe_get(pr, "reason", "")
         print(f"[premium][predict] ok={ok} trade_date={trade_date} reason={reason}")
 
-        for k in ("target_date", "pending", "verify_pending", "out_top30", "out_full", "out_verify", "report_md"):
+        for k in (
+            "target_date", "pending", "verify_pending",
+            "out_top10", "out_top20", "out_top30", "out_full", "out_verify",
+            "report_md", "report_html",
+        ):
             v = _safe_get(pr, k, None)
             if v not in (None, "", False):
                 print(f"[premium][predict] {k}: {v}")
