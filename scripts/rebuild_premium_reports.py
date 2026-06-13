@@ -246,6 +246,15 @@ def _bool_like_series(df: pd.DataFrame, names: Sequence[str], default: float = n
     return out.fillna(default)
 
 
+def _prob_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
+    col = _first_existing_col(df, names)
+    if not col:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+    x = pd.to_numeric(df[col], errors="coerce")
+    x = x.where(~(x > 1.0), x / 100.0)
+    return x.clip(lower=0.0, upper=1.0)
+
+
 def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str, object]:
     if df is None or df.empty:
         return {"ready": False, "reason": "history_empty", "source": source}
@@ -253,6 +262,7 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     rank = _num_series(df, ["rank", "dec_rank"], default=np.nan)
     actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
     ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
+    prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
     valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & actual.notna() & rank.notna()
     if not valid.any():
         return {"ready": False, "reason": "no_ready_history_rows", "source": source}
@@ -273,6 +283,37 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         dates = df.loc[valid, date_col].map(_to_yyyymmdd)
         n_days = int(dates[dates.astype(str).str.match(r"^20\d{6}$", na=False)].nunique())
 
+    rolling: Dict[str, object] = {}
+    if date_col:
+        date_s = df[date_col].map(_to_yyyymmdd)
+        all_dates = sorted(date_s[valid & date_s.astype(str).str.match(r"^20\d{6}$", na=False)].unique().tolist())
+        for win in (5, 20, 60):
+            keep_dates = set(all_dates[-win:])
+            m = valid & date_s.isin(keep_dates) & (rank <= 10)
+            total = int(m.sum())
+            hits = int(actual[m].eq(1).sum())
+            rolling[f"top10_hit_rate_{win}d"] = float(hits) / float(total) if total else float("nan")
+            rolling[f"top10_hits_{win}d"] = hits
+            rolling[f"top10_total_{win}d"] = total
+
+    cal_valid = valid & prob.notna()
+    brier = float(np.nanmean((prob[cal_valid] - actual[cal_valid]) ** 2)) if cal_valid.any() else float("nan")
+    ece = float("nan")
+    bucket_rows: List[str] = []
+    if cal_valid.any():
+        total_cal = int(cal_valid.sum())
+        err_sum = 0.0
+        for lo, hi in [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.000001)]:
+            m = cal_valid & (prob >= lo) & (prob < hi)
+            n = int(m.sum())
+            if n <= 0:
+                continue
+            avg_pred = float(prob[m].mean())
+            hit_rate = float(actual[m].mean())
+            err_sum += (n / total_cal) * abs(avg_pred - hit_rate)
+            bucket_rows.append(f"{lo:.1f}-{min(hi, 1.0):.1f}:{hit_rate:.3f}/{avg_pred:.3f}/{n}")
+        ece = float(err_sum)
+
     return {
         "ready": bool(top10_total > 0 or top20_total > 0),
         "reason": "ok",
@@ -284,6 +325,11 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         "top20_total": top20_total,
         "top20_hits": top20_hits,
         "top20_hit_rate": top20_rate,
+        "calibration_rows": int(cal_valid.sum()),
+        "calibration_brier": brier,
+        "calibration_ece": ece,
+        "calibration_bins": " | ".join(bucket_rows),
+        **rolling,
     }
 
 
