@@ -659,6 +659,98 @@ def _backfill_limitup_truth_from_market(
     return out, f"backfilled:{valid_n}/{len(out)}:{t_trade_date}->{t1_trade_date}"
 
 
+def _find_prev_market_trade_date(cfg: PremiumConfig, trade_date: str, max_probe_days: int = 15) -> Tuple[Optional[str], str]:
+    trade_date = _to_yyyymmdd(trade_date)
+    try:
+        d0 = dt.datetime.strptime(trade_date, "%Y%m%d").date()
+    except Exception:
+        return None, f"bad_trade_date:{trade_date}"
+    notes: List[str] = []
+    for i in range(1, int(max_probe_days) + 1):
+        cand = (d0 - dt.timedelta(days=i)).strftime("%Y%m%d")
+        r = ensure_daily_cached(cfg, cand)
+        if r.ok:
+            return cand, "ok"
+        if len(notes) < 3:
+            notes.append(f"{cand}:{r.reason}")
+    return None, "prev_market_daily_not_found:" + "|".join(notes)
+
+
+def _market_sentiment_features(cfg: PremiumConfig, trade_date: str) -> Dict[str, float]:
+    base: Dict[str, float] = {
+        "mkt_stock_count": 0.0,
+        "mkt_up_ratio": np.nan,
+        "mkt_avg_ret": np.nan,
+        "mkt_median_ret": np.nan,
+        "mkt_strong_count": 0.0,
+        "mkt_strong_ratio": np.nan,
+        "mkt_touch_strong_count": 0.0,
+        "mkt_touch_strong_ratio": np.nan,
+        "mkt_amount_sum": np.nan,
+        "mkt_emotion_score": np.nan,
+    }
+    r = ensure_daily_cached(cfg, trade_date)
+    if not r.ok:
+        return base
+    prev_date, _ = _find_prev_market_trade_date(cfg, trade_date)
+    if not prev_date:
+        return base
+    try:
+        d = load_daily(cfg, trade_date)[["ts_code", "open", "high", "close", "amount"]].copy()
+        p = load_daily(cfg, prev_date)[["ts_code", "close"]].rename(columns={"close": "prev_close"})
+        m = d.merge(p, on="ts_code", how="inner")
+        for c in ("open", "high", "close", "prev_close", "amount"):
+            m[c] = pd.to_numeric(m[c], errors="coerce")
+        m = m[(m["prev_close"] > 0) & m["close"].notna()].copy()
+        if m.empty:
+            return base
+        ret = m["close"] / m["prev_close"] - 1.0
+        high_ret = m["high"] / m["prev_close"] - 1.0
+        strong = ret >= 0.095
+        touch_strong = high_ret >= 0.095
+        up_ratio = float((ret > 0).mean())
+        avg_ret = float(ret.mean())
+        strong_ratio = float(strong.mean())
+        touch_ratio = float(touch_strong.mean())
+        emotion = (
+            0.45 * up_ratio
+            + 0.25 * np.clip((avg_ret + 0.02) / 0.06, 0.0, 1.0)
+            + 0.20 * np.clip(touch_ratio * 8.0, 0.0, 1.0)
+            + 0.10 * np.clip(strong_ratio * 10.0, 0.0, 1.0)
+        )
+        base.update({
+            "mkt_stock_count": float(len(m)),
+            "mkt_up_ratio": up_ratio,
+            "mkt_avg_ret": avg_ret,
+            "mkt_median_ret": float(ret.median()),
+            "mkt_strong_count": float(int(strong.sum())),
+            "mkt_strong_ratio": strong_ratio,
+            "mkt_touch_strong_count": float(int(touch_strong.sum())),
+            "mkt_touch_strong_ratio": touch_ratio,
+            "mkt_amount_sum": float(pd.to_numeric(m["amount"], errors="coerce").sum()),
+            "mkt_emotion_score": float(np.clip(emotion, 0.0, 1.0)),
+        })
+    except Exception:
+        pass
+    return base
+
+
+def _attach_market_sentiment_to_samples(cfg: PremiumConfig, samples: pd.DataFrame) -> pd.DataFrame:
+    if samples.empty or "d_trade_date" not in samples.columns:
+        return samples
+    out = samples.copy()
+    feature_cache: Dict[str, Dict[str, float]] = {}
+    for d in sorted(out["d_trade_date"].astype(str).map(_to_yyyymmdd).dropna().unique()):
+        feature_cache[d] = _market_sentiment_features(cfg, d)
+    for c in [
+        "mkt_stock_count", "mkt_up_ratio", "mkt_avg_ret", "mkt_median_ret",
+        "mkt_strong_count", "mkt_strong_ratio", "mkt_touch_strong_count",
+        "mkt_touch_strong_ratio", "mkt_amount_sum", "mkt_emotion_score",
+    ]:
+        out[c] = out["d_trade_date"].astype(str).map(lambda d: feature_cache.get(_to_yyyymmdd(d), {}).get(c, np.nan))
+    return out
+
+
 def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
     """
     从 outputs/premium/premium_verify_*.csv 回收 EHX 已验证样本。
@@ -895,6 +987,16 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             "rank_limitup_continuation": ["rank_limitup_continuation"],
             "rank_eret_plus": ["rank_eret_plus"],
             "rank_r_p50": ["rank_r_p50"],
+            "mkt_stock_count": ["mkt_stock_count"],
+            "mkt_up_ratio": ["mkt_up_ratio"],
+            "mkt_avg_ret": ["mkt_avg_ret"],
+            "mkt_median_ret": ["mkt_median_ret"],
+            "mkt_strong_count": ["mkt_strong_count"],
+            "mkt_strong_ratio": ["mkt_strong_ratio"],
+            "mkt_touch_strong_count": ["mkt_touch_strong_count"],
+            "mkt_touch_strong_ratio": ["mkt_touch_strong_ratio"],
+            "mkt_amount_sum": ["mkt_amount_sum"],
+            "mkt_emotion_score": ["mkt_emotion_score"],
         }
         for target, candidates in feature_candidates.items():
             out[target] = _safe_numeric_series(df, candidates, default=np.nan)
@@ -931,6 +1033,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
     samples["trade_date"] = samples["d_trade_date"]
     samples["ts_code"] = samples["ts_code"].astype(str).str.strip()
     samples = samples.drop_duplicates(subset=["d_trade_date", "ts_code"], keep="last").reset_index(drop=True)
+    samples = _attach_market_sentiment_to_samples(cfg, samples)
     return samples, stats
 
 
@@ -943,6 +1046,9 @@ def _build_limitup_feature_cols(samples: pd.DataFrame) -> List[str]:
         "limitup_continuation_score_rule",
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_conf_score",
         "t1_up_rate", "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50",
+        "mkt_stock_count", "mkt_up_ratio", "mkt_avg_ret", "mkt_median_ret",
+        "mkt_strong_count", "mkt_strong_ratio", "mkt_touch_strong_count",
+        "mkt_touch_strong_ratio", "mkt_amount_sum", "mkt_emotion_score",
     ]
     allow += [c for c in samples.columns if re.fullmatch(r"r_p\d{2}", str(c)) or re.fullmatch(r"close_T2_p\d{2}", str(c))]
     cols = []
