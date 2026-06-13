@@ -68,6 +68,7 @@ except Exception:  # pragma: no cover
     _load_limitup_probability_bundle = None  # type: ignore
 
 _TD_RE = re.compile(r"^\d{8}$")
+_PREMIUM_REPORT_RE = re.compile(r"^premium_(20\d{6})\.html$")
 
 
 @dataclass(frozen=True)
@@ -168,6 +169,18 @@ def _write_last_run(cfg: PremiumConfig, trade_date: str, extra: Dict[str, object
     for k, v in extra.items():
         lines.append(f"{k}: {v}")
     _write_text(cfg.out_last_run_path(), "\n".join(lines) + "\n")
+
+
+def _list_report_dates(cfg: PremiumConfig, current_trade_date: str) -> List[str]:
+    dates = {str(current_trade_date)}
+    try:
+        for p in cfg.reports_root().glob("premium_*.html"):
+            m = _PREMIUM_REPORT_RE.match(p.name)
+            if m:
+                dates.add(m.group(1))
+    except Exception:
+        pass
+    return sorted(d for d in dates if _TD_RE.match(str(d)))
 
 
 def _rebuild_rank_front(df: pd.DataFrame) -> pd.DataFrame:
@@ -1355,6 +1368,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             f"factor_degrade_mode={pack_status.degrade_mode}",
             f"limitup_truth={limitup_truth_reason}",
         ],
+        report_dates=_list_report_dates(cfg, trade_date),
     )
     p_html = _write_text(cfg.report_html_path(trade_date), html_report)
     _write_text(cfg.report_latest_html_path(), html_report)
