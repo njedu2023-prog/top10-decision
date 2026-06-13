@@ -18,6 +18,16 @@
     "eret_plus_value",
     "eret_plus_delta",
     "t1_up_rate",
+    "mkt_stock_count",
+    "mkt_up_ratio",
+    "mkt_avg_ret",
+    "mkt_median_ret",
+    "mkt_strong_count",
+    "mkt_strong_ratio",
+    "mkt_touch_strong_count",
+    "mkt_touch_strong_ratio",
+    "mkt_amount_sum",
+    "mkt_emotion_score",
     "r_p50"
   ],
   "n_samples": 1611,
@@ -30,36 +40,36 @@
       "target": "t_limitup_hit",
       "type": "class",
       "samples": 419,
-      "auc": 0.5114408514121981,
-      "brier": 0.26093847879632287,
-      "accuracy": 0.6181384248210023,
+      "auc": 0.5405239459680721,
+      "brier": 0.27067977986937153,
+      "accuracy": 0.6133651551312649,
       "mae": null
     },
     {
       "target": "t_touch_limitup",
       "type": "class",
       "samples": 419,
-      "auc": 0.4867419908466819,
-      "brier": 0.3284154170457196,
-      "accuracy": 0.5369928400954654,
+      "auc": 0.4929919908466819,
+      "brier": 0.35476295713406386,
+      "accuracy": 0.5298329355608592,
       "mae": null
     },
     {
       "target": "t1_up_hit",
       "type": "class",
       "samples": 419,
-      "auc": 0.47068870649731764,
-      "brier": 0.27931611593588407,
-      "accuracy": 0.4701670644391408,
+      "auc": 0.4783346324911734,
+      "brier": 0.28109779152502073,
+      "accuracy": 0.48687350835322196,
       "mae": null
     },
     {
       "target": "t1_high_profit_hit",
       "type": "class",
       "samples": 419,
-      "auc": 0.47820765077331384,
-      "brier": 0.28825146516287525,
-      "accuracy": 0.5202863961813843,
+      "auc": 0.4373112473689027,
+      "brier": 0.31820146411743755,
+      "accuracy": 0.5274463007159904,
       "mae": null
     },
     {
@@ -69,7 +79,7 @@
       "auc": null,
       "brier": null,
       "accuracy": null,
-      "mae": 0.07331386119737471
+      "mae": 0.07352005846362948
     },
     {
       "target": "t1_high_ret",
@@ -78,7 +88,7 @@
       "auc": null,
       "brier": null,
       "accuracy": null,
-      "mae": 0.06720825597269683
+      "mae": 0.07021344416733967
     }
   ],
   "stats": {
@@ -173,7 +183,7 @@
       "skip premium_verify_20260612.csv: no matured limitup rows"
     ]
   },
-  "created_at_utc": "2026-06-13T14:32:53Z",
-  "commit_sha": "5ebda6b1af4f",
-  "run_id": "gh_27469422464"
+  "created_at_utc": "2026-06-13T15:14:03Z",
+  "commit_sha": "2a08909f9619",
+  "run_id": "gh_27470328871"
 }

@@ -28,7 +28,7 @@
     .nav-btn:hover, .date-chip:hover, .tab-btn:hover { border-color:#b6c0d0; background:#f8fafc; }
     .nav-btn.primary, .date-chip.active, .tab-btn.active { border-color:#1f6f54; color:#0f5b43; background:#edf8f3; font-weight:700; }
     .nav-btn.disabled { color:#a0a8b5; background:#f4f6f9; cursor:not-allowed; }
-    .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:16px; }
     .metric { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:98px; box-shadow:var(--shadow); }
     .metric span { display:block; color:var(--muted); font-size:13px; }
     .metric strong { display:block; margin-top:8px; font-size:23px; line-height:1.2; }
@@ -91,7 +91,7 @@
         <div class="date-chips"><a class="date-chip" href="premium_20260604.html">20260604</a><a class="date-chip" href="premium_20260605.html">20260605</a><a class="date-chip" href="premium_20260608.html">20260608</a><a class="date-chip" href="premium_20260609.html">20260609</a><a class="date-chip" href="premium_20260610.html">20260610</a><a class="date-chip" href="premium_20260612.html">20260612</a></div>
       </nav>
     
-    <div class="metrics"><div class="metric"><span>D 分析日</span><strong>20260527</strong><small>使用 D 日收盘后信息</small></div><div class="metric"><span>T 竞价买入日</span><strong>-</strong><small>严格 A 股交易日历</small></div><div class="metric"><span>T+1 择时卖出日</span><strong>20260529</strong><small>延续上涨与验证日</small></div><div class="metric"><span>本期 TOP10 命中率</span><strong>20.00%</strong><small>2/10，ok</small></div><div class="metric"><span>历史 TOP10 累计命中率</span><strong>28.68%</strong><small>154/537，有效交易日 54，limitup_probability_training_samples.csv</small></div></div>
+    <div class="metrics"><div class="metric"><span>D 分析日</span><strong>20260527</strong><small>使用 D 日收盘后信息</small></div><div class="metric"><span>T 竞价买入日</span><strong>-</strong><small>严格 A 股交易日历</small></div><div class="metric"><span>T+1 择时卖出日</span><strong>20260529</strong><small>延续上涨与验证日</small></div><div class="metric"><span>本期 TOP10 命中率</span><strong>20.00%</strong><small>2/10，ok</small></div><div class="metric"><span>历史 TOP10 累计命中率</span><strong>28.68%</strong><small>154/537，有效交易日 54，limitup_probability_training_samples.csv</small></div><div class="metric"><span>近20日 TOP10 命中率</span><strong>27.50%</strong><small>近5日 22.00%；近60日 28.68%</small></div><div class="metric"><span>概率校准质量</span><strong>Brier 0.3366</strong><small>ECE 0.4266；样本 90</small></div><div class="metric"><span>D日市场情绪</span><strong>-</strong><small>上涨占比 -；强势股 0</small></div></div>
     <div class="toolbar">
       <div class="tabs" role="tablist" aria-label="榜单切换">
         <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 执行榜</button>
@@ -116,8 +116,11 @@
         <div>本期 TOP20 涨停预测成功率：20.00%（4/20）</div>
         <div>历史 TOP10 累计涨停预测命中率：28.68%（154/537）</div>
         <div>历史 TOP20 累计涨停预测命中率：22.77%（245/1076）</div>
+        <div>滚动 TOP10 命中率：近5日 22.00%；近20日 27.50%；近60日 28.68%</div>
+        <div>概率校准：Brier 0.3366；ECE 0.4266；校准样本 90</div>
+        <div>D日市场情绪：情绪分 -；上涨占比 -；强势股 0</div>
         <div>历史统计样本：有效交易日 54；来源：limitup_probability_training_samples.csv；状态：ok</div>
-        <div>模型版本：premium_v4_a_share_d_t_t1；生成时间：2026-06-13T14:33:10Z</div>
+        <div>模型版本：premium_v4_a_share_d_t_t1；生成时间：2026-06-13T15:14:21Z</div>
         <ul><li>archive_rebuilt=True</li><li>history_source=limitup_probability_training_samples.csv</li></ul>
       </div>
     </section>
