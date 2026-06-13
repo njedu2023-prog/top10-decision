@@ -1,6 +1,10 @@
 name: Run Premium (Follow Decision)
 
 on:
+  schedule:
+    # Mon-Fri 21:15 Beijing (UTC+8) == 13:15 UTC, same as decision mainline.
+    - cron: "15 13 * * 1-5"
+
   workflow_run:
     workflows: ["Run Top10 Decision (Auto Daily)"]
     types: [completed]
@@ -34,7 +38,11 @@ jobs:
     # 只跑 main 分支，避免 PR/分支触发混乱。
     if: >-
       ${{
-        (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+        (
+          github.event_name == 'workflow_dispatch'
+          || github.event_name == 'schedule'
+          || github.event.workflow_run.conclusion == 'success'
+        )
         && github.ref == 'refs/heads/main'
       }}
     runs-on: ubuntu-latest
@@ -74,7 +82,7 @@ jobs:
 
           # Premium V3 / E_ret_plus / EHX 阶段：默认跑 all。
           # train.py 只写 _last_train.txt，不覆盖 _last_run.txt。
-          if [ "$EVENT_NAME" = "workflow_run" ]; then
+          if [ "$EVENT_NAME" = "workflow_run" ] || [ "$EVENT_NAME" = "schedule" ]; then
             CMD="all"
           else
             CMD="${{ github.event.inputs.cmd }}"
@@ -116,10 +124,14 @@ jobs:
           echo "=== Premium V3 last_run contract ==="
           grep -E '^ok:[[:space:]]*True' outputs/premium/_last_run.txt
           grep -E '^eret_plus_src:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
+          grep -E '^out_top10:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
+          grep -E '^out_top20:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
           grep -E '^out_top30:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
           grep -E '^out_full:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
           grep -E '^out_verify:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
           grep -E '^report_md:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
+          grep -E '^report_html:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
+          grep -E '^rank_groups:[[:space:]]*TOP10\|TOP20' outputs/premium/_last_run.txt
 
           if [ "$PREMIUM_CMD" != "predict" ]; then
             echo "=== _last_train.txt ==="
