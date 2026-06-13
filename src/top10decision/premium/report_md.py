@@ -20,7 +20,7 @@ Premium 子系统 — Markdown 报告渲染（V3.5：涨停接力实盘表头版
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Iterable, List, Sequence
 
 import numpy as np
@@ -185,16 +185,10 @@ def _fmt_yyyymmdd(dt: datetime | None) -> str:
 
 def _next_weekday_yyyymmdd(base_date: str) -> str:
     """
-    兜底函数：只有在上游没有提供买入日字段时使用。
-    严格 A 股交易日历应由 predict.py 输出 buy_date。
+    旧入口兼容函数。新 Premium 主线不使用工作日兜底，买入日必须由
+    predict.py 的严格 A 股交易日历输出。
     """
-    dt = _parse_yyyymmdd(base_date)
-    if dt is None:
-        return "-"
-    dt = dt + timedelta(days=1)
-    while dt.weekday() >= 5:
-        dt = dt + timedelta(days=1)
-    return _fmt_yyyymmdd(dt)
+    return "-"
 
 
 def _extract_date_from_frames(frames: Iterable[pd.DataFrame], cols: Sequence[str]) -> str:
@@ -219,7 +213,7 @@ def _resolve_buy_date(trade_date: str, target_date: str, df_top30: pd.DataFrame,
     )
     if buy_date:
         return buy_date
-    return _next_weekday_yyyymmdd(trade_date)
+    return "-"
 
 
 # =========================
@@ -449,10 +443,6 @@ def render_premium_report_md(
     parts.append(
         "> 注：E_ret_plus、价格区间、置信度、买入价、卖出计划、Raw/Plus误差等辅助/审计字段仍保留在 CSV 与验证摘要中，主表不再展开展示。"
     )
-    if buy_date == _next_weekday_yyyymmdd(trade_date):
-        parts.append(
-            "> 注：竞价买入日优先读取上游交易日历字段；若 CSV 暂无 buy_date/next_trade_date，则本报告用工作日兜底。严格 A 股节假日口径建议由 predict.py 输出 buy_date。"
-        )
     parts.append("")
 
     return "\n".join(parts)
