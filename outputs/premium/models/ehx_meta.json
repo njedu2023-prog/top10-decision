@@ -24,10 +24,10 @@
   ],
   "n_samples": 1522,
   "n_days": 51,
-  "delta_mae": 0.05423219234979085,
-  "delta_rmse": 0.07413873194659912,
-  "plus_improve_rate": 0.6563731931668857,
-  "created_at_utc": "2026-06-13T08:06:48Z",
-  "commit_sha": "0a876cfec2a6",
-  "run_id": "gh_27461184531"
+  "delta_mae": 0.05453136911811578,
+  "delta_rmse": 0.0744108108435069,
+  "plus_improve_rate": 0.6465177398160316,
+  "created_at_utc": "2026-06-13T08:35:27Z",
+  "commit_sha": "06bf8b5bcf1b",
+  "run_id": "gh_27461788680"
 }

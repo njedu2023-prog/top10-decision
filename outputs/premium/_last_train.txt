@@ -1,8 +1,8 @@
 trade_date: 20260610
 model_version: premium_v4_a_share_d_t_t1
-run_id: gh_27461184531
-commit_sha: 0a876cfec2a6
-created_at_utc: 2026-06-13T08:06:48Z
+run_id: gh_27461788680
+commit_sha: 06bf8b5bcf1b
+created_at_utc: 2026-06-13T08:35:27Z
 trained: True
 reason: ok:ehx_from_premium_verify
 n_samples: 1522
@@ -13,6 +13,14 @@ ehx_n_samples: 1522
 ehx_min_samples: 30
 ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
 ehx_meta_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_meta.json
-delta_mae: 0.05423219234979085
-delta_rmse: 0.07413873194659912
-plus_improve_rate: 0.6563731931668857
+delta_mae: 0.05453136911811578
+delta_rmse: 0.0744108108435069
+plus_improve_rate: 0.6465177398160316
+limitup_trained: False
+limitup_reason: limitup_days_not_enough:1<4
+limitup_n_samples: 30
+limitup_n_days: 1
+limitup_min_samples: 20
+limitup_model_path: 
+limitup_metrics_path: 
+limitup_meta_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_meta.json

@@ -1,17 +1,17 @@
-trade_date: 20260610
-run_id: gh_27461184531
-commit_sha: 0a876cfec2a6
+trade_date: 20260612
+run_id: gh_27461788680
+commit_sha: 06bf8b5bcf1b
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-13T08:06:50Z
+created_at_utc: 2026-06-13T08:35:43Z
 ok: True
-buy_date: 20260611
-target_date: 20260612
-pending: False
+buy_date: 20260615
+target_date: 20260616
+pending: True
 pending_reason: buy_date:trade_cal_ok;target_date:trade_cal_ok
 truth_T_ok: True
 truth_T_reason: ok
-verify_pending: False
-verify_reason: ok
+verify_pending: True
+verify_reason: truth_not_ready: T_ok=True T2_ok=False (buy_date:trade_cal_ok;target_date:trade_cal_ok)
 eret_plus_src: ehx:model_v1
 ehx_mode: model_v1
 ehx_reason: ok
@@ -19,8 +19,8 @@ ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/
 ehx_load_reason: ok
 ehx_feature_n: 16
 ehx_meta_n_samples: 1522
-ehx_meta_delta_mae: 0.05423219234979085
-ehx_meta_delta_rmse: 0.07413873194659912
+ehx_meta_delta_mae: 0.05453136911811578
+ehx_meta_delta_rmse: 0.0744108108435069
 limitup_model_src: rule_fallback:model_missing
 limitup_model_mode: rule_fallback
 limitup_model_reason: limitup_model_missing
@@ -28,26 +28,26 @@ limitup_model_path:
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划
 limitup_model_fields: t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 rank_groups: TOP10|TOP20
-limitup_truth_reason: ok
-limitup_validation_ready: True
-limitup_validation_reason: ok
-top10_limitup_total: 10
-top10_limitup_hits: 3
-top10_limitup_hit_rate: 0.3
-top20_limitup_total: 20
-top20_limitup_hits: 4
-top20_limitup_hit_rate: 0.2
-out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260610.csv
-out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260610.csv
-out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260610.csv
-out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260610.csv
-out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260610.csv
-report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260610.md
-report_html: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260610.html
+limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260615/daily.csv body_snippet=404: Not Found
+limitup_validation_ready: False
+limitup_validation_reason: t_daily_not_ready
+top10_limitup_total: 0
+top10_limitup_hits: 0
+top10_limitup_hit_rate: 
+top20_limitup_total: 0
+top20_limitup_hits: 0
+top20_limitup_hit_rate: 
+out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260612.csv
+out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260612.csv
+out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260612.csv
+out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260612.csv
+out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260612.csv
+report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260612.md
+report_html: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260612.html
 degrade_mode: full
 packs_used: ['Pack0', 'Pack1', 'Pack2']
 packs_missing: []
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260610.csv', 'Pack2 enabled (soft mode, fixed)']
+notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260612.csv', 'Pack2 enabled (soft mode, fixed)']
 extra_prefix: factor
