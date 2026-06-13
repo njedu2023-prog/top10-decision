@@ -1,7 +1,7 @@
 {
   "trade_date": "20260612",
-  "created_at_utc": "2026-06-13T03:07:19+00:00",
-  "commit_sha": "564900c227bc3a2ca63b06b8b40bf13f2eba7801",
+  "created_at_utc": "2026-06-13T07:44:22+00:00",
+  "commit_sha": "0a2242ff3bfa80aefe933b929eb883df267eeb2c",
   "fs_version": "v0.5-history-roll-features",
   "richness_target": 0.75,
   "richness_estimate": 0.989247,
@@ -164,7 +164,7 @@
       "loaded": true,
       "content": {
         "trade_date": "20260612",
-        "created_at_utc": "2026-06-13T03:05:51+00:00",
+        "created_at_utc": "2026-06-13T07:42:53+00:00",
         "source_repo": {
           "owner": "njedu2023-prog",
           "repo": "a-share-top3-data",
