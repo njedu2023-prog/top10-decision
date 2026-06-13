@@ -42,6 +42,10 @@ from .io import (
     utc_now_iso,
 )
 from .labels import build_premium_labels
+from .limitup_probability_engine import (
+    fit_limitup_probability_engine,
+    save_bundle as save_limitup_probability_bundle,
+)
 from .market_truth import ensure_daily_cached, load_daily
 from .model_lgbm import fit_lgbm_regressor, save_lgbm
 from .model_lr import build_y_from_real_ret, fit_lr_classifier, save_lr
@@ -412,6 +416,25 @@ def _real_ret_from_verify_df(df: pd.DataFrame) -> pd.Series:
     return pd.to_numeric(derived, errors="coerce")
 
 
+def _bool_numeric_series(df: pd.DataFrame, candidates: List[str], default: float = np.nan) -> pd.Series:
+    """把 verify 里的 是/否、true/false、0/1 统一转为 0/1。"""
+    col = _first_existing_col(df, candidates)
+    if not col:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+
+    num = pd.to_numeric(df[col], errors="coerce")
+    if num.notna().any():
+        return num.clip(lower=0, upper=1)
+
+    raw = df[col].astype(str).str.strip().str.lower()
+    true_set = {"1", "true", "yes", "y", "是", "命中", "hit", "up"}
+    false_set = {"0", "false", "no", "n", "否", "未命中", "miss", "down"}
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    out.loc[raw.isin(true_set)] = 1.0
+    out.loc[raw.isin(false_set)] = 0.0
+    return out.fillna(default)
+
+
 def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
     """
     从 outputs/premium/premium_verify_*.csv 回收 EHX 已验证样本。
@@ -511,6 +534,309 @@ def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.Dat
     samples["trade_date"] = samples["trade_date"].astype(str).map(_to_yyyymmdd)
     samples["ts_code"] = samples["ts_code"].astype(str).str.strip()
     return samples, stats
+
+
+# ========= premium_verify 回收涨停概率引擎样本 =========
+
+def _t1_close_ret_from_verify_df(df: pd.DataFrame) -> pd.Series:
+    """优先用 T 日可接受买入价做 T+1 收盘收益，缺失时退回旧 actual_ret。"""
+    explicit = _safe_numeric_series(
+        df,
+        ["t1_close_ret", "premium_ret_t1_to_t2", "realized_ret_t1_to_t2", "actual_ret", "r_actual"],
+        default=np.nan,
+    )
+    if explicit.notna().any():
+        return explicit
+
+    close_t1 = _safe_numeric_series(df, ["close_T2_actual", "close_t2", "sell_close", "exit_close"], default=np.nan)
+    entry = _safe_numeric_series(
+        df,
+        ["t_max_buy_price", "T日可接受买入价", "entry_price_t1", "entry_price_proxy_t1", "close_T", "close_2"],
+        default=np.nan,
+    )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ret = close_t1 / entry - 1.0
+    return pd.to_numeric(ret, errors="coerce")
+
+
+def _t1_high_ret_from_verify_df(df: pd.DataFrame, close_ret: pd.Series) -> pd.Series:
+    high_ret = _safe_numeric_series(df, ["t1_high_ret", "high_ret_t1", "high_ret_T2"], default=np.nan)
+    if high_ret.notna().any():
+        return high_ret
+
+    high_t1 = _safe_numeric_series(df, ["high_T2_actual", "high_t2", "high_sell"], default=np.nan)
+    entry = _safe_numeric_series(
+        df,
+        ["t_max_buy_price", "T日可接受买入价", "entry_price_t1", "entry_price_proxy_t1", "close_T", "close_2"],
+        default=np.nan,
+    )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        derived = high_t1 / entry - 1.0
+    derived = pd.to_numeric(derived, errors="coerce")
+    return derived.where(derived.notna(), close_ret)
+
+
+def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.DataFrame, Dict]:
+    """
+    从 premium_verify_*.csv 回收涨停/T+1 概率模型样本。
+
+    这些文件只在真实行情到来后补齐验证字段，天然适合做自学习闭环。
+    特征列采用白名单，避免 raw_abs_err/actual_ret 等未来字段泄漏进模型。
+    """
+    out_root = cfg.out_root()
+    files = sorted(out_root.glob("premium_verify_*.csv"))
+    stats = {
+        "n_verify_files": len(files),
+        "ok_files": 0,
+        "skipped_files": 0,
+        "notes": [],
+    }
+    rows: List[pd.DataFrame] = []
+
+    for path in files:
+        try:
+            df = _read_csv_smart(path)
+        except Exception as e:
+            stats["skipped_files"] += 1
+            stats["notes"].append(f"skip {path.name}: read error: {e}")
+            continue
+        if df.empty:
+            stats["skipped_files"] += 1
+            stats["notes"].append(f"skip {path.name}: empty")
+            continue
+
+        ts_col = _first_existing_col(df, ["ts_code", "code", "symbol"])
+        if not ts_col:
+            stats["skipped_files"] += 1
+            stats["notes"].append(f"skip {path.name}: missing ts_code")
+            continue
+
+        ready = _bool_numeric_series(df, ["t_limitup_verify_ready", "label_matured"], default=np.nan)
+        t_limitup = _bool_numeric_series(df, ["t_limitup_actual", "t_limitup_hit"], default=np.nan)
+        t_touch = _bool_numeric_series(df, ["t_touch_limitup_actual", "t_touch_limitup"], default=np.nan)
+        close_ret = _t1_close_ret_from_verify_df(df)
+        high_ret = _t1_high_ret_from_verify_df(df, close_ret)
+
+        out = pd.DataFrame(index=df.index)
+        td_col = _first_existing_col(df, ["trade_date", "d_analysis_trade_date", "base_date", "date"])
+        buy_col = _first_existing_col(df, ["buy_date", "t_trade_date"])
+        target_col = _first_existing_col(df, ["target_date", "t1_trade_date", "next_trade_date"])
+        name_col = _first_existing_col(df, ["name", "名称", "stock_name"])
+
+        out["d_trade_date"] = df[td_col].astype(str).map(_to_yyyymmdd) if td_col else _infer_trade_date_from_path(path)
+        out["trade_date"] = out["d_trade_date"]
+        out["t_trade_date"] = df[buy_col].astype(str).map(_to_yyyymmdd) if buy_col else pd.NA
+        out["t1_trade_date"] = df[target_col].astype(str).map(_to_yyyymmdd) if target_col else pd.NA
+        out["ts_code"] = df[ts_col].astype(str).str.strip()
+        out["name"] = df[name_col].astype(str) if name_col else pd.NA
+
+        out["label_matured"] = np.where(ready.notna(), ready, 1.0)
+        out["t_limitup_hit"] = t_limitup
+        out["t_touch_limitup"] = t_touch.where(t_touch.notna(), t_limitup)
+        out["t1_close_ret"] = close_ret
+        out["t1_high_ret"] = high_ret
+        out["t1_up_hit"] = (pd.to_numeric(close_ret, errors="coerce") > 0).astype(float)
+        out["t1_high_profit_hit"] = (pd.to_numeric(high_ret, errors="coerce") >= 0.02).astype(float)
+
+        feature_candidates = {
+            "rank": ["rank", "dec_rank"],
+            "close_T": ["close_T", "close", "close_t", "收盘价"],
+            "p_premium": ["p_premium", "probability", "pred_prob"],
+            "e_premium": ["e_premium", "e_ret", "E_ret", "pred_ret"],
+            "score_ev": ["score_ev", "ev", "EV", "final_score", "score"],
+            "confidence": ["confidence", "conf"],
+            "data_quality": ["data_quality"],
+            "dec_rank": ["dec_rank"],
+            "dec_weight": ["dec_weight", "weight"],
+            "dec_p_fill": ["dec_p_fill", "p_fill_pred", "p_fill"],
+            "t_limitup_prob_rule": ["t_limitup_prob_rule", "t_limitup_prob", "T日涨停概率"],
+            "t_limitup_strength_rule": ["t_limitup_strength_rule", "t_limitup_strength", "T日涨停强度"],
+            "t1_continue_up_rate_rule": ["t1_continue_up_rate_rule", "t1_continue_up_rate", "T+1延续上涨率"],
+            "limitup_continuation_score_rule": ["limitup_continuation_score_rule", "limitup_continuation_score", "涨停接力评分"],
+            "eret_pred_raw": ["eret_pred_raw", "e_ret_pred_raw", "raw_eret_pred", "E_ret"],
+            "eret_plus_value": ["eret_plus_value", "eret_plus", "E_ret_plus"],
+            "eret_plus_delta": ["eret_plus_delta"],
+            "eret_plus_conf_score": ["eret_plus_conf_score"],
+            "t1_up_rate": ["t1_up_rate", "T+1上涨率"],
+            "rank_limitup_continuation": ["rank_limitup_continuation"],
+            "rank_eret_plus": ["rank_eret_plus"],
+            "rank_r_p50": ["rank_r_p50"],
+        }
+        for target, candidates in feature_candidates.items():
+            out[target] = _safe_numeric_series(df, candidates, default=np.nan)
+
+        for c in df.columns:
+            name = str(c).strip()
+            if re.fullmatch(r"r_p\d{2}", name) or re.fullmatch(r"close_T2_p\d{2}", name):
+                out[name] = pd.to_numeric(df[c], errors="coerce")
+
+        out["is_top10"] = (pd.to_numeric(out["rank"], errors="coerce") <= 10).astype(float)
+        out["is_top20"] = (pd.to_numeric(out["rank"], errors="coerce") <= 20).astype(float)
+
+        valid = (
+            pd.to_numeric(out["label_matured"], errors="coerce").fillna(0).eq(1)
+            & out["t_limitup_hit"].notna()
+            & out["t_touch_limitup"].notna()
+            & out["t1_close_ret"].notna()
+            & out["t1_high_ret"].notna()
+        )
+        out = out.loc[valid].reset_index(drop=True)
+        if out.empty:
+            stats["skipped_files"] += 1
+            stats["notes"].append(f"skip {path.name}: no matured limitup rows")
+            continue
+
+        stats["ok_files"] += 1
+        rows.append(out)
+
+    if not rows:
+        return pd.DataFrame(), stats
+
+    samples = pd.concat(rows, ignore_index=True, sort=False)
+    samples["d_trade_date"] = samples["d_trade_date"].astype(str).map(_to_yyyymmdd)
+    samples["trade_date"] = samples["d_trade_date"]
+    samples["ts_code"] = samples["ts_code"].astype(str).str.strip()
+    samples = samples.drop_duplicates(subset=["d_trade_date", "ts_code"], keep="last").reset_index(drop=True)
+    return samples, stats
+
+
+def _build_limitup_feature_cols(samples: pd.DataFrame) -> List[str]:
+    allow = [
+        "rank", "is_top10", "is_top20", "close_T",
+        "p_premium", "e_premium", "score_ev", "confidence", "data_quality",
+        "dec_rank", "dec_weight", "dec_p_fill",
+        "t_limitup_prob_rule", "t_limitup_strength_rule", "t1_continue_up_rate_rule",
+        "limitup_continuation_score_rule",
+        "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_conf_score",
+        "t1_up_rate", "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50",
+    ]
+    allow += [c for c in samples.columns if re.fullmatch(r"r_p\d{2}", str(c)) or re.fullmatch(r"close_T2_p\d{2}", str(c))]
+    cols = []
+    seen = set()
+    for c in allow:
+        if c in samples.columns and c not in seen:
+            s = pd.to_numeric(samples[c], errors="coerce")
+            if s.notna().sum() >= max(5, int(len(samples) * 0.05)):
+                cols.append(c)
+                seen.add(c)
+    return cols
+
+
+def _limitup_probability_min_samples(cfg: PremiumConfig) -> int:
+    return max(20, int(getattr(cfg, "min_train_days", 20)))
+
+
+def _save_limitup_meta(meta_path: Path, payload: Dict) -> None:
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _train_limitup_probability_from_verify(
+    cfg: PremiumConfig,
+    samples: pd.DataFrame,
+    stats: Dict,
+) -> Dict:
+    model_path = cfg.out_root() / "models" / "limitup_probability_engine.joblib"
+    metrics_path = cfg.out_root() / "models" / "limitup_probability_engine_metrics.csv"
+    meta_path = cfg.out_root() / "models" / "limitup_probability_engine_meta.json"
+    trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+
+    base_state = {
+        "limitup_trained": False,
+        "limitup_reason": "not_run",
+        "limitup_n_samples": 0,
+        "limitup_n_days": 0,
+        "limitup_min_samples": _limitup_probability_min_samples(cfg),
+        "limitup_model_path": "",
+        "limitup_metrics_path": "",
+        "limitup_meta_path": str(meta_path),
+    }
+
+    n_samples = int(len(samples))
+    n_days = int(samples["d_trade_date"].nunique()) if (not samples.empty and "d_trade_date" in samples.columns) else 0
+    state = dict(base_state)
+    state.update({"limitup_n_samples": n_samples, "limitup_n_days": n_days})
+
+    if samples.empty:
+        state["limitup_reason"] = "no_limitup_verify_samples"
+        _save_limitup_meta(meta_path, {"kind": "limitup_probability_engine", "trained": False, "reason": state["limitup_reason"], "stats": stats, "created_at_utc": utc_now_iso(), "commit_sha": get_commit_sha(cfg.repo_root()), "run_id": get_run_id()})
+        return state
+
+    if n_days < 4:
+        state["limitup_reason"] = f"limitup_days_not_enough:{n_days}<4"
+        _save_limitup_meta(meta_path, {"kind": "limitup_probability_engine", "trained": False, "reason": state["limitup_reason"], "n_samples": n_samples, "n_days": n_days, "stats": stats, "created_at_utc": utc_now_iso(), "commit_sha": get_commit_sha(cfg.repo_root()), "run_id": get_run_id()})
+        return state
+
+    feature_cols = _build_limitup_feature_cols(samples)
+    if not feature_cols:
+        state["limitup_reason"] = "limitup_feature_cols_empty"
+        _save_limitup_meta(meta_path, {"kind": "limitup_probability_engine", "trained": False, "reason": state["limitup_reason"], "n_samples": n_samples, "n_days": n_days, "stats": stats, "created_at_utc": utc_now_iso(), "commit_sha": get_commit_sha(cfg.repo_root()), "run_id": get_run_id()})
+        return state
+
+    try:
+        cfg.out_learning_dir().mkdir(parents=True, exist_ok=True)
+        samples.to_csv(trainset_path, index=False, encoding="utf-8-sig")
+        bundle = fit_limitup_probability_engine(
+            samples,
+            feature_cols=feature_cols,
+            valid_ratio=0.25,
+            min_samples=_limitup_probability_min_samples(cfg),
+        )
+        save_limitup_probability_bundle(bundle, model_path)
+        bundle.metrics.to_csv(metrics_path, index=False, encoding="utf-8-sig")
+
+        state.update({
+            "limitup_trained": True,
+            "limitup_reason": "ok",
+            "limitup_model_path": str(model_path),
+            "limitup_metrics_path": str(metrics_path),
+            "limitup_trainset_path": str(trainset_path),
+            "limitup_feature_n": int(len(feature_cols)),
+            "limitup_train_end_date": str(bundle.train_end_date),
+            "limitup_valid_start_date": str(bundle.valid_start_date),
+        })
+        _save_limitup_meta(
+            meta_path,
+            {
+                "kind": "limitup_probability_engine",
+                "model_version": cfg.model_version,
+                "trained": True,
+                "reason": "ok",
+                "source": "premium_verify",
+                "feature_cols": feature_cols,
+                "n_samples": n_samples,
+                "n_days": n_days,
+                "min_samples": _limitup_probability_min_samples(cfg),
+                "train_end_date": bundle.train_end_date,
+                "valid_start_date": bundle.valid_start_date,
+                "metrics": bundle.metrics.to_dict(orient="records"),
+                "stats": stats,
+                "created_at_utc": utc_now_iso(),
+                "commit_sha": get_commit_sha(cfg.repo_root()),
+                "run_id": get_run_id(),
+            },
+        )
+        return state
+    except Exception as e:
+        state["limitup_reason"] = f"limitup_train_error:{type(e).__name__}"
+        _save_limitup_meta(
+            meta_path,
+            {
+                "kind": "limitup_probability_engine",
+                "model_version": cfg.model_version,
+                "trained": False,
+                "reason": state["limitup_reason"],
+                "error": str(e),
+                "n_samples": n_samples,
+                "n_days": n_days,
+                "feature_cols": feature_cols,
+                "stats": stats,
+                "created_at_utc": utc_now_iso(),
+                "commit_sha": get_commit_sha(cfg.repo_root()),
+                "run_id": get_run_id(),
+            },
+        )
+        return state
 
 
 # ========= EHX 模型 =========
@@ -637,9 +963,11 @@ def _train_ehx_only(
     ehx_samples: pd.DataFrame,
     reason_prefix: str,
     stats: Optional[Dict] = None,
+    extra_train_state: Optional[Dict] = None,
 ) -> TrainResult:
     """只训练 EHX；用于旧 LR/LGBM 样本不足但 verify 样本可用的场景。"""
     stats = stats or {}
+    extra_train_state = extra_train_state or {}
     ehx_samples = ehx_samples.copy()
     ehx_samples = ehx_samples[
         ehx_samples["real_premium_ret"].notna()
@@ -680,6 +1008,7 @@ def _train_ehx_only(
                 "ehx_n_samples": n_samples,
                 "ehx_min_samples": ehx_min_samples,
                 "ehx_meta_path": str(ehx_meta_path),
+                **extra_train_state,
             },
         )
         return TrainResult(False, ehx_reason, n_samples, n_days, cfg.model_version)
@@ -687,7 +1016,11 @@ def _train_ehx_only(
     ehx_feature_cols = _build_ehx_feature_cols(ehx_samples)
     if not ehx_feature_cols:
         ehx_reason = "ehx_feature_cols_empty"
-        _write_train_state(cfg, trade_date="unknown", extra={"trained": False, "reason": ehx_reason})
+        _write_train_state(
+            cfg,
+            trade_date="unknown",
+            extra={"trained": False, "reason": ehx_reason, **extra_train_state},
+        )
         return TrainResult(False, ehx_reason, n_samples, n_days, cfg.model_version)
 
     X_ehx = _prepare_numeric_matrix(ehx_samples, ehx_feature_cols)
@@ -768,6 +1101,7 @@ def _train_ehx_only(
             "delta_mae": delta_mae,
             "delta_rmse": delta_rmse,
             "plus_improve_rate": plus_improve_rate,
+            **extra_train_state,
         },
     )
     return TrainResult(True, f"ok:{reason_prefix}", n_samples, n_days, cfg.model_version)
@@ -781,6 +1115,8 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
 
     samples, stats = collect_training_samples(cfg)
     verify_samples, verify_stats = _collect_ehx_samples_from_verify_outputs(cfg)
+    limitup_samples, limitup_stats = _collect_limitup_samples_from_verify_outputs(cfg)
+    limitup_state = _train_limitup_probability_from_verify(cfg, limitup_samples, limitup_stats)
 
     if samples.empty:
         if not verify_samples.empty:
@@ -789,6 +1125,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
                 verify_samples,
                 reason_prefix="ehx_from_premium_verify",
                 stats={"decision": stats, "verify": verify_stats},
+                extra_train_state=limitup_state,
             )
 
         ehx_meta_path = cfg.out_root() / "models" / "ehx_meta.json"
@@ -818,6 +1155,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
                 "verify_ok_files": verify_stats.get("ok_files", 0),
                 "notes_tail": " | ".join(stats.get("notes", [])[-5:]),
                 "ehx_meta_path": str(ehx_meta_path),
+                **limitup_state,
             },
         )
         return TrainResult(
@@ -841,6 +1179,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
                 verify_samples,
                 reason_prefix="ehx_from_premium_verify_min_days_fallback",
                 stats={"decision": stats, "verify": verify_stats, "decision_n_days": n_days},
+                extra_train_state=limitup_state,
             )
 
         last_td = sorted(samples["trade_date"].unique())[-1] if n_days > 0 else "unknown"
@@ -855,6 +1194,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
                 "min_train_days": int(getattr(cfg, "min_train_days", 3)),
                 "pending_days": stats.get("pending_days", 0),
                 "ok_days": stats.get("ok_days", 0),
+                **limitup_state,
             },
         )
         return TrainResult(
@@ -1059,6 +1399,10 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
         "delta_mae": delta_mae,
         "delta_rmse": delta_rmse,
         "plus_improve_rate": plus_improve_rate,
+        "limitup_trained": int(bool(limitup_state.get("limitup_trained", False))),
+        "limitup_reason": limitup_state.get("limitup_reason", ""),
+        "limitup_n_samples": int(limitup_state.get("limitup_n_samples", 0) or 0),
+        "limitup_n_days": int(limitup_state.get("limitup_n_days", 0) or 0),
         "model_version": cfg.model_version,
         "run_id": run_id,
         "commit_sha": sha,
@@ -1087,6 +1431,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
             "delta_mae": delta_mae,
             "delta_rmse": delta_rmse,
             "plus_improve_rate": plus_improve_rate,
+            **limitup_state,
         },
     )
 
@@ -1115,6 +1460,9 @@ def _main() -> int:
         "last_train": str(cfg.out_root() / "_last_train.txt"),
         "ehx_model": str(cfg.out_root() / "models" / "ehx_delta.joblib"),
         "ehx_meta": str(cfg.out_root() / "models" / "ehx_meta.json"),
+        "limitup_model": str(cfg.out_root() / "models" / "limitup_probability_engine.joblib"),
+        "limitup_meta": str(cfg.out_root() / "models" / "limitup_probability_engine_meta.json"),
+        "limitup_metrics": str(cfg.out_root() / "models" / "limitup_probability_engine_metrics.csv"),
     }
     if args.json:
         print(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2))
@@ -1129,6 +1477,9 @@ def _main() -> int:
         print(f"[premium][train] last_train={payload['last_train']}")
         print(f"[premium][train] ehx_model={payload['ehx_model']}")
         print(f"[premium][train] ehx_meta={payload['ehx_meta']}")
+        print(f"[premium][train] limitup_model={payload['limitup_model']}")
+        print(f"[premium][train] limitup_meta={payload['limitup_meta']}")
+        print(f"[premium][train] limitup_metrics={payload['limitup_metrics']}")
     return 0 if result.trained or "不足" in result.reason or "没有可用样本" in result.reason else 1
 
 
