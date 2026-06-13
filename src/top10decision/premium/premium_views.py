@@ -234,15 +234,43 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _table_html(df: pd.DataFrame) -> str:
+def _score_class(x: object, good_at: float, mid_at: float) -> str:
+    try:
+        raw = str(x).strip().replace("%", "")
+        v = float(raw)
+        if "%" in str(x):
+            v = v / 100.0
+        if v >= good_at:
+            return "good"
+        if v >= mid_at:
+            return "mid"
+    except Exception:
+        pass
+    return "quiet"
+
+
+def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
     if df is None or df.empty:
         return '<p class="empty">暂无数据</p>'
     head = "".join(f"<th>{_html_escape(c)}</th>" for c in df.columns)
     body_rows = []
     for _, r in df.iterrows():
-        cells = "".join(f"<td>{_html_escape(r.get(c, ''))}</td>" for c in df.columns)
-        body_rows.append(f"<tr>{cells}</tr>")
-    return f"<div class=\"table-wrap\"><table><thead><tr>{head}</tr></thead><tbody>{''.join(body_rows)}</tbody></table></div>"
+        cells = []
+        for c in df.columns:
+            val = r.get(c, "")
+            cls = ""
+            if c == "T涨停概率":
+                cls = f' class="num {_score_class(val, 0.70, 0.45)}"'
+            elif c == "T+1继续上涨":
+                cls = f' class="num {_score_class(val, 0.70, 0.50)}"'
+            elif c in {"T涨停强度", "接力评分"}:
+                cls = f' class="num {_score_class(val, 70.0, 55.0)}"'
+            elif c in {"排名", "D收盘"}:
+                cls = ' class="num"'
+            cells.append(f"<td{cls}>{_html_escape(val)}</td>")
+        body_rows.append(f"<tr>{''.join(cells)}</tr>")
+    tid = f' id="{_html_escape(table_id)}"' if table_id else ""
+    return f"<div class=\"table-wrap\"><table{tid}><thead><tr>{head}</tr></thead><tbody>{''.join(body_rows)}</tbody></table></div>"
 
 
 def _metric_card(label: str, value: str, note: str = "") -> str:
@@ -250,6 +278,48 @@ def _metric_card(label: str, value: str, note: str = "") -> str:
         f"<div class=\"metric\"><span>{_html_escape(label)}</span>"
         f"<strong>{_html_escape(value)}</strong><small>{_html_escape(note)}</small></div>"
     )
+
+
+def _link_button(label: str, href: str, enabled: bool, kind: str = "") -> str:
+    cls = "nav-btn"
+    if kind:
+        cls += f" {kind}"
+    if not enabled:
+        cls += " disabled"
+        return f'<span class="{cls}">{_html_escape(label)}</span>'
+    return f'<a class="{cls}" href="{_html_escape(href)}">{_html_escape(label)}</a>'
+
+
+def _report_nav_html(trade_date: str, report_dates: Optional[Sequence[str]]) -> str:
+    dates = sorted({str(x) for x in (report_dates or []) if str(x).isdigit() and len(str(x)) == 8})
+    if str(trade_date).isdigit() and str(trade_date) not in dates:
+        dates.append(str(trade_date))
+        dates = sorted(dates)
+    if not dates:
+        return ""
+
+    try:
+        idx = dates.index(str(trade_date))
+    except ValueError:
+        idx = len(dates) - 1
+
+    prev_date = dates[idx - 1] if idx > 0 else ""
+    next_date = dates[idx + 1] if idx + 1 < len(dates) else ""
+    recent = dates[-6:]
+    chips = "".join(
+        f'<a class="date-chip{" active" if d == str(trade_date) else ""}" href="premium_{_html_escape(d)}.html">{_html_escape(d)}</a>'
+        for d in recent
+    )
+    return f"""
+      <nav class="report-nav" aria-label="历史报告翻页">
+        <div class="nav-actions">
+          {_link_button("上一交易日报告", f"premium_{prev_date}.html", bool(prev_date))}
+          {_link_button("最新报告", "premium_latest.html", True, "primary")}
+          {_link_button("下一交易日报告", f"premium_{next_date}.html", bool(next_date))}
+        </div>
+        <div class="date-chips">{chips}</div>
+      </nav>
+    """
 
 
 def render_premium_report_html(
@@ -263,6 +333,7 @@ def render_premium_report_html(
     gen_ts: str,
     model_version: str,
     audit_notes: Optional[Iterable[str]] = None,
+    report_dates: Optional[Sequence[str]] = None,
 ) -> str:
     """Render the human-friendly Premium HTML report."""
     stats = limitup_stats_from_verify(df_verify)
@@ -281,6 +352,7 @@ def render_premium_report_html(
     ]
     notes = "".join(f"<li>{_html_escape(x)}</li>" for x in (audit_notes or []))
     verify_badge = "PENDING" if verify_pending else "READY"
+    nav = _report_nav_html(str(trade_date), report_dates)
 
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -291,36 +363,59 @@ def render_premium_report_html(
   <style>
     :root {{
       color-scheme: light;
-      --ink:#172033; --muted:#667085; --line:#d8dee9; --soft:#f5f7fb;
-      --accent:#b42318; --accent2:#116149; --panel:#ffffff;
+      --ink:#142033; --muted:#667085; --line:#d7dde7; --soft:#f5f7fb;
+      --accent:#b42318; --accent2:#0f6b4f; --warn:#b7791f; --panel:#ffffff;
+      --shadow:0 12px 32px rgba(20,32,51,.08);
     }}
     * {{ box-sizing:border-box; }}
-    body {{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; color:var(--ink); background:#f1f4f8; }}
-    header {{ padding:28px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); }}
+    html {{ scroll-behavior:smooth; }}
+    body {{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; color:var(--ink); background:#eef2f6; }}
+    header {{ padding:24px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }}
+    .topbar {{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; max-width:1480px; margin:0 auto; }}
     .kicker {{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:0; }}
-    h1 {{ margin:8px 0 10px; font-size:30px; line-height:1.18; letter-spacing:0; }}
-    .sub {{ margin:0; color:var(--muted); line-height:1.7; max-width:980px; }}
-    main {{ padding:20px 28px 36px; }}
-    .metrics {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:20px; }}
-    .metric {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:96px; }}
+    h1 {{ margin:7px 0 8px; font-size:28px; line-height:1.18; letter-spacing:0; }}
+    .sub {{ margin:0; color:var(--muted); line-height:1.65; max-width:900px; }}
+    .status-pill {{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:999px; padding:8px 12px; color:var(--muted); font-size:13px; white-space:nowrap; background:#fff; }}
+    .status-pill b {{ color:var(--ink); }}
+    main {{ padding:18px 28px 36px; max-width:1480px; margin:0 auto; }}
+    .report-nav {{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 0 14px; }}
+    .nav-actions, .date-chips, .tabs {{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }}
+    .nav-btn, .date-chip, .tab-btn {{ border:1px solid var(--line); background:#fff; color:#334155; text-decoration:none; border-radius:8px; padding:8px 11px; font-size:13px; line-height:1; cursor:pointer; }}
+    .nav-btn:hover, .date-chip:hover, .tab-btn:hover {{ border-color:#b6c0d0; background:#f8fafc; }}
+    .nav-btn.primary, .date-chip.active, .tab-btn.active {{ border-color:#1f6f54; color:#0f5b43; background:#edf8f3; font-weight:700; }}
+    .nav-btn.disabled {{ color:#a0a8b5; background:#f4f6f9; cursor:not-allowed; }}
+    .metrics {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }}
+    .metric {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:98px; box-shadow:var(--shadow); }}
     .metric span {{ display:block; color:var(--muted); font-size:13px; }}
-    .metric strong {{ display:block; margin-top:8px; font-size:22px; line-height:1.2; }}
+    .metric strong {{ display:block; margin-top:8px; font-size:23px; line-height:1.2; }}
     .metric small {{ display:block; margin-top:8px; color:var(--muted); line-height:1.35; }}
-    section {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-top:16px; overflow:hidden; }}
+    .toolbar {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:14px; }}
+    .hint {{ color:var(--muted); font-size:13px; line-height:1.35; }}
+    section {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-top:14px; overflow:hidden; box-shadow:var(--shadow); }}
+    section.hidden {{ display:none; }}
     .section-head {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid var(--line); }}
     h2 {{ margin:0; font-size:18px; letter-spacing:0; }}
-    .badge {{ border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted); white-space:nowrap; }}
-    .table-wrap {{ overflow-x:auto; width:100%; }}
+    .badge {{ border:1px solid var(--line); border-radius:999px; padding:5px 10px; font-size:12px; color:var(--muted); white-space:nowrap; background:#fff; }}
+    .table-wrap {{ overflow:auto; width:100%; max-height:72vh; }}
     table {{ width:100%; border-collapse:collapse; min-width:1100px; }}
-    th, td {{ padding:10px 12px; border-bottom:1px solid #edf0f5; text-align:left; white-space:nowrap; font-size:13px; }}
-    th {{ background:var(--soft); color:#384256; font-weight:700; }}
+    th, td {{ padding:10px 12px; border-bottom:1px solid #edf0f5; text-align:left; white-space:nowrap; font-size:13px; vertical-align:top; }}
+    th {{ background:var(--soft); color:#384256; font-weight:700; position:sticky; top:0; z-index:2; }}
     tbody tr:nth-child(even) td {{ background:#fbfcfe; }}
-    td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(8) {{ font-variant-numeric:tabular-nums; }}
+    tbody tr:hover td {{ background:#fff8f2; }}
+    th:first-child, td:first-child {{ position:sticky; left:0; z-index:1; background:inherit; }}
+    th:first-child {{ z-index:3; }}
+    .num {{ font-variant-numeric:tabular-nums; font-weight:650; }}
+    .good {{ color:var(--accent); }}
+    .mid {{ color:var(--warn); }}
+    .quiet {{ color:#475467; }}
     .explain {{ padding:14px 18px; color:var(--muted); line-height:1.7; }}
     .explain ul {{ margin:8px 0 0; padding-left:18px; }}
     .empty {{ margin:0; padding:16px 18px; color:var(--muted); }}
+    .footnote {{ color:var(--muted); font-size:12px; margin:14px 0 0; line-height:1.5; }}
     @media (max-width: 900px) {{
+      header {{ position:static; }}
       header, main {{ padding-left:16px; padding-right:16px; }}
+      .topbar, .report-nav, .toolbar {{ align-items:flex-start; flex-direction:column; }}
       .metrics {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
       h1 {{ font-size:24px; }}
     }}
@@ -332,21 +427,35 @@ def render_premium_report_html(
 </head>
 <body>
   <header>
-    <div class="kicker">Premium V4 Quant Engine</div>
-    <h1>涨停接力 TOP10 / TOP20 预测报告</h1>
-    <p class="sub">D 日收盘后分析，T 日集合竞价买入，T+1 盘中择时卖出。排序优先级为 T 日涨停概率、T+1 继续上涨概率与接力评分的综合结果。</p>
+    <div class="topbar">
+      <div>
+        <div class="kicker">Premium V4 Quant Engine</div>
+        <h1>涨停接力 TOP10 / TOP20 预测报告</h1>
+        <p class="sub">D 日收盘后分析，T 日集合竞价买入，T+1 盘中择时卖出。排序优先级为 T 日涨停概率、T+1 继续上涨概率与接力评分的综合结果。</p>
+      </div>
+      <div class="status-pill">验证状态 <b>{_html_escape(verify_badge)}</b></div>
+    </div>
   </header>
   <main>
+    {nav}
     <div class="metrics">{''.join(cards)}</div>
-    <section>
+    <div class="toolbar">
+      <div class="tabs" role="tablist" aria-label="榜单切换">
+        <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 执行榜</button>
+        <button class="tab-btn" type="button" data-target="top20-panel">TOP20 观察榜</button>
+        <button class="tab-btn" type="button" data-target="verify-panel">验证学习</button>
+      </div>
+      <div class="hint">表格横向可滚动，首列固定；颜色越深代表概率或评分越高。</div>
+    </div>
+    <section id="top10-panel">
       <div class="section-head"><h2>TOP10：T 日涨停概率最高</h2><span class="badge">核心执行榜</span></div>
-      {_table_html(top10)}
+      {_table_html(top10, "top10-table")}
     </section>
-    <section>
+    <section id="top20-panel" class="hidden">
       <div class="section-head"><h2>TOP20：T+1 继续上涨候选池</h2><span class="badge">扩展观察榜</span></div>
-      {_table_html(top20)}
+      {_table_html(top20, "top20-table")}
     </section>
-    <section>
+    <section id="verify-panel" class="hidden">
       <div class="section-head"><h2>验证与学习</h2><span class="badge">{_html_escape(verify_badge)}</span></div>
       <div class="explain">
         <div>验证状态：{_html_escape(verify_reason)}</div>
@@ -356,7 +465,20 @@ def render_premium_report_html(
         {('<ul>' + notes + '</ul>') if notes else ''}
       </div>
     </section>
+    <p class="footnote">报告文件由 Premium 自动生成；前后翻页基于仓库内已有历史 HTML 报告日期。</p>
   </main>
+  <script>
+    document.querySelectorAll('.tab-btn').forEach((btn) => {{
+      btn.addEventListener('click', () => {{
+        const target = btn.getAttribute('data-target');
+        document.querySelectorAll('.tab-btn').forEach((x) => x.classList.remove('active'));
+        document.querySelectorAll('main > section').forEach((panel) => panel.classList.add('hidden'));
+        btn.classList.add('active');
+        const panel = document.getElementById(target);
+        if (panel) panel.classList.remove('hidden');
+      }});
+    }});
+  </script>
 </body>
 </html>
 """
