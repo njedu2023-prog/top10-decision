@@ -138,7 +138,7 @@ class PremiumConfig:
     out_dir: str = "outputs/premium"
 
     # ===== 模型版本（追溯字段）=====
-    model_version: str = "premium_v2"
+    model_version: str = "premium_v4_a_share_d_t_t1"
 
     # ===== 旧 rank/learning/models 命名（保留）=====
     rank_csv_tpl: str = "premium_rank_{trade_date}.csv"
@@ -184,7 +184,7 @@ class PremiumConfig:
             market_fetch_mode=_env_str("PREMIUM_MARKET_FETCH_MODE", "cache_first"),
 
             out_dir=_env_str("PREMIUM_OUT_DIR", "outputs/premium"),
-            model_version=_env_str("PREMIUM_MODEL_VERSION", "premium_v2"),
+            model_version=_env_str("PREMIUM_MODEL_VERSION", "premium_v4_a_share_d_t_t1"),
         )
         return cfg
 
@@ -213,6 +213,12 @@ class PremiumConfig:
     def out_top30_csv(self, trade_date: str) -> Path:
         return (self.out_root() / f"premium_top30_{trade_date}.csv").resolve()
 
+    def out_top10_csv(self, trade_date: str) -> Path:
+        return (self.out_root() / f"premium_top10_{trade_date}.csv").resolve()
+
+    def out_top20_csv(self, trade_date: str) -> Path:
+        return (self.out_root() / f"premium_top20_{trade_date}.csv").resolve()
+
     def out_full_csv(self, trade_date: str) -> Path:
         return (self.out_root() / f"premium_full_{trade_date}.csv").resolve()
 
@@ -227,6 +233,12 @@ class PremiumConfig:
 
     def report_latest_md_path(self) -> Path:
         return (self.reports_root() / "premium_latest.md").resolve()
+
+    def report_html_path(self, trade_date: str) -> Path:
+        return (self.reports_root() / f"premium_{trade_date}.html").resolve()
+
+    def report_latest_html_path(self) -> Path:
+        return (self.reports_root() / "premium_latest.html").resolve()
 
     # V2 校准历史落库（新增）
     def calibration_history_path(self) -> Path:
