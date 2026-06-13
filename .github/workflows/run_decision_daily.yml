@@ -675,19 +675,117 @@ jobs:
           set -e
           mkdir -p data/decision docs/signals docs/reports docs/weights outputs/decision
 
+      - name: Resolve refresh decision trade_date
+        id: resolve_refresh_trade_date
+        env:
+          TRADE_DATE_INPUT: ${{ inputs.trade_date }}
+          A_TOP10_OWNER: njedu2023-prog
+          A_TOP10_REPO: a-top10
+          A_TOP10_BRANCH: main
+        run: |
+          set -e
+          echo "[refresh-date] input_trade_date=${TRADE_DATE_INPUT}"
+
+          REFRESH_TRADE_DATE="$(python - <<'PY'
+          from pathlib import Path
+          import csv
+          import re
+          import os
+
+          input_td = (os.environ.get('TRADE_DATE_INPUT') or '').strip()
+
+          fs_dates = set()
+          for p in Path('data/market').glob('features_base_*.csv'):
+              m = re.fullmatch(r'features_base_(\d{8})\.csv', p.name)
+              if m:
+                  fs_dates.add(m.group(1))
+
+          pred_dates = set()
+          archive = Path('data/pred/archive')
+          if archive.exists():
+              for p in archive.rglob('*.csv'):
+                  m = re.search(r'(\d{8})', p.name)
+                  if m:
+                      pred_dates.add(m.group(1))
+
+          latest_pred = Path('data/pred/pred_source_latest.csv')
+          if latest_pred.exists():
+              try:
+                  with latest_pred.open('r', encoding='utf-8-sig', newline='') as f:
+                      reader = csv.DictReader(f)
+                      for row in reader:
+                          td = (row.get('trade_date') or '').strip()
+                          if re.fullmatch(r'\d{8}', td):
+                              pred_dates.add(td)
+              except Exception:
+                  pass
+
+          common = sorted(fs_dates & pred_dates)
+          fs_only = sorted(fs_dates)
+
+          if re.fullmatch(r'\d{8}', input_td) and input_td in fs_dates:
+              print(input_td)
+          elif common:
+              print(common[-1])
+          elif fs_only:
+              print(fs_only[-1])
+          else:
+              print('')
+          PY
+          )"
+
+          if ! echo "${REFRESH_TRADE_DATE}" | grep -E '^[0-9]{8}$' >/dev/null; then
+            echo "[refresh-date] cannot resolve refresh trade_date"
+            echo "[refresh-date] features_base files:"
+            ls -1 data/market/features_base_*.csv 2>/dev/null || true
+            echo "[refresh-date] pred archive files:"
+            find data/pred/archive -type f -name '*.csv' 2>/dev/null | sort || true
+            exit 1
+          fi
+
+          echo "[refresh-date] resolved refresh_trade_date=${REFRESH_TRADE_DATE}"
+          echo "refresh_trade_date=${REFRESH_TRADE_DATE}" >> "$GITHUB_OUTPUT"
+
+          if [ -f "data/pred/archive/pred_source_${REFRESH_TRADE_DATE}.csv" ]; then
+            echo "[refresh-date] restore pred_source_latest from archive for ${REFRESH_TRADE_DATE}"
+            cp "data/pred/archive/pred_source_${REFRESH_TRADE_DATE}.csv" "data/pred/pred_source_latest.csv"
+          elif [ -n "${REFRESH_TRADE_DATE}" ]; then
+            echo "[refresh-date] archive pred source missing; try resync pred source for ${REFRESH_TRADE_DATE}"
+            FILE_IN_A_TOP10="outputs/decisio/pred_decisio_${REFRESH_TRADE_DATE}.csv"
+            RAW_URL="https://raw.githubusercontent.com/${A_TOP10_OWNER}/${A_TOP10_REPO}/${A_TOP10_BRANCH}/${FILE_IN_A_TOP10}"
+            TRADE_DATE="${REFRESH_TRADE_DATE}" TOP10_PRED_URL="${RAW_URL}" python scripts/sync_pred_source.py || true
+          fi
+
+          if [ -f "data/pred/archive/pred_top10_${REFRESH_TRADE_DATE}.csv" ]; then
+            echo "[refresh-date] restore pred_top10_latest from archive for ${REFRESH_TRADE_DATE}"
+            cp "data/pred/archive/pred_top10_${REFRESH_TRADE_DATE}.csv" "data/pred/pred_top10_latest.csv"
+          elif [ -f "data/pred/pred_top10_${REFRESH_TRADE_DATE}.csv" ]; then
+            echo "[refresh-date] restore pred_top10_latest from dated file for ${REFRESH_TRADE_DATE}"
+            cp "data/pred/pred_top10_${REFRESH_TRADE_DATE}.csv" "data/pred/pred_top10_latest.csv"
+          fi
+
+          echo "[refresh-date] available market FS files:"
+          ls -lah data/market/features_base_*.csv 2>/dev/null || true
+          echo "[refresh-date] current pred latest head:"
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p = Path('data/pred/pred_source_latest.csv')
+          if p.exists():
+              df = pd.read_csv(p, nrows=5)
+              print(df.to_string(index=False))
+          else:
+              print('pred_source_latest.csv missing')
+          PY
+
       - name: Run decision pipeline after learning
         env:
-          TRADE_DATE: ${{ inputs.trade_date }}
+          REFRESH_TRADE_DATE: ${{ steps.resolve_refresh_trade_date.outputs.refresh_trade_date }}
         run: |
           set -e
           echo "[refresh] using latest committed models after learning"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${TRADE_DATE}" ]; then
-            echo "[run_v2-refresh] manual trade_date=${TRADE_DATE}"
-            python scripts/run_v2.py --trade-date "${TRADE_DATE}"
-          else
-            echo "[run_v2-refresh] auto mode"
-            python scripts/run_v2.py
-          fi
+          echo "[run_v2-refresh] refresh_trade_date=${REFRESH_TRADE_DATE}"
+          python scripts/run_v2.py --trade-date "${REFRESH_TRADE_DATE}"
 
       - name: Validate IO contract after refresh
         run: |
