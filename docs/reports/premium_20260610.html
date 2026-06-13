@@ -7,36 +7,59 @@
   <style>
     :root {
       color-scheme: light;
-      --ink:#172033; --muted:#667085; --line:#d8dee9; --soft:#f5f7fb;
-      --accent:#b42318; --accent2:#116149; --panel:#ffffff;
+      --ink:#142033; --muted:#667085; --line:#d7dde7; --soft:#f5f7fb;
+      --accent:#b42318; --accent2:#0f6b4f; --warn:#b7791f; --panel:#ffffff;
+      --shadow:0 12px 32px rgba(20,32,51,.08);
     }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; color:var(--ink); background:#f1f4f8; }
-    header { padding:28px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); }
+    html { scroll-behavior:smooth; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; color:var(--ink); background:#eef2f6; }
+    header { padding:24px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }
+    .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; max-width:1480px; margin:0 auto; }
     .kicker { color:var(--accent); font-weight:700; font-size:13px; letter-spacing:0; }
-    h1 { margin:8px 0 10px; font-size:30px; line-height:1.18; letter-spacing:0; }
-    .sub { margin:0; color:var(--muted); line-height:1.7; max-width:980px; }
-    main { padding:20px 28px 36px; }
-    .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
-    .metric { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:96px; }
+    h1 { margin:7px 0 8px; font-size:28px; line-height:1.18; letter-spacing:0; }
+    .sub { margin:0; color:var(--muted); line-height:1.65; max-width:900px; }
+    .status-pill { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:999px; padding:8px 12px; color:var(--muted); font-size:13px; white-space:nowrap; background:#fff; }
+    .status-pill b { color:var(--ink); }
+    main { padding:18px 28px 36px; max-width:1480px; margin:0 auto; }
+    .report-nav { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 0 14px; }
+    .nav-actions, .date-chips, .tabs { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .nav-btn, .date-chip, .tab-btn { border:1px solid var(--line); background:#fff; color:#334155; text-decoration:none; border-radius:8px; padding:8px 11px; font-size:13px; line-height:1; cursor:pointer; }
+    .nav-btn:hover, .date-chip:hover, .tab-btn:hover { border-color:#b6c0d0; background:#f8fafc; }
+    .nav-btn.primary, .date-chip.active, .tab-btn.active { border-color:#1f6f54; color:#0f5b43; background:#edf8f3; font-weight:700; }
+    .nav-btn.disabled { color:#a0a8b5; background:#f4f6f9; cursor:not-allowed; }
+    .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .metric { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:98px; box-shadow:var(--shadow); }
     .metric span { display:block; color:var(--muted); font-size:13px; }
-    .metric strong { display:block; margin-top:8px; font-size:22px; line-height:1.2; }
+    .metric strong { display:block; margin-top:8px; font-size:23px; line-height:1.2; }
     .metric small { display:block; margin-top:8px; color:var(--muted); line-height:1.35; }
-    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-top:16px; overflow:hidden; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:14px; }
+    .hint { color:var(--muted); font-size:13px; line-height:1.35; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-top:14px; overflow:hidden; box-shadow:var(--shadow); }
+    section.hidden { display:none; }
     .section-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid var(--line); }
     h2 { margin:0; font-size:18px; letter-spacing:0; }
-    .badge { border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted); white-space:nowrap; }
-    .table-wrap { overflow-x:auto; width:100%; }
+    .badge { border:1px solid var(--line); border-radius:999px; padding:5px 10px; font-size:12px; color:var(--muted); white-space:nowrap; background:#fff; }
+    .table-wrap { overflow:auto; width:100%; max-height:72vh; }
     table { width:100%; border-collapse:collapse; min-width:1100px; }
-    th, td { padding:10px 12px; border-bottom:1px solid #edf0f5; text-align:left; white-space:nowrap; font-size:13px; }
-    th { background:var(--soft); color:#384256; font-weight:700; }
+    th, td { padding:10px 12px; border-bottom:1px solid #edf0f5; text-align:left; white-space:nowrap; font-size:13px; vertical-align:top; }
+    th { background:var(--soft); color:#384256; font-weight:700; position:sticky; top:0; z-index:2; }
     tbody tr:nth-child(even) td { background:#fbfcfe; }
-    td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(8) { font-variant-numeric:tabular-nums; }
+    tbody tr:hover td { background:#fff8f2; }
+    th:first-child, td:first-child { position:sticky; left:0; z-index:1; background:inherit; }
+    th:first-child { z-index:3; }
+    .num { font-variant-numeric:tabular-nums; font-weight:650; }
+    .good { color:var(--accent); }
+    .mid { color:var(--warn); }
+    .quiet { color:#475467; }
     .explain { padding:14px 18px; color:var(--muted); line-height:1.7; }
     .explain ul { margin:8px 0 0; padding-left:18px; }
     .empty { margin:0; padding:16px 18px; color:var(--muted); }
+    .footnote { color:var(--muted); font-size:12px; margin:14px 0 0; line-height:1.5; }
     @media (max-width: 900px) {
+      header { position:static; }
       header, main { padding-left:16px; padding-right:16px; }
+      .topbar, .report-nav, .toolbar { align-items:flex-start; flex-direction:column; }
       .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
       h1 { font-size:24px; }
     }
@@ -48,30 +71,69 @@
 </head>
 <body>
   <header>
-    <div class="kicker">Premium V4 Quant Engine</div>
-    <h1>涨停接力 TOP10 / TOP20 预测报告</h1>
-    <p class="sub">D 日收盘后分析，T 日集合竞价买入，T+1 盘中择时卖出。排序优先级为 T 日涨停概率、T+1 继续上涨概率与接力评分的综合结果。</p>
+    <div class="topbar">
+      <div>
+        <div class="kicker">Premium V4 Quant Engine</div>
+        <h1>涨停接力 TOP10 / TOP20 预测报告</h1>
+        <p class="sub">D 日收盘后分析，T 日集合竞价买入，T+1 盘中择时卖出。排序优先级为 T 日涨停概率、T+1 继续上涨概率与接力评分的综合结果。</p>
+      </div>
+      <div class="status-pill">验证状态 <b>READY</b></div>
+    </div>
   </header>
   <main>
-    <div class="metrics"><div class="metric"><span>D 分析日</span><strong>20260610</strong><small>使用 D 日收盘后信息</small></div><div class="metric"><span>T 竞价买入日</span><strong>20260611</strong><small>严格 A 股交易日历</small></div><div class="metric"><span>T+1 择时卖出日</span><strong>20260612</strong><small>延续上涨与验证日</small></div><div class="metric"><span>TOP10 涨停命中率</span><strong>30.00%</strong><small>3/10，ok</small></div></div>
-    <section>
+    
+      <nav class="report-nav" aria-label="历史报告翻页">
+        <div class="nav-actions">
+          <a class="nav-btn" href="premium_20260609.html">上一交易日报告</a>
+          <a class="nav-btn primary" href="premium_latest.html">最新报告</a>
+          <a class="nav-btn" href="premium_20260612.html">下一交易日报告</a>
+        </div>
+        <div class="date-chips"><a class="date-chip" href="premium_20260604.html">20260604</a><a class="date-chip" href="premium_20260605.html">20260605</a><a class="date-chip" href="premium_20260608.html">20260608</a><a class="date-chip" href="premium_20260609.html">20260609</a><a class="date-chip active" href="premium_20260610.html">20260610</a><a class="date-chip" href="premium_20260612.html">20260612</a></div>
+      </nav>
+    
+    <div class="metrics"><div class="metric"><span>D 分析日</span><strong>20260610</strong><small>使用 D 日收盘后信息</small></div><div class="metric"><span>T 竞价买入日</span><strong>20260611</strong><small>严格 A 股交易日历</small></div><div class="metric"><span>T+1 择时卖出日</span><strong>20260612</strong><small>延续上涨与验证日</small></div><div class="metric"><span>本期 TOP10 命中率</span><strong>30.00%</strong><small>3/10，ok</small></div><div class="metric"><span>历史 TOP10 累计命中率</span><strong>28.68%</strong><small>154/537，有效交易日 54，limitup_probability_training_samples.csv</small></div></div>
+    <div class="toolbar">
+      <div class="tabs" role="tablist" aria-label="榜单切换">
+        <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 执行榜</button>
+        <button class="tab-btn" type="button" data-target="top20-panel">TOP20 观察榜</button>
+        <button class="tab-btn" type="button" data-target="verify-panel">验证学习</button>
+      </div>
+      <div class="hint">表格横向可滚动，首列固定；颜色越深代表概率或评分越高。</div>
+    </div>
+    <section id="top10-panel">
       <div class="section-head"><h2>TOP10：T 日涨停概率最高</h2><span class="badge">核心执行榜</span></div>
-      <div class="table-wrap"><table><thead><tr><th>排名</th><th>代码</th><th>名称</th><th>D收盘</th><th>T涨停概率</th><th>T涨停强度</th><th>T+1继续上涨</th><th>接力评分</th><th>T竞价动作</th><th>最高买入价</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td>1</td><td>603065.SH</td><td>宿迁联盛</td><td>11.44</td><td>99.00%</td><td>64.70</td><td>87.55%</td><td>84.21</td><td>市价竞价</td><td>≤11.97</td><td>冲高至12.78附近优先兑现；强势放量再看13.22；弱于11.27止损</td></tr><tr><td>2</td><td>002354.SZ</td><td>天娱数科</td><td>8.87</td><td>94.71%</td><td>63.41</td><td>82.41%</td><td>80.89</td><td>市价竞价</td><td>≤9.23</td><td>冲高至9.69附近优先兑现；强势放量再看10.02；弱于8.74止损</td></tr><tr><td>3</td><td>600058.SH</td><td>五矿发展</td><td>10.34</td><td>85.65%</td><td>60.69</td><td>86.65%</td><td>77.64</td><td>市价竞价</td><td>≤10.80</td><td>冲高至11.45附近优先兑现；强势放量再看11.84；弱于10.18止损</td></tr><tr><td>4</td><td>600981.SH</td><td>苏豪汇鸿</td><td>2.71</td><td>83.28%</td><td>59.98</td><td>88.14%</td><td>76.89</td><td>市价竞价</td><td>≤2.84</td><td>冲高至3.04附近优先兑现；强势放量再看3.14；弱于2.67止损</td></tr><tr><td>5</td><td>600500.SH</td><td>中化国际</td><td>6.55</td><td>81.94%</td><td>59.58</td><td>78.91%</td><td>73.95</td><td>市价竞价</td><td>≤6.79</td><td>冲高至7.07附近优先兑现；强势放量再看7.31；弱于6.45止损</td></tr><tr><td>6</td><td>000029.SZ</td><td>深深房Ａ</td><td>26.99</td><td>85.29%</td><td>60.59</td><td>69.63%</td><td>73.22</td><td>市价竞价</td><td>≤27.81</td><td>冲高至28.65附近优先兑现；强势放量再看29.63；弱于26.59止损</td></tr><tr><td>7</td><td>002119.SZ</td><td>康强电子</td><td>28.36</td><td>77.74%</td><td>58.32</td><td>75.87%</td><td>71.19</td><td>市价竞价</td><td>≤29.34</td><td>冲高至30.41附近优先兑现；强势放量再看31.45；弱于27.93止损</td></tr><tr><td>8</td><td>600881.SH</td><td>亚泰集团</td><td>1.77</td><td>61.16%</td><td>53.35</td><td>88.14%</td><td>66.38</td><td>限价竞价</td><td>≤1.85</td><td>冲高至1.98附近优先兑现；强势放量再看2.05；弱于1.74止损</td></tr><tr><td>9</td><td>002409.SZ</td><td>雅克科技</td><td>122.55</td><td>61.94%</td><td>53.58</td><td>82.85%</td><td>65.43</td><td>限价竞价</td><td>≤127.58</td><td>冲高至134.14附近优先兑现；强势放量再看138.74；弱于120.71止损</td></tr><tr><td>10</td><td>002636.SZ</td><td>金安国纪</td><td>77.42</td><td>60.67%</td><td>53.20</td><td>84.70%</td><td>65.30</td><td>限价竞价</td><td>≤80.71</td><td>冲高至85.12附近优先兑现；强势放量再看88.04；弱于76.26止损</td></tr></tbody></table></div>
+      <div class="table-wrap"><table id="top10-table"><thead><tr><th>排名</th><th>代码</th><th>名称</th><th>D收盘</th><th>T涨停概率</th><th>T涨停强度</th><th>T+1继续上涨</th><th>接力评分</th><th>T竞价动作</th><th>最高买入价</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td class="num">1</td><td>603065.SH</td><td>宿迁联盛</td><td class="num">11.44</td><td class="num good">99.00%</td><td class="num mid">64.70</td><td class="num good">87.55%</td><td class="num good">84.21</td><td>市价竞价</td><td>≤11.97</td><td>冲高至12.78附近优先兑现；强势放量再看13.22；弱于11.27止损</td></tr><tr><td class="num">2</td><td>002354.SZ</td><td>天娱数科</td><td class="num">8.87</td><td class="num good">94.71%</td><td class="num mid">63.41</td><td class="num good">82.41%</td><td class="num good">80.89</td><td>市价竞价</td><td>≤9.23</td><td>冲高至9.69附近优先兑现；强势放量再看10.02；弱于8.74止损</td></tr><tr><td class="num">3</td><td>600058.SH</td><td>五矿发展</td><td class="num">10.34</td><td class="num good">85.65%</td><td class="num mid">60.69</td><td class="num good">86.65%</td><td class="num good">77.64</td><td>市价竞价</td><td>≤10.80</td><td>冲高至11.45附近优先兑现；强势放量再看11.84；弱于10.18止损</td></tr><tr><td class="num">4</td><td>600981.SH</td><td>苏豪汇鸿</td><td class="num">2.71</td><td class="num good">83.28%</td><td class="num mid">59.98</td><td class="num good">88.14%</td><td class="num good">76.89</td><td>市价竞价</td><td>≤2.84</td><td>冲高至3.04附近优先兑现；强势放量再看3.14；弱于2.67止损</td></tr><tr><td class="num">5</td><td>600500.SH</td><td>中化国际</td><td class="num">6.55</td><td class="num good">81.94%</td><td class="num mid">59.58</td><td class="num good">78.91%</td><td class="num good">73.95</td><td>市价竞价</td><td>≤6.79</td><td>冲高至7.07附近优先兑现；强势放量再看7.31；弱于6.45止损</td></tr><tr><td class="num">6</td><td>000029.SZ</td><td>深深房Ａ</td><td class="num">26.99</td><td class="num good">85.29%</td><td class="num mid">60.59</td><td class="num mid">69.63%</td><td class="num good">73.22</td><td>市价竞价</td><td>≤27.81</td><td>冲高至28.65附近优先兑现；强势放量再看29.63；弱于26.59止损</td></tr><tr><td class="num">7</td><td>002119.SZ</td><td>康强电子</td><td class="num">28.36</td><td class="num good">77.74%</td><td class="num mid">58.32</td><td class="num good">75.87%</td><td class="num good">71.19</td><td>市价竞价</td><td>≤29.34</td><td>冲高至30.41附近优先兑现；强势放量再看31.45；弱于27.93止损</td></tr><tr><td class="num">8</td><td>600881.SH</td><td>亚泰集团</td><td class="num">1.77</td><td class="num mid">61.16%</td><td class="num quiet">53.35</td><td class="num good">88.14%</td><td class="num mid">66.38</td><td>限价竞价</td><td>≤1.85</td><td>冲高至1.98附近优先兑现；强势放量再看2.05；弱于1.74止损</td></tr><tr><td class="num">9</td><td>002409.SZ</td><td>雅克科技</td><td class="num">122.55</td><td class="num mid">61.94%</td><td class="num quiet">53.58</td><td class="num good">82.85%</td><td class="num mid">65.43</td><td>限价竞价</td><td>≤127.58</td><td>冲高至134.14附近优先兑现；强势放量再看138.74；弱于120.71止损</td></tr><tr><td class="num">10</td><td>002636.SZ</td><td>金安国纪</td><td class="num">77.42</td><td class="num mid">60.67%</td><td class="num quiet">53.20</td><td class="num good">84.70%</td><td class="num mid">65.30</td><td>限价竞价</td><td>≤80.71</td><td>冲高至85.12附近优先兑现；强势放量再看88.04；弱于76.26止损</td></tr></tbody></table></div>
     </section>
-    <section>
+    <section id="top20-panel" class="hidden">
       <div class="section-head"><h2>TOP20：T+1 继续上涨候选池</h2><span class="badge">扩展观察榜</span></div>
-      <div class="table-wrap"><table><thead><tr><th>排名</th><th>代码</th><th>名称</th><th>D收盘</th><th>T涨停概率</th><th>T涨停强度</th><th>T+1继续上涨</th><th>接力评分</th><th>T竞价动作</th><th>最高买入价</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td>1</td><td>603065.SH</td><td>宿迁联盛</td><td>11.44</td><td>99.00%</td><td>64.70</td><td>87.55%</td><td>84.21</td><td>市价竞价</td><td>≤11.97</td><td>冲高至12.78附近优先兑现；强势放量再看13.22；弱于11.27止损</td></tr><tr><td>2</td><td>002354.SZ</td><td>天娱数科</td><td>8.87</td><td>94.71%</td><td>63.41</td><td>82.41%</td><td>80.89</td><td>市价竞价</td><td>≤9.23</td><td>冲高至9.69附近优先兑现；强势放量再看10.02；弱于8.74止损</td></tr><tr><td>3</td><td>600058.SH</td><td>五矿发展</td><td>10.34</td><td>85.65%</td><td>60.69</td><td>86.65%</td><td>77.64</td><td>市价竞价</td><td>≤10.80</td><td>冲高至11.45附近优先兑现；强势放量再看11.84；弱于10.18止损</td></tr><tr><td>4</td><td>600981.SH</td><td>苏豪汇鸿</td><td>2.71</td><td>83.28%</td><td>59.98</td><td>88.14%</td><td>76.89</td><td>市价竞价</td><td>≤2.84</td><td>冲高至3.04附近优先兑现；强势放量再看3.14；弱于2.67止损</td></tr><tr><td>5</td><td>600500.SH</td><td>中化国际</td><td>6.55</td><td>81.94%</td><td>59.58</td><td>78.91%</td><td>73.95</td><td>市价竞价</td><td>≤6.79</td><td>冲高至7.07附近优先兑现；强势放量再看7.31；弱于6.45止损</td></tr><tr><td>6</td><td>000029.SZ</td><td>深深房Ａ</td><td>26.99</td><td>85.29%</td><td>60.59</td><td>69.63%</td><td>73.22</td><td>市价竞价</td><td>≤27.81</td><td>冲高至28.65附近优先兑现；强势放量再看29.63；弱于26.59止损</td></tr><tr><td>7</td><td>002119.SZ</td><td>康强电子</td><td>28.36</td><td>77.74%</td><td>58.32</td><td>75.87%</td><td>71.19</td><td>市价竞价</td><td>≤29.34</td><td>冲高至30.41附近优先兑现；强势放量再看31.45；弱于27.93止损</td></tr><tr><td>8</td><td>600881.SH</td><td>亚泰集团</td><td>1.77</td><td>61.16%</td><td>53.35</td><td>88.14%</td><td>66.38</td><td>限价竞价</td><td>≤1.85</td><td>冲高至1.98附近优先兑现；强势放量再看2.05；弱于1.74止损</td></tr><tr><td>9</td><td>002409.SZ</td><td>雅克科技</td><td>122.55</td><td>61.94%</td><td>53.58</td><td>82.85%</td><td>65.43</td><td>限价竞价</td><td>≤127.58</td><td>冲高至134.14附近优先兑现；强势放量再看138.74；弱于120.71止损</td></tr><tr><td>10</td><td>002636.SZ</td><td>金安国纪</td><td>77.42</td><td>60.67%</td><td>53.20</td><td>84.70%</td><td>65.30</td><td>限价竞价</td><td>≤80.71</td><td>冲高至85.12附近优先兑现；强势放量再看88.04；弱于76.26止损</td></tr><tr><td>11</td><td>600732.SH</td><td>爱旭股份</td><td>12.07</td><td>57.12%</td><td>52.13</td><td>87.18%</td><td>64.23</td><td>限价竞价</td><td>≤12.63</td><td>冲高至13.45附近优先兑现；强势放量再看13.91；弱于11.89止损</td></tr><tr><td>12</td><td>688662.SH</td><td>富信科技</td><td>112.24</td><td>56.02%</td><td>51.81</td><td>88.14%</td><td>63.94</td><td>限价竞价</td><td>≤117.57</td><td>冲高至125.71附近优先兑现；强势放量再看130.02；弱于110.56止损</td></tr><tr><td>13</td><td>605318.SH</td><td>法狮龙</td><td>116.56</td><td>57.35%</td><td>52.20</td><td>78.21%</td><td>62.09</td><td>限价竞价</td><td>≤120.83</td><td>冲高至125.80附近优先兑现；强势放量再看130.11；弱于114.81止损</td></tr><tr><td>14</td><td>603636.SH</td><td>南威软件</td><td>9.66</td><td>53.28%</td><td>50.98</td><td>84.32%</td><td>61.69</td><td>限价竞价</td><td>≤10.07</td><td>冲高至10.62附近优先兑现；强势放量再看10.98；弱于9.52止损</td></tr><tr><td>15</td><td>600229.SH</td><td>城市传媒</td><td>6.13</td><td>53.12%</td><td>50.94</td><td>81.25%</td><td>60.84</td><td>限价竞价</td><td>≤6.37</td><td>冲高至6.67附近优先兑现；强势放量再看6.90；弱于6.04止损</td></tr><tr><td>16</td><td>600665.SH</td><td>天地源</td><td>3.70</td><td>47.39%</td><td>49.22</td><td>86.34%</td><td>59.40</td><td>只观察不追</td><td>≤3.74</td><td>冲高至4.09附近优先兑现；强势放量再看4.23；弱于3.64止损</td></tr><tr><td>17</td><td>600843.SH</td><td>上工申贝</td><td>8.45</td><td>47.28%</td><td>49.19</td><td>85.64%</td><td>59.17</td><td>只观察不追</td><td>≤8.53</td><td>冲高至9.31附近优先兑现；强势放量再看9.63；弱于8.32止损</td></tr><tr><td>18</td><td>003043.SZ</td><td>华亚智能</td><td>80.62</td><td>47.47%</td><td>49.24</td><td>85.08%</td><td>59.12</td><td>只观察不追</td><td>≤81.43</td><td>冲高至88.81附近优先兑现；强势放量再看91.85；弱于79.41止损</td></tr><tr><td>19</td><td>603886.SH</td><td>元祖股份</td><td>12.25</td><td>46.01%</td><td>48.80</td><td>85.97%</td><td>58.65</td><td>只观察不追</td><td>≤12.37</td><td>冲高至13.52附近优先兑现；强势放量再看13.99；弱于12.07止损</td></tr><tr><td>20</td><td>605589.SH</td><td>圣泉集团</td><td>60.10</td><td>52.22%</td><td>50.67</td><td>70.51%</td><td>57.73</td><td>限价竞价</td><td>≤61.96</td><td>冲高至63.87附近优先兑现；强势放量再看66.06；弱于59.20止损</td></tr></tbody></table></div>
+      <div class="table-wrap"><table id="top20-table"><thead><tr><th>排名</th><th>代码</th><th>名称</th><th>D收盘</th><th>T涨停概率</th><th>T涨停强度</th><th>T+1继续上涨</th><th>接力评分</th><th>T竞价动作</th><th>最高买入价</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td class="num">1</td><td>603065.SH</td><td>宿迁联盛</td><td class="num">11.44</td><td class="num good">99.00%</td><td class="num mid">64.70</td><td class="num good">87.55%</td><td class="num good">84.21</td><td>市价竞价</td><td>≤11.97</td><td>冲高至12.78附近优先兑现；强势放量再看13.22；弱于11.27止损</td></tr><tr><td class="num">2</td><td>002354.SZ</td><td>天娱数科</td><td class="num">8.87</td><td class="num good">94.71%</td><td class="num mid">63.41</td><td class="num good">82.41%</td><td class="num good">80.89</td><td>市价竞价</td><td>≤9.23</td><td>冲高至9.69附近优先兑现；强势放量再看10.02；弱于8.74止损</td></tr><tr><td class="num">3</td><td>600058.SH</td><td>五矿发展</td><td class="num">10.34</td><td class="num good">85.65%</td><td class="num mid">60.69</td><td class="num good">86.65%</td><td class="num good">77.64</td><td>市价竞价</td><td>≤10.80</td><td>冲高至11.45附近优先兑现；强势放量再看11.84；弱于10.18止损</td></tr><tr><td class="num">4</td><td>600981.SH</td><td>苏豪汇鸿</td><td class="num">2.71</td><td class="num good">83.28%</td><td class="num mid">59.98</td><td class="num good">88.14%</td><td class="num good">76.89</td><td>市价竞价</td><td>≤2.84</td><td>冲高至3.04附近优先兑现；强势放量再看3.14；弱于2.67止损</td></tr><tr><td class="num">5</td><td>600500.SH</td><td>中化国际</td><td class="num">6.55</td><td class="num good">81.94%</td><td class="num mid">59.58</td><td class="num good">78.91%</td><td class="num good">73.95</td><td>市价竞价</td><td>≤6.79</td><td>冲高至7.07附近优先兑现；强势放量再看7.31；弱于6.45止损</td></tr><tr><td class="num">6</td><td>000029.SZ</td><td>深深房Ａ</td><td class="num">26.99</td><td class="num good">85.29%</td><td class="num mid">60.59</td><td class="num mid">69.63%</td><td class="num good">73.22</td><td>市价竞价</td><td>≤27.81</td><td>冲高至28.65附近优先兑现；强势放量再看29.63；弱于26.59止损</td></tr><tr><td class="num">7</td><td>002119.SZ</td><td>康强电子</td><td class="num">28.36</td><td class="num good">77.74%</td><td class="num mid">58.32</td><td class="num good">75.87%</td><td class="num good">71.19</td><td>市价竞价</td><td>≤29.34</td><td>冲高至30.41附近优先兑现；强势放量再看31.45；弱于27.93止损</td></tr><tr><td class="num">8</td><td>600881.SH</td><td>亚泰集团</td><td class="num">1.77</td><td class="num mid">61.16%</td><td class="num quiet">53.35</td><td class="num good">88.14%</td><td class="num mid">66.38</td><td>限价竞价</td><td>≤1.85</td><td>冲高至1.98附近优先兑现；强势放量再看2.05；弱于1.74止损</td></tr><tr><td class="num">9</td><td>002409.SZ</td><td>雅克科技</td><td class="num">122.55</td><td class="num mid">61.94%</td><td class="num quiet">53.58</td><td class="num good">82.85%</td><td class="num mid">65.43</td><td>限价竞价</td><td>≤127.58</td><td>冲高至134.14附近优先兑现；强势放量再看138.74；弱于120.71止损</td></tr><tr><td class="num">10</td><td>002636.SZ</td><td>金安国纪</td><td class="num">77.42</td><td class="num mid">60.67%</td><td class="num quiet">53.20</td><td class="num good">84.70%</td><td class="num mid">65.30</td><td>限价竞价</td><td>≤80.71</td><td>冲高至85.12附近优先兑现；强势放量再看88.04；弱于76.26止损</td></tr><tr><td class="num">11</td><td>600732.SH</td><td>爱旭股份</td><td class="num">12.07</td><td class="num mid">57.12%</td><td class="num quiet">52.13</td><td class="num good">87.18%</td><td class="num mid">64.23</td><td>限价竞价</td><td>≤12.63</td><td>冲高至13.45附近优先兑现；强势放量再看13.91；弱于11.89止损</td></tr><tr><td class="num">12</td><td>688662.SH</td><td>富信科技</td><td class="num">112.24</td><td class="num mid">56.02%</td><td class="num quiet">51.81</td><td class="num good">88.14%</td><td class="num mid">63.94</td><td>限价竞价</td><td>≤117.57</td><td>冲高至125.71附近优先兑现；强势放量再看130.02；弱于110.56止损</td></tr><tr><td class="num">13</td><td>605318.SH</td><td>法狮龙</td><td class="num">116.56</td><td class="num mid">57.35%</td><td class="num quiet">52.20</td><td class="num good">78.21%</td><td class="num mid">62.09</td><td>限价竞价</td><td>≤120.83</td><td>冲高至125.80附近优先兑现；强势放量再看130.11；弱于114.81止损</td></tr><tr><td class="num">14</td><td>603636.SH</td><td>南威软件</td><td class="num">9.66</td><td class="num mid">53.28%</td><td class="num quiet">50.98</td><td class="num good">84.32%</td><td class="num mid">61.69</td><td>限价竞价</td><td>≤10.07</td><td>冲高至10.62附近优先兑现；强势放量再看10.98；弱于9.52止损</td></tr><tr><td class="num">15</td><td>600229.SH</td><td>城市传媒</td><td class="num">6.13</td><td class="num mid">53.12%</td><td class="num quiet">50.94</td><td class="num good">81.25%</td><td class="num mid">60.84</td><td>限价竞价</td><td>≤6.37</td><td>冲高至6.67附近优先兑现；强势放量再看6.90；弱于6.04止损</td></tr><tr><td class="num">16</td><td>600665.SH</td><td>天地源</td><td class="num">3.70</td><td class="num mid">47.39%</td><td class="num quiet">49.22</td><td class="num good">86.34%</td><td class="num mid">59.40</td><td>只观察不追</td><td>≤3.74</td><td>冲高至4.09附近优先兑现；强势放量再看4.23；弱于3.64止损</td></tr><tr><td class="num">17</td><td>600843.SH</td><td>上工申贝</td><td class="num">8.45</td><td class="num mid">47.28%</td><td class="num quiet">49.19</td><td class="num good">85.64%</td><td class="num mid">59.17</td><td>只观察不追</td><td>≤8.53</td><td>冲高至9.31附近优先兑现；强势放量再看9.63；弱于8.32止损</td></tr><tr><td class="num">18</td><td>003043.SZ</td><td>华亚智能</td><td class="num">80.62</td><td class="num mid">47.47%</td><td class="num quiet">49.24</td><td class="num good">85.08%</td><td class="num mid">59.12</td><td>只观察不追</td><td>≤81.43</td><td>冲高至88.81附近优先兑现；强势放量再看91.85；弱于79.41止损</td></tr><tr><td class="num">19</td><td>603886.SH</td><td>元祖股份</td><td class="num">12.25</td><td class="num mid">46.01%</td><td class="num quiet">48.80</td><td class="num good">85.97%</td><td class="num mid">58.65</td><td>只观察不追</td><td>≤12.37</td><td>冲高至13.52附近优先兑现；强势放量再看13.99；弱于12.07止损</td></tr><tr><td class="num">20</td><td>605589.SH</td><td>圣泉集团</td><td class="num">60.10</td><td class="num mid">52.22%</td><td class="num quiet">50.67</td><td class="num good">70.51%</td><td class="num mid">57.73</td><td>限价竞价</td><td>≤61.96</td><td>冲高至63.87附近优先兑现；强势放量再看66.06；弱于59.20止损</td></tr></tbody></table></div>
     </section>
-    <section>
+    <section id="verify-panel" class="hidden">
       <div class="section-head"><h2>验证与学习</h2><span class="badge">READY</span></div>
       <div class="explain">
         <div>验证状态：ok</div>
-        <div>TOP10 涨停预测成功率：30.00%（3/10）</div>
-        <div>TOP20 涨停预测成功率：20.00%（4/20）</div>
-        <div>模型版本：premium_v4_a_share_d_t_t1；生成时间：2026-06-13T08:06:50Z</div>
-        <ul><li>factor_degrade_mode=full</li><li>limitup_truth=ok</li></ul>
+        <div>本期 TOP10 涨停预测成功率：30.00%（3/10）</div>
+        <div>本期 TOP20 涨停预测成功率：20.00%（4/20）</div>
+        <div>历史 TOP10 累计涨停预测命中率：28.68%（154/537）</div>
+        <div>历史 TOP20 累计涨停预测命中率：22.77%（245/1076）</div>
+        <div>历史统计样本：有效交易日 54；来源：limitup_probability_training_samples.csv；状态：ok</div>
+        <div>模型版本：premium_v4_a_share_d_t_t1；生成时间：2026-06-13T14:33:10Z</div>
+        <ul><li>archive_rebuilt=True</li><li>history_source=limitup_probability_training_samples.csv</li></ul>
       </div>
     </section>
+    <p class="footnote">报告文件由 Premium 自动生成；前后翻页基于仓库内已有历史 HTML 报告日期。</p>
   </main>
+  <script>
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-target');
+        document.querySelectorAll('.tab-btn').forEach((x) => x.classList.remove('active'));
+        document.querySelectorAll('main > section').forEach((panel) => panel.classList.add('hidden'));
+        btn.classList.add('active');
+        const panel = document.getElementById(target);
+        if (panel) panel.classList.remove('hidden');
+      });
+    });
+  </script>
 </body>
 </html>
