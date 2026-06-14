@@ -617,6 +617,46 @@ def evaluate_regression(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, Opt
     }
 
 
+def _metric_value(metrics: Dict[str, object], key: str, default: float) -> float:
+    try:
+        value = metrics.get(key)
+        if value is None:
+            return default
+        out = float(value)
+        if not np.isfinite(out):
+            return default
+        return out
+    except Exception:
+        return default
+
+
+def choose_selected_model(metrics_valid: Dict[str, Dict[str, object]]) -> Tuple[str, Dict[str, object]]:
+    """
+    选择线上 E_ret 模型。
+
+    E_ret 是小样本回归，LR 偶尔会被极端样本拖出荒唐量级。线上不能固定
+    LR > LGBM，而应按验证集质量选择。主排序用 RMSE，辅以 MAE / 方向准确率；
+    指标缺失时偏向 LGBM，因为树模型对非线性和缺失填充更稳。
+    """
+    candidates: list[tuple[tuple[float, float, float, int], str, Dict[str, object]]] = []
+    for preference, kind in enumerate(("lgbm", "lr")):
+        metrics = metrics_valid.get(kind, {}) or {}
+        rmse = _metric_value(metrics, "rmse", float("inf"))
+        mae = _metric_value(metrics, "mae", float("inf"))
+        directional_acc = _metric_value(metrics, "directional_acc", -1.0)
+        candidates.append(((rmse, mae, -directional_acc, preference), kind, metrics))
+
+    candidates.sort(key=lambda x: x[0])
+    selected_kind = candidates[0][1] if candidates else "lgbm"
+    selected_metrics = candidates[0][2] if candidates else {}
+    return selected_kind, {
+        "selected_model": selected_kind,
+        "selection_rule": "min_rmse_then_mae_then_directional_acc_prefer_lgbm",
+        "selected_metrics": selected_metrics,
+        "candidate_metrics": metrics_valid,
+    }
+
+
 def empty_metrics(reason: str) -> Dict[str, Optional[float] | str]:
     return {
         "mae": None,
@@ -822,6 +862,12 @@ def train_window_as_of(
         gbm_model = fit_gbm_train_only(train_df, feature_cols)
         gbm_metrics = empty_metrics("small_sample_mode_skip_valid")
 
+    metrics_valid = {
+        "lr": lr_metrics,
+        "lgbm": gbm_metrics,
+    }
+    selected_model, model_selection = choose_selected_model(metrics_valid)
+
     # 输出
     models_dir = project_root / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -871,6 +917,8 @@ def train_window_as_of(
             "lr": "sklearn.ElasticNet",
             "lgbm": "lightgbm.LGBMRegressor" if HAS_LGBM else "sklearn.HistGradientBoostingRegressor",
         },
+        "selected_model": selected_model,
+        "model_selection": model_selection,
         "window": {
             "maturity_csv": str(maturity_path),
             "matured_trade_dates": matured_trade_dates,
@@ -912,10 +960,7 @@ def train_window_as_of(
             "filtered_feature_count_due_to_contract": int(len(filtered_feature_cols_due_to_contract)),
         },
         "missing_ratio": missing_ratio,
-        "metrics_valid": {
-            "lr": lr_metrics,
-            "lgbm": gbm_metrics,
-        },
+        "metrics_valid": metrics_valid,
         "notes": [
             "仅训练 label_ready_ret=1 且 eret_sample_eligible=1 的成熟样本。",
             "本文件已升级为成熟窗口训练，训练样本来自 sample_maturity 中 ERET_READY=1 的全部历史样本日。",
@@ -925,6 +970,7 @@ def train_window_as_of(
             "E_ret feature contract 已升级为 online_safe_v1。",
             "未来真值列、T+1/T+2 真值列、sample_weight、冷启动/覆盖度审计列、线上不稳定 prior_* 列已从特征中剔除。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
+            "线上 E_ret 模型按验证 RMSE/MAE/方向准确率选择，不再固定 LR 优先。",
         ],
     }
 
@@ -944,6 +990,7 @@ def train_window_as_of(
     print(f"[train_eret] features_total={len(feature_cols)}")
     print(f"[train_eret] filtered_features_due_to_contract={len(filtered_feature_cols_due_to_contract)}")
     print(f"[train_eret] lr_rmse={lr_metrics.get('rmse')} gbm_rmse={gbm_metrics.get('rmse')}")
+    print(f"[train_eret] selected_model={selected_model}")
     print(f"[train_eret] out_lr={lr_path}")
     print(f"[train_eret] out_lgbm={gbm_path}")
     print(f"[train_eret] out_meta={meta_path}")
