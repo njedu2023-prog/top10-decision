@@ -222,7 +222,7 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                         "sector",
                         r.get(
                             "板块",
-                            r.get("industry", r.get("行业", r.get("所属板块", r.get("所属行业", "-")))),
+                            r.get("board", r.get("industry", r.get("行业", r.get("所属板块", r.get("所属行业", "-"))))),
                         ),
                     ),
                     "-",
