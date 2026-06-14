@@ -305,6 +305,9 @@ LEAKAGE_COLS = {
     "is_suspended_t1",
     "dataset_split",
     "label_version",
+    "sample_weight",
+    "is_cold_start",
+    "feature_coverage_score",
     "buy_window_start",
     "buy_window_end",
 }
@@ -318,13 +321,29 @@ ID_COLS = {
 
 NON_FEATURE_PREFIXES = ("Unnamed:",)
 
+ONLINE_UNAVAILABLE_COLS = {
+    "prior_strength_score",
+    "prior_theme_boost",
+    "prior_seal_amount",
+    "prior_open_times",
+    "prior_turnover_rate",
+    "prior_volume_ratio",
+    "prior_limit_up_strength",
+    "prior_board_rank",
+    "prior_board_limit_up_count",
+    "prior_prob",
+    "prior_probability",
+}
+
 
 def select_feature_columns(df: pd.DataFrame) -> List[str]:
     cols: List[str] = []
     for c in df.columns:
-        if c in LEAKAGE_COLS or c in ID_COLS:
+        if c in LEAKAGE_COLS or c in ID_COLS or c in ONLINE_UNAVAILABLE_COLS:
             continue
         if any(str(c).startswith(p) for p in NON_FEATURE_PREFIXES):
+            continue
+        if not pd.api.types.is_numeric_dtype(df[c]):
             continue
         cols.append(c)
     if not cols:
