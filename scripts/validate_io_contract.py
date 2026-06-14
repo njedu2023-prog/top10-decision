@@ -27,10 +27,16 @@ from __future__ import annotations
 
 import json
 import sys
+import argparse
 from pathlib import Path
 from typing import Iterable, List, Optional
 
 import pandas as pd
+
+try:
+    from top10decision.writers.io_contract import is_a_share_trading_day
+except Exception:
+    is_a_share_trading_day = None  # type: ignore
 
 
 # =========================
@@ -48,6 +54,16 @@ def _warn(msg: str) -> None:
 
 def _ok(msg: str) -> None:
     print(f"[CONTRACT][OK] {msg}")
+
+
+def _parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Validate Decision IO and optional semantic health contract.")
+    ap.add_argument(
+        "--strict-semantic",
+        action="store_true",
+        help="同时校验学习验收、A股交易日历、线上特征缺失等语义健康指标。",
+    )
+    return ap.parse_args()
 
 
 def _ensure_exists(p: Path, label: str) -> None:
@@ -111,6 +127,69 @@ def _read_eval_payload(exec_date: str) -> tuple[Optional[Path], dict]:
     eval_json = Path(f"outputs/decision/eval_{exec_date}.json")
     if not eval_json.exists():
         return eval_json, {}
+
+
+def _read_json_any(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _max_numeric_col(df: pd.DataFrame, col: str) -> float:
+    if df is None or df.empty or col not in df.columns:
+        return 0.0
+    s = pd.to_numeric(df[col], errors="coerce")
+    return float(s.fillna(0.0).max()) if len(s) else 0.0
+
+
+def _mean_numeric_col(df: pd.DataFrame, col: str) -> float:
+    if df is None or df.empty or col not in df.columns:
+        return 0.0
+    s = pd.to_numeric(df[col], errors="coerce")
+    return float(s.fillna(0.0).mean()) if len(s) else 0.0
+
+
+def _validate_semantic_health(
+    *,
+    exec_date: str,
+    trade_date: str,
+    payload: dict,
+    cand_df: pd.DataFrame,
+) -> None:
+    if is_a_share_trading_day is None:
+        _fail("无法导入 A 股交易日历校验函数 top10decision.writers.io_contract.is_a_share_trading_day")
+    if not is_a_share_trading_day(exec_date):  # type: ignore[misc]
+        _fail(f"exec_date={exec_date} 不是严格 A 股交易日")
+    _ok(f"exec_date={exec_date} 通过严格 A 股交易日历校验")
+
+    learning_path = Path("outputs/learning/learning_acceptance_latest.json")
+    learning = _read_json_any(learning_path)
+    if not learning:
+        _fail(f"严格语义校验需要学习验收产物：{learning_path.as_posix()}")
+    if learning.get("overall_pass") is not True:
+        _fail(f"learning_acceptance overall_pass != true: {learning.get('overall_pass')}")
+    _ok("learning_acceptance overall_pass=true")
+
+    for prefix in ("pfill", "eret"):
+        missing_col = f"{prefix}_model_missing_feature_count"
+        missing_max = _max_numeric_col(cand_df, missing_col)
+        if missing_max > 0:
+            _fail(f"{missing_col} max={missing_max}，线上输入缺少训练特征")
+
+    eret_missing_ratio = _mean_numeric_col(cand_df, "eret_model_feature_missing_cell_ratio")
+    if eret_missing_ratio > 0.05:
+        _fail(f"eret_model_feature_missing_cell_ratio mean={eret_missing_ratio:.6f} > 0.05")
+
+    picked = int(pd.to_numeric(pd.Series([payload.get("picked", 0)]), errors="coerce").fillna(0).iloc[0])
+    if picked <= 0:
+        _warn("picked=0：严格语义校验允许 NO_TRADE，但已显式告警")
+
+    if _norm_ymd(trade_date) != _norm_ymd(payload.get("signal_date", trade_date)):
+        _fail("strict semantic trade_date 与 eval.signal_date 不一致")
     try:
         payload = json.loads(eval_json.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
@@ -167,6 +246,8 @@ def _get_learning_required_cols() -> List[str]:
 # =========================
 
 def main() -> int:
+    args = _parse_args()
+
     # ---- 固定 latest
     signal_latest = Path("docs/signals/top10_latest.csv")
     weights_latest = Path("docs/weights/weights_latest.csv")
@@ -295,6 +376,14 @@ def main() -> int:
     if "paths" not in payload or not isinstance(payload["paths"], dict):
         _fail("eval JSON 缺少 paths 字段或格式不对")
     _ok("eval JSON 结构验收通过")
+
+    if args.strict_semantic:
+        _validate_semantic_health(
+            exec_date=exec_date,
+            trade_date=trade_date,
+            payload=payload,
+            cand_df=cand_df,
+        )
 
     # ---- 兜底：确保 outputs/decision 至少有内容
     decision_dir = Path("outputs/decision")
