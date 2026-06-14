@@ -290,6 +290,25 @@ def _metric_card(label: str, value: str, note: str = "") -> str:
     )
 
 
+def _rate_rows_card(title: str, rows: Sequence[Dict[str, object]]) -> str:
+    parts = []
+    for row in rows:
+        label = _clean_text(row.get("label"))
+        rate = _clean_text(row.get("rate"))
+        hits = _clean_text(row.get("hits"))
+        total = _clean_text(row.get("total"))
+        note = _clean_text(row.get("note"), "")
+        suffix = f"／{_html_escape(total)}" if total else ""
+        note_html = f"<small>{_html_escape(hits)}{suffix}{('，' + _html_escape(note)) if note else ''}</small>"
+        parts.append(
+            '<div class="metric-line">'
+            f'<span>{_html_escape(label)}</span>'
+            f'<strong>{_html_escape(rate)}</strong>'
+            f"{note_html}</div>"
+        )
+    return f'<div class="metric metric-wide"><span>{_html_escape(title)}</span><div class="metric-lines">{"".join(parts)}</div></div>'
+
+
 def _link_button(label: str, href: str, enabled: bool, kind: str = "") -> str:
     cls = "nav-btn"
     if kind:
@@ -361,6 +380,15 @@ def render_premium_report_html(
     hist_top5_rate = pd.to_numeric(pd.Series([hist.get("top5_hit_rate", np.nan)]), errors="coerce").iloc[0]
     hist_top5_hits = int(hist.get("top5_hits", 0) or 0)
     hist_top5_total = int(hist.get("top5_total", 0) or 0)
+    hist_top1_up_rate = pd.to_numeric(pd.Series([hist.get("top1_up_rate", np.nan)]), errors="coerce").iloc[0]
+    hist_top1_up_hits = int(hist.get("top1_up_hits", 0) or 0)
+    hist_top1_up_total = int(hist.get("top1_up_total", 0) or 0)
+    hist_top3_up_rate = pd.to_numeric(pd.Series([hist.get("top3_up_rate", np.nan)]), errors="coerce").iloc[0]
+    hist_top3_up_hits = int(hist.get("top3_up_hits", 0) or 0)
+    hist_top3_up_total = int(hist.get("top3_up_total", 0) or 0)
+    hist_top5_up_rate = pd.to_numeric(pd.Series([hist.get("top5_up_rate", np.nan)]), errors="coerce").iloc[0]
+    hist_top5_up_hits = int(hist.get("top5_up_hits", 0) or 0)
+    hist_top5_up_total = int(hist.get("top5_up_total", 0) or 0)
     hist_top10_rate = pd.to_numeric(pd.Series([hist.get("top10_hit_rate", np.nan)]), errors="coerce").iloc[0]
     hist_top10_hits = int(hist.get("top10_hits", 0) or 0)
     hist_top10_total = int(hist.get("top10_total", 0) or 0)
@@ -410,20 +438,21 @@ def render_premium_report_html(
             "-" if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate),
             f"{hist_top10_hits}/{hist_top10_total}，有效交易日 {hist_days}，{hist_source}",
         ),
-        _metric_card(
-            "TOP1 历史累计涨停命中率",
-            "-" if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate),
-            f"{hist_top1_hits}/{hist_top1_total}，排名第 1 的历史累计表现",
+        _rate_rows_card(
+            "头部历史累计涨停命中率",
+            [
+                {"label": "TOP1 历史累计涨停命中率", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate), "hits": hist_top1_hits, "total": hist_top1_total},
+                {"label": "TOP3 历史累计涨停命中率", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate), "hits": hist_top3_hits, "total": hist_top3_total},
+                {"label": "TOP5 历史累计涨停命中率", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate), "hits": hist_top5_hits, "total": hist_top5_total},
+            ],
         ),
-        _metric_card(
-            "TOP3 历史累计涨停命中率",
-            "-" if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate),
-            f"{hist_top3_hits}/{hist_top3_total}，排名前 3 的历史累计表现",
-        ),
-        _metric_card(
-            "TOP5 历史累计涨停命中率",
-            "-" if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate),
-            f"{hist_top5_hits}/{hist_top5_total}，排名前 5 的历史累计表现",
+        _rate_rows_card(
+            "头部历史累计上涨率",
+            [
+                {"label": "TOP1 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate), "hits": hist_top1_up_hits, "total": hist_top1_up_total, "note": "T+1收益>0"},
+                {"label": "TOP3 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate), "hits": hist_top3_up_hits, "total": hist_top3_up_total, "note": "T+1收益>0"},
+                {"label": "TOP5 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate), "hits": hist_top5_up_hits, "total": hist_top5_up_total, "note": "T+1收益>0"},
+            ],
         ),
         _metric_card(
             "近20日 TOP10 命中率",
@@ -490,11 +519,18 @@ def render_premium_report_html(
     .nav-btn:hover, .date-chip:hover, .tab-btn:hover {{ border-color:#b6c0d0; background:#f8fafc; }}
     .nav-btn.primary, .date-chip.active, .tab-btn.active {{ border-color:#1f6f54; color:#0f5b43; background:#edf8f3; font-weight:700; }}
     .nav-btn.disabled {{ color:#a0a8b5; background:#f4f6f9; cursor:not-allowed; }}
-    .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:16px; }}
+    .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-bottom:16px; }}
     .metric {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:98px; box-shadow:var(--shadow); }}
+    .metric-wide {{ grid-column:span 2; }}
     .metric span {{ display:block; color:var(--muted); font-size:13px; }}
     .metric strong {{ display:block; margin-top:8px; font-size:23px; line-height:1.2; }}
     .metric small {{ display:block; margin-top:8px; color:var(--muted); line-height:1.35; }}
+    .metric-lines {{ margin-top:10px; display:grid; gap:8px; }}
+    .metric-line {{ display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #edf0f5; }}
+    .metric-line:first-child {{ border-top:0; padding-top:0; }}
+    .metric-line span {{ color:#344054; font-weight:650; line-height:1.3; }}
+    .metric-line strong {{ margin:0; font-size:20px; color:var(--accent); font-variant-numeric:tabular-nums; }}
+    .metric-line small {{ margin:0; color:var(--muted); font-size:12px; white-space:nowrap; }}
     .toolbar {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; background:#fff; border:1px solid var(--line); border-radius:8px; margin-bottom:14px; }}
     .hint {{ color:var(--muted); font-size:13px; line-height:1.35; }}
     section {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-top:14px; overflow:hidden; box-shadow:var(--shadow); }}
@@ -523,10 +559,13 @@ def render_premium_report_html(
       header, main {{ padding-left:16px; padding-right:16px; }}
       .topbar, .report-nav, .toolbar {{ align-items:flex-start; flex-direction:column; }}
       .metrics {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
+      .metric-wide {{ grid-column:1 / -1; }}
       h1 {{ font-size:24px; }}
     }}
     @media (max-width: 560px) {{
       .metrics {{ grid-template-columns:1fr; }}
+      .metric-line {{ grid-template-columns:1fr auto; }}
+      .metric-line small {{ grid-column:1 / -1; }}
       .section-head {{ align-items:flex-start; flex-direction:column; }}
     }}
   </style>
@@ -568,6 +607,7 @@ def render_premium_report_html(
         <div>本期 TOP10 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top10_hit_rate) else _fmt_pct(stats.top10_hit_rate))}（{stats.top10_hits}/{stats.top10_total}）</div>
         <div>本期 TOP20 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top20_hit_rate) else _fmt_pct(stats.top20_hit_rate))}（{stats.top20_hits}/{stats.top20_total}）</div>
         <div>历史 TOP1 / TOP3 / TOP5 累计涨停命中率：TOP1 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate))}（{hist_top1_hits}/{hist_top1_total}）；TOP3 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate))}（{hist_top3_hits}/{hist_top3_total}）；TOP5 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate))}（{hist_top5_hits}/{hist_top5_total}）</div>
+        <div>历史 TOP1 / TOP3 / TOP5 累计上涨率：TOP1 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate))}（{hist_top1_up_hits}/{hist_top1_up_total}）；TOP3 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate))}（{hist_top3_up_hits}/{hist_top3_up_total}）；TOP5 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate))}（{hist_top5_up_hits}/{hist_top5_up_total}）</div>
         <div>历史 TOP10 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate))}（{hist_top10_hits}/{hist_top10_total}）</div>
         <div>历史 TOP20 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top20_rate) else _fmt_pct(hist_top20_rate))}（{hist_top20_hits}/{hist_top20_total}）</div>
         <div>滚动 TOP10 命中率：近5日 {_html_escape('-' if not np.isfinite(hist_5d) else _fmt_pct(hist_5d))}；近20日 {_html_escape('-' if not np.isfinite(hist_20d) else _fmt_pct(hist_20d))}；近60日 {_html_escape('-' if not np.isfinite(hist_60d) else _fmt_pct(hist_60d))}</div>
