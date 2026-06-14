@@ -255,6 +255,134 @@ def _prob_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan
     return x.clip(lower=0.0, upper=1.0)
 
 
+def _safe_corr(x: pd.Series, y: pd.Series, method: str = "spearman") -> float:
+    pair = pd.DataFrame({"x": pd.to_numeric(x, errors="coerce"), "y": pd.to_numeric(y, errors="coerce")}).dropna()
+    if len(pair) < 3 or pair["x"].nunique() < 2 or pair["y"].nunique() < 2:
+        return float("nan")
+    try:
+        if method == "spearman":
+            return float(pair["x"].rank(method="average").corr(pair["y"].rank(method="average"), method="pearson"))
+        if method == "kendall":
+            x_vals = pair["x"].to_numpy(dtype=float)
+            y_vals = pair["y"].to_numpy(dtype=float)
+            concordant = 0
+            discordant = 0
+            ties_x = 0
+            ties_y = 0
+            n = len(pair)
+            for i in range(n - 1):
+                dx = x_vals[i] - x_vals[i + 1:]
+                dy = y_vals[i] - y_vals[i + 1:]
+                sx = np.sign(dx)
+                sy = np.sign(dy)
+                ties_x += int((sx == 0).sum())
+                ties_y += int((sy == 0).sum())
+                prod = sx * sy
+                concordant += int((prod > 0).sum())
+                discordant += int((prod < 0).sum())
+            denom = np.sqrt((concordant + discordant + ties_x) * (concordant + discordant + ties_y))
+            return float((concordant - discordant) / denom) if denom > 0 else float("nan")
+        return float(pair["x"].corr(pair["y"], method="pearson"))
+    except Exception:
+        return float("nan")
+
+
+def _daily_rank_ic_stats(
+    valid: pd.Series,
+    score: pd.Series,
+    actual: pd.Series,
+    date_s: pd.Series,
+    prefix: str,
+) -> Dict[str, object]:
+    tmp = pd.DataFrame({
+        "date": date_s.astype(str),
+        "score": pd.to_numeric(score, errors="coerce"),
+        "actual": pd.to_numeric(actual, errors="coerce"),
+        "valid": valid.fillna(False).astype(bool),
+    })
+    tmp = tmp[tmp["valid"] & tmp["date"].str.match(r"^20\d{6}$", na=False)].dropna(subset=["score", "actual"])
+    if tmp.empty:
+        return {
+            f"{prefix}_ic_days": 0,
+            f"{prefix}_ic_rows": 0,
+            f"{prefix}_spearman_ic_mean": float("nan"),
+            f"{prefix}_spearman_ic_median": float("nan"),
+            f"{prefix}_spearman_ic_positive_rate": float("nan"),
+            f"{prefix}_kendall_tau_mean": float("nan"),
+            f"{prefix}_spearman_ic_all": float("nan"),
+        }
+
+    rows: List[Dict[str, object]] = []
+    for d, g in tmp.groupby("date", sort=True):
+        if len(g) < 3 or g["score"].nunique() < 2 or g["actual"].nunique() < 2:
+            continue
+        sp = _safe_corr(g["score"], g["actual"], "spearman")
+        kt = _safe_corr(g["score"], g["actual"], "kendall")
+        if np.isfinite(sp) or np.isfinite(kt):
+            rows.append({"date": str(d), "spearman": sp, "kendall": kt, "n": int(len(g))})
+
+    ic = pd.DataFrame(rows)
+    out: Dict[str, object] = {
+        f"{prefix}_ic_days": int(len(ic)),
+        f"{prefix}_ic_rows": int(len(tmp)),
+        f"{prefix}_spearman_ic_all": _safe_corr(tmp["score"], tmp["actual"], "spearman"),
+    }
+    if ic.empty:
+        out.update({
+            f"{prefix}_spearman_ic_mean": float("nan"),
+            f"{prefix}_spearman_ic_median": float("nan"),
+            f"{prefix}_spearman_ic_positive_rate": float("nan"),
+            f"{prefix}_kendall_tau_mean": float("nan"),
+        })
+    else:
+        sp = pd.to_numeric(ic["spearman"], errors="coerce")
+        kt = pd.to_numeric(ic["kendall"], errors="coerce")
+        out.update({
+            f"{prefix}_spearman_ic_mean": float(sp.mean()) if sp.notna().any() else float("nan"),
+            f"{prefix}_spearman_ic_median": float(sp.median()) if sp.notna().any() else float("nan"),
+            f"{prefix}_spearman_ic_positive_rate": float((sp > 0).mean()) if sp.notna().any() else float("nan"),
+            f"{prefix}_kendall_tau_mean": float(kt.mean()) if kt.notna().any() else float("nan"),
+        })
+        for win in (5, 20, 60):
+            sub = ic.tail(win)
+            spw = pd.to_numeric(sub["spearman"], errors="coerce")
+            out[f"{prefix}_spearman_ic_{win}d"] = float(spw.mean()) if spw.notna().any() else float("nan")
+            out[f"{prefix}_spearman_ic_positive_rate_{win}d"] = float((spw > 0).mean()) if spw.notna().any() else float("nan")
+            out[f"{prefix}_ic_days_{win}d"] = int(spw.notna().sum())
+    return out
+
+
+def _rank_tier_stats(rank: pd.Series, valid: pd.Series, actual: pd.Series, t1_ret: pd.Series) -> Dict[str, object]:
+    tiers = [
+        ("top10", "TOP1-10", rank <= 10),
+        ("top20_tail", "TOP11-20", (rank > 10) & (rank <= 20)),
+        ("top30_tail", "TOP21-30", (rank > 20) & (rank <= 30)),
+        ("after30", "TOP31+", rank > 30),
+    ]
+    parts: List[str] = []
+    out: Dict[str, object] = {}
+    for key, label, mask in tiers:
+        m = valid & mask & actual.notna()
+        total = int(m.sum())
+        hits = int(actual[m].eq(1).sum()) if total else 0
+        hit_rate = float(hits) / float(total) if total else float("nan")
+        ret_m = valid & mask & t1_ret.notna()
+        avg_ret = float(pd.to_numeric(t1_ret[ret_m], errors="coerce").mean()) if ret_m.any() else float("nan")
+        out[f"tier_{key}_total"] = total
+        out[f"tier_{key}_hits"] = hits
+        out[f"tier_{key}_hit_rate"] = hit_rate
+        out[f"tier_{key}_t1_ret_mean"] = avg_ret
+        if total:
+            ret_text = "-" if not np.isfinite(avg_ret) else f"{avg_ret:.4f}"
+            parts.append(f"{label}:{hits}/{total}/{hit_rate:.3f}/ret={ret_text}")
+    out["tier_summary"] = " | ".join(parts)
+    if np.isfinite(out.get("tier_top10_hit_rate", float("nan"))) and np.isfinite(out.get("tier_top20_tail_hit_rate", float("nan"))):
+        out["tier_top10_vs_11_20_hit_spread"] = float(out["tier_top10_hit_rate"]) - float(out["tier_top20_tail_hit_rate"])
+    else:
+        out["tier_top10_vs_11_20_hit_spread"] = float("nan")
+    return out
+
+
 def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str, object]:
     if df is None or df.empty:
         return {"ready": False, "reason": "history_empty", "source": source}
@@ -263,6 +391,8 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
     ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
     prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
+    t1_score = _prob_series(df, ["t1_continue_up_rate", "t1_up_prob_model", "T+1延续上涨率", "T+1继续上涨概率"], default=np.nan)
+    t1_ret = _num_series(df, ["t1_close_ret", "t1_ret", "t1_return", "real_premium_ret"], default=np.nan)
     valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & actual.notna() & rank.notna()
     if not valid.any():
         return {"ready": False, "reason": "no_ready_history_rows", "source": source}
@@ -278,14 +408,17 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     top20_total, top20_hits, top20_rate = calc(20)
 
     date_col = _first_existing_col(df, ["d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"])
+    if date_col:
+        date_s = df[date_col].map(_to_yyyymmdd)
+    else:
+        date_s = pd.Series(["00000000"] * len(df), index=df.index)
     n_days = 0
     if date_col:
-        dates = df.loc[valid, date_col].map(_to_yyyymmdd)
+        dates = date_s[valid]
         n_days = int(dates[dates.astype(str).str.match(r"^20\d{6}$", na=False)].nunique())
 
     rolling: Dict[str, object] = {}
     if date_col:
-        date_s = df[date_col].map(_to_yyyymmdd)
         all_dates = sorted(date_s[valid & date_s.astype(str).str.match(r"^20\d{6}$", na=False)].unique().tolist())
         for win in (5, 20, 60):
             keep_dates = set(all_dates[-win:])
@@ -314,6 +447,11 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
             bucket_rows.append(f"{lo:.1f}-{min(hi, 1.0):.1f}:{hit_rate:.3f}/{avg_pred:.3f}/{n}")
         ece = float(err_sum)
 
+    rank_quality: Dict[str, object] = {}
+    rank_quality.update(_daily_rank_ic_stats(valid & prob.notna(), prob, actual, date_s, "limitup"))
+    rank_quality.update(_daily_rank_ic_stats(valid & t1_score.notna() & t1_ret.notna(), t1_score, t1_ret, date_s, "t1_ret"))
+    rank_quality.update(_rank_tier_stats(rank, valid, actual, t1_ret))
+
     return {
         "ready": bool(top10_total > 0 or top20_total > 0),
         "reason": "ok",
@@ -330,6 +468,7 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         "calibration_ece": ece,
         "calibration_bins": " | ".join(bucket_rows),
         **rolling,
+        **rank_quality,
     }
 
 
