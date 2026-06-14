@@ -1,8 +1,8 @@
 trade_date: 20260612
-run_id: gh_27487742931
-commit_sha: 1375d7532bc3
+run_id: gh_27488290360
+commit_sha: 451477b0bac1
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-14T04:11:19Z
+created_at_utc: 2026-06-14T04:39:42Z
 ok: True
 buy_date: 20260615
 target_date: 20260616
@@ -64,6 +64,19 @@ history_top10_hit_rate_60d: 0.28677839851024206
 limitup_calibration_rows: 90
 limitup_calibration_brier: 0.33658791403987776
 limitup_calibration_ece: 0.4266386111111112
+history_limitup_rank_ic_days: 3
+history_limitup_spearman_ic_mean: 0.19117341538436225
+history_limitup_spearman_ic_20d: 0.19117341538436225
+history_limitup_spearman_ic_positive_rate: 1.0
+history_limitup_kendall_tau_mean: 0.15867265515599363
+history_t1_ret_rank_ic_days: 0
+history_t1_ret_spearman_ic_mean: nan
+history_t1_ret_spearman_ic_20d: 
+history_t1_ret_spearman_ic_positive_rate: nan
+history_tier_top10_hit_rate: 0.28677839851024206
+history_tier_top20_tail_hit_rate: 0.16883116883116883
+history_tier_top10_vs_11_20_hit_spread: 0.11794722967907323
+history_tier_summary: TOP1-10:154/537/0.287/ret=0.0009 | TOP11-20:91/539/0.169/ret=-0.0012 | TOP21-30:97/535/0.181/ret=0.0038
 out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260612.csv
 out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260612.csv
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260612.csv
