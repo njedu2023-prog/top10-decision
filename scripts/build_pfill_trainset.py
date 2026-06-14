@@ -199,6 +199,8 @@ def pick_prior_source(root: Path, trade_date: str) -> PriorSource:
             continue
         df = ensure_trade_date(df, trade_date)
         df = dedupe_by_key(df, ["trade_date", "ts_code"])
+        if df.empty:
+            continue
         return PriorSource(path=path, mode=mode, df=df)
 
     return PriorSource(path=None, mode="missing", df=pd.DataFrame(columns=["trade_date", "ts_code"]))
