@@ -709,29 +709,34 @@ def _risk_tail_penalty(row: pd.Series) -> float:
     第二轮新增：尾部风险惩罚
     优先使用 tail_risk_score；
     若缺失，则退回 downside_vol / max_drawdown_20d 的轻量近似。
+
+    Feature Store 中这些字段是 decimal return 口径：
+    - 0.08 表示 8%
+    - max_drawdown_20d 常为负值，这里用绝对回撤幅度比较
     """
     trs = _tail_risk_score(row)
     if not np.isnan(trs):
-        if trs <= 1.0:
+        if trs <= 0.08:
             return 0.0
-        if trs <= 3.0:
-            return _smooth_step(trs, 1.0, 3.0, 0.0015, W_TAIL_RISK)
+        if trs <= 0.24:
+            return _smooth_step(trs, 0.08, 0.24, 0.0015, W_TAIL_RISK)
         return W_TAIL_RISK
 
     dv = _downside_vol(row)
     if not np.isnan(dv):
-        if dv <= 3.0:
+        if dv <= 0.03:
             return 0.0
-        if dv <= 8.0:
-            return _smooth_step(dv, 3.0, 8.0, 0.001, 0.0045)
+        if dv <= 0.10:
+            return _smooth_step(dv, 0.03, 0.10, 0.001, 0.0045)
         return 0.0045
 
     mdd = _max_drawdown_20d(row)
     if not np.isnan(mdd):
-        if mdd <= 8.0:
+        mdd_abs = abs(float(mdd))
+        if mdd_abs <= 0.08:
             return 0.0
-        if mdd <= 20.0:
-            return _smooth_step(mdd, 8.0, 20.0, 0.001, 0.004)
+        if mdd_abs <= 0.20:
+            return _smooth_step(mdd_abs, 0.08, 0.20, 0.001, 0.004)
         return 0.004
 
     return 0.0
