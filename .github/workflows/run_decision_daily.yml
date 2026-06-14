@@ -371,6 +371,9 @@ jobs:
                   or Path(f'data/market/raw/daily_{td}.csv').exists()
               )
 
+          def has_pred_source(td):
+              return Path(f'data/pred/archive/pred_source_{td}.csv').exists()
+
           rows = []
           with maturity.open('r', encoding='utf-8-sig', newline='') as f:
               reader = csv.DictReader(f)
@@ -392,11 +395,17 @@ jobs:
               subprocess.run(['python', 'scripts/build_market_fs.py', '--trade-date', td], check=True)
 
               if pfill_ready:
+                  if not has_pred_source(td):
+                      print(f'[learning-rebuild][skip] pred source missing for {td}')
+                      continue
                   print(f'[learning-rebuild] rebuild P_fill trainset {td}')
                   subprocess.run(['python', 'scripts/build_fill_truth.py', '--trade-date', td], check=True)
                   subprocess.run(['python', 'scripts/build_pfill_trainset.py', '--trade-date', td], check=True)
 
               if eret_ready:
+                  if not has_pred_source(td):
+                      print(f'[learning-rebuild][skip] pred source missing for {td}')
+                      continue
                   print(f'[learning-rebuild] rebuild E_ret trainset {td}')
                   subprocess.run(['python', 'scripts/build_fill_truth.py', '--trade-date', td], check=True)
                   subprocess.run(['python', 'scripts/build_eret_truth.py', '--trade-date', td], check=True)
@@ -413,13 +422,15 @@ jobs:
           import csv
           path = Path('data/market/sample_maturity_latest.csv')
           dates = []
+          def has_pred_source(td):
+              return Path(f'data/pred/archive/pred_source_{td}.csv').exists()
           if path.exists():
               with path.open('r', encoding='utf-8-sig', newline='') as f:
                   reader = csv.DictReader(f)
                   for row in reader:
                       td = (row.get('trade_date') or '').strip()
                       ready = (row.get('PFILL_READY') or '').strip()
-                      if td and ready == '1':
+                      if td and ready == '1' and has_pred_source(td):
                           dates.append(td)
           dates = sorted(set(dates))
           print(dates[-1] if dates else '')
@@ -476,13 +487,15 @@ jobs:
           import csv
           path = Path('data/market/sample_maturity_latest.csv')
           dates = []
+          def has_pred_source(td):
+              return Path(f'data/pred/archive/pred_source_{td}.csv').exists()
           if path.exists():
               with path.open('r', encoding='utf-8-sig', newline='') as f:
                   reader = csv.DictReader(f)
                   for row in reader:
                       td = (row.get('trade_date') or '').strip()
                       ready = (row.get('ERET_READY') or '').strip()
-                      if td and ready == '1':
+                      if td and ready == '1' and has_pred_source(td):
                           dates.append(td)
           dates = sorted(set(dates))
           print(dates[-1] if dates else '')
