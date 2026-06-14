@@ -352,6 +352,15 @@ def render_premium_report_html(
     top20 = _display_table(df_top, 20)
     hist = historical_limitup_stats or {}
     hist_ready = bool(hist.get("ready", False))
+    hist_top1_rate = pd.to_numeric(pd.Series([hist.get("top1_hit_rate", np.nan)]), errors="coerce").iloc[0]
+    hist_top1_hits = int(hist.get("top1_hits", 0) or 0)
+    hist_top1_total = int(hist.get("top1_total", 0) or 0)
+    hist_top3_rate = pd.to_numeric(pd.Series([hist.get("top3_hit_rate", np.nan)]), errors="coerce").iloc[0]
+    hist_top3_hits = int(hist.get("top3_hits", 0) or 0)
+    hist_top3_total = int(hist.get("top3_total", 0) or 0)
+    hist_top5_rate = pd.to_numeric(pd.Series([hist.get("top5_hit_rate", np.nan)]), errors="coerce").iloc[0]
+    hist_top5_hits = int(hist.get("top5_hits", 0) or 0)
+    hist_top5_total = int(hist.get("top5_total", 0) or 0)
     hist_top10_rate = pd.to_numeric(pd.Series([hist.get("top10_hit_rate", np.nan)]), errors="coerce").iloc[0]
     hist_top10_hits = int(hist.get("top10_hits", 0) or 0)
     hist_top10_total = int(hist.get("top10_total", 0) or 0)
@@ -400,6 +409,21 @@ def render_premium_report_html(
             "历史 TOP10 累计命中率",
             "-" if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate),
             f"{hist_top10_hits}/{hist_top10_total}，有效交易日 {hist_days}，{hist_source}",
+        ),
+        _metric_card(
+            "TOP1 历史累计涨停命中率",
+            "-" if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate),
+            f"{hist_top1_hits}/{hist_top1_total}，排名第 1 的历史累计表现",
+        ),
+        _metric_card(
+            "TOP3 历史累计涨停命中率",
+            "-" if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate),
+            f"{hist_top3_hits}/{hist_top3_total}，排名前 3 的历史累计表现",
+        ),
+        _metric_card(
+            "TOP5 历史累计涨停命中率",
+            "-" if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate),
+            f"{hist_top5_hits}/{hist_top5_total}，排名前 5 的历史累计表现",
         ),
         _metric_card(
             "近20日 TOP10 命中率",
@@ -543,6 +567,7 @@ def render_premium_report_html(
         <div>验证状态：{_html_escape(verify_reason)}</div>
         <div>本期 TOP10 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top10_hit_rate) else _fmt_pct(stats.top10_hit_rate))}（{stats.top10_hits}/{stats.top10_total}）</div>
         <div>本期 TOP20 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top20_hit_rate) else _fmt_pct(stats.top20_hit_rate))}（{stats.top20_hits}/{stats.top20_total}）</div>
+        <div>历史 TOP1 / TOP3 / TOP5 累计涨停命中率：TOP1 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate))}（{hist_top1_hits}/{hist_top1_total}）；TOP3 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate))}（{hist_top3_hits}/{hist_top3_total}）；TOP5 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate))}（{hist_top5_hits}/{hist_top5_total}）</div>
         <div>历史 TOP10 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate))}（{hist_top10_hits}/{hist_top10_total}）</div>
         <div>历史 TOP20 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top20_rate) else _fmt_pct(hist_top20_rate))}（{hist_top20_hits}/{hist_top20_total}）</div>
         <div>滚动 TOP10 命中率：近5日 {_html_escape('-' if not np.isfinite(hist_5d) else _fmt_pct(hist_5d))}；近20日 {_html_escape('-' if not np.isfinite(hist_20d) else _fmt_pct(hist_20d))}；近60日 {_html_escape('-' if not np.isfinite(hist_60d) else _fmt_pct(hist_60d))}</div>
