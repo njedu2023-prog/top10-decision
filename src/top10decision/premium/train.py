@@ -643,6 +643,7 @@ def _backfill_limitup_truth_from_market(
     out["high_T2_actual"] = t1_high
     out["close_T2_actual"] = t1_close
     out["t_limit_price_est"] = limit_price
+    out["t_up_actual"] = np.where(ready, (t_close > d_close).astype(int), np.nan)
     out["t_limitup_actual"] = np.where(ready, (t_close >= limit_price * 0.9985).astype(int), np.nan)
     out["t_touch_limitup_actual"] = np.where(ready, (t_high >= limit_price * 0.9985).astype(int), np.nan)
     out["t_limitup_verify_ready"] = ready.astype(int)
