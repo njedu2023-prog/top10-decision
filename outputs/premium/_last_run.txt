@@ -1,8 +1,8 @@
 trade_date: 20260612
-run_id: gh_27494226724
-commit_sha: ac7fd757eba0
+run_id: gh_27495249737
+commit_sha: 4db1c966db0f
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-14T09:21:42Z
+created_at_utc: 2026-06-14T10:06:22Z
 ok: True
 buy_date: 20260615
 target_date: 20260616
@@ -13,6 +13,10 @@ truth_T_reason: ok
 verify_pending: True
 verify_reason: truth_not_ready: T_ok=True T2_ok=False (buy_date:trade_cal_ok;target_date:trade_cal_ok)
 market_sentiment_reason: ok:prev=20260611
+calendar_contract: strict_a_share_trade_calendar_only
+analysis_date_calendar_reason: trade_cal_ok
+buy_date_calendar_reason: trade_cal_ok
+target_date_calendar_reason: trade_cal_ok
 mkt_up_ratio: 0.7076978939724038
 mkt_strong_count: 131.0
 mkt_touch_strong_count: 329.0
@@ -37,6 +41,14 @@ limitup_calibration_mode: historical_bin_blend_v1
 limitup_calibration_reason: ok
 limitup_calibration_bins: 3
 limitup_calibration_avg_delta: -0.11404059379382887
+adaptive_rank_mode: history_ic_weighted_v1
+adaptive_weight_limitup: 0.569017
+adaptive_weight_t1: 0.06805
+adaptive_weight_strength: 0.249516
+adaptive_weight_execution: 0.113417
+adaptive_limitup_ic: 0.191173
+adaptive_t1_ret_ic: -0.084898
+adaptive_reason: t1_downweighted_negative_ic
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划
 limitup_model_fields: t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 rank_groups: TOP10|TOP20
