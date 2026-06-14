@@ -402,6 +402,9 @@ def select_feature_columns(df: pd.DataFrame) -> List[str]:
         if _is_forbidden_feature_col(c):
             filtered.append(str(c))
             continue
+        if not pd.api.types.is_numeric_dtype(df[c]):
+            filtered.append(str(c))
+            continue
         cols.append(str(c))
 
     if not cols:
