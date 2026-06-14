@@ -28,6 +28,8 @@ import re
 import shutil
 import sys
 import urllib.request
+import csv
+import io
 from pathlib import Path
 
 
@@ -67,12 +69,57 @@ def _extract_trade_date(text: str) -> str:
     return m.group(1) if m else ""
 
 
-def _resolve_trade_date(url: str, path: str) -> str:
+def _extract_trade_date_from_csv_bytes(data: bytes) -> str:
+    """
+    从 CSV 内容中解析实际 trade_date。
+    latest URL 通常不带日期，必须以内文日期归档，否则历史学习样本会缺少
+    pred_source_{trade_date}.csv，甚至误用 latest。
+    """
+    text = ""
+    for enc in ("utf-8-sig", "utf-8", "gbk", "gb18030"):
+        try:
+            text = data.decode(enc)
+            break
+        except Exception:
+            continue
+    if not text:
+        return ""
+
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+    except Exception:
+        return ""
+
+    date_cols = (
+        "trade_date",
+        "signal_date",
+        "date",
+        "verify_date",
+        "target_trade_date",
+    )
+    counts: dict[str, int] = {}
+    for i, row in enumerate(reader):
+        if i >= 500:
+            break
+        for col in date_cols:
+            val = row.get(col)
+            td = _extract_trade_date(str(val or ""))
+            if td:
+                counts[td] = counts.get(td, 0) + 1
+                break
+
+    if not counts:
+        return ""
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+
+def _resolve_trade_date(url: str, path: str, data: bytes | None = None) -> str:
     """
     trade_date 解析优先级：
     1) 环境变量 TRADE_DATE
     2) 从 TOP10_PRED_URL 中提取
     3) 从 TOP10_PRED_PATH 中提取
+    4) 从 CSV 内容 trade_date/signal_date 等字段中提取
     """
     env_trade_date = (os.getenv("TRADE_DATE") or "").strip()
     if env_trade_date:
@@ -90,6 +137,11 @@ def _resolve_trade_date(url: str, path: str) -> str:
     from_path = _extract_trade_date(path)
     if from_path:
         return from_path
+
+    if data:
+        from_csv = _extract_trade_date_from_csv_bytes(data)
+        if from_csv:
+            return from_csv
 
     return ""
 
@@ -112,15 +164,14 @@ def main() -> int:
         print("[SYNC][ERR] 未提供 TOP10_PRED_URL / TOP10_PRED_PATH，无法同步预测源。", file=sys.stderr)
         return 2
 
-    trade_date = _resolve_trade_date(url=url, path=path)
-    if trade_date:
-        print(f"[SYNC] resolved trade_date={trade_date}")
-    else:
-        print("[SYNC][WARN] trade_date unresolved")
-
     if url:
         print(f"[SYNC] use TOP10_PRED_URL={url}")
         data = _download_bytes(url)
+        trade_date = _resolve_trade_date(url=url, path=path, data=data)
+        if trade_date:
+            print(f"[SYNC] resolved trade_date={trade_date}")
+        else:
+            print("[SYNC][WARN] trade_date unresolved")
         _write_bytes(SNAPSHOT_PATH, data)
         print(f"[SYNC] wrote snapshot -> {SNAPSHOT_PATH}")
         _write_archive_if_possible(data, trade_date)
@@ -133,6 +184,11 @@ def main() -> int:
 
     print(f"[SYNC] use TOP10_PRED_PATH={p}")
     data = _read_local_bytes(p)
+    trade_date = _resolve_trade_date(url=url, path=path, data=data)
+    if trade_date:
+        print(f"[SYNC] resolved trade_date={trade_date}")
+    else:
+        print("[SYNC][WARN] trade_date unresolved")
     _write_bytes(SNAPSHOT_PATH, data)
     print(f"[SYNC] wrote snapshot -> {SNAPSHOT_PATH}")
     _write_archive_if_possible(data, trade_date)
