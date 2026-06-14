@@ -67,6 +67,8 @@ A_SHARE_EXCHANGE_HOLIDAYS = {
     "20261007",
 }
 
+A_SHARE_CALENDAR_YEARS = {2026}
+
 
 # =========================
 # 通用工具（保持原行为）
@@ -132,6 +134,19 @@ def _parse_ymd(value: str) -> datetime | None:
         return None
 
 
+def _assert_a_share_calendar_covered(dt: datetime) -> None:
+    """
+    严格交易日历：只允许使用已显式维护过交易所休市日的年份。
+    未覆盖年份继续用“周末+假日猜测”会直接产生错误执行日，所以这里硬失败。
+    """
+    if dt.year not in A_SHARE_CALENDAR_YEARS:
+        covered = ",".join(str(y) for y in sorted(A_SHARE_CALENDAR_YEARS))
+        raise RuntimeError(
+            f"A-share trading calendar does not cover year={dt.year}; "
+            f"covered_years={covered}. Please update A_SHARE_EXCHANGE_HOLIDAYS first."
+        )
+
+
 def is_a_share_trading_day(value: str) -> bool:
     """
     判断是否为 A 股交易日。
@@ -141,6 +156,7 @@ def is_a_share_trading_day(value: str) -> bool:
     dt = _parse_ymd(value)
     if dt is None:
         return False
+    _assert_a_share_calendar_covered(dt)
     ymd = dt.strftime("%Y%m%d")
     if dt.weekday() >= 5:
         return False
@@ -162,7 +178,8 @@ def next_a_share_trading_day(value: str, include_self: bool = False, max_scan_da
     """
     dt = _parse_ymd(value)
     if dt is None:
-        return norm_ymd(value)
+        raise ValueError(f"Invalid YYYYMMDD date for A-share calendar: {value}")
+    _assert_a_share_calendar_covered(dt)
 
     cursor = dt if include_self else (dt + timedelta(days=1))
     for _ in range(max_scan_days):
@@ -171,9 +188,10 @@ def next_a_share_trading_day(value: str, include_self: bool = False, max_scan_da
             return ymd
         cursor += timedelta(days=1)
 
-    # 极端兜底：避免因为 calendar 未覆盖导致主链硬崩。
-    # 但这种情况应在验收中被发现。
-    return norm_ymd(value)
+    raise RuntimeError(
+        f"Cannot find next A-share trading day from {norm_ymd(value)} "
+        f"within {max_scan_days} days; calendar is incomplete."
+    )
 
 
 def choose_exec_date(trade_date: str, target_trade_date: str) -> str:
@@ -203,7 +221,9 @@ def choose_exec_date(trade_date: str, target_trade_date: str) -> str:
     ttd_dt = _parse_ymd(ttd)
 
     if td_dt is None:
-        return next_a_share_trading_day(ttd, include_self=True) if ttd else td
+        if ttd:
+            return next_a_share_trading_day(ttd, include_self=True)
+        raise ValueError(f"Invalid trade_date for exec date resolution: {trade_date}")
 
     if ttd_dt is not None and ttd_dt > td_dt:
         return next_a_share_trading_day(ttd, include_self=True)
