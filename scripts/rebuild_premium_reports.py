@@ -246,6 +246,19 @@ def _bool_like_series(df: pd.DataFrame, names: Sequence[str], default: float = n
     return out.fillna(default)
 
 
+def _t_up_actual_series(df: pd.DataFrame) -> pd.Series:
+    direct = _bool_like_series(df, ["t_up_hit", "t_up_actual", "t_close_up_actual", "T日上涨实际"], default=np.nan)
+    if direct.notna().any():
+        return direct
+
+    t_close = _num_series(df, ["t_close", "close_T_actual", "close_t_actual", "T日收盘价"], default=np.nan)
+    d_close = _num_series(df, ["d_close", "close_T", "base_close", "D日收盘价", "收盘价"], default=np.nan)
+    out = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
+    m = t_close.notna() & d_close.notna() & (d_close > 0)
+    out.loc[m] = (t_close.loc[m] > d_close.loc[m]).astype(float)
+    return out
+
+
 def _prob_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
     col = _first_existing_col(df, names)
     if not col:
@@ -393,6 +406,7 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
     t1_score = _prob_series(df, ["t1_continue_up_rate", "t1_up_prob_model", "T+1延续上涨率", "T+1继续上涨概率"], default=np.nan)
     t1_ret = _num_series(df, ["t1_close_ret", "t1_ret", "t1_return", "real_premium_ret"], default=np.nan)
+    t_up_actual = _t_up_actual_series(df)
     valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & actual.notna() & rank.notna()
     if not valid.any():
         return {"ready": False, "reason": "no_ready_history_rows", "source": source}
@@ -404,12 +418,12 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         rate = float(hits) / float(total) if total else float("nan")
         return total, hits, rate
 
-    up_valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & rank.notna() & t1_ret.notna()
+    up_valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & rank.notna() & t_up_actual.notna()
 
     def calc_up(n: int) -> tuple[int, int, float]:
         m = up_valid & (rank <= n)
         total = int(m.sum())
-        hits = int((pd.to_numeric(t1_ret[m], errors="coerce") > 0).sum())
+        hits = int(t_up_actual[m].eq(1).sum())
         rate = float(hits) / float(total) if total else float("nan")
         return total, hits, rate
 
