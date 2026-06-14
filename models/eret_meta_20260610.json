@@ -1,5 +1,5 @@
 {
-  "train_time_utc": "2026-06-14T14:01:03+00:00",
+  "train_time_utc": "2026-06-14T14:31:55+00:00",
   "anchor_trade_date": "20260610",
   "status": "trained",
   "skip_reason": "",
@@ -16,6 +16,34 @@
   "model_backend": {
     "lr": "sklearn.ElasticNet",
     "lgbm": "lightgbm.LGBMRegressor"
+  },
+  "selected_model": "lgbm",
+  "model_selection": {
+    "selected_model": "lgbm",
+    "selection_rule": "min_rmse_then_mae_then_directional_acc_prefer_lgbm",
+    "selected_metrics": {
+      "mae": 0.05402397793567677,
+      "rmse": 0.07027906477701244,
+      "r2": 0.10315726167884542,
+      "corr": 0.33885660480720753,
+      "directional_acc": 0.6521739130434783
+    },
+    "candidate_metrics": {
+      "lr": {
+        "mae": 0.07382333352276058,
+        "rmse": 0.09090669851529262,
+        "r2": -0.5005695182169312,
+        "corr": 0.23890938444270238,
+        "directional_acc": 0.6231884057971014
+      },
+      "lgbm": {
+        "mae": 0.05402397793567677,
+        "rmse": 0.07027906477701244,
+        "r2": 0.10315726167884542,
+        "corr": 0.33885660480720753,
+        "directional_acc": 0.6521739130434783
+      }
+    }
   },
   "window": {
     "maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv",
@@ -315,18 +343,18 @@
     "turnover_rate_f": 0.0,
     "volume_ratio": 0.0,
     "amihud_illiquidity": 0.0,
-    "volatility_5d": 0.106481,
-    "volatility_10d": 0.106481,
-    "volatility_20d": 0.109568,
-    "atr": 0.106481,
-    "downside_vol": 0.106481,
-    "max_drawdown_20d": 0.106481,
-    "tail_risk_score": 0.106481,
-    "ret_2d": 0.106481,
-    "ret_5d": 0.106481,
-    "ret_10d": 0.109568,
-    "bid_ask_proxy": 0.106481,
-    "spread_proxy": 0.106481,
+    "volatility_5d": 0.0,
+    "volatility_10d": 0.0,
+    "volatility_20d": 0.003086,
+    "atr": 0.0,
+    "downside_vol": 0.0,
+    "max_drawdown_20d": 0.0,
+    "tail_risk_score": 0.0,
+    "ret_2d": 0.0,
+    "ret_5d": 0.0,
+    "ret_10d": 0.003086,
+    "bid_ask_proxy": 0.0,
+    "spread_proxy": 0.0,
     "total_mv": 0.0,
     "float_mv": 1.0,
     "pe_ttm": 1.0,
@@ -367,18 +395,18 @@
   },
   "metrics_valid": {
     "lr": {
-      "mae": 0.8131704112577964,
-      "rmse": 1.1308829918652072,
-      "r2": -231.22003906893607,
-      "corr": -0.056868473676835764,
-      "directional_acc": 0.43478260869565216
+      "mae": 0.07382333352276058,
+      "rmse": 0.09090669851529262,
+      "r2": -0.5005695182169312,
+      "corr": 0.23890938444270238,
+      "directional_acc": 0.6231884057971014
     },
     "lgbm": {
-      "mae": 0.059258195876489075,
-      "rmse": 0.07747428286387813,
-      "r2": -0.08988199662096763,
-      "corr": 0.04561330691547498,
-      "directional_acc": 0.6086956521739131
+      "mae": 0.05402397793567677,
+      "rmse": 0.07027906477701244,
+      "r2": 0.10315726167884542,
+      "corr": 0.33885660480720753,
+      "directional_acc": 0.6521739130434783
     }
   },
   "notes": [
@@ -389,6 +417,7 @@
     "若整个成熟窗口样本不足，则跳过训练并写出 skip meta，不覆盖旧模型。",
     "E_ret feature contract 已升级为 online_safe_v1。",
     "未来真值列、T+1/T+2 真值列、sample_weight、冷启动/覆盖度审计列、线上不稳定 prior_* 列已从特征中剔除。",
-    "同时输出 latest 与 dated 模型文件，便于追溯。"
+    "同时输出 latest 与 dated 模型文件，便于追溯。",
+    "线上 E_ret 模型按验证 RMSE/MAE/方向准确率选择，不再固定 LR 优先。"
   ]
 }

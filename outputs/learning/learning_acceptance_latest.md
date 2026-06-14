@@ -1,6 +1,6 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-06-14T14:01:04+00:00
+- generated_at_utc: 2026-06-14T14:31:55+00:00
 - current_run_date: 20260612
 - overall_pass: PASS
 
@@ -17,4 +17,6 @@
 - loaded_trade_dates: 8
 - missing_trade_dates: 0
 - fs_v2_still_all_missing: []
+- selected_model: lgbm
+- selected_model_pass: PASS
 - acceptance_pass: PASS
