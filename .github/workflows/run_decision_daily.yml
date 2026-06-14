@@ -344,6 +344,65 @@ jobs:
             --output-json "data/market/sample_maturity_latest.json"
           cat data/market/sample_maturity_latest.csv || true
 
+      - name: Rebuild matured Decision learning trainsets
+        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
+        run: |
+          set -e
+          python - <<'PY'
+          from pathlib import Path
+          import csv
+          import re
+          import subprocess
+
+          maturity = Path('data/market/sample_maturity_latest.csv')
+          if not maturity.exists():
+              raise SystemExit('sample_maturity_latest.csv missing')
+
+          def norm(v):
+              s = ''.join(ch for ch in str(v or '') if ch.isdigit())
+              return s[:8] if len(s) >= 8 else ''
+
+          def ready(row, col):
+              return str(row.get(col, '')).strip() == '1'
+
+          def has_raw(td):
+              return (
+                  Path(f'data/market/raw/{td[:4]}/{td}/daily.csv').exists()
+                  or Path(f'data/market/raw/daily_{td}.csv').exists()
+              )
+
+          rows = []
+          with maturity.open('r', encoding='utf-8-sig', newline='') as f:
+              reader = csv.DictReader(f)
+              for row in reader:
+                  td = norm(row.get('trade_date'))
+                  if td and (ready(row, 'PFILL_READY') or ready(row, 'ERET_READY')):
+                      rows.append((td, ready(row, 'PFILL_READY'), ready(row, 'ERET_READY')))
+
+          rows = sorted(set(rows))
+          print(f'[learning-rebuild] matured rows={len(rows)}')
+          for td, pfill_ready, eret_ready in rows:
+              if not re.fullmatch(r'\d{8}', td):
+                  continue
+              if not has_raw(td):
+                  print(f'[learning-rebuild][skip] raw daily missing for {td}')
+                  continue
+
+              print(f'[learning-rebuild] rebuild FS {td}')
+              subprocess.run(['python', 'scripts/build_market_fs.py', '--trade-date', td], check=True)
+
+              if pfill_ready:
+                  print(f'[learning-rebuild] rebuild P_fill trainset {td}')
+                  subprocess.run(['python', 'scripts/build_fill_truth.py', '--trade-date', td], check=True)
+                  subprocess.run(['python', 'scripts/build_pfill_trainset.py', '--trade-date', td], check=True)
+
+              if eret_ready:
+                  print(f'[learning-rebuild] rebuild E_ret trainset {td}')
+                  subprocess.run(['python', 'scripts/build_fill_truth.py', '--trade-date', td], check=True)
+                  subprocess.run(['python', 'scripts/build_eret_truth.py', '--trade-date', td], check=True)
+                  subprocess.run(['python', 'scripts/build_eret_trainset.py', '--trade-date', td], check=True)
+          PY
+
       - name: Resolve latest PFILL_READY trade_date
         id: resolve_pfill_learning_td
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
@@ -634,6 +693,23 @@ jobs:
             exit 1
           fi
 
+      - name: Gate refresh on learning acceptance
+        if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
+        run: |
+          set -e
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          path = Path('outputs/learning/learning_acceptance_latest.json')
+          if not path.exists():
+              raise SystemExit('[learning-gate] missing learning acceptance artifact')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          print(f"[learning-gate] overall_pass={payload.get('overall_pass')}")
+          if payload.get('overall_pass') is not True:
+              raise SystemExit('[learning-gate] FAIL: learning acceptance did not pass; skip decision refresh')
+          PY
+
   decision_refresh_after_learning:
     name: Refresh Decision With Latest Learning Models
     needs: pfill_learning
@@ -790,7 +866,7 @@ jobs:
       - name: Validate IO contract after refresh
         run: |
           set -e
-          python scripts/validate_io_contract.py
+          python scripts/validate_io_contract.py --strict-semantic
 
       - name: Show refresh status
         run: |
