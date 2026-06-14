@@ -147,7 +147,7 @@ class DecisionInputSchema:
             "probability": ("probability", "prob", "_prob", "p", "p_premium", "up_prob", "f_prob", "概率"),
             "final_score": ("finalscore", "final_score", "最终得分", "score", "score_ev", "ev", "pred_ev"),
             "regime_weight": ("regime_weight", "regime", "情绪权重", "市场状态权重"),
-            "industry": ("industry", "行业"),
+            "industry": ("industry", "board", "sector", "sw_industry", "申万行业", "行业", "板块", "所属行业", "所属板块"),
             "theme": ("theme", "题材", "concept", "concept_name"),
             "turnover_rate": ("turnover_rate", "换手率"),
             "amount": ("amount", "成交额"),
@@ -286,6 +286,7 @@ class PremiumRankOutputSchema:
         "target_date",
         "ts_code",
         "name",
+        "sector",
         "close_T",
 
         # 上游信息（可选）
