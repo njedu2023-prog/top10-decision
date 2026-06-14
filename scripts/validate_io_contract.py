@@ -127,6 +127,13 @@ def _read_eval_payload(exec_date: str) -> tuple[Optional[Path], dict]:
     eval_json = Path(f"outputs/decision/eval_{exec_date}.json")
     if not eval_json.exists():
         return eval_json, {}
+    try:
+        payload = json.loads(eval_json.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return eval_json, {}
+        return eval_json, payload
+    except Exception:
+        return eval_json, {}
 
 
 def _read_json_any(path: Path) -> dict:
