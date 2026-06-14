@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-14T13:26:33+00:00",
+  "generated_at_utc": "2026-06-14T13:52:50+00:00",
   "current_run_date": "20260612",
   "pfill": {
     "anchor_trade_date": "20260611",
@@ -27,35 +27,22 @@
     "missing_trade_dates": 0,
     "metrics_valid": {
       "lr": {
-        "mae": 0.07568779251501673,
-        "rmse": 0.09286486743789993,
-        "r2": -0.5659115777021373,
-        "corr": 0.07550330029817519,
+        "mae": 0.07382333352276058,
+        "rmse": 0.09090669851529262,
+        "r2": -0.5005695182169312,
+        "corr": 0.23890938444270238,
         "directional_acc": 0.6231884057971014
       },
       "lgbm": {
-        "mae": 0.06068700102938369,
-        "rmse": 0.0760902700602109,
-        "r2": -0.05129016098664296,
-        "corr": 0.17394083067455765,
-        "directional_acc": 0.5507246376811594
+        "mae": 0.05402397793567677,
+        "rmse": 0.07027906477701244,
+        "r2": 0.10315726167884542,
+        "corr": 0.33885660480720753,
+        "directional_acc": 0.6521739130434783
       }
     },
-    "fs_v2_still_all_missing": [
-      "ret_2d",
-      "ret_5d",
-      "ret_10d",
-      "volatility_5d",
-      "volatility_10d",
-      "volatility_20d",
-      "atr",
-      "downside_vol",
-      "max_drawdown_20d",
-      "tail_risk_score",
-      "bid_ask_proxy",
-      "spread_proxy"
-    ],
-    "acceptance_pass": false
+    "fs_v2_still_all_missing": [],
+    "acceptance_pass": true
   },
-  "overall_pass": false
+  "overall_pass": true
 }
