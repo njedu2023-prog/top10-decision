@@ -21,10 +21,9 @@ eret_engine.py
   5) 落盘输出
 
 当前版本：
-- v3：保留原主链与上下游字段不变，仅强化 E_ret 线上推理诊断
-- 按 eret_meta.json 的训练态 feature contract 对齐线上推理输入
-- 若 models/eret_lr.joblib 或 models/eret_lgbm.joblib 存在，则优先走学习模型
-- 当前默认优先级：LR > LGBM > rule
+- v4：保留原主链与上下游字段不变，仅修正 E_ret 线上模型选择
+- 按 eret_meta.json 的 selected_model / metrics_valid 选择线上模型
+- 若 meta 缺少 selected_model，则按验证 RMSE 推断；指标缺失时优先 LGBM
 - 同时输出 raw / clipped / final，便于定位 E_ret 全负与 -0.30 下限命中问题
 """
 
@@ -199,6 +198,51 @@ def _resolve_category_like_cols(meta: Dict[str, Any]) -> list[str]:
     return out
 
 
+def _metric_value(metrics: Dict[str, Any], key: str, default: float) -> float:
+    try:
+        value = metrics.get(key)
+        if value is None:
+            return default
+        out = float(value)
+        if not np.isfinite(out):
+            return default
+        return out
+    except Exception:
+        return default
+
+
+def _resolve_selected_model_kind(meta: Dict[str, Any]) -> str:
+    if not isinstance(meta, dict):
+        return "lgbm"
+
+    direct = str(meta.get("selected_model", "") or "").strip().lower()
+    if direct in {"lgbm", "lr"}:
+        return direct
+
+    selection = meta.get("model_selection", {})
+    if isinstance(selection, dict):
+        nested = str(selection.get("selected_model", "") or "").strip().lower()
+        if nested in {"lgbm", "lr"}:
+            return nested
+
+    metrics_valid = meta.get("metrics_valid", {})
+    if isinstance(metrics_valid, dict):
+        scored: list[tuple[tuple[float, float, float, int], str]] = []
+        for preference, kind in enumerate(("lgbm", "lr")):
+            metrics = metrics_valid.get(kind, {})
+            if not isinstance(metrics, dict):
+                metrics = {}
+            rmse = _metric_value(metrics, "rmse", float("inf"))
+            mae = _metric_value(metrics, "mae", float("inf"))
+            directional_acc = _metric_value(metrics, "directional_acc", -1.0)
+            scored.append(((rmse, mae, -directional_acc, preference), kind))
+        scored.sort(key=lambda x: x[0])
+        if scored and np.isfinite(scored[0][0][0]):
+            return scored[0][1]
+
+    return "lgbm"
+
+
 def _build_model_missing_audit(meta_path: Optional[Path]) -> Dict[str, Any]:
     return {
         "eret_model_loaded": False,
@@ -240,19 +284,9 @@ def _build_model_load_failed_audit(
 def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[ERetModelBundle], Dict[str, Any]]:
     root = project_root or _detect_project_root()
 
-    # 线上优先级：LR > LGBM > rule
     lr_path = _existing_model_path(root, ["eret_lr.joblib"])
     lgbm_path = _existing_model_path(root, ["eret_lgbm.joblib"])
     meta_path = _existing_meta_path(root, ["eret_meta.json"])
-
-    candidates: list[Path] = []
-    if lr_path is not None:
-        candidates.append(lr_path)
-    if lgbm_path is not None:
-        candidates.append(lgbm_path)
-
-    if not candidates:
-        return None, _build_model_missing_audit(meta_path)
 
     meta: Dict[str, Any] = {}
     feature_cols: list[str] = []
@@ -266,6 +300,22 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
         categorical_cols = _resolve_category_cols(meta, feature_cols)
         numeric_cols = _resolve_numeric_cols(meta, feature_cols, categorical_cols)
         category_like_cols_detected = _resolve_category_like_cols(meta)
+
+    path_by_kind = {
+        "lr": lr_path,
+        "lgbm": lgbm_path,
+    }
+    selected_kind = _resolve_selected_model_kind(meta)
+    ordered_kinds = [selected_kind] + [k for k in ("lgbm", "lr") if k != selected_kind]
+
+    candidates: list[Path] = []
+    for kind in ordered_kinds:
+        p = path_by_kind.get(kind)
+        if p is not None and p not in candidates:
+            candidates.append(p)
+
+    if not candidates:
+        return None, _build_model_missing_audit(meta_path)
 
     last_err: Optional[Exception] = None
     last_path: Optional[Path] = None
