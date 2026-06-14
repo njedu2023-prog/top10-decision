@@ -404,7 +404,19 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
     ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
     prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
-    t1_score = _prob_series(df, ["t1_continue_up_rate", "t1_up_prob_model", "T+1延续上涨率", "T+1继续上涨概率"], default=np.nan)
+    t1_score = _prob_series(
+        df,
+        [
+            "t1_continue_up_rate",
+            "t1_continue_up_rate_rule",
+            "t1_up_prob_model",
+            "t1_up_rate",
+            "T+1延续上涨率",
+            "T+1继续上涨概率",
+            "T+1上涨率",
+        ],
+        default=np.nan,
+    )
     t1_ret = _num_series(df, ["t1_close_ret", "t1_ret", "t1_return", "real_premium_ret"], default=np.nan)
     t_up_actual = _t_up_actual_series(df)
     valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & actual.notna() & rank.notna()
