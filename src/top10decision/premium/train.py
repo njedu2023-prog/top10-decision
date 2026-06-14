@@ -528,12 +528,14 @@ def _infer_next_market_trade_dates(
 
 def _has_complete_limitup_truth(df: pd.DataFrame) -> bool:
     ready = _bool_numeric_series(df, ["t_limitup_verify_ready", "label_matured"], default=np.nan)
+    t_up = _bool_numeric_series(df, ["t_up_actual", "t_up_hit"], default=np.nan)
     t_limitup = _bool_numeric_series(df, ["t_limitup_actual", "t_limitup_hit"], default=np.nan)
     t_touch = _bool_numeric_series(df, ["t_touch_limitup_actual", "t_touch_limitup"], default=np.nan)
     close_ret = _t1_close_ret_from_verify_df(df)
     high_ret = _t1_high_ret_from_verify_df(df, close_ret)
     valid = (
         pd.to_numeric(ready, errors="coerce").fillna(0).eq(1)
+        & t_up.notna()
         & t_limitup.notna()
         & t_touch.notna()
         & close_ret.notna()
@@ -939,6 +941,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             continue
 
         ready = _bool_numeric_series(df, ["t_limitup_verify_ready", "label_matured"], default=np.nan)
+        t_up = _bool_numeric_series(df, ["t_up_actual", "t_up_hit"], default=np.nan)
         t_limitup = _bool_numeric_series(df, ["t_limitup_actual", "t_limitup_hit"], default=np.nan)
         t_touch = _bool_numeric_series(df, ["t_touch_limitup_actual", "t_touch_limitup"], default=np.nan)
         close_ret = _t1_close_ret_from_verify_df(df)
@@ -958,6 +961,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         out["name"] = df[name_col].astype(str) if name_col else pd.NA
 
         out["label_matured"] = np.where(ready.notna(), ready, 1.0)
+        out["t_up_hit"] = t_up
         out["t_limitup_hit"] = t_limitup
         out["t_touch_limitup"] = t_touch.where(t_touch.notna(), t_limitup)
         out["t1_close_ret"] = close_ret
@@ -1012,6 +1016,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
 
         valid = (
             pd.to_numeric(out["label_matured"], errors="coerce").fillna(0).eq(1)
+            & out["t_up_hit"].notna()
             & out["t_limitup_hit"].notna()
             & out["t_touch_limitup"].notna()
             & out["t1_close_ret"].notna()
