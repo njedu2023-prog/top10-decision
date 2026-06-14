@@ -367,6 +367,19 @@ def render_premium_report_html(
     cal_brier = pd.to_numeric(pd.Series([hist.get("calibration_brier", np.nan)]), errors="coerce").iloc[0]
     cal_ece = pd.to_numeric(pd.Series([hist.get("calibration_ece", np.nan)]), errors="coerce").iloc[0]
     cal_rows = int(hist.get("calibration_rows", 0) or 0)
+    limitup_ic = pd.to_numeric(pd.Series([hist.get("limitup_spearman_ic_mean", np.nan)]), errors="coerce").iloc[0]
+    limitup_ic_20d = pd.to_numeric(pd.Series([hist.get("limitup_spearman_ic_20d", np.nan)]), errors="coerce").iloc[0]
+    limitup_ic_pos = pd.to_numeric(pd.Series([hist.get("limitup_spearman_ic_positive_rate", np.nan)]), errors="coerce").iloc[0]
+    limitup_tau = pd.to_numeric(pd.Series([hist.get("limitup_kendall_tau_mean", np.nan)]), errors="coerce").iloc[0]
+    limitup_ic_days = int(hist.get("limitup_ic_days", 0) or 0)
+    t1_ret_ic = pd.to_numeric(pd.Series([hist.get("t1_ret_spearman_ic_mean", np.nan)]), errors="coerce").iloc[0]
+    t1_ret_ic_20d = pd.to_numeric(pd.Series([hist.get("t1_ret_spearman_ic_20d", np.nan)]), errors="coerce").iloc[0]
+    t1_ret_ic_pos = pd.to_numeric(pd.Series([hist.get("t1_ret_spearman_ic_positive_rate", np.nan)]), errors="coerce").iloc[0]
+    t1_ret_ic_days = int(hist.get("t1_ret_ic_days", 0) or 0)
+    tier_top10_rate = pd.to_numeric(pd.Series([hist.get("tier_top10_hit_rate", np.nan)]), errors="coerce").iloc[0]
+    tier_11_20_rate = pd.to_numeric(pd.Series([hist.get("tier_top20_tail_hit_rate", np.nan)]), errors="coerce").iloc[0]
+    tier_spread = pd.to_numeric(pd.Series([hist.get("tier_top10_vs_11_20_hit_spread", np.nan)]), errors="coerce").iloc[0]
+    tier_summary = _clean_text(hist.get("tier_summary"), "-")
     mkt_emotion = pd.to_numeric(df_top.get("mkt_emotion_score", pd.Series([np.nan])), errors="coerce").dropna()
     mkt_up = pd.to_numeric(df_top.get("mkt_up_ratio", pd.Series([np.nan])), errors="coerce").dropna()
     mkt_strong = pd.to_numeric(df_top.get("mkt_strong_count", pd.Series([np.nan])), errors="coerce").dropna()
@@ -397,6 +410,21 @@ def render_premium_report_html(
             "概率校准质量",
             "-" if not np.isfinite(cal_brier) else f"Brier {cal_brier:.4f}",
             f"ECE {_fmt_num(cal_ece, 4) if np.isfinite(cal_ece) else '-'}；样本 {cal_rows}",
+        ),
+        _metric_card(
+            "涨停 Rank IC",
+            "-" if not np.isfinite(limitup_ic) else _fmt_num(limitup_ic, 4),
+            f"近20日 {_fmt_num(limitup_ic_20d, 4) if np.isfinite(limitup_ic_20d) else '-'}；正值率 {_fmt_pct(limitup_ic_pos) if np.isfinite(limitup_ic_pos) else '-'}；{limitup_ic_days}日",
+        ),
+        _metric_card(
+            "T+1收益 Rank IC",
+            "-" if not np.isfinite(t1_ret_ic) else _fmt_num(t1_ret_ic, 4),
+            f"近20日 {_fmt_num(t1_ret_ic_20d, 4) if np.isfinite(t1_ret_ic_20d) else '-'}；正值率 {_fmt_pct(t1_ret_ic_pos) if np.isfinite(t1_ret_ic_pos) else '-'}；{t1_ret_ic_days}日",
+        ),
+        _metric_card(
+            "分层有效性",
+            "-" if not np.isfinite(tier_spread) else _fmt_pct(tier_spread),
+            f"TOP10 {_fmt_pct(tier_top10_rate) if np.isfinite(tier_top10_rate) else '-'}；11-20 {_fmt_pct(tier_11_20_rate) if np.isfinite(tier_11_20_rate) else '-'}",
         ),
         _metric_card(
             "D日市场情绪",
@@ -519,6 +547,9 @@ def render_premium_report_html(
         <div>历史 TOP20 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top20_rate) else _fmt_pct(hist_top20_rate))}（{hist_top20_hits}/{hist_top20_total}）</div>
         <div>滚动 TOP10 命中率：近5日 {_html_escape('-' if not np.isfinite(hist_5d) else _fmt_pct(hist_5d))}；近20日 {_html_escape('-' if not np.isfinite(hist_20d) else _fmt_pct(hist_20d))}；近60日 {_html_escape('-' if not np.isfinite(hist_60d) else _fmt_pct(hist_60d))}</div>
         <div>概率校准：Brier {_html_escape('-' if not np.isfinite(cal_brier) else f'{cal_brier:.4f}')}；ECE {_html_escape('-' if not np.isfinite(cal_ece) else f'{cal_ece:.4f}')}；校准样本 {cal_rows}</div>
+        <div>涨停排序 Rank IC：Spearman 均值 {_html_escape('-' if not np.isfinite(limitup_ic) else f'{limitup_ic:.4f}')}；近20日 {_html_escape('-' if not np.isfinite(limitup_ic_20d) else f'{limitup_ic_20d:.4f}')}；Kendall Tau {_html_escape('-' if not np.isfinite(limitup_tau) else f'{limitup_tau:.4f}')}；正值率 {_html_escape('-' if not np.isfinite(limitup_ic_pos) else _fmt_pct(limitup_ic_pos))}；有效日 {limitup_ic_days}</div>
+        <div>T+1收益排序 Rank IC：Spearman 均值 {_html_escape('-' if not np.isfinite(t1_ret_ic) else f'{t1_ret_ic:.4f}')}；近20日 {_html_escape('-' if not np.isfinite(t1_ret_ic_20d) else f'{t1_ret_ic_20d:.4f}')}；正值率 {_html_escape('-' if not np.isfinite(t1_ret_ic_pos) else _fmt_pct(t1_ret_ic_pos))}；有效日 {t1_ret_ic_days}</div>
+        <div>分层命中/收益：{_html_escape(tier_summary)}</div>
         <div>D日市场情绪：情绪分 {_html_escape('-' if not np.isfinite(mkt_emotion_v) else _fmt_pct(mkt_emotion_v))}；上涨占比 {_html_escape('-' if not np.isfinite(mkt_up_v) else _fmt_pct(mkt_up_v))}；强势股 {mkt_strong_v}</div>
         <div>历史统计样本：有效交易日 {hist_days}；来源：{_html_escape(hist_source)}；状态：{_html_escape(hist_reason)}</div>
         <div>模型版本：{_html_escape(model_version)}；生成时间：{_html_escape(gen_ts)}</div>
