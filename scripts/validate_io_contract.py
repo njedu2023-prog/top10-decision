@@ -197,13 +197,6 @@ def _validate_semantic_health(
 
     if _norm_ymd(trade_date) != _norm_ymd(payload.get("signal_date", trade_date)):
         _fail("strict semantic trade_date 与 eval.signal_date 不一致")
-    try:
-        payload = json.loads(eval_json.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            return eval_json, {}
-        return eval_json, payload
-    except Exception:
-        return eval_json, {}
 
 
 def _get_learning_required_cols() -> List[str]:
