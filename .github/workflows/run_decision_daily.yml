@@ -374,6 +374,12 @@ jobs:
           def has_pred_source(td):
               return Path(f'data/pred/archive/pred_source_{td}.csv').exists()
 
+          def has_pfill_trainset(td):
+              return Path(f'data/market/pfill_trainset_{td}.csv').exists()
+
+          def has_eret_trainset(td):
+              return Path(f'data/market/eret_trainset_{td}.csv').exists()
+
           rows = []
           with maturity.open('r', encoding='utf-8-sig', newline='') as f:
               reader = csv.DictReader(f)
@@ -384,30 +390,40 @@ jobs:
 
           rows = sorted(set(rows))
           print(f'[learning-rebuild] matured rows={len(rows)}')
+          eligible_rows = []
           for td, pfill_ready, eret_ready in rows:
               if not re.fullmatch(r'\d{8}', td):
                   continue
               if not has_raw(td):
                   print(f'[learning-rebuild][skip] raw daily missing for {td}')
                   continue
-
+              if not has_pred_source(td):
+                  print(f'[learning-rebuild][skip] pred source missing for {td}')
+                  continue
+              needs_pfill = pfill_ready and not has_pfill_trainset(td)
+              needs_eret = eret_ready and not has_eret_trainset(td)
+              if not (needs_pfill or needs_eret):
+                  print(f'[learning-rebuild][skip] trainsets already exist for {td}')
+                  continue
+              eligible_rows.append((td, needs_pfill, needs_eret))
+          max_rebuild = 8
+          if len(eligible_rows) > max_rebuild:
+              print(f'[learning-rebuild] limiting rebuild rows {len(eligible_rows)} -> last {max_rebuild}')
+              eligible_rows = eligible_rows[-max_rebuild:]
+          print(f'[learning-rebuild] eligible rows={len(eligible_rows)}')
+          for td, needs_pfill, needs_eret in eligible_rows:
               print(f'[learning-rebuild] rebuild FS {td}')
               subprocess.run(['python', 'scripts/build_market_fs.py', '--trade-date', td], check=True)
 
-              if pfill_ready:
-                  if not has_pred_source(td):
-                      print(f'[learning-rebuild][skip] pred source missing for {td}')
-                      continue
-                  print(f'[learning-rebuild] rebuild P_fill trainset {td}')
+              if needs_pfill or needs_eret:
                   subprocess.run(['python', 'scripts/build_fill_truth.py', '--trade-date', td], check=True)
+
+              if needs_pfill:
+                  print(f'[learning-rebuild] rebuild P_fill trainset {td}')
                   subprocess.run(['python', 'scripts/build_pfill_trainset.py', '--trade-date', td], check=True)
 
-              if eret_ready:
-                  if not has_pred_source(td):
-                      print(f'[learning-rebuild][skip] pred source missing for {td}')
-                      continue
+              if needs_eret:
                   print(f'[learning-rebuild] rebuild E_ret trainset {td}')
-                  subprocess.run(['python', 'scripts/build_fill_truth.py', '--trade-date', td], check=True)
                   subprocess.run(['python', 'scripts/build_eret_truth.py', '--trade-date', td], check=True)
                   subprocess.run(['python', 'scripts/build_eret_trainset.py', '--trade-date', td], check=True)
           PY
@@ -475,7 +491,7 @@ jobs:
         if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
+          python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}" --window-size 8
 
       - name: Resolve latest ERET_READY trade_date
         id: resolve_eret_learning_td
@@ -546,7 +562,7 @@ jobs:
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+          python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}" --window-size 8
 
       - name: Build learning acceptance artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
