@@ -104,7 +104,7 @@ def add_rank_groups(df: pd.DataFrame) -> pd.DataFrame:
     )
     out["is_top10"] = (rank <= 10).astype("Int64")
     out["is_top20"] = (rank <= 20).astype("Int64")
-    out["榜单分组"] = out["rank_group"].map({"TOP10": "TOP10", "TOP20": "TOP20", "FULL": "TOP20以外"})
+    out["榜单分组"] = out["rank_group"].map({"TOP10": "TOP10", "TOP20": "TOP20", "FULL": "Outside TOP20"})
     return out
 
 
@@ -214,10 +214,10 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
     for _, r in show.iterrows():
         rows.append(
             {
-                "排名": _clean_text(r.get("rank")),
-                "代码": _clean_text(r.get("ts_code")),
-                "名称": _clean_text(r.get("name")),
-                "板块": _clean_text(
+                "Rank": _clean_text(r.get("rank")),
+                "Code": _clean_text(r.get("ts_code")),
+                "Name": _clean_text(r.get("name")),
+                "Sector": _clean_text(
                     r.get(
                         "sector",
                         r.get(
@@ -227,18 +227,19 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                     ),
                     "-",
                 ),
-                "D收盘": _fmt_num(r.get("close_T"), 2),
-                "T涨停概率": _fmt_pct(r.get("t_limitup_prob"), 2),
-                "T涨停强度": _fmt_num(r.get("t_limitup_strength"), 2),
-                "T+1继续上涨": _fmt_pct(r.get("t1_continue_up_rate"), 2),
-                "接力评分": _fmt_num(r.get("limitup_continuation_score"), 2),
-                "T竞价动作": _clean_text(
+                "D Close": _fmt_num(r.get("close_T"), 2),
+                "T Limit-up Prob": _fmt_pct(r.get("t_limitup_prob"), 2),
+                "T Limit-up Strength": _fmt_num(r.get("t_limitup_strength"), 2),
+                "T+1 Up Prob": _fmt_pct(r.get("t1_continue_up_rate"), 2),
+                "Relay Score": _fmt_num(r.get("limitup_continuation_score"), 2),
+                "Adaptive Score": _fmt_num(r.get("premium_adaptive_score", r.get("自适应排序评分")), 2),
+                "T Auction Action": _clean_text(
                     r.get("T日建议买入方式", r.get("T+1建议买入方式", r.get("t1_buy_method")))
                 ),
-                "最高买入价": _clean_text(
+                "Max Buy Price": _clean_text(
                     r.get("T日可接受买入价", r.get("T+1可接受买入价", r.get("t1_max_buy_price")))
                 ),
-                "T+1卖出计划": _clean_text(r.get("T+1卖出计划", r.get("t1_sell_plan"))),
+                "T+1 Sell Plan": _clean_text(r.get("T+1卖出计划", r.get("t1_sell_plan"))),
             }
         )
     return pd.DataFrame(rows)
@@ -261,7 +262,7 @@ def _score_class(x: object, good_at: float, mid_at: float) -> str:
 
 def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
     if df is None or df.empty:
-        return '<p class="empty">暂无数据</p>'
+        return '<p class="empty">No data available</p>'
     head = "".join(f"<th>{_html_escape(c)}</th>" for c in df.columns)
     body_rows = []
     for _, r in df.iterrows():
@@ -269,13 +270,13 @@ def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
         for c in df.columns:
             val = r.get(c, "")
             cls = ""
-            if c == "T涨停概率":
+            if c == "T Limit-up Prob":
                 cls = f' class="num {_score_class(val, 0.70, 0.45)}"'
-            elif c == "T+1继续上涨":
+            elif c == "T+1 Up Prob":
                 cls = f' class="num {_score_class(val, 0.70, 0.50)}"'
-            elif c in {"T涨停强度", "接力评分"}:
+            elif c in {"T Limit-up Strength", "Relay Score", "Adaptive Score"}:
                 cls = f' class="num {_score_class(val, 70.0, 55.0)}"'
-            elif c in {"排名", "D收盘"}:
+            elif c in {"Rank", "D Close"}:
                 cls = ' class="num"'
             cells.append(f"<td{cls}>{_html_escape(val)}</td>")
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
@@ -298,8 +299,8 @@ def _rate_rows_card(title: str, rows: Sequence[Dict[str, object]]) -> str:
         hits = _clean_text(row.get("hits"))
         total = _clean_text(row.get("total"))
         note = _clean_text(row.get("note"), "")
-        suffix = f"／{_html_escape(total)}" if total else ""
-        note_html = f"<small>{_html_escape(hits)}{suffix}{('，' + _html_escape(note)) if note else ''}</small>"
+        suffix = f"/{_html_escape(total)}" if total else ""
+        note_html = f"<small>{_html_escape(hits)}{suffix}{(', ' + _html_escape(note)) if note else ''}</small>"
         parts.append(
             '<div class="metric-line">'
             f'<span>{_html_escape(label)}</span>'
@@ -340,11 +341,11 @@ def _report_nav_html(trade_date: str, report_dates: Optional[Sequence[str]]) -> 
         for d in recent
     )
     return f"""
-      <nav class="report-nav" aria-label="历史报告翻页">
+      <nav class="report-nav" aria-label="Report navigation">
         <div class="nav-actions">
-          {_link_button("上一交易日报告", f"premium_{prev_date}.html", bool(prev_date))}
-          {_link_button("最新报告", "premium_latest.html", True, "primary")}
-          {_link_button("下一交易日报告", f"premium_{next_date}.html", bool(next_date))}
+          {_link_button("Previous Report", f"premium_{prev_date}.html", bool(prev_date))}
+          {_link_button("Latest Report", "premium_latest.html", True, "primary")}
+          {_link_button("Next Report", f"premium_{next_date}.html", bool(next_date))}
         </div>
         <div class="date-chips">{chips}</div>
       </nav>
@@ -423,66 +424,79 @@ def render_premium_report_html(
     mkt_emotion_v = float(mkt_emotion.iloc[0]) if len(mkt_emotion) else float("nan")
     mkt_up_v = float(mkt_up.iloc[0]) if len(mkt_up) else float("nan")
     mkt_strong_v = int(mkt_strong.iloc[0]) if len(mkt_strong) else 0
+    w_limitup = pd.to_numeric(df_top.get("adaptive_weight_limitup", pd.Series([np.nan])), errors="coerce").dropna()
+    w_t1 = pd.to_numeric(df_top.get("adaptive_weight_t1", pd.Series([np.nan])), errors="coerce").dropna()
+    w_strength = pd.to_numeric(df_top.get("adaptive_weight_strength", pd.Series([np.nan])), errors="coerce").dropna()
+    w_exec = pd.to_numeric(df_top.get("adaptive_weight_execution", pd.Series([np.nan])), errors="coerce").dropna()
+    w_limitup_v = float(w_limitup.iloc[0]) if len(w_limitup) else float("nan")
+    w_t1_v = float(w_t1.iloc[0]) if len(w_t1) else float("nan")
+    w_strength_v = float(w_strength.iloc[0]) if len(w_strength) else float("nan")
+    w_exec_v = float(w_exec.iloc[0]) if len(w_exec) else float("nan")
 
     cards = [
-        _metric_card("D 分析日", str(trade_date), "使用 D 日收盘后信息"),
-        _metric_card("T 竞价买入日", str(buy_date), "严格 A 股交易日历"),
-        _metric_card("T+1 择时卖出日", str(target_date), "延续上涨与验证日"),
+        _metric_card("D Analysis Date", str(trade_date), "Uses post-close data from D only"),
+        _metric_card("T Auction Buy Date", str(buy_date), "Strict A-share trading calendar"),
+        _metric_card("T+1 Timing Exit Date", str(target_date), "Continuation and validation date"),
         _metric_card(
-            "本期 TOP10 命中率",
+            "Current TOP10 Hit Rate",
             "-" if not stats.ready or not np.isfinite(stats.top10_hit_rate) else _fmt_pct(stats.top10_hit_rate),
-            f"{stats.top10_hits}/{stats.top10_total}，{stats.reason}",
+            f"{stats.top10_hits}/{stats.top10_total}, {stats.reason}",
         ),
         _metric_card(
-            "历史 TOP10 累计命中率",
+            "Historical TOP10 Limit-up Hit Rate",
             "-" if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate),
-            f"{hist_top10_hits}/{hist_top10_total}，有效交易日 {hist_days}，{hist_source}",
+            f"{hist_top10_hits}/{hist_top10_total}, trading days {hist_days}, {hist_source}",
         ),
         _rate_rows_card(
-            "头部历史累计涨停命中率",
+            "Head Historical Limit-up Hit Rate",
             [
-                {"label": "TOP1 历史累计涨停命中率", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate), "hits": hist_top1_hits, "total": hist_top1_total},
-                {"label": "TOP3 历史累计涨停命中率", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate), "hits": hist_top3_hits, "total": hist_top3_total},
-                {"label": "TOP5 历史累计涨停命中率", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate), "hits": hist_top5_hits, "total": hist_top5_total},
+                {"label": "TOP1 Historical Limit-up Hit Rate", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate), "hits": hist_top1_hits, "total": hist_top1_total},
+                {"label": "TOP3 Historical Limit-up Hit Rate", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate), "hits": hist_top3_hits, "total": hist_top3_total},
+                {"label": "TOP5 Historical Limit-up Hit Rate", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate), "hits": hist_top5_hits, "total": hist_top5_total},
             ],
         ),
         _rate_rows_card(
-            "头部历史累计上涨率",
+            "Head Historical Up Rate",
             [
-                {"label": "TOP1 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate), "hits": hist_top1_up_hits, "total": hist_top1_up_total, "note": "T日收盘>D日收盘"},
-                {"label": "TOP3 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate), "hits": hist_top3_up_hits, "total": hist_top3_up_total, "note": "T日收盘>D日收盘"},
-                {"label": "TOP5 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate), "hits": hist_top5_up_hits, "total": hist_top5_up_total, "note": "T日收盘>D日收盘"},
+                {"label": "TOP1 Historical Up Rate", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate), "hits": hist_top1_up_hits, "total": hist_top1_up_total, "note": "T close > D close"},
+                {"label": "TOP3 Historical Up Rate", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate), "hits": hist_top3_up_hits, "total": hist_top3_up_total, "note": "T close > D close"},
+                {"label": "TOP5 Historical Up Rate", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate), "hits": hist_top5_up_hits, "total": hist_top5_up_total, "note": "T close > D close"},
             ],
         ),
         _metric_card(
-            "近20日 TOP10 命中率",
+            "20D TOP10 Hit Rate",
             "-" if not hist_ready or not np.isfinite(hist_20d) else _fmt_pct(hist_20d),
-            f"近5日 {_fmt_pct(hist_5d) if np.isfinite(hist_5d) else '-'}；近60日 {_fmt_pct(hist_60d) if np.isfinite(hist_60d) else '-'}",
+            f"5D {_fmt_pct(hist_5d) if np.isfinite(hist_5d) else '-'}; 60D {_fmt_pct(hist_60d) if np.isfinite(hist_60d) else '-'}",
         ),
         _metric_card(
-            "概率校准质量",
+            "Probability Calibration Quality",
             "-" if not np.isfinite(cal_brier) else f"Brier {cal_brier:.4f}",
-            f"ECE {_fmt_num(cal_ece, 4) if np.isfinite(cal_ece) else '-'}；样本 {cal_rows}",
+            f"ECE {_fmt_num(cal_ece, 4) if np.isfinite(cal_ece) else '-'}; samples {cal_rows}",
         ),
         _metric_card(
-            "涨停 Rank IC",
+            "Limit-up Rank IC",
             "-" if not np.isfinite(limitup_ic) else _fmt_num(limitup_ic, 4),
-            f"近20日 {_fmt_num(limitup_ic_20d, 4) if np.isfinite(limitup_ic_20d) else '-'}；正值率 {_fmt_pct(limitup_ic_pos) if np.isfinite(limitup_ic_pos) else '-'}；{limitup_ic_days}日",
+            f"20D {_fmt_num(limitup_ic_20d, 4) if np.isfinite(limitup_ic_20d) else '-'}; positive rate {_fmt_pct(limitup_ic_pos) if np.isfinite(limitup_ic_pos) else '-'}; {limitup_ic_days} days",
         ),
         _metric_card(
-            "T+1收益 Rank IC",
+            "T+1 Return Rank IC",
             "-" if not np.isfinite(t1_ret_ic) else _fmt_num(t1_ret_ic, 4),
-            f"近20日 {_fmt_num(t1_ret_ic_20d, 4) if np.isfinite(t1_ret_ic_20d) else '-'}；正值率 {_fmt_pct(t1_ret_ic_pos) if np.isfinite(t1_ret_ic_pos) else '-'}；{t1_ret_ic_days}日",
+            f"20D {_fmt_num(t1_ret_ic_20d, 4) if np.isfinite(t1_ret_ic_20d) else '-'}; positive rate {_fmt_pct(t1_ret_ic_pos) if np.isfinite(t1_ret_ic_pos) else '-'}; {t1_ret_ic_days} days",
         ),
         _metric_card(
-            "分层有效性",
+            "Adaptive Ranking Weights",
+            f"Limit-up {_fmt_pct(w_limitup_v) if np.isfinite(w_limitup_v) else '-'} / T+1 {_fmt_pct(w_t1_v) if np.isfinite(w_t1_v) else '-'}",
+            f"Strength {_fmt_pct(w_strength_v) if np.isfinite(w_strength_v) else '-'}; Execution {_fmt_pct(w_exec_v) if np.isfinite(w_exec_v) else '-'}",
+        ),
+        _metric_card(
+            "Tier Effectiveness",
             "-" if not np.isfinite(tier_spread) else _fmt_pct(tier_spread),
-            f"TOP10 {_fmt_pct(tier_top10_rate) if np.isfinite(tier_top10_rate) else '-'}；11-20 {_fmt_pct(tier_11_20_rate) if np.isfinite(tier_11_20_rate) else '-'}",
+            f"TOP10 {_fmt_pct(tier_top10_rate) if np.isfinite(tier_top10_rate) else '-'}; 11-20 {_fmt_pct(tier_11_20_rate) if np.isfinite(tier_11_20_rate) else '-'}",
         ),
         _metric_card(
-            "D日市场情绪",
+            "D Market Sentiment",
             "-" if not np.isfinite(mkt_emotion_v) else _fmt_pct(mkt_emotion_v),
-            f"上涨占比 {_fmt_pct(mkt_up_v) if np.isfinite(mkt_up_v) else '-'}；强势股 {mkt_strong_v}",
+            f"Up ratio {_fmt_pct(mkt_up_v) if np.isfinite(mkt_up_v) else '-'}; strong stocks {mkt_strong_v}",
         ),
     ]
     notes = "".join(f"<li>{_html_escape(x)}</li>" for x in (audit_notes or []))
@@ -490,11 +504,11 @@ def render_premium_report_html(
     nav = _report_nav_html(str(trade_date), report_dates)
 
     return f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Premium 涨停接力预测 {html.escape(str(trade_date))}</title>
+  <title>Premium Limit-up Relay Forecast {html.escape(str(trade_date))}</title>
   <style>
     :root {{
       color-scheme: light;
@@ -575,53 +589,54 @@ def render_premium_report_html(
     <div class="topbar">
       <div>
         <div class="kicker">Premium V4 Quant Engine</div>
-        <h1>涨停接力 TOP10 / TOP20 预测报告</h1>
-        <p class="sub">D 日收盘后分析，T 日集合竞价买入，T+1 盘中择时卖出。排序优先级为 T 日涨停概率、T+1 继续上涨概率与接力评分的综合结果。</p>
+        <h1>Premium Limit-up Relay TOP10 / TOP20 Forecast Report</h1>
+        <p class="sub">After the D-day close, the system analyzes candidates; on T-day it buys through the opening auction, then exits opportunistically on T+1. The primary ranking uses the adaptive score, dynamically weighting T-day limit-up probability, T+1 return quality, strength, and execution based on historical Rank IC.</p>
       </div>
-      <div class="status-pill">验证状态 <b>{_html_escape(verify_badge)}</b></div>
+      <div class="status-pill">Validation <b>{_html_escape(verify_badge)}</b></div>
     </div>
   </header>
   <main>
     {nav}
     <div class="metrics">{''.join(cards)}</div>
     <div class="toolbar">
-      <div class="tabs" role="tablist" aria-label="榜单切换">
-        <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 执行榜</button>
-        <button class="tab-btn" type="button" data-target="top20-panel">TOP20 观察榜</button>
-        <button class="tab-btn" type="button" data-target="verify-panel">验证学习</button>
+      <div class="tabs" role="tablist" aria-label="List switcher">
+        <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 Execution List</button>
+        <button class="tab-btn" type="button" data-target="top20-panel">TOP20 Watch List</button>
+        <button class="tab-btn" type="button" data-target="verify-panel">Validation & Learning</button>
       </div>
-      <div class="hint">表格横向可滚动，首列固定；颜色越深代表概率或评分越高。</div>
+      <div class="hint">Tables scroll horizontally with the first column pinned; stronger colors indicate higher probability or score.</div>
     </div>
     <section id="top10-panel">
-      <div class="section-head"><h2>TOP10：T 日涨停概率最高</h2><span class="badge">核心执行榜</span></div>
+      <div class="section-head"><h2>TOP10: Highest T-day Limit-up Probability</h2><span class="badge">Core Execution List</span></div>
       {_table_html(top10, "top10-table")}
     </section>
     <section id="top20-panel" class="hidden">
-      <div class="section-head"><h2>TOP20：T+1 继续上涨候选池</h2><span class="badge">扩展观察榜</span></div>
+      <div class="section-head"><h2>TOP20: T+1 Continuation Candidates</h2><span class="badge">Extended Watch List</span></div>
       {_table_html(top20, "top20-table")}
     </section>
     <section id="verify-panel" class="hidden">
-      <div class="section-head"><h2>验证与学习</h2><span class="badge">{_html_escape(verify_badge)}</span></div>
+      <div class="section-head"><h2>Validation & Learning</h2><span class="badge">{_html_escape(verify_badge)}</span></div>
       <div class="explain">
-        <div>验证状态：{_html_escape(verify_reason)}</div>
-        <div>本期 TOP10 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top10_hit_rate) else _fmt_pct(stats.top10_hit_rate))}（{stats.top10_hits}/{stats.top10_total}）</div>
-        <div>本期 TOP20 涨停预测成功率：{_html_escape('-' if not stats.ready or not np.isfinite(stats.top20_hit_rate) else _fmt_pct(stats.top20_hit_rate))}（{stats.top20_hits}/{stats.top20_total}）</div>
-        <div>历史 TOP1 / TOP3 / TOP5 累计涨停命中率：TOP1 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate))}（{hist_top1_hits}/{hist_top1_total}）；TOP3 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate))}（{hist_top3_hits}/{hist_top3_total}）；TOP5 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate))}（{hist_top5_hits}/{hist_top5_total}）</div>
-        <div>历史 TOP1 / TOP3 / TOP5 累计上涨率：TOP1 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate))}（{hist_top1_up_hits}/{hist_top1_up_total}）；TOP3 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate))}（{hist_top3_up_hits}/{hist_top3_up_total}）；TOP5 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate))}（{hist_top5_up_hits}/{hist_top5_up_total}）</div>
-        <div>历史 TOP10 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate))}（{hist_top10_hits}/{hist_top10_total}）</div>
-        <div>历史 TOP20 累计涨停预测命中率：{_html_escape('-' if not hist_ready or not np.isfinite(hist_top20_rate) else _fmt_pct(hist_top20_rate))}（{hist_top20_hits}/{hist_top20_total}）</div>
-        <div>滚动 TOP10 命中率：近5日 {_html_escape('-' if not np.isfinite(hist_5d) else _fmt_pct(hist_5d))}；近20日 {_html_escape('-' if not np.isfinite(hist_20d) else _fmt_pct(hist_20d))}；近60日 {_html_escape('-' if not np.isfinite(hist_60d) else _fmt_pct(hist_60d))}</div>
-        <div>概率校准：Brier {_html_escape('-' if not np.isfinite(cal_brier) else f'{cal_brier:.4f}')}；ECE {_html_escape('-' if not np.isfinite(cal_ece) else f'{cal_ece:.4f}')}；校准样本 {cal_rows}</div>
-        <div>涨停排序 Rank IC：Spearman 均值 {_html_escape('-' if not np.isfinite(limitup_ic) else f'{limitup_ic:.4f}')}；近20日 {_html_escape('-' if not np.isfinite(limitup_ic_20d) else f'{limitup_ic_20d:.4f}')}；Kendall Tau {_html_escape('-' if not np.isfinite(limitup_tau) else f'{limitup_tau:.4f}')}；正值率 {_html_escape('-' if not np.isfinite(limitup_ic_pos) else _fmt_pct(limitup_ic_pos))}；有效日 {limitup_ic_days}</div>
-        <div>T+1收益排序 Rank IC：Spearman 均值 {_html_escape('-' if not np.isfinite(t1_ret_ic) else f'{t1_ret_ic:.4f}')}；近20日 {_html_escape('-' if not np.isfinite(t1_ret_ic_20d) else f'{t1_ret_ic_20d:.4f}')}；正值率 {_html_escape('-' if not np.isfinite(t1_ret_ic_pos) else _fmt_pct(t1_ret_ic_pos))}；有效日 {t1_ret_ic_days}</div>
-        <div>分层命中/收益：{_html_escape(tier_summary)}</div>
-        <div>D日市场情绪：情绪分 {_html_escape('-' if not np.isfinite(mkt_emotion_v) else _fmt_pct(mkt_emotion_v))}；上涨占比 {_html_escape('-' if not np.isfinite(mkt_up_v) else _fmt_pct(mkt_up_v))}；强势股 {mkt_strong_v}</div>
-        <div>历史统计样本：有效交易日 {hist_days}；来源：{_html_escape(hist_source)}；状态：{_html_escape(hist_reason)}</div>
-        <div>模型版本：{_html_escape(model_version)}；生成时间：{_html_escape(gen_ts)}</div>
+        <div>Validation status: {_html_escape(verify_reason)}</div>
+        <div>Current TOP10 limit-up prediction hit rate: {_html_escape('-' if not stats.ready or not np.isfinite(stats.top10_hit_rate) else _fmt_pct(stats.top10_hit_rate))} ({stats.top10_hits}/{stats.top10_total})</div>
+        <div>Current TOP20 limit-up prediction hit rate: {_html_escape('-' if not stats.ready or not np.isfinite(stats.top20_hit_rate) else _fmt_pct(stats.top20_hit_rate))} ({stats.top20_hits}/{stats.top20_total})</div>
+        <div>Historical TOP1 / TOP3 / TOP5 cumulative limit-up hit rate: TOP1 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top1_rate) else _fmt_pct(hist_top1_rate))} ({hist_top1_hits}/{hist_top1_total}); TOP3 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top3_rate) else _fmt_pct(hist_top3_rate))} ({hist_top3_hits}/{hist_top3_total}); TOP5 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top5_rate) else _fmt_pct(hist_top5_rate))} ({hist_top5_hits}/{hist_top5_total})</div>
+        <div>Historical TOP1 / TOP3 / TOP5 cumulative up rate: TOP1 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate))} ({hist_top1_up_hits}/{hist_top1_up_total}); TOP3 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate))} ({hist_top3_up_hits}/{hist_top3_up_total}); TOP5 {_html_escape('-' if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate))} ({hist_top5_up_hits}/{hist_top5_up_total})</div>
+        <div>Historical TOP10 cumulative limit-up hit rate: {_html_escape('-' if not hist_ready or not np.isfinite(hist_top10_rate) else _fmt_pct(hist_top10_rate))} ({hist_top10_hits}/{hist_top10_total})</div>
+        <div>Historical TOP20 cumulative limit-up hit rate: {_html_escape('-' if not hist_ready or not np.isfinite(hist_top20_rate) else _fmt_pct(hist_top20_rate))} ({hist_top20_hits}/{hist_top20_total})</div>
+        <div>Rolling TOP10 hit rate: 5D {_html_escape('-' if not np.isfinite(hist_5d) else _fmt_pct(hist_5d))}; 20D {_html_escape('-' if not np.isfinite(hist_20d) else _fmt_pct(hist_20d))}; 60D {_html_escape('-' if not np.isfinite(hist_60d) else _fmt_pct(hist_60d))}</div>
+        <div>Probability calibration: Brier {_html_escape('-' if not np.isfinite(cal_brier) else f'{cal_brier:.4f}')}; ECE {_html_escape('-' if not np.isfinite(cal_ece) else f'{cal_ece:.4f}')}; samples {cal_rows}</div>
+        <div>Limit-up Rank IC: Spearman mean {_html_escape('-' if not np.isfinite(limitup_ic) else f'{limitup_ic:.4f}')}; 20D {_html_escape('-' if not np.isfinite(limitup_ic_20d) else f'{limitup_ic_20d:.4f}')}; Kendall Tau {_html_escape('-' if not np.isfinite(limitup_tau) else f'{limitup_tau:.4f}')}; positive rate {_html_escape('-' if not np.isfinite(limitup_ic_pos) else _fmt_pct(limitup_ic_pos))}; valid days {limitup_ic_days}</div>
+        <div>T+1 Return Rank IC: Spearman mean {_html_escape('-' if not np.isfinite(t1_ret_ic) else f'{t1_ret_ic:.4f}')}; 20D {_html_escape('-' if not np.isfinite(t1_ret_ic_20d) else f'{t1_ret_ic_20d:.4f}')}; positive rate {_html_escape('-' if not np.isfinite(t1_ret_ic_pos) else _fmt_pct(t1_ret_ic_pos))}; valid days {t1_ret_ic_days}</div>
+        <div>Adaptive ranking weights: limit-up {_html_escape('-' if not np.isfinite(w_limitup_v) else _fmt_pct(w_limitup_v))}; T+1 {_html_escape('-' if not np.isfinite(w_t1_v) else _fmt_pct(w_t1_v))}; strength {_html_escape('-' if not np.isfinite(w_strength_v) else _fmt_pct(w_strength_v))}; execution {_html_escape('-' if not np.isfinite(w_exec_v) else _fmt_pct(w_exec_v))}. T+1 weight is reduced when T+1 Rank IC is negative, then increases gradually after it turns positive.</div>
+        <div>Tier hit/return summary: {_html_escape(tier_summary)}</div>
+        <div>D-day market sentiment: sentiment {_html_escape('-' if not np.isfinite(mkt_emotion_v) else _fmt_pct(mkt_emotion_v))}; up ratio {_html_escape('-' if not np.isfinite(mkt_up_v) else _fmt_pct(mkt_up_v))}; strong stocks {mkt_strong_v}</div>
+        <div>Historical statistics sample: valid trading days {hist_days}; source: {_html_escape(hist_source)}; status: {_html_escape(hist_reason)}</div>
+        <div>Model version: {_html_escape(model_version)}; generated at: {_html_escape(gen_ts)}</div>
         {('<ul>' + notes + '</ul>') if notes else ''}
       </div>
     </section>
-    <p class="footnote">报告文件由 Premium 自动生成；前后翻页基于仓库内已有历史 HTML 报告日期。</p>
+    <p class="footnote">This report is generated automatically by Premium. Previous/next navigation is based on historical HTML report dates already present in the repository.</p>
   </main>
   <script>
     document.querySelectorAll('.tab-btn').forEach((btn) => {{
