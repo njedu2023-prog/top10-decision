@@ -357,6 +357,17 @@ def _rank_tier_stats(
     return out
 
 
+def _stat_float(stats: Dict[str, object], *names: str, default: float = np.nan) -> float:
+    for name in names:
+        try:
+            v = float(stats.get(name, np.nan))
+        except Exception:
+            continue
+        if np.isfinite(v):
+            return v
+    return default
+
+
 def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str, object]:
     """Summarize cumulative historical TOP10/TOP20 limit-up hit rates."""
     if df is None or df.empty:
@@ -601,6 +612,96 @@ def _apply_limitup_probability_calibration(cfg: PremiumConfig, df: pd.DataFrame)
         "limitup_calibration_reason": "ok",
         "limitup_calibration_avg_delta": float(delta.mean()) if delta.notna().any() else 0.0,
     })
+    return out, trace
+
+
+def _adaptive_rank_weights(history: Dict[str, object]) -> Dict[str, float]:
+    limitup_ic = _stat_float(history, "limitup_spearman_ic_20d", "limitup_spearman_ic_mean", default=np.nan)
+    t1_ic = _stat_float(history, "t1_ret_spearman_ic_20d", "t1_ret_spearman_ic_mean", default=np.nan)
+    limitup_days = max(int(history.get("limitup_ic_days", 0) or 0), int(history.get("limitup_ic_days_20d", 0) or 0))
+    t1_days = max(int(history.get("t1_ret_ic_days", 0) or 0), int(history.get("t1_ret_ic_days_20d", 0) or 0))
+
+    limitup_conf = min(1.0, max(0.0, limitup_days / 20.0))
+    t1_conf = min(1.0, max(0.0, t1_days / 20.0))
+    limitup_quality = 0.0 if not np.isfinite(limitup_ic) else np.clip((limitup_ic + 0.05) / 0.30, 0.0, 1.0) * limitup_conf
+    t1_quality = 0.0 if not np.isfinite(t1_ic) else np.clip(t1_ic / 0.25, 0.0, 1.0) * t1_conf
+
+    if np.isfinite(t1_ic) and t1_ic < 0:
+        t1_weight = 0.06
+    elif t1_days <= 0:
+        t1_weight = 0.14
+    else:
+        t1_weight = 0.10 + 0.24 * t1_quality
+
+    limitup_weight = 0.48 + 0.18 * limitup_quality
+    strength_weight = 0.22
+    execution_weight = 0.10
+
+    weights = {
+        "limitup": float(limitup_weight),
+        "t1": float(t1_weight),
+        "strength": float(strength_weight),
+        "execution": float(execution_weight),
+    }
+    total = sum(weights.values())
+    if total <= 0:
+        return {"limitup": 0.55, "t1": 0.15, "strength": 0.20, "execution": 0.10}
+    return {k: float(v / total) for k, v in weights.items()}
+
+
+def _apply_adaptive_rank_score(df: pd.DataFrame, history: Dict[str, object]) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    out = df.copy()
+    weights = _adaptive_rank_weights(history)
+    idx = out.index
+
+    limitup_prob = pd.to_numeric(out.get("t_limitup_prob", pd.Series([0.5] * len(out), index=idx)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    touch_prob = pd.to_numeric(out.get("t_touch_limitup_prob_model", limitup_prob), errors="coerce").fillna(limitup_prob).clip(0.0, 1.0)
+    strength = pd.to_numeric(out.get("t_limitup_strength", out.get("t_limitup_strength_rule", pd.Series([50.0] * len(out), index=idx))), errors="coerce").fillna(50.0).clip(0.0, 100.0) / 100.0
+    t1_prob = pd.to_numeric(out.get("t1_continue_up_rate", out.get("t1_up_rate", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    t1_model_prob = pd.to_numeric(out.get("t1_up_prob_model", t1_prob), errors="coerce").fillna(t1_prob).clip(0.0, 1.0)
+    t1_ret_pred = pd.to_numeric(out.get("t1_close_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce")
+    t1_high_pred = pd.to_numeric(out.get("t1_high_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce")
+    p_fill = pd.to_numeric(out.get("dec_p_fill", out.get("p_fill_pred", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    conf_score = pd.to_numeric(out.get("eret_plus_conf_score", out.get("confidence", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
+
+    limitup_alpha = (0.72 * limitup_prob + 0.18 * touch_prob + 0.10 * strength).clip(0.0, 1.0)
+    t1_return_rank = _rank_pct(t1_ret_pred, neutral=0.50)
+    t1_high_rank = _rank_pct(t1_high_pred, neutral=0.50)
+    t1_alpha = (0.50 * t1_model_prob + 0.25 * t1_prob + 0.18 * t1_return_rank + 0.07 * t1_high_rank).clip(0.0, 1.0)
+    strength_alpha = (0.60 * strength + 0.40 * _rank_pct(out.get("limitup_continuation_score", pd.Series([50.0] * len(out), index=idx)), neutral=0.50)).clip(0.0, 1.0)
+    execution_alpha = (0.65 * p_fill + 0.35 * conf_score).clip(0.0, 1.0)
+
+    adaptive_score = (
+        weights["limitup"] * limitup_alpha
+        + weights["t1"] * t1_alpha
+        + weights["strength"] * strength_alpha
+        + weights["execution"] * execution_alpha
+    ).clip(0.0, 1.0)
+
+    out["limitup_alpha_score"] = (100.0 * limitup_alpha).round(4)
+    out["t1_alpha_score"] = (100.0 * t1_alpha).round(4)
+    out["strength_alpha_score"] = (100.0 * strength_alpha).round(4)
+    out["execution_alpha_score"] = (100.0 * execution_alpha).round(4)
+    out["premium_adaptive_score"] = (100.0 * adaptive_score).round(4)
+    out["自适应排序评分"] = out["premium_adaptive_score"]
+    out["rank_adaptive_score"] = pd.to_numeric(out["premium_adaptive_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+    out["adaptive_weight_limitup"] = weights["limitup"]
+    out["adaptive_weight_t1"] = weights["t1"]
+    out["adaptive_weight_strength"] = weights["strength"]
+    out["adaptive_weight_execution"] = weights["execution"]
+
+    limitup_ic = _stat_float(history, "limitup_spearman_ic_20d", "limitup_spearman_ic_mean", default=np.nan)
+    t1_ic = _stat_float(history, "t1_ret_spearman_ic_20d", "t1_ret_spearman_ic_mean", default=np.nan)
+    trace = {
+        "adaptive_rank_mode": "history_ic_weighted_v1",
+        "adaptive_weight_limitup": round(weights["limitup"], 6),
+        "adaptive_weight_t1": round(weights["t1"], 6),
+        "adaptive_weight_strength": round(weights["strength"], 6),
+        "adaptive_weight_execution": round(weights["execution"], 6),
+        "adaptive_limitup_ic": "" if not np.isfinite(limitup_ic) else round(float(limitup_ic), 6),
+        "adaptive_t1_ret_ic": "" if not np.isfinite(t1_ic) else round(float(t1_ic), 6),
+        "adaptive_reason": "t1_downweighted_negative_ic" if np.isfinite(t1_ic) and t1_ic < 0 else "ok",
+    }
     return out, trace
 
 
@@ -1633,6 +1734,23 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         d0 = load_daily(cfg, trade_date)[["ts_code", "close"]].rename(columns={"close": "close_T"})
 
     market_sentiment, market_sentiment_reason = _market_sentiment_features(cfg, trade_date)
+    d_calendar_date, d_calendar_reason = _advance_trade_days(cfg, trade_date, 0)
+    if not d_calendar_date or d_calendar_date != trade_date:
+        reason = f"strict_a_share_calendar_unavailable: analysis_date={d_calendar_reason}; inferred_D={trade_date}; calendar_D={d_calendar_date}"
+        _write_last_run(
+            cfg,
+            trade_date,
+            {
+                "ok": False,
+                "reason": reason,
+                "buy_date": "",
+                "target_date": "",
+                "pending": True,
+                "calendar_contract": "strict_a_share_trade_calendar_only",
+            },
+        )
+        return PredictResult(False, trade_date, None, True, reason)
+
     buy_date, buy_reason = _advance_trade_days(cfg, trade_date, 1)
     target_date, td_reason = _advance_trade_days(cfg, trade_date, int(cfg.horizon_trade_days))
     if not buy_date or not target_date:
@@ -1694,6 +1812,8 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df = _build_limitup_continuation_fields(df)
     df, limitup_trace = _apply_limitup_probability_engine(cfg, df)
     df, calibration_trace = _apply_limitup_probability_calibration(cfg, df)
+    historical_limitup_stats = _collect_historical_limitup_stats(cfg)
+    df, adaptive_trace = _apply_adaptive_rank_score(df, historical_limitup_stats)
 
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     q_mid = min(qs, key=lambda x: abs(float(x) - 0.50))
@@ -1707,7 +1827,15 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         df["rank_eret_plus"] = pd.to_numeric(df["eret_plus_value"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
     if mid_key in df.columns and pd.to_numeric(df[mid_key], errors="coerce").notna().any():
         df["rank_r_p50"] = pd.to_numeric(df[mid_key], errors="coerce").rank(method="first", ascending=False).astype("Int64")
-    if "limitup_continuation_score" in df.columns and pd.to_numeric(df["limitup_continuation_score"], errors="coerce").notna().any():
+    if "premium_adaptive_score" in df.columns and pd.to_numeric(df["premium_adaptive_score"], errors="coerce").notna().any():
+        if "limitup_continuation_score" in df.columns and pd.to_numeric(df["limitup_continuation_score"], errors="coerce").notna().any():
+            df["rank_limitup_continuation"] = pd.to_numeric(df["limitup_continuation_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+        df = df.sort_values(
+            by=["premium_adaptive_score", "t_limitup_prob", "t1_alpha_score", "t_limitup_strength"],
+            ascending=[False, False, False, False],
+            na_position="last",
+        ).reset_index(drop=True)
+    elif "limitup_continuation_score" in df.columns and pd.to_numeric(df["limitup_continuation_score"], errors="coerce").notna().any():
         df["rank_limitup_continuation"] = pd.to_numeric(df["limitup_continuation_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
         df = df.sort_values(
             by=["limitup_continuation_score", "t_limitup_prob", "t1_continue_up_rate", "t_limitup_strength"],
@@ -1754,6 +1882,9 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t_limitup_prob_model", "t_touch_limitup_prob_model", "t1_up_prob_model", "t1_high_profit_prob_model",
         "t1_close_ret_pred", "t1_high_ret_pred", "limitup_model_score", "limitup_model_src",
         "t_limitup_prob_raw_before_calibration", "t_limitup_prob_calibrated", "limitup_calibration_src",
+        "limitup_alpha_score", "t1_alpha_score", "strength_alpha_score", "execution_alpha_score",
+        "premium_adaptive_score", "自适应排序评分", "rank_adaptive_score",
+        "adaptive_weight_limitup", "adaptive_weight_t1", "adaptive_weight_strength", "adaptive_weight_execution",
     ]
     market_cols = [
         "mkt_stock_count", "mkt_up_ratio", "mkt_avg_ret", "mkt_median_ret",
@@ -1902,7 +2033,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     p_md = _write_text(cfg.report_md_path(trade_date), md)
     _write_text(cfg.report_latest_md_path(), md)
 
-    historical_limitup_stats = _collect_historical_limitup_stats(cfg)
     html_report = render_premium_report_html(
         trade_date=trade_date,
         buy_date=buy_date,
@@ -1956,6 +2086,10 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "verify_pending": bool(verify_pending),
             "verify_reason": verify_reason,
             "market_sentiment_reason": market_sentiment_reason,
+            "calendar_contract": "strict_a_share_trade_calendar_only",
+            "analysis_date_calendar_reason": d_calendar_reason,
+            "buy_date_calendar_reason": buy_reason,
+            "target_date_calendar_reason": td_reason,
             "mkt_up_ratio": market_sentiment.get("mkt_up_ratio", ""),
             "mkt_strong_count": market_sentiment.get("mkt_strong_count", ""),
             "mkt_touch_strong_count": market_sentiment.get("mkt_touch_strong_count", ""),
@@ -1965,6 +2099,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "limitup_model_src": limitup_model_src,
             **limitup_trace,
             **calibration_trace,
+            **adaptive_trace,
             "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划",
             "limitup_model_fields": "t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score",
             "rank_groups": "TOP10|TOP20",
