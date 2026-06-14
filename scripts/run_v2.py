@@ -631,7 +631,9 @@ def main() -> int:
         gr_topk = TOPK_DEFAULT
     topk = min(max(10, gr_topk), max(10, len(input_df)))
 
-    routed_df = score_router(input_df).head(topk).copy()
+    # 不在模型/EV 之前截断：上游候选池超过 TOPK 时，必须先完整评分，
+    # 再按最终 EV 选择 TopK，避免高 EV 候选因为原始行序被提前丢掉。
+    routed_df = score_router(input_df).copy()
 
     trade_date = get_first_value(routed_df, "trade_date")
     trade_date = requested_trade_date or trade_date
@@ -758,6 +760,11 @@ def main() -> int:
     routed_df = _apply_ev_upgrade_v1(routed_df)
     routed_df["input_mode"] = input_mode
     routed_df["fs_degrade_reason"] = fs_degrade_reason
+    routed_df = routed_df.sort_values(
+        by=["ev_pred", "ts_code"],
+        ascending=[False, True],
+        kind="mergesort",
+    ).head(topk).reset_index(drop=True)
 
     cand_path = write_candidates_snapshot(routed_df.copy(), signal_date=trade_date)
 
