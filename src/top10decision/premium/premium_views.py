@@ -217,6 +217,16 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                 "排名": _clean_text(r.get("rank")),
                 "代码": _clean_text(r.get("ts_code")),
                 "名称": _clean_text(r.get("name")),
+                "板块": _clean_text(
+                    r.get(
+                        "sector",
+                        r.get(
+                            "板块",
+                            r.get("industry", r.get("行业", r.get("所属板块", r.get("所属行业", "-")))),
+                        ),
+                    ),
+                    "-",
+                ),
                 "D收盘": _fmt_num(r.get("close_T"), 2),
                 "T涨停概率": _fmt_pct(r.get("t_limitup_prob"), 2),
                 "T涨停强度": _fmt_num(r.get("t_limitup_strength"), 2),
