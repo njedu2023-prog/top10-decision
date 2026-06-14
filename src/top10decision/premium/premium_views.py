@@ -522,7 +522,7 @@ def render_premium_report_html(
     header {{ padding:24px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }}
     .topbar {{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; max-width:1480px; margin:0 auto; }}
     .kicker {{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:0; }}
-    h1 {{ margin:7px 0 8px; font-size:28px; line-height:1.18; letter-spacing:0; }}
+    h1 {{ margin:7px 0 0; font-size:24px; line-height:1.18; letter-spacing:0; }}
     .sub {{ margin:0; color:var(--muted); line-height:1.65; max-width:900px; }}
     .status-pill {{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:999px; padding:8px 12px; color:var(--muted); font-size:13px; white-space:nowrap; background:#fff; }}
     .status-pill b {{ color:var(--ink); }}
@@ -589,8 +589,7 @@ def render_premium_report_html(
     <div class="topbar">
       <div>
         <div class="kicker">Premium V4 Quant Engine</div>
-        <h1>Premium Limit-up Relay TOP10 / TOP20 Forecast Report</h1>
-        <p class="sub">After the D-day close, the system analyzes candidates; on T-day it buys through the opening auction, then exits opportunistically on T+1. The primary ranking uses the adaptive score, dynamically weighting T-day limit-up probability, T+1 return quality, strength, and execution based on historical Rank IC.</p>
+        <h1>Premium Limit-up Relay TOP10 / TOP20</h1>
       </div>
       <div class="status-pill">Validation <b>{_html_escape(verify_badge)}</b></div>
     </div>
