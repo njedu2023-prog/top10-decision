@@ -210,6 +210,19 @@ def _bool_like_series(df: pd.DataFrame, names: List[str], default: float = np.na
     return out.fillna(default)
 
 
+def _t_up_actual_series(df: pd.DataFrame) -> pd.Series:
+    direct = _bool_like_series(df, ["t_up_hit", "t_up_actual", "t_close_up_actual", "T日上涨实际"], default=np.nan)
+    if direct.notna().any():
+        return direct
+
+    t_close = _num_series(df, "t_close", "close_T_actual", "close_t_actual", "T日收盘价", default=np.nan)
+    d_close = _num_series(df, "d_close", "close_T", "base_close", "D日收盘价", "收盘价", default=np.nan)
+    out = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
+    m = t_close.notna() & d_close.notna() & (d_close > 0)
+    out.loc[m] = (t_close.loc[m] > d_close.loc[m]).astype(float)
+    return out
+
+
 def _safe_corr(x: pd.Series, y: pd.Series, method: str = "spearman") -> float:
     pair = pd.DataFrame({"x": pd.to_numeric(x, errors="coerce"), "y": pd.to_numeric(y, errors="coerce")}).dropna()
     if len(pair) < 3 or pair["x"].nunique() < 2 or pair["y"].nunique() < 2:
@@ -355,6 +368,7 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
     t1_score = _prob_series(df, ["t1_continue_up_rate", "t1_up_prob_model", "T+1延续上涨率", "T+1继续上涨概率"], default=np.nan)
     t1_ret = _num_series(df, "t1_close_ret", "t1_ret", "t1_return", "real_premium_ret", default=np.nan)
+    t_up_actual = _t_up_actual_series(df)
     if ready.notna().any():
         valid = ready.fillna(0).eq(1) & actual.notna() & rank.notna()
     else:
@@ -369,12 +383,12 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         hits = int(actual[m].eq(1).sum())
         return total, hits, _rate_from_hits(hits, total)
 
-    up_valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & rank.notna() & t1_ret.notna()
+    up_valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & rank.notna() & t_up_actual.notna()
 
     def calc_up(n: int) -> Tuple[int, int, float]:
         m = up_valid & (rank <= n)
         total = int(m.sum())
-        hits = int((pd.to_numeric(t1_ret[m], errors="coerce") > 0).sum())
+        hits = int(t_up_actual[m].eq(1).sum())
         return total, hits, _rate_from_hits(hits, total)
 
     top1_total, top1_hits, top1_rate = calc(1)
@@ -1791,7 +1805,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
         "in_p10", "in_p50", "err_r_p50", "err_close_p50", "actual_ret", "raw_abs_err", "plus_abs_err", "improve_flag", "hit_up",
         "open_T_actual", "high_T_actual", "close_T_actual", "t_limit_price_est",
-        "t_limitup_actual", "t_touch_limitup_actual", "t_limitup_verify_ready",
+        "t_up_actual", "t_limitup_actual", "t_touch_limitup_actual", "t_limitup_verify_ready",
         "t_limitup_verify_reason", "t_limitup_verify_trade_date", "d_analysis_trade_date",
     ]
 
