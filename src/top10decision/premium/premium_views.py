@@ -449,9 +449,9 @@ def render_premium_report_html(
         _rate_rows_card(
             "头部历史累计上涨率",
             [
-                {"label": "TOP1 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate), "hits": hist_top1_up_hits, "total": hist_top1_up_total, "note": "T+1收益>0"},
-                {"label": "TOP3 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate), "hits": hist_top3_up_hits, "total": hist_top3_up_total, "note": "T+1收益>0"},
-                {"label": "TOP5 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate), "hits": hist_top5_up_hits, "total": hist_top5_up_total, "note": "T+1收益>0"},
+                {"label": "TOP1 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top1_up_rate) else _fmt_pct(hist_top1_up_rate), "hits": hist_top1_up_hits, "total": hist_top1_up_total, "note": "T日收盘>D日收盘"},
+                {"label": "TOP3 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top3_up_rate) else _fmt_pct(hist_top3_up_rate), "hits": hist_top3_up_hits, "total": hist_top3_up_total, "note": "T日收盘>D日收盘"},
+                {"label": "TOP5 历史累计上涨率", "rate": "-" if not hist_ready or not np.isfinite(hist_top5_up_rate) else _fmt_pct(hist_top5_up_rate), "hits": hist_top5_up_hits, "total": hist_top5_up_total, "note": "T日收盘>D日收盘"},
             ],
         ),
         _metric_card(
