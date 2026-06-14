@@ -255,6 +255,7 @@ def build_limitup_labels(
     buy_base = t_close.where(t_close.notna(), d_close)
 
     out["t_touch_limitup"] = ((t_high >= t_limit * (1.0 - limit_tolerance)) & t_limit.notna()).astype(float)
+    out["t_up_hit"] = (t_close > d_close).astype(float)
     out["t_limitup_hit"] = ((t_close >= t_limit * (1.0 - limit_tolerance)) & t_limit.notna()).astype(float)
     out["t1_close_ret"] = np.where(buy_base > 0, t1_close / buy_base - 1.0, np.nan)
     out["t1_high_ret"] = np.where(buy_base > 0, t1_high / buy_base - 1.0, np.nan)
@@ -265,7 +266,7 @@ def build_limitup_labels(
     valid_t1 = t1_close.notna() & t1_high.notna()
     valid_all = out["label_matured"].eq(1) & valid_t & valid_t1
 
-    label_cols = ["t_limitup_hit", "t_touch_limitup", "t1_up_hit", "t1_high_profit_hit", "t1_close_ret", "t1_high_ret"]
+    label_cols = ["t_up_hit", "t_limitup_hit", "t_touch_limitup", "t1_up_hit", "t1_high_profit_hit", "t1_close_ret", "t1_high_ret"]
     for c in label_cols:
         out.loc[~valid_all, c] = np.nan
 
