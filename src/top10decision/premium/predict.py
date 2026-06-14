@@ -369,6 +369,9 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         hits = int(actual[m].eq(1).sum())
         return total, hits, _rate_from_hits(hits, total)
 
+    top1_total, top1_hits, top1_rate = calc(1)
+    top3_total, top3_hits, top3_rate = calc(3)
+    top5_total, top5_hits, top5_rate = calc(5)
     top10_total, top10_hits, top10_rate = calc(10)
     top20_total, top20_hits, top20_rate = calc(20)
 
@@ -422,6 +425,15 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         "reason": "ok",
         "source": source,
         "n_days": n_days,
+        "top1_total": top1_total,
+        "top1_hits": top1_hits,
+        "top1_hit_rate": top1_rate,
+        "top3_total": top3_total,
+        "top3_hits": top3_hits,
+        "top3_hit_rate": top3_rate,
+        "top5_total": top5_total,
+        "top5_hits": top5_hits,
+        "top5_hit_rate": top5_rate,
         "top10_total": top10_total,
         "top10_hits": top10_hits,
         "top10_hit_rate": top10_rate,
@@ -1915,6 +1927,21 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "history_limitup_source": historical_limitup_stats.get("source", ""),
             "history_limitup_reason": historical_limitup_stats.get("reason", ""),
             "history_limitup_days": historical_limitup_stats.get("n_days", 0),
+            "history_top1_limitup_total": historical_limitup_stats.get("top1_total", 0),
+            "history_top1_limitup_hits": historical_limitup_stats.get("top1_hits", 0),
+            "history_top1_limitup_hit_rate": (
+                "" if not historical_limitup_stats.get("ready") else round(float(historical_limitup_stats.get("top1_hit_rate", float("nan"))), 6)
+            ),
+            "history_top3_limitup_total": historical_limitup_stats.get("top3_total", 0),
+            "history_top3_limitup_hits": historical_limitup_stats.get("top3_hits", 0),
+            "history_top3_limitup_hit_rate": (
+                "" if not historical_limitup_stats.get("ready") else round(float(historical_limitup_stats.get("top3_hit_rate", float("nan"))), 6)
+            ),
+            "history_top5_limitup_total": historical_limitup_stats.get("top5_total", 0),
+            "history_top5_limitup_hits": historical_limitup_stats.get("top5_hits", 0),
+            "history_top5_limitup_hit_rate": (
+                "" if not historical_limitup_stats.get("ready") else round(float(historical_limitup_stats.get("top5_hit_rate", float("nan"))), 6)
+            ),
             "history_top10_limitup_total": historical_limitup_stats.get("top10_total", 0),
             "history_top10_limitup_hits": historical_limitup_stats.get("top10_hits", 0),
             "history_top10_limitup_hit_rate": (
