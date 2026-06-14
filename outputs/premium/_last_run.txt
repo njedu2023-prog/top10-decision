@@ -1,8 +1,8 @@
 trade_date: 20260612
-run_id: gh_27490892394
-commit_sha: 63536157e054
+run_id: gh_27491446357
+commit_sha: b15a83626a0e
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-14T06:50:16Z
+created_at_utc: 2026-06-14T07:16:29Z
 ok: True
 buy_date: 20260615
 target_date: 20260616
