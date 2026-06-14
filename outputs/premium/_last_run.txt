@@ -1,8 +1,8 @@
 trade_date: 20260612
-run_id: gh_27488290360
-commit_sha: 451477b0bac1
+run_id: gh_27490892394
+commit_sha: 63536157e054
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-14T04:39:42Z
+created_at_utc: 2026-06-14T06:50:16Z
 ok: True
 buy_date: 20260615
 target_date: 20260616
@@ -52,6 +52,15 @@ top20_limitup_hit_rate:
 history_limitup_source: limitup_probability_training_samples.csv
 history_limitup_reason: ok
 history_limitup_days: 54
+history_top1_limitup_total: 54
+history_top1_limitup_hits: 28
+history_top1_limitup_hit_rate: 0.518519
+history_top3_limitup_total: 162
+history_top3_limitup_hits: 67
+history_top3_limitup_hit_rate: 0.41358
+history_top5_limitup_total: 270
+history_top5_limitup_hits: 87
+history_top5_limitup_hit_rate: 0.322222
 history_top10_limitup_total: 537
 history_top10_limitup_hits: 154
 history_top10_limitup_hit_rate: 0.286778
