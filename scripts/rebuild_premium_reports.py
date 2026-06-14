@@ -404,11 +404,23 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         rate = float(hits) / float(total) if total else float("nan")
         return total, hits, rate
 
+    up_valid = (ready.fillna(0).eq(1) if ready.notna().any() else pd.Series(True, index=df.index)) & rank.notna() & t1_ret.notna()
+
+    def calc_up(n: int) -> tuple[int, int, float]:
+        m = up_valid & (rank <= n)
+        total = int(m.sum())
+        hits = int((pd.to_numeric(t1_ret[m], errors="coerce") > 0).sum())
+        rate = float(hits) / float(total) if total else float("nan")
+        return total, hits, rate
+
     top1_total, top1_hits, top1_rate = calc(1)
     top3_total, top3_hits, top3_rate = calc(3)
     top5_total, top5_hits, top5_rate = calc(5)
     top10_total, top10_hits, top10_rate = calc(10)
     top20_total, top20_hits, top20_rate = calc(20)
+    top1_up_total, top1_up_hits, top1_up_rate = calc_up(1)
+    top3_up_total, top3_up_hits, top3_up_rate = calc_up(3)
+    top5_up_total, top5_up_hits, top5_up_rate = calc_up(5)
 
     date_col = _first_existing_col(df, ["d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"])
     if date_col:
@@ -469,6 +481,15 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
         "top5_total": top5_total,
         "top5_hits": top5_hits,
         "top5_hit_rate": top5_rate,
+        "top1_up_total": top1_up_total,
+        "top1_up_hits": top1_up_hits,
+        "top1_up_rate": top1_up_rate,
+        "top3_up_total": top3_up_total,
+        "top3_up_hits": top3_up_hits,
+        "top3_up_rate": top3_up_rate,
+        "top5_up_total": top5_up_total,
+        "top5_up_hits": top5_up_hits,
+        "top5_up_rate": top5_up_rate,
         "top10_total": top10_total,
         "top10_hits": top10_hits,
         "top10_hit_rate": top10_rate,
