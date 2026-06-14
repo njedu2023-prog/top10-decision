@@ -380,6 +380,29 @@ jobs:
           def has_eret_trainset(td):
               return Path(f'data/market/eret_trainset_{td}.csv').exists()
 
+          fs_v2_cols = [
+              'ret_2d', 'ret_5d', 'ret_10d',
+              'volatility_5d', 'volatility_10d', 'volatility_20d',
+              'atr', 'downside_vol', 'max_drawdown_20d', 'tail_risk_score',
+              'bid_ask_proxy', 'spread_proxy',
+          ]
+
+          def eret_trainset_has_fs_v2(td):
+              path = Path(f'data/market/eret_trainset_{td}.csv')
+              if not path.exists():
+                  return False
+              try:
+                  import pandas as pd
+                  df = pd.read_csv(path, encoding='utf-8-sig')
+              except Exception:
+                  return False
+              for col in fs_v2_cols:
+                  if col not in df.columns:
+                      return False
+                  if not pd.to_numeric(df[col], errors='coerce').notna().any():
+                      return False
+              return True
+
           rows = []
           with maturity.open('r', encoding='utf-8-sig', newline='') as f:
               reader = csv.DictReader(f)
@@ -390,7 +413,7 @@ jobs:
 
           rows = sorted(set(rows))
           print(f'[learning-rebuild] matured rows={len(rows)}')
-          eligible_rows = []
+          valid_rows = []
           for td, pfill_ready, eret_ready in rows:
               if not re.fullmatch(r'\d{8}', td):
                   continue
@@ -400,16 +423,25 @@ jobs:
               if not has_pred_source(td):
                   print(f'[learning-rebuild][skip] pred source missing for {td}')
                   continue
-              needs_pfill = pfill_ready and not has_pfill_trainset(td)
-              needs_eret = eret_ready and not has_eret_trainset(td)
+              valid_rows.append((td, pfill_ready, eret_ready))
+
+          window_size = 8
+          target_pfill = {td for td, pfill_ready, _ in valid_rows if pfill_ready}
+          target_eret = {td for td, _, eret_ready in valid_rows if eret_ready}
+          target_pfill = set(sorted(target_pfill)[-window_size:])
+          target_eret = set(sorted(target_eret)[-window_size:])
+
+          eligible_rows = []
+          for td, pfill_ready, eret_ready in valid_rows:
+              needs_pfill = td in target_pfill and pfill_ready and not has_pfill_trainset(td)
+              needs_eret = td in target_eret and eret_ready and not eret_trainset_has_fs_v2(td)
               if not (needs_pfill or needs_eret):
-                  print(f'[learning-rebuild][skip] trainsets already exist for {td}')
+                  if td in target_pfill or td in target_eret:
+                      print(f'[learning-rebuild][skip] trainsets already usable for {td}')
                   continue
               eligible_rows.append((td, needs_pfill, needs_eret))
-          max_rebuild = 8
-          if len(eligible_rows) > max_rebuild:
-              print(f'[learning-rebuild] limiting rebuild rows {len(eligible_rows)} -> last {max_rebuild}')
-              eligible_rows = eligible_rows[-max_rebuild:]
+          print(f'[learning-rebuild] target_pfill={sorted(target_pfill)}')
+          print(f'[learning-rebuild] target_eret={sorted(target_eret)}')
           print(f'[learning-rebuild] eligible rows={len(eligible_rows)}')
           for td, needs_pfill, needs_eret in eligible_rows:
               print(f'[learning-rebuild] rebuild FS {td}')
