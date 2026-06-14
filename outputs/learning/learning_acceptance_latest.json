@@ -1,21 +1,21 @@
 {
-  "generated_at_utc": "2026-06-13T10:10:20+00:00",
+  "generated_at_utc": "2026-06-14T13:26:33+00:00",
   "current_run_date": "20260612",
   "pfill": {
     "anchor_trade_date": "20260611",
     "status": "trained",
-    "loaded_trade_dates": 69,
-    "missing_trade_dates": 2,
+    "loaded_trade_dates": 8,
+    "missing_trade_dates": 0,
     "metrics_valid": {
       "lr": {
-        "auc": 0.9015151515151515,
-        "logloss": 0.38895148452898376,
-        "brier": 0.11090023257492433
+        "auc": 0.9583333333333334,
+        "logloss": 0.6130011948112924,
+        "brier": 0.14389195306113514
       },
       "lgbm": {
-        "auc": 0.9696969696969697,
-        "logloss": 0.11829965197462321,
-        "brier": 0.03975710736881419
+        "auc": 0.9621212121212122,
+        "logloss": 0.15018493057208068,
+        "brier": 0.043219681869195975
       }
     },
     "acceptance_pass": true
@@ -23,22 +23,22 @@
   "eret": {
     "anchor_trade_date": "20260610",
     "status": "trained",
-    "loaded_trade_dates": 68,
-    "missing_trade_dates": 2,
+    "loaded_trade_dates": 8,
+    "missing_trade_dates": 0,
     "metrics_valid": {
       "lr": {
-        "mae": 0.05737888184130221,
-        "rmse": 0.07364448128451796,
-        "r2": 0.015207428439416248,
-        "corr": 0.17640696888334081,
-        "directional_acc": 0.5942028985507246
+        "mae": 0.07568779251501673,
+        "rmse": 0.09286486743789993,
+        "r2": -0.5659115777021373,
+        "corr": 0.07550330029817519,
+        "directional_acc": 0.6231884057971014
       },
       "lgbm": {
-        "mae": 0.06398685233535104,
-        "rmse": 0.07879267964099229,
-        "r2": -0.1272911303969344,
-        "corr": 0.22749515953751662,
-        "directional_acc": 0.42028985507246375
+        "mae": 0.06068700102938369,
+        "rmse": 0.0760902700602109,
+        "r2": -0.05129016098664296,
+        "corr": 0.17394083067455765,
+        "directional_acc": 0.5507246376811594
       }
     },
     "fs_v2_still_all_missing": [
