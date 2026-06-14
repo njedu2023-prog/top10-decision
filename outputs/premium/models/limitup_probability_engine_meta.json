@@ -58,18 +58,18 @@
       "target": "t1_up_hit",
       "type": "class",
       "samples": 419,
-      "auc": 0.4783346324911734,
-      "brier": 0.28109779152502073,
-      "accuracy": 0.48687350835322196,
+      "auc": 0.47678046989721,
+      "brier": 0.28160660595759784,
+      "accuracy": 0.48448687350835323,
       "mae": null
     },
     {
       "target": "t1_high_profit_hit",
       "type": "class",
       "samples": 419,
-      "auc": 0.4373112473689027,
-      "brier": 0.31820146411743755,
-      "accuracy": 0.5274463007159904,
+      "auc": 0.44493432534215116,
+      "brier": 0.31098022764574973,
+      "accuracy": 0.5393794749403341,
       "mae": null
     },
     {
@@ -79,7 +79,7 @@
       "auc": null,
       "brier": null,
       "accuracy": null,
-      "mae": 0.07352005846362948
+      "mae": 0.0723271758891252
     },
     {
       "target": "t1_high_ret",
@@ -88,14 +88,14 @@
       "auc": null,
       "brier": null,
       "accuracy": null,
-      "mae": 0.07021344416733967
+      "mae": 0.06890919384043602
     }
   ],
   "stats": {
     "n_verify_files": 69,
     "ok_files": 54,
     "skipped_files": 15,
-    "backfilled_files": 64,
+    "backfilled_files": 65,
     "backfill_failed": 4,
     "notes": [
       "premium_verify_20260227.csv: backfilled:30/30:20260302->20260303",
@@ -179,11 +179,12 @@
       "premium_verify_20260605.csv: backfilled:30/30:20260608->20260609",
       "premium_verify_20260608.csv: backfilled:30/30:20260609->20260610",
       "premium_verify_20260609.csv: backfilled:30/30:20260610->20260611",
+      "premium_verify_20260610.csv: backfilled:30/30:20260611->20260612",
       "premium_verify_20260612.csv: backfill skipped: t_daily_not_ready:20260615:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260615/daily.csv body_snippet=404: Not Found",
       "skip premium_verify_20260612.csv: no matured limitup rows"
     ]
   },
-  "created_at_utc": "2026-06-14T08:10:15Z",
-  "commit_sha": "558f6ad780de",
-  "run_id": "gh_27492605802"
+  "created_at_utc": "2026-06-14T08:34:33Z",
+  "commit_sha": "5a38ffab162e",
+  "run_id": "gh_27493142049"
 }

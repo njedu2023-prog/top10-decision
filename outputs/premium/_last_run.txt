@@ -1,8 +1,8 @@
 trade_date: 20260612
-run_id: gh_27492605802
-commit_sha: 558f6ad780de
+run_id: gh_27493142049
+commit_sha: 5a38ffab162e
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-14T08:10:31Z
+created_at_utc: 2026-06-14T08:34:49Z
 ok: True
 buy_date: 20260615
 target_date: 20260616
@@ -61,15 +61,15 @@ history_top3_limitup_hit_rate: 0.41358
 history_top5_limitup_total: 270
 history_top5_limitup_hits: 87
 history_top5_limitup_hit_rate: 0.322222
-history_top1_up_total: 0
-history_top1_up_hits: 0
-history_top1_up_rate: nan
-history_top3_up_total: 0
-history_top3_up_hits: 0
-history_top3_up_rate: nan
-history_top5_up_total: 0
-history_top5_up_hits: 0
-history_top5_up_rate: nan
+history_top1_up_total: 54
+history_top1_up_hits: 41
+history_top1_up_rate: 0.759259
+history_top3_up_total: 162
+history_top3_up_hits: 119
+history_top3_up_rate: 0.734568
+history_top5_up_total: 270
+history_top5_up_hits: 185
+history_top5_up_rate: 0.685185
 history_top10_limitup_total: 537
 history_top10_limitup_hits: 154
 history_top10_limitup_hit_rate: 0.286778
@@ -94,7 +94,7 @@ history_t1_ret_spearman_ic_positive_rate: nan
 history_tier_top10_hit_rate: 0.28677839851024206
 history_tier_top20_tail_hit_rate: 0.16883116883116883
 history_tier_top10_vs_11_20_hit_spread: 0.11794722967907323
-history_tier_summary: TOP1-10:154/537/0.287/ret=0.0009 | TOP11-20:91/539/0.169/ret=-0.0012 | TOP21-30:97/535/0.181/ret=0.0038
+history_tier_summary: TOP1-10:154/537/0.287/ret=0.0003 | TOP11-20:91/539/0.169/ret=-0.0016 | TOP21-30:97/535/0.181/ret=0.0038
 out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260612.csv
 out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260612.csv
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260612.csv
