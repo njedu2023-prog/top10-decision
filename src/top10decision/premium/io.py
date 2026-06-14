@@ -312,6 +312,10 @@ def load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
             c_date = pick("trade_date", "date", "dt", "交易日期", "日期")
             c_code = pick("ts_code", "code", "symbol", "ticker", "股票代码", "代码")
             c_name = pick("name", "stock_name", "股票名称", "名称")
+            c_sector = pick(
+                "sector", "board", "industry", "sw_industry", "申万行业", "行业", "板块",
+                "所属行业", "所属板块", "concept", "theme", "concept_name", "概念", "题材",
+            )
 
             if not c_date or not c_code:
                 continue
@@ -321,6 +325,8 @@ def load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
             d["ts_code"] = d[c_code].astype(str).str.strip()
             if c_name:
                 d["name"] = d[c_name].astype(str).str.strip()
+            if c_sector:
+                d["sector"] = d[c_sector].astype(str).str.strip()
 
             if (d["trade_date"].astype(str) == trade_date).any():
                 hit.append(d)
@@ -348,6 +354,8 @@ def load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
 
     if "name" in dec.columns:
         out["name"] = dec["name"].astype(str).str.strip()
+    if "sector" in dec.columns:
+        out["sector"] = dec["sector"].astype(str).str.strip()
 
     m_rank = pick("dec_rank", "decision_rank", "rank", "决策排名")
     m_w = pick("dec_weight", "weight", "target_weight", "决策权重")
