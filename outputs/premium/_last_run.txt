@@ -1,8 +1,8 @@
 trade_date: 20260612
-run_id: gh_27493142049
-commit_sha: 5a38ffab162e
+run_id: gh_27494226724
+commit_sha: ac7fd757eba0
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-14T08:34:49Z
+created_at_utc: 2026-06-14T09:21:42Z
 ok: True
 buy_date: 20260615
 target_date: 20260616
@@ -87,10 +87,10 @@ history_limitup_spearman_ic_mean: 0.19117341538436225
 history_limitup_spearman_ic_20d: 0.19117341538436225
 history_limitup_spearman_ic_positive_rate: 1.0
 history_limitup_kendall_tau_mean: 0.15867265515599363
-history_t1_ret_rank_ic_days: 0
-history_t1_ret_spearman_ic_mean: nan
-history_t1_ret_spearman_ic_20d: 
-history_t1_ret_spearman_ic_positive_rate: nan
+history_t1_ret_rank_ic_days: 3
+history_t1_ret_spearman_ic_mean: -0.08489760073669515
+history_t1_ret_spearman_ic_20d: -0.08489760073669515
+history_t1_ret_spearman_ic_positive_rate: 0.3333333333333333
 history_tier_top10_hit_rate: 0.28677839851024206
 history_tier_top20_tail_hit_rate: 0.16883116883116883
 history_tier_top10_vs_11_20_hit_spread: 0.11794722967907323

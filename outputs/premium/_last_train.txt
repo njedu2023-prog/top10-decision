@@ -1,8 +1,8 @@
 trade_date: 20260610
 model_version: premium_v4_a_share_d_t_t1
-run_id: gh_27493142049
-commit_sha: 5a38ffab162e
-created_at_utc: 2026-06-14T08:34:34Z
+run_id: gh_27494226724
+commit_sha: ac7fd757eba0
+created_at_utc: 2026-06-14T09:21:27Z
 trained: True
 reason: ok:ehx_from_premium_verify
 n_samples: 1522
