@@ -631,6 +631,43 @@ jobs:
           eret_missing = eret.get('missing_ratio', {}) or {}
           still_all_missing = [c for c in core_fs_v2 if eret_missing.get(c) == 1.0]
 
+          def metric_float(metrics, key, default=None):
+              try:
+                  value = (metrics or {}).get(key)
+                  if value is None:
+                      return default
+                  return float(value)
+              except Exception:
+                  return default
+
+          eret_metrics = eret.get('metrics_valid', {}) or {}
+          eret_selected_model = str(
+              eret.get('selected_model')
+              or (eret.get('model_selection', {}) or {}).get('selected_model')
+              or ''
+          ).strip().lower()
+          if eret_selected_model not in ('lgbm', 'lr'):
+              scored = []
+              for preference, kind in enumerate(('lgbm', 'lr')):
+                  m = eret_metrics.get(kind, {}) or {}
+                  rmse = metric_float(m, 'rmse', float('inf'))
+                  mae = metric_float(m, 'mae', float('inf'))
+                  directional = metric_float(m, 'directional_acc', -1.0)
+                  scored.append(((rmse, mae, -directional, preference), kind))
+              scored.sort(key=lambda x: x[0])
+              eret_selected_model = scored[0][1] if scored else ''
+
+          eret_selected_metrics = eret_metrics.get(eret_selected_model, {}) or {}
+          eret_selected_rmse = metric_float(eret_selected_metrics, 'rmse')
+          eret_selected_directional = metric_float(eret_selected_metrics, 'directional_acc')
+          eret_selected_model_pass = (
+              eret_selected_model in ('lgbm', 'lr')
+              and eret_selected_rmse is not None
+              and eret_selected_rmse <= 0.15
+              and eret_selected_directional is not None
+              and eret_selected_directional >= 0.50
+          )
+
           acceptance = {
               'generated_at_utc': datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
               'current_run_date': '${{ steps.resolve_current_run_date.outputs.current_run_date }}',
@@ -649,7 +686,10 @@ jobs:
                   'missing_trade_dates': len(eret_window.get('missing_trade_dates', []) or []),
                   'metrics_valid': eret.get('metrics_valid', {}) or {},
                   'fs_v2_still_all_missing': still_all_missing,
-                  'acceptance_pass': bool(eret.get('anchor_trade_date')) and eret.get('status') == 'trained' and len(still_all_missing) == 0,
+                  'selected_model': eret_selected_model,
+                  'selected_model_metrics': eret_selected_metrics,
+                  'selected_model_pass': eret_selected_model_pass,
+                  'acceptance_pass': bool(eret.get('anchor_trade_date')) and eret.get('status') == 'trained' and len(still_all_missing) == 0 and eret_selected_model_pass,
               },
           }
           acceptance['overall_pass'] = bool(acceptance['pfill']['acceptance_pass'] and acceptance['eret']['acceptance_pass'])
@@ -678,12 +718,15 @@ jobs:
               f"- loaded_trade_dates: {acceptance['eret']['loaded_trade_dates']}",
               f"- missing_trade_dates: {acceptance['eret']['missing_trade_dates']}",
               f"- fs_v2_still_all_missing: {acceptance['eret']['fs_v2_still_all_missing']}",
+              f"- selected_model: {acceptance['eret']['selected_model']}",
+              f"- selected_model_pass: {'PASS' if acceptance['eret']['selected_model_pass'] else 'FAIL'}",
               f"- acceptance_pass: {'PASS' if acceptance['eret']['acceptance_pass'] else 'FAIL'}",
               '',
           ]
           md_path.write_text('\n'.join(lines), encoding='utf-8')
           print(f'[learning-acceptance] overall_pass={acceptance["overall_pass"]}')
           print(f'[learning-acceptance] eret_fs_v2_still_all_missing={still_all_missing}')
+          print(f'[learning-acceptance] eret_selected_model={eret_selected_model} pass={eret_selected_model_pass}')
           PY
 
       - name: Commit learning artifacts
