@@ -678,6 +678,10 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
     c_date = pick("trade_date", "date", "dt", "交易日期", "日期")
     c_code = pick("ts_code", "code", "symbol", "ticker", "股票代码", "代码")
     c_name = pick("name", "stock_name", "股票名称", "名称")
+    c_sector = pick(
+        "sector", "industry", "sw_industry", "申万行业", "行业", "板块",
+        "所属行业", "所属板块", "concept", "theme", "概念", "题材",
+    )
 
     if c_date:
         df["trade_date"] = df[c_date].astype(str).map(_to_yyyymmdd)
@@ -685,6 +689,8 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
         df["ts_code"] = df[c_code].astype(str).str.strip()
     if c_name:
         df["name"] = df[c_name].astype(str).str.strip()
+    if c_sector:
+        df["sector"] = df[c_sector].astype(str).str.strip()
     return df
 
 
@@ -781,10 +787,14 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     dec["ts_code"] = dec["ts_code"].astype(str).str.strip()
     if "name" in dec.columns:
         dec["name"] = dec["name"].astype(str).str.strip()
+    if "sector" in dec.columns:
+        dec["sector"] = dec["sector"].astype(str).str.strip()
 
     out = pd.DataFrame({"trade_date": dec["trade_date"].astype(str), "ts_code": dec["ts_code"].astype(str)})
     if "name" in dec.columns:
         out["name"] = dec["name"]
+    if "sector" in dec.columns:
+        out["sector"] = dec["sector"]
 
     for out_col, names in {
         "dec_rank": ("dec_rank", "decision_rank", "rank", "决策排名"),
@@ -1401,6 +1411,8 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df0["ts_code"] = df0["ts_code"].astype(str).str.strip()
     if "name" not in df0.columns:
         df0["name"] = pd.NA
+    if "sector" not in df0.columns:
+        df0["sector"] = pd.NA
 
     pack_status = detect_factor_packs(cfg, trade_date)
     r_t = ensure_daily_cached(cfg, trade_date)
@@ -1441,6 +1453,12 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         if "name_dec" in m.columns:
             m["name"] = m["name"].where(m["name"].notna() & (m["name"].astype(str).str.strip() != ""), m["name_dec"])
             m = m.drop(columns=["name_dec"])
+        if "sector_dec" in m.columns:
+            if "sector" not in m.columns:
+                m["sector"] = m["sector_dec"]
+            else:
+                m["sector"] = m["sector"].where(m["sector"].notna() & (m["sector"].astype(str).str.strip() != ""), m["sector_dec"])
+            m = m.drop(columns=["sector_dec"])
         df = m
     else:
         for c in ("dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"):
@@ -1537,7 +1555,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     ]
 
     out_cols = [
-        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "close_T",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         *exec_cols,
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
@@ -1577,7 +1595,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     verify_pending = True
     verify_reason = "pending"
     verify_cols = [
-        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "close_T",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         "T日建议买入方式", "T日可接受买入价",
         "T+1建议买入方式", "T+1可接受买入价", "T+1卖出计划", "T+2卖出计划",
