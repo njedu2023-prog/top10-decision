@@ -413,7 +413,7 @@
 
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
     const API_LIST_URL = `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
-    const CACHE_KEY = "top10_decision_last_report_v2";
+    const CACHE_KEY = "top10_decision_last_report_v3";
 
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
@@ -482,12 +482,16 @@
       return `${y}${m}${day}`;
     }
 
-    function getDateCandidates(daysBack = 60) {
+    function getDateCandidates(daysBack = 60, daysForward = 10) {
       const out = [];
       const d = new Date();
-      for (let i = 0; i <= daysBack; i += 1) {
+      const offsets = [0];
+      for (let i = 1; i <= daysForward; i += 1) offsets.push(i);
+      for (let i = 1; i <= daysBack; i += 1) offsets.push(-i);
+
+      for (const i of offsets) {
         const x = new Date(d);
-        x.setDate(d.getDate() - i);
+        x.setDate(d.getDate() + i);
         out.push(formatDateYmd(x));
       }
       return out;
