@@ -413,6 +413,7 @@
 
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
     const API_LIST_URL = `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
+    const CACHE_KEY = "top10_decision_last_report_v2";
 
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
@@ -427,6 +428,31 @@
     let currentIndex = 0;
     let currentFileName = "";
     let lastLoadMode = "";
+
+    function saveCachedReport(info, mdRaw) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          savedAt: Date.now(),
+          info,
+          mdRaw
+        }));
+      } catch (err) {
+        console.warn("Decision report cache write failed.", err);
+      }
+    }
+
+    function loadCachedReport() {
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        if (!cached || !cached.info || typeof cached.mdRaw !== "string") return null;
+        return cached;
+      } catch (err) {
+        console.warn("Decision report cache read failed.", err);
+        return null;
+      }
+    }
 
     function setStatus(type, text) {
       statusPill.className = `pill ${type || ""}`.trim();
@@ -692,7 +718,6 @@
 
       reportBox.className = "";
       reportBox.innerHTML = `
-        ${lastLoadMode === "raw-date-fallback" ? '<div class="notice">当前使用 raw 日期回退模式：GitHub API 列表读取失败或被限流，但报告正文已通过 raw 文件恢复读取。</div>' : ""}
         ${rawNotice}
 
         <div class="report-section">
@@ -797,7 +822,7 @@
         reportFiles = await getReportFilesFromApi();
         lastLoadMode = "api-list";
       } catch (err) {
-        console.warn("GitHub API list failed, fallback to raw date probing.", err);
+        console.warn("GitHub API list failed; using raw date probing.", err);
         reportFiles = getFallbackReportFiles();
         lastLoadMode = "raw-date-fallback";
       }
@@ -828,9 +853,10 @@
           updateNavButtons();
 
           try {
-            setStatus(lastLoadMode === "raw-date-fallback" ? "warn" : "", `正在读取：${info.name}`);
+            setStatus("", `正在读取：${info.name}`);
             const mdRaw = await fetchText(info.rawUrl);
             renderReport(mdRaw);
+            saveCachedReport(info, mdRaw);
             setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
             footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
             return;
@@ -844,6 +870,17 @@
         throw lastErr || new Error("未找到可读取的 decision_report_YYYYMMDD.md");
       } catch (err) {
         console.error(err);
+        const cached = loadCachedReport();
+        if (cached) {
+          currentFileName = cached.info.name || "cached_report";
+          reportFiles = [cached.info];
+          currentIndex = 0;
+          updateNavButtons();
+          renderReport(cached.mdRaw);
+          setStatus("warn", `已显示本地缓存：${currentFileName}`);
+          footerText.textContent = `Top10 Decision · ${currentFileName} · 缓存时间：${new Date(cached.savedAt || Date.now()).toLocaleString("zh-CN")}`;
+          return;
+        }
         setStatus("bad", "页面加载失败");
         reportBox.className = "error";
         reportBox.innerHTML = `
