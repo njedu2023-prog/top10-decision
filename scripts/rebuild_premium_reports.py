@@ -36,6 +36,8 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 
 def _load_symbol(module_name: str, file_path: Path, symbol: str):
@@ -58,6 +60,13 @@ render_premium_report_html = _load_symbol(
     SRC / "top10decision" / "premium" / "premium_views.py",
     "render_premium_report_html",
 )
+attach_limitup_validation = _load_symbol(
+    "premium_rebuild_views_attach",
+    SRC / "top10decision" / "premium" / "premium_views.py",
+    "attach_limitup_validation",
+)
+
+from top10decision.premium.market_truth import ensure_daily_cached, load_daily  # noqa: E402
 
 DATE_RE = re.compile(r"(20\d{6})")
 
@@ -78,6 +87,11 @@ def _read_csv_smart(path: Path) -> pd.DataFrame:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _write_csv(path: Path, df: pd.DataFrame) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False, encoding="utf-8-sig")
 
 
 def _date_from_path(path: Path) -> Optional[str]:
@@ -223,6 +237,45 @@ def _patch_verify_from_training_labels(df_verify: pd.DataFrame, labels: pd.DataF
     reason = out["t_limitup_verify_reason"].astype(str)
     out["t_limitup_verify_reason"] = np.where(ready & reason.isin(["", "nan", "None", "<NA>"]), "ok_from_training_archive", reason)
     return out.drop(columns=[c for c in out.columns if c.endswith("_hist")] + ["_hist_date", "_hist_code"], errors="ignore")
+
+
+def _verify_ready_rows(df_verify: pd.DataFrame) -> int:
+    if df_verify is None or df_verify.empty:
+        return 0
+    ready = pd.to_numeric(df_verify.get("t_limitup_verify_ready", pd.Series(dtype=float)), errors="coerce").fillna(0)
+    return int(ready.eq(1).sum())
+
+
+def _refresh_verify_with_t_truth(
+    cfg: PremiumConfig,
+    df_verify: pd.DataFrame,
+    trade_date: str,
+    buy_date: str,
+) -> tuple[pd.DataFrame, str]:
+    if df_verify is None or df_verify.empty:
+        return df_verify, "verify_empty"
+    if _verify_ready_rows(df_verify) > 0:
+        return df_verify, "already_ready"
+    buy_date = _to_yyyymmdd(buy_date)
+    if not re.fullmatch(r"20\d{6}", str(buy_date)):
+        return df_verify, "missing_buy_date"
+
+    r_buy = ensure_daily_cached(cfg, buy_date)
+    if not r_buy.ok:
+        return df_verify, f"t_daily_not_ready:{r_buy.reason}"
+    try:
+        daily_buy = load_daily(cfg, buy_date)
+        refreshed, stats = attach_limitup_validation(
+            df_verify=df_verify,
+            daily_t=daily_buy,
+            trade_date=trade_date,
+            buy_date=buy_date,
+        )
+        if _verify_ready_rows(refreshed) > 0:
+            return refreshed, f"refreshed_from_t_daily:{buy_date}:{stats.top10_hits}/{stats.top10_total}"
+        return refreshed, f"refresh_no_ready_rows:{stats.reason}"
+    except Exception as e:
+        return df_verify, f"refresh_error:{type(e).__name__}"
 
 
 def _num_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
@@ -589,9 +642,14 @@ def _render_one(
     if not target_date:
         target_date = _first_value(df_verify, ["target_date", "t1_trade_date", "next_trade_date"], "")
 
-    ready = pd.to_numeric(df_verify.get("t_limitup_verify_ready", pd.Series(dtype=float)), errors="coerce").fillna(0)
-    verify_pending = bool(ready.sum() <= 0)
-    verify_reason = "ok" if not verify_pending else "historical_truth_not_ready"
+    refresh_reason = "not_attempted"
+    if _verify_ready_rows(df_verify) <= 0:
+        df_verify, refresh_reason = _refresh_verify_with_t_truth(cfg, df_verify, trade_date, buy_date)
+        if _verify_ready_rows(df_verify) > 0:
+            _write_csv(verify_path, df_verify)
+
+    verify_pending = bool(_verify_ready_rows(df_verify) <= 0)
+    verify_reason = "ok" if not verify_pending else refresh_reason
 
     html = render_premium_report_html(
         trade_date=trade_date,
@@ -606,6 +664,7 @@ def _render_one(
         audit_notes=[
             "archive_rebuilt=True",
             f"history_source={historical_stats.get('source', '-')}",
+            f"truth_refresh={refresh_reason}",
         ],
         report_dates=report_dates,
         historical_limitup_stats=historical_stats,
