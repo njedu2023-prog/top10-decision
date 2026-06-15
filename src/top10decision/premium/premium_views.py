@@ -228,15 +228,16 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                     "-",
                 ),
                 "D Close": _fmt_num(r.get("close_T"), 2),
-                "T Limit-up Prob": _fmt_pct(r.get("t_limitup_prob"), 2),
-                "T Limit-up Strength": _fmt_num(r.get("t_limitup_strength"), 2),
-                "T+1 Up Prob": _fmt_pct(r.get("t1_continue_up_rate"), 2),
-                "Relay Score": _fmt_num(r.get("limitup_continuation_score"), 2),
-                "Adaptive Score": _fmt_num(r.get("premium_adaptive_score", r.get("自适应排序评分")), 2),
+                "upD": _clean_text(r.get("upD"), "-"),
+                "T-Up": _fmt_pct(r.get("t_limitup_prob"), 2),
+                "T-Strength": _fmt_num(r.get("t_limitup_strength"), 2),
+                "T1-Up": _fmt_pct(r.get("t1_continue_up_rate"), 2),
+                "T1-Relay": _fmt_num(r.get("limitup_continuation_score"), 2),
+                "Score": _fmt_num(r.get("premium_adaptive_score", r.get("自适应排序评分")), 2),
                 "T Auction Action": _clean_text(
                     r.get("T日建议买入方式", r.get("T+1建议买入方式", r.get("t1_buy_method")))
                 ),
-                "Max Buy Price": _clean_text(
+                "Price": _clean_text(
                     r.get("T日可接受买入价", r.get("T+1可接受买入价", r.get("t1_max_buy_price")))
                 ),
                 "T+1 Sell Plan": _clean_text(r.get("T+1卖出计划", r.get("t1_sell_plan"))),
@@ -270,13 +271,13 @@ def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
         for c in df.columns:
             val = r.get(c, "")
             cls = ""
-            if c == "T Limit-up Prob":
+            if c == "T-Up":
                 cls = f' class="num {_score_class(val, 0.70, 0.45)}"'
-            elif c == "T+1 Up Prob":
+            elif c == "T1-Up":
                 cls = f' class="num {_score_class(val, 0.70, 0.50)}"'
-            elif c in {"T Limit-up Strength", "Relay Score", "Adaptive Score"}:
+            elif c in {"T-Strength", "T1-Relay", "Score"}:
                 cls = f' class="num {_score_class(val, 70.0, 55.0)}"'
-            elif c in {"Rank", "D Close"}:
+            elif c in {"Rank", "D Close", "upD"}:
                 cls = ' class="num"'
             cells.append(f"<td{cls}>{_html_escape(val)}</td>")
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
