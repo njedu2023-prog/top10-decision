@@ -792,6 +792,95 @@ def _market_sentiment_features(cfg: PremiumConfig, trade_date: str) -> Tuple[Dic
         return base, f"market_sentiment_error:{type(e).__name__}:{e}"
 
 
+def _limit_rate_for_code(ts_code: object) -> float:
+    s = str(ts_code or "").strip().upper()
+    raw = s.split(".")[0] if "." in s else "".join(ch for ch in s if ch.isdigit())[-6:]
+    suffix = s.split(".")[-1] if "." in s else ""
+    if suffix == "BJ" or raw.startswith(("43", "83", "87", "88", "92")):
+        return 0.30
+    if raw.startswith(("300", "301", "688", "689")):
+        return 0.20
+    return 0.10
+
+
+def _attach_d_limitup_streak(
+    cfg: PremiumConfig,
+    df: pd.DataFrame,
+    trade_date: str,
+    max_streak_days: int = 12,
+) -> Tuple[pd.DataFrame, str]:
+    """
+    Add upD: consecutive close-limit-up days ending at D close.
+
+    It uses only D and earlier daily bars. Missing historical bars stop the backward count,
+    which keeps the feature conservative and avoids future leakage.
+    """
+    out = df.copy()
+    if out.empty or "ts_code" not in out.columns:
+        out["upD"] = pd.Series([pd.NA] * len(out), index=out.index, dtype="Int64")
+        return out, "empty_or_missing_ts_code"
+
+    dates: List[str] = [_to_yyyymmdd(trade_date)]
+    reason_parts: List[str] = []
+    for _ in range(int(max_streak_days) + 1):
+        prev, reason = _find_prev_market_trade_date(cfg, dates[-1], max_probe_days=15)
+        if not prev:
+            reason_parts.append(reason)
+            break
+        dates.append(prev)
+
+    if len(dates) < 2:
+        out["upD"] = pd.Series([pd.NA] * len(out), index=out.index, dtype="Int64")
+        return out, "prev_trade_date_missing:" + "|".join(reason_parts[:2])
+
+    close_maps: Dict[str, pd.Series] = {}
+    for d in dates:
+        r = ensure_daily_cached(cfg, d)
+        if not r.ok:
+            reason_parts.append(f"{d}:{r.reason}")
+            continue
+        try:
+            daily = load_daily(cfg, d)[["ts_code", "close"]].copy()
+            daily["ts_code"] = daily["ts_code"].astype(str).str.strip()
+            daily["close"] = pd.to_numeric(daily["close"], errors="coerce")
+            close_maps[d] = daily.dropna(subset=["ts_code"]).drop_duplicates("ts_code").set_index("ts_code")["close"]
+        except Exception as e:
+            reason_parts.append(f"{d}:load_error:{type(e).__name__}")
+
+    streaks: List[object] = []
+    for _, row in out.iterrows():
+        ts_code = str(row.get("ts_code", "")).strip()
+        if not ts_code:
+            streaks.append(pd.NA)
+            continue
+        rate = _limit_rate_for_code(ts_code)
+        streak = 0
+        has_d_bar = False
+        for i in range(len(dates) - 1):
+            d_cur = dates[i]
+            d_prev = dates[i + 1]
+            cur_map = close_maps.get(d_cur)
+            prev_map = close_maps.get(d_prev)
+            if cur_map is None or prev_map is None or ts_code not in cur_map.index or ts_code not in prev_map.index:
+                break
+            cur_close = pd.to_numeric(pd.Series([cur_map.loc[ts_code]]), errors="coerce").iloc[0]
+            prev_close = pd.to_numeric(pd.Series([prev_map.loc[ts_code]]), errors="coerce").iloc[0]
+            if not np.isfinite(cur_close) or not np.isfinite(prev_close) or prev_close <= 0:
+                break
+            has_d_bar = True
+            limit_price = round(float(prev_close) * (1.0 + rate), 2)
+            if float(cur_close) >= limit_price * 0.9985:
+                streak += 1
+                continue
+            break
+        streaks.append(streak if has_d_bar else pd.NA)
+
+    out["upD"] = pd.Series(streaks, index=out.index, dtype="Int64")
+    if out["upD"].notna().any():
+        return out, f"ok:lookback_dates={len(dates)}"
+    return out, "no_upD_values:" + "|".join(reason_parts[:3])
+
+
 def _attach_market_sentiment(df: pd.DataFrame, features: Dict[str, float]) -> pd.DataFrame:
     out = df.copy()
     for k, v in features.items():
@@ -1798,6 +1887,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df["risk_flags"] = risk
 
     df = df.merge(d0, on="ts_code", how="left")
+    df, upd_reason = _attach_d_limitup_streak(cfg, df, trade_date)
     df = _attach_market_sentiment(df, market_sentiment)
     df["base_date"] = trade_date
     df["buy_date"] = buy_date
@@ -1893,7 +1983,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     ]
 
     out_cols = [
-        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T", "upD",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         *exec_cols,
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
@@ -1933,7 +2023,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     verify_pending = True
     verify_reason = "pending"
     verify_cols = [
-        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T", "upD",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         "T日建议买入方式", "T日可接受买入价",
         "T+1建议买入方式", "T+1可接受买入价", "T+1卖出计划", "T+2卖出计划",
@@ -2086,6 +2176,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "verify_pending": bool(verify_pending),
             "verify_reason": verify_reason,
             "market_sentiment_reason": market_sentiment_reason,
+            "upD_reason": upd_reason,
             "calendar_contract": "strict_a_share_trade_calendar_only",
             "analysis_date_calendar_reason": d_calendar_reason,
             "buy_date_calendar_reason": buy_reason,
