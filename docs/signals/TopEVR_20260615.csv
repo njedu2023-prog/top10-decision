@@ -1,1 +1,2 @@
 trade_date,target_trade_date,jq_code,target_weight,risk_budget,regime,reason
+20260615,20260616,301196.XSHE,1.0,1.0,RISK_ON,TopEVR_EV>3pct_Risk<1pct
