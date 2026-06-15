@@ -792,8 +792,215 @@ def _market_sentiment_features(cfg: PremiumConfig, trade_date: str) -> Tuple[Dic
         return base, f"market_sentiment_error:{type(e).__name__}:{e}"
 
 
+def _stock_code_key(v: object) -> str:
+    s = str(v).strip().upper()
+    if not s or s in {"NAN", "NONE", "NULL"}:
+        return ""
+    m = re.search(r"(\d{6})", s)
+    return m.group(1) if m else ""
+
+
+def _cn_board_num(text: str) -> Optional[int]:
+    s = str(text).strip()
+    if not s:
+        return None
+    if "首板" in s:
+        return 1
+    m = re.search(r"(\d+)\s*天\s*(\d+)\s*板", s)
+    if m:
+        return int(m.group(2))
+    m = re.search(r"(\d+)\s*/\s*(\d+)", s)
+    if m:
+        return int(m.group(2))
+    m = re.search(r"[一二两三四五六七八九十]+\s*天\s*([一二两三四五六七八九十]+)\s*板", s)
+    if m:
+        return _cn_board_num(m.group(1) + "板")
+    m = re.search(r"([一二两三四五六七八九十]+)(?:连板|板)", s)
+    if not m:
+        return None
+    raw = m.group(1)
+    vals = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if raw == "十":
+        return 10
+    if raw.startswith("十") and len(raw) == 2:
+        return 10 + vals.get(raw[1], 0)
+    if raw.endswith("十") and len(raw) == 2:
+        return vals.get(raw[0], 0) * 10
+    if "十" in raw and len(raw) == 3:
+        return vals.get(raw[0], 0) * 10 + vals.get(raw[2], 0)
+    return vals.get(raw)
+
+
+def _parse_upd_source(source: pd.Series) -> pd.Series:
+    parsed = pd.to_numeric(source, errors="coerce")
+    if parsed.isna().all():
+        text = source.astype(str)
+        parsed = text.map(_cn_board_num)
+        missing = pd.isna(parsed)
+        if missing.any():
+            extracted = text.loc[missing].str.extract(r"(\d+)(?:\s*连板|板|天|/)?", expand=False)
+            parsed.loc[missing] = pd.to_numeric(extracted, errors="coerce")
+        missing = parsed.isna()
+        if missing.any():
+            parsed.loc[missing] = text.loc[missing].map(_cn_board_num)
+    parsed = pd.to_numeric(parsed, errors="coerce")
+    return parsed.round().clip(lower=1)
+
+
+def _upd_source_columns() -> List[str]:
+    # 只放“个股连板/第几板”字段。board_limit_up_count 是板块涨停家数，不能用于 upD。
+    return [
+        "upD", "upD_source", "limit_times", "连板数", "连板", "几连板", "几板", "连板高度", "高度",
+        "涨停连板数", "连续涨停数", "连续涨停天数", "limit_up_days", "limitup_days",
+        "limit_up_streak", "limitup_streak", "zt_streak", "zt_days", "board_count",
+        "up_stat", "涨停统计", "涨停天数", "连续板数", "几天几板",
+    ]
+
+
+def _upd_map_from_table(df: pd.DataFrame, label: str) -> Tuple[pd.Series, str]:
+    if df is None or df.empty:
+        return pd.Series(dtype="float64"), f"{label}:empty"
+
+    code_col = _first_existing_col(df, "ts_code", "股票代码", "代码", "code", "symbol", "证券代码")
+    if code_col is None:
+        for c in df.columns:
+            cs = str(c).strip()
+            if any(k in cs for k in ("股票代码", "证券代码", "代码", "ts_code", "code", "symbol")):
+                code_col = c
+                break
+
+    upd_candidates: List[str] = []
+    exact = _first_existing_col(df, *_upd_source_columns())
+    if exact is not None:
+        upd_candidates.append(exact)
+    for c in df.columns:
+        cs = str(c).strip()
+        if any(k in cs for k in _upd_source_columns()) and c not in upd_candidates:
+            upd_candidates.append(c)
+
+    if code_col is None or not upd_candidates:
+        return pd.Series(dtype="float64"), f"{label}:missing_code_or_upd"
+
+    best_col: Optional[str] = None
+    best_parsed: Optional[pd.Series] = None
+    best_valid = -1
+    for c in upd_candidates:
+        parsed = _parse_upd_source(df[c])
+        valid = int(parsed.notna().sum())
+        if valid > best_valid:
+            best_col = c
+            best_parsed = parsed
+            best_valid = valid
+
+    if best_col is None or best_parsed is None or best_valid <= 0:
+        return pd.Series(dtype="float64"), f"{label}:no_valid_upd_col"
+
+    tmp = df[[code_col]].copy()
+    tmp["_code_key"] = tmp[code_col].map(_stock_code_key)
+    tmp["_upD"] = best_parsed
+    tmp = tmp[(tmp["_code_key"] != "") & tmp["_upD"].notna()].copy()
+    if tmp.empty:
+        return pd.Series(dtype="float64"), f"{label}:{best_col}:no_valid_rows"
+
+    tmp = tmp.drop_duplicates("_code_key", keep="last")
+    return tmp.set_index("_code_key")["_upD"], f"{label}:{best_col};rows={len(tmp)}"
+
+
+def _read_upd_map_file(path: Path, label: str) -> Tuple[pd.Series, str]:
+    if not path.exists():
+        return pd.Series(dtype="float64"), f"{label}:missing"
+    try:
+        df = _read_csv_smart(path)
+    except Exception as e:
+        return pd.Series(dtype="float64"), f"{label}:read_error:{type(e).__name__}"
+    return _upd_map_from_table(df, label)
+
+
+def _load_local_limitup_upd_maps(cfg: PremiumConfig, trade_date: str) -> List[Tuple[pd.Series, str]]:
+    td = _to_yyyymmdd(trade_date)
+    root = cfg.repo_root()
+    paths = [
+        (root / "data" / "market" / "raw" / td[:4] / td / "limit_up_tags.csv", "raw_limit_up_tags"),
+        (root / "data" / "market" / "raw" / td[:4] / td / "limit_list_d.csv", "raw_limit_list_d"),
+        (root / "data" / "market" / f"features_limit_{td}.csv", "features_limit"),
+        (root / "data" / "market" / f"features_base_{td}.csv", "features_base"),
+    ]
+    out: List[Tuple[pd.Series, str]] = []
+    for path, label in paths:
+        s, reason = _read_upd_map_file(path, label)
+        out.append((s, reason))
+    return out
+
+
+def _fetch_pywencai_limitup_upd(trade_date: str) -> Tuple[pd.Series, str]:
+    try:
+        import pywencai  # type: ignore
+    except Exception as e:
+        return pd.Series(dtype="float64"), f"pywencai_unavailable:{type(e).__name__}"
+
+    td = _to_yyyymmdd(trade_date)
+    qdate = f"{td[:4]}年{int(td[4:6])}月{int(td[6:8])}日"
+    query = f"{qdate} 涨停 连板数 股票代码 股票简称"
+    try:
+        df = pywencai.get(query=query, query_type="stock", loop=True)
+        if isinstance(df, list):
+            df = pd.concat([x for x in df if isinstance(x, pd.DataFrame)], ignore_index=True) if df else pd.DataFrame()
+        if not isinstance(df, pd.DataFrame):
+            return pd.Series(dtype="float64"), "pywencai:not_dataframe"
+        return _upd_map_from_table(df, "pywencai_ths_limitup")
+    except Exception as e:
+        return pd.Series(dtype="float64"), f"pywencai_error:{type(e).__name__}"
+
+
+def _fetch_akshare_limitup_upd(trade_date: str) -> Tuple[pd.Series, str]:
+    try:
+        import akshare as ak  # type: ignore
+    except Exception as e:
+        return pd.Series(dtype="float64"), f"akshare_unavailable:{type(e).__name__}"
+
+    td = _to_yyyymmdd(trade_date)
+    date_args = [td, f"{td[:4]}-{td[4:6]}-{td[6:8]}"]
+    funcs = ["stock_zt_pool_ths", "stock_zt_pool_em", "stock_zt_pool_previous_em"]
+    notes: List[str] = []
+    for name in funcs:
+        fn = getattr(ak, name, None)
+        if fn is None:
+            notes.append(f"{name}:missing")
+            continue
+        for arg in date_args:
+            try:
+                df = fn(date=arg)
+                s, reason = _upd_map_from_table(df, f"akshare_{name}")
+                if not s.empty:
+                    return s, reason
+                notes.append(reason)
+            except TypeError:
+                try:
+                    df = fn(arg)
+                    s, reason = _upd_map_from_table(df, f"akshare_{name}")
+                    if not s.empty:
+                        return s, reason
+                    notes.append(reason)
+                except Exception as e:
+                    notes.append(f"{name}:{type(e).__name__}")
+            except Exception as e:
+                notes.append(f"{name}:{type(e).__name__}")
+    return pd.Series(dtype="float64"), "akshare_no_data:" + "|".join(notes[:6])
+
+
+def _fetch_remote_limitup_upd_map(trade_date: str) -> Tuple[pd.Series, str]:
+    # 同花顺问财优先；AkShare 涨停池作为次级兜底，二者都只取外部日频涨停池字段。
+    s, reason = _fetch_pywencai_limitup_upd(trade_date)
+    if not s.empty:
+        return s, reason
+    s2, reason2 = _fetch_akshare_limitup_upd(trade_date)
+    if not s2.empty:
+        return s2, reason2
+    return pd.Series(dtype="float64"), f"remote_no_data:{reason};{reason2}"
+
+
 def _attach_upd_from_source(cfg: PremiumConfig, df: pd.DataFrame, trade_date: str) -> Tuple[pd.DataFrame, str]:
-    """Attach upD from upstream candidate/factor fields.
+    """Attach upD from reliable D-day limit-up board-count sources.
 
     Premium candidates are D-close limit-up stocks, so when no reliable upstream board-count
     field is available, the conservative floor is 1 instead of recalculating from OHLC.
@@ -803,52 +1010,50 @@ def _attach_upd_from_source(cfg: PremiumConfig, df: pd.DataFrame, trade_date: st
         out["upD"] = pd.Series([pd.NA] * len(out), index=out.index, dtype="Int64")
         return out, "empty"
 
-    candidates = [
-        "upD", "upD_source", "连板数", "连板", "几连板", "几板", "连板高度", "高度",
-        "涨停连板数", "连续涨停数", "连续涨停天数", "limit_up_days", "limitup_days",
-        "limit_up_streak", "limitup_streak", "zt_streak", "zt_days", "board_count",
-        "prior_board_limit_up_count", "board_limit_up_count",
-    ]
+    out["_code_key_upd"] = out["ts_code"].map(_stock_code_key) if "ts_code" in out.columns else ""
+    upd = pd.Series([np.nan] * len(out), index=out.index, dtype="float64")
+    notes: List[str] = []
 
-    def parse_source(source: pd.Series) -> pd.Series:
-        parsed = pd.to_numeric(source, errors="coerce")
-        if parsed.isna().all():
-            extracted = source.astype(str).str.extract(r"(\d+)", expand=False)
-            parsed = pd.to_numeric(extracted, errors="coerce")
-        return parsed.round().clip(lower=1)
+    def fill_from_series(src: pd.Series, label: str) -> None:
+        nonlocal upd
+        parsed = _parse_upd_source(src)
+        mask = upd.isna() & parsed.notna()
+        if mask.any():
+            upd.loc[mask] = parsed.loc[mask]
+            notes.append(f"{label};filled={int(mask.sum())}")
 
-    source_col = _first_existing_col(out, *candidates)
+    def fill_from_map(mapping: pd.Series, label: str) -> None:
+        nonlocal upd
+        if mapping is None or mapping.empty:
+            notes.append(label)
+            return
+        mapped = out["_code_key_upd"].map(mapping)
+        parsed = _parse_upd_source(mapped)
+        mask = upd.isna() & parsed.notna()
+        if mask.any():
+            upd.loc[mask] = parsed.loc[mask]
+            notes.append(f"{label};filled={int(mask.sum())}")
+        else:
+            notes.append(f"{label};filled=0")
+
+    source_col = _first_existing_col(out, *_upd_source_columns())
     if source_col is not None:
-        upd = parse_source(out[source_col])
-        out["upD"] = upd.astype("Int64")
-        filled = int(out["upD"].notna().sum())
-        if filled > 0:
-            return out, f"source:{source_col};filled={filled}/{len(out)}"
+        fill_from_series(out[source_col], f"source:{source_col}")
 
-    for rel_tpl in ("data/market/features_limit_{trade_date}.csv", "data/market/features_base_{trade_date}.csv"):
-        p = cfg.repo_root() / rel_tpl.format(trade_date=_to_yyyymmdd(trade_date))
-        if not p.exists():
-            continue
-        try:
-            fs = _read_csv_smart(p)
-        except Exception:
-            continue
-        if fs.empty or "ts_code" not in fs.columns:
-            continue
-        fs["ts_code"] = fs["ts_code"].astype(str).str.strip()
-        fs_col = _first_existing_col(fs, *candidates)
-        if fs_col is None:
-            continue
-        mapped = fs.drop_duplicates("ts_code").set_index("ts_code")[fs_col]
-        upd = out["ts_code"].astype(str).str.strip().map(mapped)
-        parsed = parse_source(upd)
-        out["upD"] = parsed.astype("Int64")
-        filled = int(out["upD"].notna().sum())
-        if filled > 0:
-            return out, f"feature_store:{p.name}:{fs_col};filled={filled}/{len(out)}"
+    for mapping, reason in _load_local_limitup_upd_maps(cfg, trade_date):
+        fill_from_map(mapping, reason)
+        if upd.notna().all():
+            break
 
-    out["upD"] = pd.Series([1] * len(out), index=out.index, dtype="Int64")
-    return out, "fallback_floor_1:no_source_field"
+    if upd.isna().any():
+        mapping, reason = _fetch_remote_limitup_upd_map(trade_date)
+        fill_from_map(mapping, reason)
+
+    fallback_n = int(upd.isna().sum())
+    out["upD"] = upd.fillna(1).round().clip(lower=1).astype("Int64")
+    out = out.drop(columns=["_code_key_upd"], errors="ignore")
+    notes.append(f"fallback_floor_1={fallback_n}")
+    return out, "|".join(notes)
 
 
 def _attach_market_sentiment(df: pd.DataFrame, features: Dict[str, float]) -> pd.DataFrame:
