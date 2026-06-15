@@ -221,6 +221,8 @@ jobs:
     needs: decision_initial
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    outputs:
+      learning_gate_pass: ${{ steps.learning_gate.outputs.learning_gate_pass }}
 
     steps:
       - name: Checkout latest main
@@ -798,20 +800,32 @@ jobs:
           fi
 
       - name: Gate refresh on learning acceptance
+        id: learning_gate
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
         run: |
           set -e
           python - <<'PY'
           from pathlib import Path
           import json
+          import os
 
           path = Path('outputs/learning/learning_acceptance_latest.json')
           if not path.exists():
-              raise SystemExit('[learning-gate] missing learning acceptance artifact')
+              print('[learning-gate] missing learning acceptance artifact; skip decision refresh')
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+                  fh.write('learning_gate_pass=false\n')
+              raise SystemExit(0)
+
           payload = json.loads(path.read_text(encoding='utf-8'))
-          print(f"[learning-gate] overall_pass={payload.get('overall_pass')}")
-          if payload.get('overall_pass') is not True:
-              raise SystemExit('[learning-gate] FAIL: learning acceptance did not pass; skip decision refresh')
+          passed = payload.get('overall_pass') is True
+          eret = payload.get('eret', {}) or {}
+          print(f"[learning-gate] overall_pass={passed}")
+          print(f"[learning-gate] eret_selected_model={eret.get('selected_model')} pass={eret.get('selected_model_pass')}")
+          print(f"[learning-gate] eret_selected_model_metrics={eret.get('selected_model_metrics')}")
+          if not passed:
+              print('[learning-gate] learning acceptance did not pass; keep existing decision outputs and skip refresh')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+              fh.write(f"learning_gate_pass={'true' if passed else 'false'}\n")
           PY
 
   decision_refresh_after_learning:
@@ -819,7 +833,7 @@ jobs:
     needs: pfill_learning
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    if: ${{ needs.pfill_learning.result == 'success' }}
+    if: ${{ needs.pfill_learning.result == 'success' && needs.pfill_learning.outputs.learning_gate_pass == 'true' }}
 
     steps:
       - name: Checkout latest main after learning
