@@ -1,8 +1,8 @@
 trade_date: 20260612
-run_id: gh_27523006123
-commit_sha: 9622679f11c8
+run_id: gh_27527211849
+commit_sha: d8e16a9ce8c0
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-15T04:06:49Z
+created_at_utc: 2026-06-15T06:14:05Z
 ok: True
 buy_date: 20260615
 target_date: 20260616
@@ -13,7 +13,7 @@ truth_T_reason: ok
 verify_pending: True
 verify_reason: truth_not_ready: T_ok=True T2_ok=False (buy_date:trade_cal_ok;target_date:trade_cal_ok)
 market_sentiment_reason: ok:prev=20260611
-upD_reason: feature_store:features_limit_20260612.csv:board_limit_up_count;filled=47/92
+upD_reason: raw_limit_up_tags:missing_code_or_upd|raw_limit_list_d:missing_code_or_upd|features_limit:no_valid_upd_col|features_base:missing_code_or_upd|remote_no_data:pywencai_unavailable:ModuleNotFoundError;akshare_unavailable:ModuleNotFoundError|fallback_floor_1=92
 calendar_contract: strict_a_share_trade_calendar_only
 analysis_date_calendar_reason: trade_cal_ok
 buy_date_calendar_reason: trade_cal_ok
