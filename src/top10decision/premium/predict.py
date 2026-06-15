@@ -792,93 +792,63 @@ def _market_sentiment_features(cfg: PremiumConfig, trade_date: str) -> Tuple[Dic
         return base, f"market_sentiment_error:{type(e).__name__}:{e}"
 
 
-def _limit_rate_for_code(ts_code: object) -> float:
-    s = str(ts_code or "").strip().upper()
-    raw = s.split(".")[0] if "." in s else "".join(ch for ch in s if ch.isdigit())[-6:]
-    suffix = s.split(".")[-1] if "." in s else ""
-    if suffix == "BJ" or raw.startswith(("43", "83", "87", "88", "92")):
-        return 0.30
-    if raw.startswith(("300", "301", "688", "689")):
-        return 0.20
-    return 0.10
+def _attach_upd_from_source(cfg: PremiumConfig, df: pd.DataFrame, trade_date: str) -> Tuple[pd.DataFrame, str]:
+    """Attach upD from upstream candidate/factor fields.
 
-
-def _attach_d_limitup_streak(
-    cfg: PremiumConfig,
-    df: pd.DataFrame,
-    trade_date: str,
-    max_streak_days: int = 12,
-) -> Tuple[pd.DataFrame, str]:
-    """
-    Add upD: consecutive close-limit-up days ending at D close.
-
-    It uses only D and earlier daily bars. Missing historical bars stop the backward count,
-    which keeps the feature conservative and avoids future leakage.
+    Premium candidates are D-close limit-up stocks, so when no reliable upstream board-count
+    field is available, the conservative floor is 1 instead of recalculating from OHLC.
     """
     out = df.copy()
-    if out.empty or "ts_code" not in out.columns:
+    if out.empty:
         out["upD"] = pd.Series([pd.NA] * len(out), index=out.index, dtype="Int64")
-        return out, "empty_or_missing_ts_code"
+        return out, "empty"
 
-    dates: List[str] = [_to_yyyymmdd(trade_date)]
-    reason_parts: List[str] = []
-    for _ in range(int(max_streak_days) + 1):
-        prev, reason = _find_prev_market_trade_date(cfg, dates[-1], max_probe_days=15)
-        if not prev:
-            reason_parts.append(reason)
-            break
-        dates.append(prev)
+    candidates = [
+        "upD", "upD_source", "连板数", "连板", "几连板", "几板", "连板高度", "高度",
+        "涨停连板数", "连续涨停数", "连续涨停天数", "limit_up_days", "limitup_days",
+        "limit_up_streak", "limitup_streak", "zt_streak", "zt_days", "board_count",
+        "prior_board_limit_up_count", "board_limit_up_count",
+    ]
 
-    if len(dates) < 2:
-        out["upD"] = pd.Series([pd.NA] * len(out), index=out.index, dtype="Int64")
-        return out, "prev_trade_date_missing:" + "|".join(reason_parts[:2])
+    def parse_source(source: pd.Series) -> pd.Series:
+        parsed = pd.to_numeric(source, errors="coerce")
+        if parsed.isna().all():
+            extracted = source.astype(str).str.extract(r"(\d+)", expand=False)
+            parsed = pd.to_numeric(extracted, errors="coerce")
+        return parsed.round().clip(lower=1)
 
-    close_maps: Dict[str, pd.Series] = {}
-    for d in dates:
-        r = ensure_daily_cached(cfg, d)
-        if not r.ok:
-            reason_parts.append(f"{d}:{r.reason}")
+    source_col = _first_existing_col(out, *candidates)
+    if source_col is not None:
+        upd = parse_source(out[source_col])
+        out["upD"] = upd.astype("Int64")
+        filled = int(out["upD"].notna().sum())
+        if filled > 0:
+            return out, f"source:{source_col};filled={filled}/{len(out)}"
+
+    for rel_tpl in ("data/market/features_limit_{trade_date}.csv", "data/market/features_base_{trade_date}.csv"):
+        p = cfg.repo_root() / rel_tpl.format(trade_date=_to_yyyymmdd(trade_date))
+        if not p.exists():
             continue
         try:
-            daily = load_daily(cfg, d)[["ts_code", "close"]].copy()
-            daily["ts_code"] = daily["ts_code"].astype(str).str.strip()
-            daily["close"] = pd.to_numeric(daily["close"], errors="coerce")
-            close_maps[d] = daily.dropna(subset=["ts_code"]).drop_duplicates("ts_code").set_index("ts_code")["close"]
-        except Exception as e:
-            reason_parts.append(f"{d}:load_error:{type(e).__name__}")
-
-    streaks: List[object] = []
-    for _, row in out.iterrows():
-        ts_code = str(row.get("ts_code", "")).strip()
-        if not ts_code:
-            streaks.append(pd.NA)
+            fs = _read_csv_smart(p)
+        except Exception:
             continue
-        rate = _limit_rate_for_code(ts_code)
-        streak = 0
-        has_d_bar = False
-        for i in range(len(dates) - 1):
-            d_cur = dates[i]
-            d_prev = dates[i + 1]
-            cur_map = close_maps.get(d_cur)
-            prev_map = close_maps.get(d_prev)
-            if cur_map is None or prev_map is None or ts_code not in cur_map.index or ts_code not in prev_map.index:
-                break
-            cur_close = pd.to_numeric(pd.Series([cur_map.loc[ts_code]]), errors="coerce").iloc[0]
-            prev_close = pd.to_numeric(pd.Series([prev_map.loc[ts_code]]), errors="coerce").iloc[0]
-            if not np.isfinite(cur_close) or not np.isfinite(prev_close) or prev_close <= 0:
-                break
-            has_d_bar = True
-            limit_price = round(float(prev_close) * (1.0 + rate), 2)
-            if float(cur_close) >= limit_price * 0.9985:
-                streak += 1
-                continue
-            break
-        streaks.append(streak if has_d_bar else pd.NA)
+        if fs.empty or "ts_code" not in fs.columns:
+            continue
+        fs["ts_code"] = fs["ts_code"].astype(str).str.strip()
+        fs_col = _first_existing_col(fs, *candidates)
+        if fs_col is None:
+            continue
+        mapped = fs.drop_duplicates("ts_code").set_index("ts_code")[fs_col]
+        upd = out["ts_code"].astype(str).str.strip().map(mapped)
+        parsed = parse_source(upd)
+        out["upD"] = parsed.astype("Int64")
+        filled = int(out["upD"].notna().sum())
+        if filled > 0:
+            return out, f"feature_store:{p.name}:{fs_col};filled={filled}/{len(out)}"
 
-    out["upD"] = pd.Series(streaks, index=out.index, dtype="Int64")
-    if out["upD"].notna().any():
-        return out, f"ok:lookback_dates={len(dates)}"
-    return out, "no_upD_values:" + "|".join(reason_parts[:3])
+    out["upD"] = pd.Series([1] * len(out), index=out.index, dtype="Int64")
+    return out, "fallback_floor_1:no_source_field"
 
 
 def _attach_market_sentiment(df: pd.DataFrame, features: Dict[str, float]) -> pd.DataFrame:
@@ -1887,7 +1857,6 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df["risk_flags"] = risk
 
     df = df.merge(d0, on="ts_code", how="left")
-    df, upd_reason = _attach_d_limitup_streak(cfg, df, trade_date)
     df = _attach_market_sentiment(df, market_sentiment)
     df["base_date"] = trade_date
     df["buy_date"] = buy_date
@@ -1896,6 +1865,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     feats = build_features_by_packs(cfg, trade_date, df0, pack_status.packs_used)
     if feats is not None and not feats.empty:
         df = df.merge(feats, on="ts_code", how="left")
+    df, upd_reason = _attach_upd_from_source(cfg, df, trade_date)
 
     df, ehx_trace = _build_ehx_v1(cfg, df)
     df = _compute_quantile_returns(cfg, df)
