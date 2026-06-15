@@ -1,5 +1,5 @@
 {
-  "train_time_utc": "2026-06-15T12:46:57+00:00",
+  "train_time_utc": "2026-06-15T13:04:44+00:00",
   "anchor_trade_date": "20260612",
   "status": "trained",
   "skip_reason": "",
@@ -89,8 +89,8 @@
     "valid_neg": 1
   },
   "features": {
-    "n_total": 72,
-    "n_numeric": 72,
+    "n_total": 74,
+    "n_numeric": 74,
     "n_categorical": 0,
     "feature_cols": [
       "rank",
@@ -164,7 +164,9 @@
       "open_times_t1__is_missing",
       "prior_prob_prior__is_missing",
       "prior_strength_score__is_missing",
-      "prior_theme_boost__is_missing"
+      "prior_theme_boost__is_missing",
+      "up_stat",
+      "limit_times"
     ],
     "numeric_cols": [
       "rank",
@@ -238,7 +240,9 @@
       "open_times_t1__is_missing",
       "prior_prob_prior__is_missing",
       "prior_strength_score__is_missing",
-      "prior_theme_boost__is_missing"
+      "prior_theme_boost__is_missing",
+      "up_stat",
+      "limit_times"
     ],
     "categorical_cols": [],
     "category_like_cols_detected": [
@@ -318,7 +322,9 @@
     "open_times_t1__is_missing": 0.0,
     "prior_prob_prior__is_missing": 0.0,
     "prior_strength_score__is_missing": 0.0,
-    "prior_theme_boost__is_missing": 0.0
+    "prior_theme_boost__is_missing": 0.0,
+    "up_stat": 1.0,
+    "limit_times": 1.0
   },
   "metrics_valid": {
     "lr": {
