@@ -180,11 +180,11 @@
       "premium_verify_20260608.csv: backfilled:30/30:20260609->20260610",
       "premium_verify_20260609.csv: backfilled:30/30:20260610->20260611",
       "premium_verify_20260610.csv: backfilled:30/30:20260611->20260612",
-      "premium_verify_20260612.csv: backfill skipped: t_daily_not_ready:20260615:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260615/daily.csv body_snippet=404: Not Found",
+      "premium_verify_20260612.csv: backfill skipped: t1_daily_not_ready:20260616:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260616/daily.csv body_snippet=404: Not Found",
       "skip premium_verify_20260612.csv: no matured limitup rows"
     ]
   },
-  "created_at_utc": "2026-06-15T10:59:40Z",
-  "commit_sha": "349b08a0b0f2",
-  "run_id": "gh_27541101993"
+  "created_at_utc": "2026-06-15T13:15:45Z",
+  "commit_sha": "ff0fd5b84b79",
+  "run_id": "gh_27548239269"
 }

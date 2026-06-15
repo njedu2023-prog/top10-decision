@@ -1,26 +1,26 @@
-trade_date: 20260612
-run_id: gh_27541101993
-commit_sha: 349b08a0b0f2
+trade_date: 20260615
+run_id: gh_27548239269
+commit_sha: ff0fd5b84b79
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-15T10:59:56Z
+created_at_utc: 2026-06-15T13:16:13Z
 ok: True
-buy_date: 20260615
-target_date: 20260616
+buy_date: 20260616
+target_date: 20260617
 pending: True
 pending_reason: buy_date:trade_cal_ok;target_date:trade_cal_ok
 truth_T_ok: True
 truth_T_reason: ok
 verify_pending: True
 verify_reason: truth_not_ready: T_ok=True T2_ok=False (buy_date:trade_cal_ok;target_date:trade_cal_ok)
-market_sentiment_reason: ok:prev=20260611
+market_sentiment_reason: ok:prev=20260612
 calendar_contract: strict_a_share_trade_calendar_only
 analysis_date_calendar_reason: trade_cal_ok
 buy_date_calendar_reason: trade_cal_ok
 target_date_calendar_reason: trade_cal_ok
-mkt_up_ratio: 0.7076978939724038
-mkt_strong_count: 131.0
-mkt_touch_strong_count: 329.0
-mkt_emotion_score: 0.5652099103001914
+mkt_up_ratio: 0.7053587647593097
+mkt_strong_count: 299.0
+mkt_touch_strong_count: 430.0
+mkt_emotion_score: 0.6611745392963353
 eret_plus_src: ehx:model_v1
 ehx_mode: model_v1
 ehx_reason: ok
@@ -40,7 +40,7 @@ limitup_model_valid_start_date: 20260522
 limitup_calibration_mode: historical_bin_blend_v1
 limitup_calibration_reason: ok
 limitup_calibration_bins: 3
-limitup_calibration_avg_delta: -0.11404059379382887
+limitup_calibration_avg_delta: -0.088247242451174
 adaptive_rank_mode: history_ic_weighted_v1
 adaptive_weight_limitup: 0.569017
 adaptive_weight_t1: 0.06805
@@ -52,7 +52,7 @@ adaptive_reason: t1_downweighted_negative_ic
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划
 limitup_model_fields: t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 rank_groups: TOP10|TOP20
-limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260615/daily.csv body_snippet=404: Not Found
+limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260616/daily.csv body_snippet=404: Not Found
 limitup_validation_ready: False
 limitup_validation_reason: t_daily_not_ready
 top10_limitup_total: 0
@@ -107,17 +107,17 @@ history_tier_top10_hit_rate: 0.28677839851024206
 history_tier_top20_tail_hit_rate: 0.16883116883116883
 history_tier_top10_vs_11_20_hit_spread: 0.11794722967907323
 history_tier_summary: TOP1-10:154/537/0.287/ret=0.0003 | TOP11-20:91/539/0.169/ret=-0.0016 | TOP21-30:97/535/0.181/ret=0.0038
-out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260612.csv
-out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260612.csv
-out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260612.csv
-out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260612.csv
-out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260612.csv
-report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260612.md
-report_html: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260612.html
+out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260615.csv
+out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260615.csv
+out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260615.csv
+out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260615.csv
+out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260615.csv
+report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260615.md
+report_html: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260615.html
 degrade_mode: full
 packs_used: ['Pack0', 'Pack1', 'Pack2']
 packs_missing: []
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260612.csv', 'Pack2 enabled (soft mode, fixed)']
+notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260615.csv', 'Pack2 enabled (soft mode, fixed)']
 extra_prefix: factor
