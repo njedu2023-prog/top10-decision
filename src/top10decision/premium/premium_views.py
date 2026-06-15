@@ -228,7 +228,6 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                     "-",
                 ),
                 "D Close": _fmt_num(r.get("close_T"), 2),
-                "upD": _clean_text(r.get("upD"), "-"),
                 "T-Up": _fmt_pct(r.get("t_limitup_prob"), 2),
                 "T-Strength": _fmt_num(r.get("t_limitup_strength"), 2),
                 "T1-Up": _fmt_pct(r.get("t1_continue_up_rate"), 2),
@@ -277,7 +276,7 @@ def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
                 cls = f' class="num {_score_class(val, 0.70, 0.50)}"'
             elif c in {"T-Strength", "T1-Relay", "Score"}:
                 cls = f' class="num {_score_class(val, 70.0, 55.0)}"'
-            elif c in {"Rank", "D Close", "upD"}:
+            elif c in {"Rank", "D Close"}:
                 cls = ' class="num"'
             cells.append(f"<td{cls}>{_html_escape(val)}</td>")
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
