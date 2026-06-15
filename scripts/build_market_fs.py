@@ -523,10 +523,6 @@ def _std_limit_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     已确认表头：
     trade_date, ts_code, name, limit_type, close, up_limit, down_limit,
     open_times, fd_amount, first_time, last_time, seal_amount
-
-    Tushare limit_list_d 新字段兼容：
-    up_stat（涨停统计，常见格式：N天M板 / N/M）
-    limit_times（连板数/连续涨停次数，若上游提供则优先用于 Premium upD）
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
@@ -544,8 +540,6 @@ def _std_limit_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     std["first_time_limit"] = out["first_time"] if "first_time" in out.columns else None
     std["last_time_limit"] = out["last_time"] if "last_time" in out.columns else None
     std["seal_amount_limit"] = _to_numeric(out["seal_amount"]) if "seal_amount" in out.columns else None
-    std["up_stat"] = out["up_stat"] if "up_stat" in out.columns else None
-    std["limit_times"] = _to_numeric(out["limit_times"]) if "limit_times" in out.columns else None
     return std
 
 
@@ -884,8 +878,6 @@ def build_features_limit(df: pd.DataFrame) -> pd.DataFrame:
     out["seal_amount"] = _to_numeric(df.get("seal_amount_limit"))
     out["first_seal_time"] = df.get("first_time_limit")
     out["last_seal_time"] = df.get("last_time_limit")
-    out["up_stat"] = df.get("up_stat")
-    out["limit_times"] = _to_numeric(df.get("limit_times"))
 
     # limit_break_d 补充
     out["open_times_break"] = _to_numeric(df.get("open_times_break"))
