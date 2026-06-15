@@ -523,6 +523,10 @@ def _std_limit_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     已确认表头：
     trade_date, ts_code, name, limit_type, close, up_limit, down_limit,
     open_times, fd_amount, first_time, last_time, seal_amount
+
+    Tushare limit_list_d 新字段兼容：
+    up_stat（涨停统计，常见格式：N天M板 / N/M）
+    limit_times（连板数/连续涨停次数，若上游提供则优先用于 Premium upD）
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=KEY_COLS)
@@ -540,6 +544,8 @@ def _std_limit_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     std["first_time_limit"] = out["first_time"] if "first_time" in out.columns else None
     std["last_time_limit"] = out["last_time"] if "last_time" in out.columns else None
     std["seal_amount_limit"] = _to_numeric(out["seal_amount"]) if "seal_amount" in out.columns else None
+    std["up_stat"] = out["up_stat"] if "up_stat" in out.columns else None
+    std["limit_times"] = _to_numeric(out["limit_times"]) if "limit_times" in out.columns else None
     return std
 
 
@@ -800,9 +806,7 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     out["pre_close_est"] = _to_numeric(df.get("pre_close_est"))
 
     # 收益与价格行为
-    # pct_chg 保留上游百分点口径；returns_1d 统一为 decimal return，
-    # 与 ret_2d/ret_5d/volatility 等滚动特征保持同一单位。
-    out["returns_1d"] = _pct_to_decimal_series(out["pct_chg"])
+    out["returns_1d"] = out["pct_chg"]
     pre = out["pre_close_est"]
     out["high_low_range"] = (out["high"] - out["low"]) / pre
     out["candle_body"] = (out["close"] - out["open"]) / pre
@@ -814,7 +818,7 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     out["turnover_rate"] = _to_numeric(df.get("turnover_rate"))
     out["turnover_rate_f"] = _to_numeric(df.get("turnover_rate_f"))
     out["volume_ratio"] = _to_numeric(df.get("volume_ratio"))
-    out["amihud_illiquidity"] = out["returns_1d"].abs() / out["amount"]
+    out["amihud_illiquidity"] = out["pct_chg"].abs() / out["amount"]
 
     # 历史收益 / 波动 / 尾部风险特征
     trade_date_for_history = ""
@@ -880,6 +884,8 @@ def build_features_limit(df: pd.DataFrame) -> pd.DataFrame:
     out["seal_amount"] = _to_numeric(df.get("seal_amount_limit"))
     out["first_seal_time"] = df.get("first_time_limit")
     out["last_seal_time"] = df.get("last_time_limit")
+    out["up_stat"] = df.get("up_stat")
+    out["limit_times"] = _to_numeric(df.get("limit_times"))
 
     # limit_break_d 补充
     out["open_times_break"] = _to_numeric(df.get("open_times_break"))
@@ -1066,7 +1072,6 @@ def build_meta(
         "notes": [
             "本版本已按真实上游表头修正 raw -> FS 的字段映射。",
             "daily.csv 无 pre_close，当前使用 close 和 pct_chg/100 反推 pre_close_est。",
-            "pct_chg 保留百分点口径，returns_1d 已统一为 decimal return，避免与 ret_2d/volatility 混用单位。",
             "已接入历史 daily.csv，计算 ret_2d/5d/10d 与 volatility_5d/10d/20d。",
             "已新增 atr/downside_vol/max_drawdown_20d/tail_risk_score 作为风险骨架特征。",
             "moneyflow_hsgt 当前按市场级数据处理，并按 trade_date 广播到个股特征层。",
