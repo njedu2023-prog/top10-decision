@@ -820,6 +820,7 @@ def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.Dat
             "amount": ["amount", "成交额"],
             "vol": ["vol", "volume", "成交量"],
             "close": ["close", "close_t", "收盘价", "close_T", "close_2", "close_t1"],
+            "upD": ["upD"],
             "pct_chg": ["pct_chg", "pct_change", "涨跌幅"],
             "amplitude": ["amplitude", "range_1d", "振幅"],
             "rank_eret_plus": ["rank_eret_plus", "rank", "E_ret_plus排名"],
@@ -972,6 +973,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         feature_candidates = {
             "rank": ["rank", "dec_rank"],
             "close_T": ["close_T", "close", "close_t", "收盘价"],
+            "upD": ["upD"],
             "p_premium": ["p_premium", "probability", "pred_prob"],
             "e_premium": ["e_premium", "e_ret", "E_ret", "pred_ret"],
             "score_ev": ["score_ev", "ev", "EV", "final_score", "score"],
@@ -1045,7 +1047,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
 
 def _build_limitup_feature_cols(samples: pd.DataFrame) -> List[str]:
     allow = [
-        "rank", "is_top10", "is_top20", "close_T",
+        "rank", "is_top10", "is_top20", "close_T", "upD",
         "p_premium", "e_premium", "score_ev", "confidence", "data_quality",
         "dec_rank", "dec_weight", "dec_p_fill",
         "t_limitup_prob_rule", "t_limitup_strength_rule", "t1_continue_up_rate_rule",
@@ -1208,6 +1210,7 @@ def _build_ehx_feature_cols(samples: pd.DataFrame) -> List[str]:
         "risk_penalty_total",
         "ev",
         "close",
+        "upD",
         "pct_chg",
         "amplitude",
         "rank_eret_plus",
