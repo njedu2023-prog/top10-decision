@@ -705,6 +705,248 @@ def _apply_adaptive_rank_score(df: pd.DataFrame, history: Dict[str, object]) -> 
     return out, trace
 
 
+def _field_01(df: pd.DataFrame, name: str, default: float = 0.5) -> pd.Series:
+    if name in df.columns:
+        s = pd.to_numeric(df[name], errors="coerce")
+    else:
+        s = pd.Series([default] * len(df), index=df.index, dtype="float64")
+    return s.fillna(default).clip(0.0, 1.0).astype(float)
+
+
+def _score_01_from_percent_or_rank(df: pd.DataFrame, *names: str, default: float = 0.5) -> pd.Series:
+    s = _num_series(df, *names, default=np.nan)
+    if s.notna().any():
+        x = s.replace([np.inf, -np.inf], np.nan)
+        if x.dropna().abs().max() > 1.5:
+            x = x / 100.0
+        return x.fillna(default).clip(0.0, 1.0).astype(float)
+    return pd.Series([default] * len(df), index=df.index, dtype="float64")
+
+
+def _ret_score_01(s: pd.Series, neutral: float = 0.50) -> pd.Series:
+    x = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    if x.notna().sum() < 3:
+        return pd.Series([neutral] * len(x), index=x.index, dtype="float64")
+    rank = _rank_pct(x, neutral=neutral)
+    level = ((x.fillna(0.0).clip(-0.04, 0.08) + 0.04) / 0.12).clip(0.0, 1.0)
+    return (0.65 * rank + 0.35 * level).clip(0.0, 1.0).astype(float)
+
+
+def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    """
+    Professional two-stage Premium scorer.
+
+    Score columns are stored as 0-100 for report readability; the gate logic uses
+    the corresponding 0-1 raw components internally.
+    """
+    out = df.copy()
+    idx = out.index
+
+    rule_t_limit = _field_01(out, "t_limitup_prob", 0.5)
+    rule_touch = _field_01(out, "t_touch_limitup_prob_model", float("nan")).fillna(rule_t_limit)
+    rule_t1_up = _field_01(out, "t1_continue_up_rate", 0.5)
+    model_can_rank = _field_01(out, "model_can_rank", 0.0) >= 0.5
+    model_alpha = pd.Series(np.where(model_can_rank, 0.72, 0.28), index=idx, dtype="float64")
+
+    t_up_model = _field_01(out, "t_up_prob_model", float("nan"))
+    t_high_profit_model = _field_01(out, "t_high_profit_prob_model", float("nan"))
+    t_limit_model = _field_01(out, "t_limitup_prob_model", float("nan"))
+    touch_model = _field_01(out, "t_touch_limitup_prob_model", float("nan"))
+    t1_up_model = _field_01(out, "t1_up_prob_model", float("nan"))
+    t1_high_profit_model = _field_01(out, "t1_high_profit_prob_model", float("nan"))
+    t1_accept_model = _field_01(out, "t1_accept_prob_model", float("nan"))
+    t1_fail_model = _field_01(out, "t1_fail_prob_model", float("nan"))
+    t1_big_dd_model = _field_01(out, "t1_big_drawdown_prob_model", float("nan"))
+
+    strength = _score_01_from_percent_or_rank(out, "t_limitup_strength", "t_limitup_strength_rule", default=0.5)
+    eret_plus = _num_series(out, "eret_plus_value", "eret_plus", "E_ret_plus", default=np.nan)
+    eret_plus_score = _ret_score_01(eret_plus, neutral=0.50)
+    market_score = _field_01(out, "mkt_emotion_score", 0.5)
+    p_fill = _score_01_from_percent_or_rank(out, "dec_p_fill", "p_fill_pred", "p_fill", default=0.5)
+    conf_score = _score_01_from_percent_or_rank(out, "eret_plus_conf_score", "confidence", default=0.5)
+    risk_raw = _score_01_from_percent_or_rank(out, "risk_penalty_total", "risk_penalty", "risk_score", default=0.0)
+
+    t_up_prob = (model_alpha * t_up_model.fillna(rule_t1_up) + (1.0 - model_alpha) * rule_t1_up).clip(0.0, 1.0)
+    t_high_profit_prob = (
+        model_alpha * t_high_profit_model.fillna((rule_touch + rule_t_limit) / 2.0)
+        + (1.0 - model_alpha) * ((rule_touch + rule_t_limit) / 2.0)
+    ).clip(0.0, 1.0)
+    t_limit_prob = (model_alpha * t_limit_model.fillna(rule_t_limit) + (1.0 - model_alpha) * rule_t_limit).clip(0.0, 1.0)
+    t_touch_prob = (model_alpha * touch_model.fillna(rule_touch) + (1.0 - model_alpha) * rule_touch).clip(0.0, 1.0)
+
+    t1_close_ret_pred = _num_series(out, "t1_close_ret_pred", default=np.nan)
+    t1_high_ret_pred = _num_series(out, "t1_high_ret_pred", default=np.nan)
+    t1_close_ret_pred_score = _ret_score_01(t1_close_ret_pred, neutral=0.50)
+    t1_high_ret_pred_score = _ret_score_01(t1_high_ret_pred, neutral=0.50)
+    fallback_t1_high_profit = (0.45 * rule_t1_up + 0.35 * t1_high_ret_pred_score + 0.20 * eret_plus_score).clip(0.0, 1.0)
+    t1_up_prob = (model_alpha * t1_up_model.fillna(rule_t1_up) + (1.0 - model_alpha) * rule_t1_up).clip(0.0, 1.0)
+    t1_high_profit_prob = (
+        model_alpha * t1_high_profit_model.fillna(fallback_t1_high_profit)
+        + (1.0 - model_alpha) * fallback_t1_high_profit
+    ).clip(0.0, 1.0)
+    fallback_t1_accept = (
+        0.40 * t1_up_prob
+        + 0.25 * t1_high_profit_prob
+        + 0.20 * t1_close_ret_pred_score
+        + 0.15 * eret_plus_score
+    ).clip(0.0, 1.0)
+    t1_accept_prob = (
+        model_alpha * t1_accept_model.fillna(fallback_t1_accept)
+        + (1.0 - model_alpha) * fallback_t1_accept
+    ).clip(0.0, 1.0)
+    fallback_fail = (1.0 - 0.55 * t1_accept_prob - 0.25 * t1_up_prob - 0.20 * eret_plus_score).clip(0.0, 1.0)
+    t1_fail_prob = (model_alpha * t1_fail_model.fillna(fallback_fail) + (1.0 - model_alpha) * fallback_fail).clip(0.0, 1.0)
+    fallback_big_dd = (0.55 * risk_raw + 0.30 * t1_fail_prob + 0.15 * (1.0 - conf_score)).clip(0.0, 1.0)
+    t1_big_drawdown_prob = (
+        model_alpha * t1_big_dd_model.fillna(fallback_big_dd)
+        + (1.0 - model_alpha) * fallback_big_dd
+    ).clip(0.0, 1.0)
+
+    execution_safety_score = (0.45 * p_fill + 0.35 * conf_score + 0.20 * (1.0 - risk_raw)).clip(0.0, 1.0)
+    execution_score = execution_safety_score
+    risk_penalty_score = (0.45 * risk_raw + 0.30 * t1_big_drawdown_prob + 0.25 * t1_fail_prob).clip(0.0, 1.0)
+
+    t_up_attack_raw = (
+        0.20 * t_up_prob
+        + 0.25 * t_touch_prob
+        + 0.25 * t_limit_prob
+        + 0.15 * strength
+        + 0.10 * eret_plus_score
+        + 0.05 * market_score
+    ).clip(0.0, 1.0)
+    t1_accept_raw = (
+        0.25 * t1_up_prob
+        + 0.25 * t1_accept_prob
+        + 0.20 * t1_high_profit_prob
+        + 0.15 * t1_close_ret_pred_score
+        + 0.10 * t1_high_ret_pred_score
+        + 0.05 * execution_safety_score
+    ).clip(0.0, 1.0)
+    premium_final_raw = (
+        0.30 * t_up_attack_raw
+        + 0.35 * t1_accept_raw
+        + 0.20 * eret_plus_score
+        + 0.10 * execution_score
+        + 0.05 * market_score
+        - risk_penalty_score
+    ).clip(0.0, 1.0)
+
+    out["t_up_prob_model_blend"] = t_up_prob.round(6)
+    out["t_high_profit_prob_model_blend"] = t_high_profit_prob.round(6)
+    out["t_touch_limitup_prob_blend"] = t_touch_prob.round(6)
+    out["t1_accept_prob_blend"] = t1_accept_prob.round(6)
+    out["t1_fail_prob_blend"] = t1_fail_prob.round(6)
+    out["t1_big_drawdown_prob_blend"] = t1_big_drawdown_prob.round(6)
+    out["eret_plus_score"] = (100.0 * eret_plus_score).round(4)
+    out["market_score"] = (100.0 * market_score).round(4)
+    out["execution_safety_score"] = (100.0 * execution_safety_score).round(4)
+    out["execution_score"] = (100.0 * execution_score).round(4)
+    out["risk_penalty_score"] = risk_penalty_score.round(6)
+    out["t1_close_ret_pred_score"] = (100.0 * t1_close_ret_pred_score).round(4)
+    out["t1_high_ret_pred_score"] = (100.0 * t1_high_ret_pred_score).round(4)
+    out["t_up_attack_score"] = (100.0 * t_up_attack_raw).round(4)
+    out["t1_accept_score"] = (100.0 * t1_accept_raw).round(4)
+    out["premium_final_score"] = (100.0 * premium_final_raw).round(4)
+    out["premium_final_score_raw"] = premium_final_raw.round(6)
+
+    dec_can_buy = pd.to_numeric(out.get("dec_can_buy", pd.Series([1.0] * len(out), index=idx)), errors="coerce").fillna(1.0)
+    score_ev = pd.to_numeric(out.get("score_ev", pd.Series([0.0] * len(out), index=idx)), errors="coerce").fillna(0.0)
+    eret_gate = eret_plus.fillna(0.0)
+
+    force_excluded = (
+        dec_can_buy.eq(0)
+        | (score_ev < -0.002)
+        | (eret_gate < -0.008)
+        | (t1_accept_raw < 0.45)
+        | (t1_big_drawdown_prob >= 0.35)
+        | (risk_penalty_score >= 0.75)
+    )
+    eligible = (
+        ~force_excluded
+        & dec_can_buy.ne(0)
+        & (score_ev >= 0.0)
+        & (eret_gate >= -0.003)
+        & (t_up_attack_raw >= 0.55)
+        & (t1_accept_raw >= 0.52)
+        & (t1_high_profit_prob >= 0.50)
+        & (risk_penalty_score <= 0.60)
+    )
+    out["premium_eligible"] = eligible.astype(int)
+    out["premium_force_excluded"] = force_excluded.astype(int)
+    out["premium_bucket"] = np.select(
+        [force_excluded, eligible],
+        ["EXCLUDED", "ELIGIBLE"],
+        default="WATCH",
+    )
+
+    reasons: List[str] = []
+    for i in idx:
+        row_reasons: List[str] = []
+        if dec_can_buy.loc[i] == 0:
+            row_reasons.append("dec_can_buy=0")
+        if score_ev.loc[i] < -0.002:
+            row_reasons.append("score_ev<-0.002")
+        if eret_gate.loc[i] < -0.008:
+            row_reasons.append("eret_plus<-0.008")
+        if t1_accept_raw.loc[i] < 0.45:
+            row_reasons.append("t1_accept<0.45")
+        if t1_big_drawdown_prob.loc[i] >= 0.35:
+            row_reasons.append("big_drawdown_prob>=0.35")
+        if risk_penalty_score.loc[i] >= 0.75:
+            row_reasons.append("risk_penalty>=0.75")
+        if not row_reasons and not eligible.loc[i]:
+            if score_ev.loc[i] < 0:
+                row_reasons.append("score_ev<0")
+            if eret_gate.loc[i] < -0.003:
+                row_reasons.append("eret_plus<-0.003")
+            if t_up_attack_raw.loc[i] < 0.55:
+                row_reasons.append("t_attack<0.55")
+            if t1_accept_raw.loc[i] < 0.52:
+                row_reasons.append("t1_accept<0.52")
+            if t1_high_profit_prob.loc[i] < 0.50:
+                row_reasons.append("t1_high_profit<0.50")
+            if risk_penalty_score.loc[i] > 0.60:
+                row_reasons.append("risk_penalty>0.60")
+        reasons.append(";".join(row_reasons) if row_reasons else "ok")
+    out["premium_exclude_reason"] = pd.Series(reasons, index=idx, dtype="object")
+    out["premium_rank_mode"] = np.where(model_can_rank, "model_validated_professional_score", "professional_score_rule_guarded")
+
+    trace = {
+        "premium_score_mode": "t_attack_t1_accept_final_v1",
+        "premium_eligible_count": int(eligible.sum()),
+        "premium_watch_count": int((out["premium_bucket"] == "WATCH").sum()),
+        "premium_excluded_count": int(force_excluded.sum()),
+        "premium_model_can_rank_count": int(model_can_rank.sum()),
+    }
+    return out, trace
+
+
+def _sort_professional_premium(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "premium_bucket" not in out.columns:
+        out["premium_bucket"] = "WATCH"
+    bucket_order = out["premium_bucket"].map({"ELIGIBLE": 0, "WATCH": 1, "EXCLUDED": 2}).fillna(1).astype(int)
+    out["_premium_bucket_order"] = bucket_order
+    sort_cols = [
+        "_premium_bucket_order",
+        "premium_final_score",
+        "t1_accept_score",
+        "t_up_attack_score",
+        "eret_plus_value",
+        "t1_high_profit_prob_model",
+        "t_limitup_prob",
+    ]
+    for c in sort_cols:
+        if c not in out.columns:
+            out[c] = pd.NA
+    out = out.sort_values(
+        by=sort_cols,
+        ascending=[True, False, False, False, False, False, False],
+        na_position="last",
+    ).drop(columns=["_premium_bucket_order"], errors="ignore")
+    return out.reset_index(drop=True)
+
+
 def _find_prev_market_trade_date(cfg: PremiumConfig, trade_date: str, max_probe_days: int = 15) -> Tuple[Optional[str], str]:
     import datetime as dt
 
@@ -1531,13 +1773,23 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
     }
 
     model_cols = [
+        "t_up_prob_model",
+        "t_high_profit_prob_model",
         "t_limitup_prob_model",
         "t_touch_limitup_prob_model",
         "t1_up_prob_model",
         "t1_high_profit_prob_model",
+        "t1_accept_prob_model",
+        "t1_fail_prob_model",
+        "t1_big_drawdown_prob_model",
+        "t_close_ret_pred",
+        "t_intraday_ret_pred",
         "t1_close_ret_pred",
         "t1_high_ret_pred",
         "limitup_model_score",
+        "model_can_rank",
+        "model_rank_mode",
+        "model_quality_flag",
     ]
     for c in model_cols:
         if c not in out.columns:
@@ -1568,8 +1820,9 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         m_touch = pd.to_numeric(out["t_touch_limitup_prob_model"], errors="coerce").fillna(m_t_limitup).clip(0.0, 1.0)
         m_t1_up = pd.to_numeric(out["t1_up_prob_model"], errors="coerce").fillna(rule_t1_continue).clip(0.0, 1.0)
         m_high_profit = pd.to_numeric(out["t1_high_profit_prob_model"], errors="coerce").fillna(m_t1_up).clip(0.0, 1.0)
+        m_t1_accept = pd.to_numeric(out.get("t1_accept_prob_model", m_t1_up), errors="coerce").fillna(m_t1_up).clip(0.0, 1.0)
         m_score = pd.to_numeric(out["limitup_model_score"], errors="coerce").fillna(
-            0.35 * m_t_limitup + 0.25 * m_touch + 0.25 * m_t1_up + 0.15 * m_high_profit
+            0.30 * m_t_limitup + 0.20 * m_touch + 0.20 * m_t1_up + 0.20 * m_t1_accept + 0.10 * m_high_profit
         ).clip(0.0, 1.0)
 
         # 最终生产字段：模型为主、规则为辅，避免模型早期样本不足时突然漂移。
@@ -1577,7 +1830,7 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         out["T日涨停概率"] = out["t_limitup_prob"]
         out["t_limitup_strength"] = (0.60 * (100.0 * m_touch) + 0.40 * rule_t_strength).clip(0.0, 100.0).round(4)
         out["T日涨停强度"] = out["t_limitup_strength"]
-        out["t1_continue_up_rate"] = (0.70 * m_t1_up + 0.30 * rule_t1_continue).clip(0.01, 0.99).round(6)
+        out["t1_continue_up_rate"] = (0.55 * m_t1_up + 0.25 * m_t1_accept + 0.20 * rule_t1_continue).clip(0.01, 0.99).round(6)
         out["T+1延续上涨率"] = out["t1_continue_up_rate"]
         out["limitup_continuation_score"] = (0.70 * (100.0 * m_score) + 0.30 * rule_score).clip(0.0, 100.0).round(4)
         out["涨停接力评分"] = out["limitup_continuation_score"]
@@ -1589,6 +1842,10 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             "limitup_model_feature_n": len(getattr(bundle, "feature_cols", []) or []),
             "limitup_model_train_end_date": getattr(bundle, "train_end_date", ""),
             "limitup_model_valid_start_date": getattr(bundle, "valid_start_date", ""),
+            "limitup_model_can_rank": bool(getattr(bundle, "model_can_rank", False)),
+            "limitup_model_rank_mode": getattr(bundle, "model_rank_mode", "disabled_validation_not_pass"),
+            "limitup_model_validation_days": int(getattr(bundle, "validation_days", 0) or 0),
+            "limitup_model_validation_samples": int(getattr(bundle, "validation_samples", 0) or 0),
         })
         return out, trace
     except Exception as e:
@@ -1610,6 +1867,8 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
     p25 = pd.to_numeric(out.get("close_T2_p25", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     p50 = pd.to_numeric(out.get("close_T2_p50", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
     p75 = pd.to_numeric(out.get("close_T2_p75", pd.Series([np.nan] * len(out), index=out.index)), errors="coerce")
+    bucket = out.get("premium_bucket", pd.Series(["WATCH"] * len(out), index=out.index)).astype(str)
+    gate_reason = out.get("premium_exclude_reason", pd.Series([""] * len(out), index=out.index)).astype(str)
 
     edge = eret_plus.fillna(0.0)
     max_open_premium = (0.18 * edge + 0.035 * (p_up - 0.5) + 0.025 * (conf_score - 0.5)).clip(lower=-0.03, upper=0.08)
@@ -1636,6 +1895,17 @@ def _build_execution_fields(df: pd.DataFrame) -> pd.DataFrame:
             methods.append("只观察不追")
             max_buy_labels.append("")
             sell_plans.append("缺少T日收盘价，先不生成价格计划")
+            continue
+
+        if bucket.loc[idx] == "EXCLUDED":
+            methods.append("放弃")
+            max_buy_labels.append("不建议买入")
+            sell_plans.append(f"风控排除：{gate_reason.loc[idx] or 'premium_gate_excluded'}")
+            continue
+        if bucket.loc[idx] == "WATCH":
+            methods.append("只观察不追")
+            max_buy_labels.append(f"≤{_fmt_price_value(min(mb, ct * 1.005))}")
+            sell_plans.append(f"观察池：{gate_reason.loc[idx] or 'premium_gate_watch'}；若竞价弱于预期不追")
             continue
 
         if ep <= -0.005 or pu < 0.48 or lp < 0.35 or cs < 42:
@@ -1814,6 +2084,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df, calibration_trace = _apply_limitup_probability_calibration(cfg, df)
     historical_limitup_stats = _collect_historical_limitup_stats(cfg)
     df, adaptive_trace = _apply_adaptive_rank_score(df, historical_limitup_stats)
+    df, professional_trace = _apply_professional_premium_scores(df)
 
     qs = tuple(getattr(cfg, "quantiles", (0.05, 0.25, 0.50, 0.75, 0.95)))
     q_mid = min(qs, key=lambda x: abs(float(x) - 0.50))
@@ -1822,12 +2093,18 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df["rank_eret_plus"] = pd.NA
     df["rank_r_p50"] = pd.NA
     df["rank_limitup_continuation"] = pd.NA
+    df["rank_premium_final"] = pd.NA
 
     if "eret_plus_value" in df.columns and pd.to_numeric(df["eret_plus_value"], errors="coerce").notna().any():
         df["rank_eret_plus"] = pd.to_numeric(df["eret_plus_value"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
     if mid_key in df.columns and pd.to_numeric(df[mid_key], errors="coerce").notna().any():
         df["rank_r_p50"] = pd.to_numeric(df[mid_key], errors="coerce").rank(method="first", ascending=False).astype("Int64")
-    if "premium_adaptive_score" in df.columns and pd.to_numeric(df["premium_adaptive_score"], errors="coerce").notna().any():
+    if "premium_final_score" in df.columns and pd.to_numeric(df["premium_final_score"], errors="coerce").notna().any():
+        df["rank_premium_final"] = pd.to_numeric(df["premium_final_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+        if "limitup_continuation_score" in df.columns and pd.to_numeric(df["limitup_continuation_score"], errors="coerce").notna().any():
+            df["rank_limitup_continuation"] = pd.to_numeric(df["limitup_continuation_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+        df = _sort_professional_premium(df)
+    elif "premium_adaptive_score" in df.columns and pd.to_numeric(df["premium_adaptive_score"], errors="coerce").notna().any():
         if "limitup_continuation_score" in df.columns and pd.to_numeric(df["limitup_continuation_score"], errors="coerce").notna().any():
             df["rank_limitup_continuation"] = pd.to_numeric(df["limitup_continuation_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
         df = df.sort_values(
@@ -1879,12 +2156,24 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     limitup_model_cols = [
         "t_limitup_prob_rule", "t_limitup_strength_rule", "t1_continue_up_rate_rule", "limitup_continuation_score_rule",
-        "t_limitup_prob_model", "t_touch_limitup_prob_model", "t1_up_prob_model", "t1_high_profit_prob_model",
+        "t_up_prob_model", "t_high_profit_prob_model", "t_limitup_prob_model", "t_touch_limitup_prob_model",
+        "t1_up_prob_model", "t1_high_profit_prob_model", "t1_accept_prob_model", "t1_fail_prob_model",
+        "t1_big_drawdown_prob_model", "t_close_ret_pred", "t_intraday_ret_pred",
         "t1_close_ret_pred", "t1_high_ret_pred", "limitup_model_score", "limitup_model_src",
+        "model_can_rank", "model_rank_mode", "model_quality_flag",
         "t_limitup_prob_raw_before_calibration", "t_limitup_prob_calibrated", "limitup_calibration_src",
         "limitup_alpha_score", "t1_alpha_score", "strength_alpha_score", "execution_alpha_score",
         "premium_adaptive_score", "自适应排序评分", "rank_adaptive_score",
         "adaptive_weight_limitup", "adaptive_weight_t1", "adaptive_weight_strength", "adaptive_weight_execution",
+    ]
+    professional_cols = [
+        "t_up_prob_model_blend", "t_high_profit_prob_model_blend", "t_touch_limitup_prob_blend",
+        "t1_accept_prob_blend", "t1_fail_prob_blend", "t1_big_drawdown_prob_blend",
+        "eret_plus_score", "market_score", "execution_safety_score", "execution_score",
+        "risk_penalty_score", "t1_close_ret_pred_score", "t1_high_ret_pred_score",
+        "t_up_attack_score", "t1_accept_score", "premium_final_score", "premium_final_score_raw",
+        "premium_eligible", "premium_force_excluded", "premium_bucket", "premium_exclude_reason",
+        "premium_rank_mode", "rank_premium_final",
     ]
     market_cols = [
         "mkt_stock_count", "mkt_up_ratio", "mkt_avg_ret", "mkt_median_ret",
@@ -1899,6 +2188,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
         *limitup_model_cols,
+        *professional_cols,
         *market_cols,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf", "eret_plus_conf_score", "eret_plus_src",
         *v_cols,
@@ -1942,13 +2232,19 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
         "t1_continue_up_rate", "T+1延续上涨率", "limitup_continuation_score", "涨停接力评分",
         *limitup_model_cols,
+        *professional_cols,
         *market_cols,
         "t1_up_rate", "T+1上涨率",
-        "close_T2_actual", "r_actual", mid_key,
+        "r_actual", mid_key,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
         "in_p10", "in_p50", "err_r_p50", "err_close_p50", "actual_ret", "raw_abs_err", "plus_abs_err", "improve_flag", "hit_up",
         "open_T_actual", "high_T_actual", "close_T_actual", "t_limit_price_est",
         "t_up_actual", "t_limitup_actual", "t_touch_limitup_actual", "t_limitup_verify_ready",
+        "t_open_ret", "t_intraday_ret", "t_close_ret", "t_high_profit_hit",
+        "open_T2_actual", "high_T2_actual", "low_T2_actual", "close_T2_actual",
+        "t1_open_ret", "t1_low_ret", "t1_close_ret", "t1_high_ret",
+        "t1_up_hit", "t1_high_profit_hit", "t1_accept_hit", "t1_fail_hit",
+        "t1_big_drawdown_hit", "t1_limitdown_risk_hit",
         "t_limitup_verify_reason", "t_limitup_verify_trade_date", "d_analysis_trade_date",
     ]
 
@@ -2100,8 +2396,10 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             **limitup_trace,
             **calibration_trace,
             **adaptive_trace,
+            **professional_trace,
             "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划",
-            "limitup_model_fields": "t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score",
+            "limitup_model_fields": "t_up_prob_model|t_high_profit_prob_model|t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_accept_prob_model|t1_fail_prob_model|t1_big_drawdown_prob_model|t_close_ret_pred|t_intraday_ret_pred|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score",
+            "premium_professional_fields": "t_up_attack_score|t1_accept_score|premium_final_score|premium_bucket|premium_exclude_reason",
             "rank_groups": "TOP10|TOP20",
             "limitup_truth_reason": limitup_truth_reason,
             **limitup_validation.as_dict(),
