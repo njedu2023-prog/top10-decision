@@ -1,8 +1,8 @@
 trade_date: 20260615
-run_id: gh_27566250299
-commit_sha: f5a53636c6fc
+run_id: gh_27600674128
+commit_sha: 2b84b077f3d9
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-15T18:26:24Z
+created_at_utc: 2026-06-16T07:23:18Z
 ok: True
 buy_date: 20260616
 target_date: 20260617
@@ -37,6 +37,10 @@ limitup_model_path: /home/runner/work/top10-decision/top10-decision/outputs/prem
 limitup_model_feature_n: 24
 limitup_model_train_end_date: 20260521
 limitup_model_valid_start_date: 20260522
+limitup_model_can_rank: False
+limitup_model_rank_mode: disabled_validation_not_pass:days=14;samples=419;t1_accept_auc=0.4737033998723908;t1_accept_brier=0.30001760521526954;t1_ret_spearman_ic=-0.10001209223130224
+limitup_model_validation_days: 14
+limitup_model_validation_samples: 419
 limitup_calibration_mode: historical_bin_blend_v1
 limitup_calibration_reason: ok
 limitup_calibration_bins: 3
@@ -49,8 +53,14 @@ adaptive_weight_execution: 0.113417
 adaptive_limitup_ic: 0.191173
 adaptive_t1_ret_ic: -0.084898
 adaptive_reason: t1_downweighted_negative_ic
+premium_score_mode: t_attack_t1_accept_final_v1
+premium_eligible_count: 112
+premium_watch_count: 32
+premium_excluded_count: 3
+premium_model_can_rank_count: 0
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划
-limitup_model_fields: t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
+limitup_model_fields: t_up_prob_model|t_high_profit_prob_model|t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_accept_prob_model|t1_fail_prob_model|t1_big_drawdown_prob_model|t_close_ret_pred|t_intraday_ret_pred|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
+premium_professional_fields: t_up_attack_score|t1_accept_score|premium_final_score|premium_bucket|premium_exclude_reason
 rank_groups: TOP10|TOP20
 limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260616/daily.csv body_snippet=404: Not Found
 limitup_validation_ready: False
