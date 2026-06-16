@@ -44,9 +44,13 @@ CODE_COLS = ["ts_code", "code", "symbol", "证券代码", "股票代码"]
 DATE_COLS = ["trade_date", "date", "交易日期", "日期"]
 OPEN_COLS = ["open", "开盘价"]
 HIGH_COLS = ["high", "最高价"]
+LOW_COLS = ["low", "最低价"]
 CLOSE_COLS = ["close", "收盘价", "D日收盘价"]
 PRE_CLOSE_COLS = ["pre_close", "preclose", "prev_close", "昨收", "前收盘"]
 LIMIT_UP_COLS = ["limit_up", "up_limit", "涨停价", "涨停板价"]
+PCT_CHG_COLS = ["pct_chg", "pct_change", "涨跌幅"]
+AMOUNT_COLS = ["amount", "成交额"]
+VOLUME_COLS = ["vol", "volume", "成交量"]
 
 
 def _first_existing(df: pd.DataFrame, names: Sequence[str], required: bool = True) -> Optional[str]:
@@ -155,13 +159,17 @@ def build_limitup_labels(
     m_date = _first_existing(m, DATE_COLS)
     m_open = _first_existing(m, OPEN_COLS, required=False)
     m_high = _first_existing(m, HIGH_COLS)
+    m_low = _first_existing(m, LOW_COLS, required=False)
     m_close = _first_existing(m, CLOSE_COLS)
     m_pre_close = _first_existing(m, PRE_CLOSE_COLS, required=False)
     m_limit_up = _first_existing(m, LIMIT_UP_COLS, required=False)
+    m_pct_chg = _first_existing(m, PCT_CHG_COLS, required=False)
+    m_amount = _first_existing(m, AMOUNT_COLS, required=False)
+    m_volume = _first_existing(m, VOLUME_COLS, required=False)
 
     m["_ts_code_norm"] = m[m_code].map(_norm_ts_code)
     m["_trade_date_norm"] = _norm_date_series(m[m_date])
-    for c in [m_open, m_high, m_close, m_pre_close, m_limit_up]:
+    for c in [m_open, m_high, m_low, m_close, m_pre_close, m_limit_up, m_pct_chg, m_amount, m_volume]:
         if c is not None:
             m[c] = pd.to_numeric(m[c], errors="coerce")
 
@@ -194,9 +202,47 @@ def build_limitup_labels(
         & (s["t1_trade_date"].astype(str) <= str(as_of_date))
     ).astype(int)
 
-    base_cols = ["_ts_code_norm", "_trade_date_norm", m_open, m_high, m_close, m_pre_close, m_limit_up]
+    base_cols = [
+        "_ts_code_norm",
+        "_trade_date_norm",
+        m_open,
+        m_high,
+        m_low,
+        m_close,
+        m_pre_close,
+        m_limit_up,
+        m_pct_chg,
+        m_amount,
+        m_volume,
+    ]
     base_cols = [c for c in base_cols if c is not None]
     q = m[base_cols].copy()
+
+    right_d = q.copy()
+    rename_d = {
+        "_ts_code_norm": "_join_code",
+        "_trade_date_norm": "_join_date",
+        m_high: "d_high",
+        m_close: "d_close",
+    }
+    if m_open is not None:
+        rename_d[m_open] = "d_open"
+    if m_low is not None:
+        rename_d[m_low] = "d_low"
+    if m_pre_close is not None:
+        rename_d[m_pre_close] = "d_pre_close"
+    if m_pct_chg is not None:
+        rename_d[m_pct_chg] = "d_pct_chg"
+    if m_amount is not None:
+        rename_d[m_amount] = "d_amount"
+    if m_volume is not None:
+        rename_d[m_volume] = "d_volume"
+    right_d = right_d.rename(columns=rename_d)
+
+    out = s.copy()
+    out["_join_code"] = out["_ts_code_norm"]
+    out["_join_date"] = out["d_trade_date"]
+    out = out.merge(right_d, on=["_join_code", "_join_date"], how="left").drop(columns=["_join_code", "_join_date"])
 
     right_t = q.copy()
     rename_t = {
@@ -207,13 +253,14 @@ def build_limitup_labels(
     }
     if m_open is not None:
         rename_t[m_open] = "t_open"
+    if m_low is not None:
+        rename_t[m_low] = "t_low"
     if m_pre_close is not None:
         rename_t[m_pre_close] = "t_pre_close"
     if m_limit_up is not None:
         rename_t[m_limit_up] = "t_limit_up"
     right_t = right_t.rename(columns=rename_t)
 
-    out = s.copy()
     out["_join_code"] = out["_ts_code_norm"]
     out["_join_date"] = out["t_trade_date"]
     out = out.merge(right_t, on=["_join_code", "_join_date"], how="left").drop(columns=["_join_code", "_join_date"])
@@ -227,6 +274,8 @@ def build_limitup_labels(
     }
     if m_open is not None:
         rename_t1[m_open] = "t1_open"
+    if m_low is not None:
+        rename_t1[m_low] = "t1_low"
     if m_pre_close is not None:
         rename_t1[m_pre_close] = "t1_pre_close"
     if m_limit_up is not None:
@@ -237,7 +286,8 @@ def build_limitup_labels(
     out["_join_date"] = out["t1_trade_date"]
     out = out.merge(right_t1, on=["_join_code", "_join_date"], how="left").drop(columns=["_join_code", "_join_date"])
 
-    out["d_close"] = pd.to_numeric(out[m_close], errors="coerce") if m_close in out.columns else np.nan
+    if "d_close" not in out.columns:
+        out["d_close"] = pd.to_numeric(out[m_close], errors="coerce") if m_close in out.columns else np.nan
 
     if "t_limit_up" in out.columns:
         out["_t_limit_price"] = pd.to_numeric(out["t_limit_up"], errors="coerce")
@@ -246,31 +296,83 @@ def build_limitup_labels(
         rates = out["_ts_code_norm"].map(_limit_rate_for_code).astype(float)
         out["_t_limit_price"] = (pre * (1.0 + rates)).round(2)
 
+    out["t_limit_price"] = out["_t_limit_price"]
+    t_open = pd.to_numeric(out.get("t_open", np.nan), errors="coerce")
     t_high = pd.to_numeric(out.get("t_high", np.nan), errors="coerce")
+    t_low = pd.to_numeric(out.get("t_low", np.nan), errors="coerce")
     t_close = pd.to_numeric(out.get("t_close", np.nan), errors="coerce")
     t_limit = pd.to_numeric(out["_t_limit_price"], errors="coerce")
+    t1_open = pd.to_numeric(out.get("t1_open", np.nan), errors="coerce")
+    t1_low = pd.to_numeric(out.get("t1_low", np.nan), errors="coerce")
     t1_close = pd.to_numeric(out.get("t1_close", np.nan), errors="coerce")
     t1_high = pd.to_numeric(out.get("t1_high", np.nan), errors="coerce")
     d_close = pd.to_numeric(out["d_close"], errors="coerce")
     buy_base = t_close.where(t_close.notna(), d_close)
 
     out["t_touch_limitup"] = ((t_high >= t_limit * (1.0 - limit_tolerance)) & t_limit.notna()).astype(float)
+    out["t_open_up_hit"] = (t_open > d_close).astype(float)
     out["t_up_hit"] = (t_close > d_close).astype(float)
     out["t_limitup_hit"] = ((t_close >= t_limit * (1.0 - limit_tolerance)) & t_limit.notna()).astype(float)
+    out["t_open_ret"] = np.where(d_close > 0, t_open / d_close - 1.0, np.nan)
+    out["t_intraday_ret"] = np.where(d_close > 0, t_high / d_close - 1.0, np.nan)
+    out["t_close_ret"] = np.where(d_close > 0, t_close / d_close - 1.0, np.nan)
+    out["t_high_profit_hit"] = (out["t_intraday_ret"] >= float(high_profit_threshold)).astype(float)
+    out["t_low_ret"] = np.where(d_close > 0, t_low / d_close - 1.0, np.nan)
+    out["t1_open_ret"] = np.where(buy_base > 0, t1_open / buy_base - 1.0, np.nan)
     out["t1_close_ret"] = np.where(buy_base > 0, t1_close / buy_base - 1.0, np.nan)
     out["t1_high_ret"] = np.where(buy_base > 0, t1_high / buy_base - 1.0, np.nan)
+    out["t1_low_ret"] = np.where(buy_base > 0, t1_low / buy_base - 1.0, np.nan)
     out["t1_up_hit"] = (out["t1_close_ret"] > 0).astype(float)
     out["t1_high_profit_hit"] = (out["t1_high_ret"] >= float(high_profit_threshold)).astype(float)
+    out["t1_accept_hit"] = ((pd.to_numeric(out["t1_high_ret"], errors="coerce") >= 0.015) & (pd.to_numeric(out["t1_close_ret"], errors="coerce") >= -0.015)).astype(float)
+    out["t1_fail_hit"] = ((pd.to_numeric(out["t1_high_ret"], errors="coerce") < 0.008) | (pd.to_numeric(out["t1_close_ret"], errors="coerce") <= -0.025)).astype(float)
+    out["t1_big_drawdown_hit"] = (pd.to_numeric(out["t1_low_ret"], errors="coerce") <= -0.04).astype(float)
+    out["t1_limitdown_risk_hit"] = (pd.to_numeric(out["t1_low_ret"], errors="coerce") <= -0.08).astype(float)
 
     valid_t = t_close.notna() & t_high.notna()
     valid_t1 = t1_close.notna() & t1_high.notna()
     valid_all = out["label_matured"].eq(1) & valid_t & valid_t1
 
-    label_cols = ["t_up_hit", "t_limitup_hit", "t_touch_limitup", "t1_up_hit", "t1_high_profit_hit", "t1_close_ret", "t1_high_ret"]
+    label_cols = [
+        "t_open_up_hit",
+        "t_up_hit",
+        "t_high_profit_hit",
+        "t_limitup_hit",
+        "t_touch_limitup",
+        "t_open_ret",
+        "t_intraday_ret",
+        "t_close_ret",
+        "t_low_ret",
+        "t1_open_ret",
+        "t1_up_hit",
+        "t1_high_profit_hit",
+        "t1_accept_hit",
+        "t1_fail_hit",
+        "t1_big_drawdown_hit",
+        "t1_limitdown_risk_hit",
+        "t1_close_ret",
+        "t1_high_ret",
+        "t1_low_ret",
+    ]
     for c in label_cols:
         out.loc[~valid_all, c] = np.nan
 
     out["label_valid"] = valid_all.astype(int)
+    out["calendar_status"] = np.select(
+        [
+            out["t_trade_date"].isna(),
+            out["t1_trade_date"].isna(),
+            out["label_matured"].ne(1),
+            valid_all,
+        ],
+        ["missing_t_trade_date", "missing_t1_trade_date", "not_matured", "ok"],
+        default="missing_price",
+    )
+    out["calendar_reason"] = np.where(
+        valid_all,
+        "strict_a_share_calendar_ok",
+        "strict_a_share_calendar_or_price_not_ready",
+    )
     out["calendar_source"] = calendar_source
     out["label_as_of"] = as_of_date
     return out
