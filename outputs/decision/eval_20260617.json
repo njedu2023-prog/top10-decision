@@ -1,21 +1,21 @@
 {
   "signal_date": "20260616",
   "exec_date": "20260617",
-  "requested_trade_date": "20260616",
+  "requested_trade_date": "",
   "regime": "RISK_ON",
   "risk_budget": 1.0,
   "topk": 100,
   "picked": 10,
-  "cost_est_mean": 0.0016287783249999998,
+  "cost_est_mean": 0.0016287297549999998,
   "cost_est_min": 0.00111001,
   "cost_est_max": 0.0029,
-  "risk_penalty_mean": 0.014937030828962347,
+  "risk_penalty_mean": 0.014924114951712001,
   "risk_penalty_min": 0.005325108660206281,
   "risk_penalty_max": 0.032085065830060655,
-  "ev_base_mean": 0.026262547499332857,
-  "ev_final_mean": 0.011175651580452126,
-  "pfill_penalty_extra_mean": 0.0006367236781197447,
-  "risk_penalty_extra_mean": 0.01445017224076098,
+  "ev_base_mean": 0.0264290982077779,
+  "ev_final_mean": 0.011359743402972418,
+  "pfill_penalty_extra_mean": 0.0006367236781197448,
+  "risk_penalty_extra_mean": 0.014432631126685738,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
   "fs_degrade_reason": "",
@@ -32,8 +32,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260616",
-      "created_at_utc": "2026-06-16T13:29:00+00:00",
-      "commit_sha": "a0f3395ab2f97a96a3c722ed4c95fe4c8706b281",
+      "created_at_utc": "2026-06-16T18:10:24+00:00",
+      "commit_sha": "72e9075819f6a5842d71fff760352364f0a33975",
       "fs_version": "v0.5-history-roll-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989247,
@@ -196,7 +196,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260616",
-            "created_at_utc": "2026-06-16T13:27:31+00:00",
+            "created_at_utc": "2026-06-16T18:08:20+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -211,7 +211,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260616",
-              "generated_at_bj": "2026-06-16 21:21:10",
+              "generated_at_bj": "2026-06-16 23:07:37",
               "jobs": [
                 {
                   "key": "limit_list_d",
