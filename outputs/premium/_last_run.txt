@@ -1,8 +1,8 @@
 trade_date: 20260616
-run_id: gh_27621929333
-commit_sha: b10a840c208a
+run_id: gh_27638304972
+commit_sha: a006cb1ebc61
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-16T13:56:47Z
+created_at_utc: 2026-06-16T18:34:17Z
 ok: True
 buy_date: 20260617
 target_date: 20260618
@@ -44,7 +44,7 @@ limitup_model_validation_samples: 419
 limitup_calibration_mode: historical_bin_blend_v1
 limitup_calibration_reason: ok
 limitup_calibration_bins: 4
-limitup_calibration_avg_delta: -0.14469858195315422
+limitup_calibration_avg_delta: -0.14522152249632744
 adaptive_rank_mode: history_ic_weighted_v1
 adaptive_weight_limitup: 0.575893
 adaptive_weight_t1: 0.066964
@@ -54,8 +54,8 @@ adaptive_limitup_ic: 0.253838
 adaptive_t1_ret_ic: -0.106651
 adaptive_reason: t1_downweighted_negative_ic
 premium_score_mode: t_attack_t1_accept_final_v1
-premium_eligible_count: 93
-premium_watch_count: 23
+premium_eligible_count: 92
+premium_watch_count: 24
 premium_excluded_count: 2
 premium_model_can_rank_count: 0
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划
