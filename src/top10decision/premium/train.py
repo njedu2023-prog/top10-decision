@@ -587,8 +587,10 @@ def _backfill_limitup_truth_from_market(
         return df, f"t1_daily_not_ready:{t1_trade_date}:{r_t1.reason}"
 
     try:
-        daily_t = load_daily(cfg, t_trade_date)[["ts_code", "open", "high", "close"]].copy()
-        daily_t1 = load_daily(cfg, t1_trade_date)[["ts_code", "high", "close"]].copy()
+        daily_t_raw = load_daily(cfg, t_trade_date)
+        daily_t1_raw = load_daily(cfg, t1_trade_date)
+        daily_t = daily_t_raw[[c for c in ["ts_code", "open", "high", "low", "close"] if c in daily_t_raw.columns]].copy()
+        daily_t1 = daily_t1_raw[[c for c in ["ts_code", "open", "high", "low", "close"] if c in daily_t1_raw.columns]].copy()
     except Exception as e:
         return df, f"daily_load_error:{type(e).__name__}:{e}"
 
@@ -602,13 +604,16 @@ def _backfill_limitup_truth_from_market(
             "ts_code": "_join_ts_code",
             "open": "_bf_open_T_actual",
             "high": "_bf_high_T_actual",
+            "low": "_bf_low_T_actual",
             "close": "_bf_close_T_actual",
         }
     )
     daily_t1 = daily_t1.rename(
         columns={
             "ts_code": "_join_ts_code",
+            "open": "_bf_open_T2_actual",
             "high": "_bf_high_T2_actual",
+            "low": "_bf_low_T2_actual",
             "close": "_bf_close_T2_actual",
         }
     )
@@ -618,8 +623,11 @@ def _backfill_limitup_truth_from_market(
     d_close = _safe_numeric_series(out, ["close_T", "d_close", "close", "收盘价"], default=np.nan)
     t_open = pd.to_numeric(out["_bf_open_T_actual"], errors="coerce")
     t_high = pd.to_numeric(out["_bf_high_T_actual"], errors="coerce")
+    t_low = pd.to_numeric(out.get("_bf_low_T_actual", np.nan), errors="coerce")
     t_close = pd.to_numeric(out["_bf_close_T_actual"], errors="coerce")
+    t1_open = pd.to_numeric(out.get("_bf_open_T2_actual", np.nan), errors="coerce")
     t1_high = pd.to_numeric(out["_bf_high_T2_actual"], errors="coerce")
+    t1_low = pd.to_numeric(out.get("_bf_low_T2_actual", np.nan), errors="coerce")
     t1_close = pd.to_numeric(out["_bf_close_T2_actual"], errors="coerce")
 
     limit_rates = out["_join_ts_code"].map(_limit_rate_for_code).astype(float)
@@ -641,20 +649,44 @@ def _backfill_limitup_truth_from_market(
     out["t1_trade_date"] = t1_trade_date
     out["open_T_actual"] = t_open
     out["high_T_actual"] = t_high
+    out["low_T_actual"] = t_low
     out["close_T_actual"] = t_close
+    out["open_T2_actual"] = t1_open
     out["high_T2_actual"] = t1_high
+    out["low_T2_actual"] = t1_low
     out["close_T2_actual"] = t1_close
     out["t_limit_price_est"] = limit_price
+    out["t_open_ret"] = np.where(ready, t_open / d_close - 1.0, np.nan)
+    out["t_intraday_ret"] = np.where(ready, t_high / d_close - 1.0, np.nan)
+    out["t_low_ret"] = np.where(ready, t_low / d_close - 1.0, np.nan)
+    out["t_close_ret"] = np.where(ready, t_close / d_close - 1.0, np.nan)
+    out["t_open_up_hit"] = np.where(ready, (t_open > d_close).astype(int), np.nan)
     out["t_up_actual"] = np.where(ready, (t_close > d_close).astype(int), np.nan)
+    out["t_high_profit_hit"] = np.where(ready, (out["t_intraday_ret"] >= 0.02).astype(int), np.nan)
     out["t_limitup_actual"] = np.where(ready, (t_close >= limit_price * 0.9985).astype(int), np.nan)
     out["t_touch_limitup_actual"] = np.where(ready, (t_high >= limit_price * 0.9985).astype(int), np.nan)
     out["t_limitup_verify_ready"] = ready.astype(int)
     out["t_limitup_verify_reason"] = np.where(ready, "ok_backfilled_daily", "missing_daily_row")
     out["t_limitup_verify_trade_date"] = t_trade_date
+    out["t1_open_ret"] = np.where(ready, t1_open / entry_price - 1.0, np.nan)
     out["t1_close_ret"] = np.where(ready, t1_close / entry_price - 1.0, np.nan)
     out["t1_high_ret"] = np.where(ready, t1_high / entry_price - 1.0, np.nan)
+    out["t1_low_ret"] = np.where(ready, t1_low / entry_price - 1.0, np.nan)
     out["t1_up_hit"] = np.where(ready, (out["t1_close_ret"] > 0).astype(int), np.nan)
     out["t1_high_profit_hit"] = np.where(ready, (out["t1_high_ret"] >= 0.02).astype(int), np.nan)
+    out["t1_accept_hit"] = np.where(
+        ready,
+        ((pd.to_numeric(out["t1_high_ret"], errors="coerce") >= 0.015) & (pd.to_numeric(out["t1_close_ret"], errors="coerce") >= -0.015)).astype(int),
+        np.nan,
+    )
+    out["t1_fail_hit"] = np.where(
+        ready,
+        ((pd.to_numeric(out["t1_high_ret"], errors="coerce") < 0.008) | (pd.to_numeric(out["t1_close_ret"], errors="coerce") <= -0.025)).astype(int),
+        np.nan,
+    )
+    t1_low_ret_num = pd.to_numeric(out["t1_low_ret"], errors="coerce")
+    out["t1_big_drawdown_hit"] = np.where(ready & t1_low_ret_num.notna(), (t1_low_ret_num <= -0.04).astype(int), np.nan)
+    out["t1_limitdown_risk_hit"] = np.where(ready & t1_low_ret_num.notna(), (t1_low_ret_num <= -0.08).astype(int), np.nan)
 
     tmp_cols = [c for c in out.columns if str(c).startswith("_bf_")]
     out = out.drop(columns=tmp_cols + ["_join_ts_code"], errors="ignore")
@@ -946,6 +978,29 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         t_touch = _bool_numeric_series(df, ["t_touch_limitup_actual", "t_touch_limitup"], default=np.nan)
         close_ret = _t1_close_ret_from_verify_df(df)
         high_ret = _t1_high_ret_from_verify_df(df, close_ret)
+        d_close = _safe_numeric_series(df, ["close_T", "d_close", "close", "收盘价"], default=np.nan)
+        t_open_actual = _safe_numeric_series(df, ["open_T_actual", "open_t", "t_open"], default=np.nan)
+        t_high_actual = _safe_numeric_series(df, ["high_T_actual", "high_t", "t_high"], default=np.nan)
+        t_close_actual = _safe_numeric_series(df, ["close_T_actual", "close_t", "t_close"], default=np.nan)
+        t1_open_actual = _safe_numeric_series(df, ["open_T2_actual", "t1_open", "open_t1"], default=np.nan)
+        t1_low_actual = _safe_numeric_series(df, ["low_T2_actual", "t1_low", "low_t1"], default=np.nan)
+        entry_price = _price_numeric_series(
+            df,
+            ["t_max_buy_price", "T日可接受买入价", "entry_price_t1", "entry_price_proxy_t1", "close_T_actual", "close_T"],
+            default=np.nan,
+        )
+        entry_price = entry_price.where(entry_price > 0, t_close_actual)
+        t_close_ret = _safe_numeric_series(df, ["t_close_ret"], default=np.nan)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t_close_ret = t_close_ret.where(t_close_ret.notna(), t_close_actual / d_close - 1.0)
+            t_intraday_ret = _safe_numeric_series(df, ["t_intraday_ret"], default=np.nan)
+            t_intraday_ret = t_intraday_ret.where(t_intraday_ret.notna(), t_high_actual / d_close - 1.0)
+            t_open_ret = _safe_numeric_series(df, ["t_open_ret"], default=np.nan)
+            t_open_ret = t_open_ret.where(t_open_ret.notna(), t_open_actual / d_close - 1.0)
+            t1_open_ret = _safe_numeric_series(df, ["t1_open_ret"], default=np.nan)
+            t1_open_ret = t1_open_ret.where(t1_open_ret.notna(), t1_open_actual / entry_price - 1.0)
+            t1_low_ret = _safe_numeric_series(df, ["t1_low_ret"], default=np.nan)
+            t1_low_ret = t1_low_ret.where(t1_low_ret.notna(), t1_low_actual / entry_price - 1.0)
 
         out = pd.DataFrame(index=df.index)
         td_col = _first_existing_col(df, ["trade_date", "d_analysis_trade_date", "base_date", "date"])
@@ -962,12 +1017,29 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
 
         out["label_matured"] = np.where(ready.notna(), ready, 1.0)
         out["t_up_hit"] = t_up
+        out["t_open_up_hit"] = (pd.to_numeric(t_open_ret, errors="coerce") > 0).where(pd.to_numeric(t_open_ret, errors="coerce").notna(), np.nan).astype(float)
         out["t_limitup_hit"] = t_limitup
         out["t_touch_limitup"] = t_touch.where(t_touch.notna(), t_limitup)
+        out["t_close_ret"] = t_close_ret
+        out["t_intraday_ret"] = t_intraday_ret
+        out["t_open_ret"] = t_open_ret
+        out["t_high_profit_hit"] = (pd.to_numeric(t_intraday_ret, errors="coerce") >= 0.02).where(pd.to_numeric(t_intraday_ret, errors="coerce").notna(), np.nan).astype(float)
+        out["t1_open_ret"] = t1_open_ret
         out["t1_close_ret"] = close_ret
         out["t1_high_ret"] = high_ret
+        out["t1_low_ret"] = t1_low_ret
         out["t1_up_hit"] = (pd.to_numeric(close_ret, errors="coerce") > 0).astype(float)
         out["t1_high_profit_hit"] = (pd.to_numeric(high_ret, errors="coerce") >= 0.02).astype(float)
+        out["t1_accept_hit"] = (
+            (pd.to_numeric(high_ret, errors="coerce") >= 0.015)
+            & (pd.to_numeric(close_ret, errors="coerce") >= -0.015)
+        ).where(pd.to_numeric(high_ret, errors="coerce").notna() & pd.to_numeric(close_ret, errors="coerce").notna(), np.nan).astype(float)
+        out["t1_fail_hit"] = (
+            (pd.to_numeric(high_ret, errors="coerce") < 0.008)
+            | (pd.to_numeric(close_ret, errors="coerce") <= -0.025)
+        ).where(pd.to_numeric(high_ret, errors="coerce").notna() & pd.to_numeric(close_ret, errors="coerce").notna(), np.nan).astype(float)
+        out["t1_big_drawdown_hit"] = (pd.to_numeric(t1_low_ret, errors="coerce") <= -0.04).where(pd.to_numeric(t1_low_ret, errors="coerce").notna(), np.nan).astype(float)
+        out["t1_limitdown_risk_hit"] = (pd.to_numeric(t1_low_ret, errors="coerce") <= -0.08).where(pd.to_numeric(t1_low_ret, errors="coerce").notna(), np.nan).astype(float)
 
         feature_candidates = {
             "rank": ["rank", "dec_rank"],
@@ -992,6 +1064,13 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             "rank_limitup_continuation": ["rank_limitup_continuation"],
             "rank_eret_plus": ["rank_eret_plus"],
             "rank_r_p50": ["rank_r_p50"],
+            "premium_adaptive_score": ["premium_adaptive_score", "自适应排序评分"],
+            "t_up_attack_score": ["t_up_attack_score"],
+            "t1_accept_score": ["t1_accept_score"],
+            "premium_final_score": ["premium_final_score"],
+            "risk_penalty_score": ["risk_penalty_score"],
+            "execution_score": ["execution_score"],
+            "market_score": ["market_score"],
             "mkt_stock_count": ["mkt_stock_count"],
             "mkt_up_ratio": ["mkt_up_ratio"],
             "mkt_avg_ret": ["mkt_avg_ret"],
@@ -1017,10 +1096,15 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         valid = (
             pd.to_numeric(out["label_matured"], errors="coerce").fillna(0).eq(1)
             & out["t_up_hit"].notna()
+            & out["t_high_profit_hit"].notna()
             & out["t_limitup_hit"].notna()
             & out["t_touch_limitup"].notna()
+            & out["t_close_ret"].notna()
+            & out["t_intraday_ret"].notna()
             & out["t1_close_ret"].notna()
             & out["t1_high_ret"].notna()
+            & out["t1_accept_hit"].notna()
+            & out["t1_fail_hit"].notna()
         )
         out = out.loc[valid].reset_index(drop=True)
         if out.empty:
