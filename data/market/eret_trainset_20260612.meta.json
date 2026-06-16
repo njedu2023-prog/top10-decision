@@ -285,6 +285,8 @@
       "seal_amount",
       "first_seal_time",
       "last_seal_time",
+      "up_stat",
+      "limit_times",
       "open_times_break",
       "fd_amount_break",
       "seal_amount_break",
