@@ -30,7 +30,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
-from sklearn.metrics import accuracy_score, brier_score_loss, mean_absolute_error, roc_auc_score
+from sklearn.metrics import accuracy_score, brier_score_loss, mean_absolute_error, mean_squared_error, roc_auc_score
 
 try:
     import lightgbm as lgb
@@ -38,12 +38,40 @@ except Exception:  # pragma: no cover
     lgb = None  # type: ignore
 
 
-CLASS_TARGETS = ["t_limitup_hit", "t_touch_limitup", "t1_up_hit", "t1_high_profit_hit"]
-REG_TARGETS = ["t1_close_ret", "t1_high_ret"]
+CLASS_TARGETS = [
+    "t_up_hit",
+    "t_high_profit_hit",
+    "t_limitup_hit",
+    "t_touch_limitup",
+    "t1_up_hit",
+    "t1_high_profit_hit",
+    "t1_accept_hit",
+    "t1_fail_hit",
+    "t1_big_drawdown_hit",
+]
+REG_TARGETS = ["t_close_ret", "t_intraday_ret", "t1_close_ret", "t1_high_ret"]
 DEFAULT_EXCLUDE = set(CLASS_TARGETS + REG_TARGETS + [
     "ts_code", "code", "symbol", "名称", "name", "trade_date", "d_trade_date", "t_trade_date", "t1_trade_date",
-    "label_matured", "calendar_source", "label_as_of",
+    "label_valid", "label_matured", "calendar_source", "calendar_status", "calendar_reason", "label_as_of",
 ])
+
+FEATURE_ALLOW_PREFIXES = [
+    "d_", "factor_", "mkt_", "dec_", "eret_", "pfill_", "risk_", "theme_", "amount_",
+    "ret_", "vol_", "close_pos_", "rank_", "t_limitup_prob_rule", "t_limitup_strength_rule",
+    "t1_continue_up_rate_rule", "limitup_continuation_score_rule",
+]
+FEATURE_ALLOW_EXACT = {
+    "rank", "is_top10", "is_top20", "close_T", "p_premium", "e_premium", "score_ev",
+    "confidence", "data_quality", "dec_weight", "dec_rank", "dec_p_fill",
+    "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_conf_score",
+    "t1_up_rate", "r_p50", "r_p25", "r_p75", "in_p10", "in_p50",
+}
+FEATURE_DENY_KEYWORDS = [
+    "actual", "hit", "label", "verify", "future",
+    "t_open", "t_high", "t_low", "t_close",
+    "t1_open", "t1_high", "t1_low", "t1_close",
+    "open_T_actual", "high_T_actual", "close_T_actual",
+]
 
 
 @dataclass
@@ -56,15 +84,25 @@ class LimitupModelBundle:
     metrics: pd.DataFrame
     train_end_date: str
     valid_start_date: str
+    model_can_rank: bool = False
+    model_rank_mode: str = "disabled_validation_not_pass"
+    validation_days: int = 0
+    validation_samples: int = 0
+    gate_reason: str = ""
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
         X = _make_X(df, self.feature_cols)
         out = df.copy()
         name_map = {
+            "t_up_hit": "t_up_prob_model",
+            "t_high_profit_hit": "t_high_profit_prob_model",
             "t_limitup_hit": "t_limitup_prob_model",
             "t_touch_limitup": "t_touch_limitup_prob_model",
             "t1_up_hit": "t1_up_prob_model",
             "t1_high_profit_hit": "t1_high_profit_prob_model",
+            "t1_accept_hit": "t1_accept_prob_model",
+            "t1_fail_hit": "t1_fail_prob_model",
+            "t1_big_drawdown_hit": "t1_big_drawdown_prob_model",
         }
         for target, col in name_map.items():
             model = self.class_models.get(target)
@@ -76,7 +114,12 @@ class LimitupModelBundle:
                 else:
                     raw = model.predict(X)
                     out[col] = np.clip(raw, 0.0, 1.0)
-        reg_map = {"t1_close_ret": "t1_close_ret_pred", "t1_high_ret": "t1_high_ret_pred"}
+        reg_map = {
+            "t_close_ret": "t_close_ret_pred",
+            "t_intraday_ret": "t_intraday_ret_pred",
+            "t1_close_ret": "t1_close_ret_pred",
+            "t1_high_ret": "t1_high_ret_pred",
+        }
         for target, col in reg_map.items():
             model = self.reg_models.get(target)
             if model is None:
@@ -84,11 +127,16 @@ class LimitupModelBundle:
             else:
                 out[col] = np.asarray(model.predict(X), dtype=float)
         out["limitup_model_score"] = (
-            0.35 * out.get("t_limitup_prob_model", 0)
-            + 0.25 * out.get("t_touch_limitup_prob_model", 0)
-            + 0.25 * out.get("t1_up_prob_model", 0)
-            + 0.15 * out.get("t1_high_profit_prob_model", 0)
+            0.18 * out.get("t_up_prob_model", 0)
+            + 0.18 * out.get("t_limitup_prob_model", 0)
+            + 0.16 * out.get("t_touch_limitup_prob_model", 0)
+            + 0.20 * out.get("t1_accept_prob_model", 0)
+            + 0.14 * out.get("t1_up_prob_model", 0)
+            + 0.14 * out.get("t1_high_profit_prob_model", 0)
         )
+        out["model_can_rank"] = bool(getattr(self, "model_can_rank", False))
+        out["model_rank_mode"] = getattr(self, "model_rank_mode", "disabled_validation_not_pass")
+        out["model_quality_flag"] = "ok" if bool(getattr(self, "model_can_rank", False)) else "degraded"
         return out
 
 
@@ -134,6 +182,11 @@ def infer_feature_cols(df: pd.DataFrame, extra_exclude: Optional[Iterable[str]] 
     cols: List[str] = []
     for c in df.columns:
         if c in exclude:
+            continue
+        cname = str(c)
+        if any(k.lower() in cname.lower() for k in FEATURE_DENY_KEYWORDS):
+            continue
+        if not (cname in FEATURE_ALLOW_EXACT or any(cname.startswith(p) for p in FEATURE_ALLOW_PREFIXES)):
             continue
         s = pd.to_numeric(df[c], errors="coerce")
         if s.notna().sum() >= max(20, int(len(df) * 0.05)):
@@ -210,7 +263,7 @@ def _eval_classifier(model, prior: float, X: pd.DataFrame, y: pd.Series, target:
     yy = yy[valid].astype(int)
     Xv = X.loc[valid]
     if len(yy) == 0:
-        return {"target": target, "type": "class", "samples": 0, "auc": np.nan, "brier": np.nan, "accuracy": np.nan}
+        return {"target": target, "type": "class", "samples": 0, "positive_rate": np.nan, "auc": np.nan, "brier": np.nan, "accuracy": np.nan, "precision_top10": np.nan, "recall": np.nan, "calibration_ece": np.nan}
     if model is None:
         prob = np.full(len(yy), prior, dtype=float)
     elif hasattr(model, "predict_proba"):
@@ -218,13 +271,21 @@ def _eval_classifier(model, prior: float, X: pd.DataFrame, y: pd.Series, target:
     else:
         prob = np.clip(model.predict(Xv), 0.0, 1.0)
     pred = (prob >= 0.5).astype(int)
+    top_n = min(10, len(yy))
+    order = np.argsort(-prob)[:top_n] if top_n > 0 else np.array([], dtype=int)
+    positives = int(yy.sum())
+    ece = _calibration_ece(pd.Series(prob), pd.Series(yy.values))
     return {
         "target": target,
         "type": "class",
         "samples": int(len(yy)),
+        "positive_rate": float(yy.mean()) if len(yy) else np.nan,
         "auc": float(roc_auc_score(yy, prob)) if yy.nunique() == 2 else np.nan,
         "brier": float(brier_score_loss(yy, prob)),
         "accuracy": float(accuracy_score(yy, pred)),
+        "precision_top10": float(yy.iloc[order].mean()) if len(order) else np.nan,
+        "recall": float(yy.iloc[order].sum() / positives) if positives > 0 and len(order) else np.nan,
+        "calibration_ece": ece,
     }
 
 
@@ -234,9 +295,72 @@ def _eval_regressor(model, mean_value: float, X: pd.DataFrame, y: pd.Series, tar
     yy = yy[valid].astype(float)
     Xv = X.loc[valid]
     if len(yy) == 0:
-        return {"target": target, "type": "reg", "samples": 0, "mae": np.nan}
+        return {"target": target, "type": "reg", "samples": 0, "mae": np.nan, "rmse": np.nan, "spearman_ic": np.nan, "positive_ic_rate": np.nan}
     pred = np.full(len(yy), mean_value, dtype=float) if model is None else np.asarray(model.predict(Xv), dtype=float)
-    return {"target": target, "type": "reg", "samples": int(len(yy)), "mae": float(mean_absolute_error(yy, pred))}
+    ic = _safe_spearman(pd.Series(pred), yy.reset_index(drop=True))
+    return {
+        "target": target,
+        "type": "reg",
+        "samples": int(len(yy)),
+        "mae": float(mean_absolute_error(yy, pred)),
+        "rmse": float(np.sqrt(mean_squared_error(yy, pred))),
+        "spearman_ic": ic,
+        "positive_ic_rate": float(ic > 0) if np.isfinite(ic) else np.nan,
+    }
+
+
+def _safe_spearman(x: pd.Series, y: pd.Series) -> float:
+    pair = pd.DataFrame({"x": pd.to_numeric(x, errors="coerce"), "y": pd.to_numeric(y, errors="coerce")}).dropna()
+    if len(pair) < 3 or pair["x"].nunique() < 2 or pair["y"].nunique() < 2:
+        return float("nan")
+    return float(pair["x"].rank(method="average").corr(pair["y"].rank(method="average"), method="pearson"))
+
+
+def _calibration_ece(prob: pd.Series, actual: pd.Series, bins: int = 5) -> float:
+    p = pd.to_numeric(prob, errors="coerce").clip(0.0, 1.0)
+    y = pd.to_numeric(actual, errors="coerce")
+    valid = p.notna() & y.notna()
+    if not valid.any():
+        return float("nan")
+    total = int(valid.sum())
+    err = 0.0
+    for lo in np.linspace(0.0, 1.0, bins, endpoint=False):
+        hi = min(1.0, lo + 1.0 / bins)
+        m = valid & (p >= lo) & (p < (hi + 1e-9))
+        n = int(m.sum())
+        if n:
+            err += (n / total) * abs(float(p[m].mean()) - float(y[m].mean()))
+    return float(err)
+
+
+def _metric_value(metrics: pd.DataFrame, target: str, col: str) -> float:
+    if metrics is None or metrics.empty or col not in metrics.columns:
+        return float("nan")
+    sub = metrics[metrics["target"].astype(str) == str(target)]
+    if sub.empty:
+        return float("nan")
+    return float(pd.to_numeric(sub[col], errors="coerce").iloc[0])
+
+
+def _model_gate(metrics: pd.DataFrame, validation_days: int, validation_samples: int) -> Tuple[bool, str]:
+    t1_accept_auc = _metric_value(metrics, "t1_accept_hit", "auc")
+    t1_accept_brier = _metric_value(metrics, "t1_accept_hit", "brier")
+    t1_ret_ic = _metric_value(metrics, "t1_close_ret", "spearman_ic")
+    ok = (
+        int(validation_days) >= 20
+        and int(validation_samples) >= 500
+        and np.isfinite(t1_accept_auc) and t1_accept_auc >= 0.53
+        and np.isfinite(t1_accept_brier) and t1_accept_brier <= 0.25
+        and np.isfinite(t1_ret_ic) and t1_ret_ic > 0
+    )
+    if ok:
+        return True, "rank_enabled_validation_pass"
+    return False, (
+        "disabled_validation_not_pass:"
+        f"days={validation_days};samples={validation_samples};"
+        f"t1_accept_auc={t1_accept_auc};t1_accept_brier={t1_accept_brier};"
+        f"t1_ret_spearman_ic={t1_ret_ic}"
+    )
 
 
 def fit_limitup_probability_engine(
@@ -250,7 +374,7 @@ def fit_limitup_probability_engine(
         data = data[pd.to_numeric(data["label_matured"], errors="coerce").fillna(0).astype(int) == 1].copy()
     for target in CLASS_TARGETS + REG_TARGETS:
         if target not in data.columns:
-            raise ValueError(f"训练数据缺少标签字段: {target}")
+            data[target] = np.nan
     train, valid, train_end, valid_start = time_split(data, valid_ratio=valid_ratio)
     if feature_cols is None:
         feature_cols = infer_feature_cols(train)
@@ -279,6 +403,9 @@ def fit_limitup_probability_engine(
         metric_rows.append(_eval_regressor(model, mean_value, X_valid, valid[target], target))
 
     metrics = pd.DataFrame(metric_rows)
+    validation_days = int(valid["d_trade_date"].nunique()) if "d_trade_date" in valid.columns else 0
+    validation_samples = int(len(valid))
+    model_can_rank, model_rank_mode = _model_gate(metrics, validation_days, validation_samples)
     return LimitupModelBundle(
         feature_cols=feature_cols,
         class_models=class_models,
@@ -288,6 +415,11 @@ def fit_limitup_probability_engine(
         metrics=metrics,
         train_end_date=train_end,
         valid_start_date=valid_start,
+        model_can_rank=model_can_rank,
+        model_rank_mode=model_rank_mode,
+        validation_days=validation_days,
+        validation_samples=validation_samples,
+        gate_reason=model_rank_mode,
     )
 
 
