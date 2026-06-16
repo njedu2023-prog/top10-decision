@@ -149,6 +149,7 @@ def attach_limitup_validation(
 
     out = df_verify.copy().merge(t, on="ts_code", how="left")
     d_close = _num(out.get("close_T")).reindex(out.index)
+    t_open = _num(out.get("open_T_actual")).reindex(out.index)
     t_high = _num(out.get("high_T_actual")).reindex(out.index)
     t_close = _num(out.get("close_T_actual")).reindex(out.index)
     rates = out["ts_code"].map(_limit_rate_for_code).astype(float)
@@ -156,6 +157,11 @@ def attach_limitup_validation(
 
     ready = d_close.notna() & t_high.notna() & t_close.notna() & (d_close > 0)
     out["t_limit_price_est"] = limit_px
+    out["t_open_ret"] = np.where(ready & t_open.notna(), t_open / d_close - 1.0, pd.NA)
+    out["t_intraday_ret"] = np.where(ready, t_high / d_close - 1.0, pd.NA)
+    out["t_close_ret"] = np.where(ready, t_close / d_close - 1.0, pd.NA)
+    out["t_up_actual"] = np.where(ready, (t_close > d_close).astype(int), pd.NA)
+    out["t_high_profit_hit"] = np.where(ready, (pd.to_numeric(out["t_intraday_ret"], errors="coerce") >= 0.02).astype(int), pd.NA)
     out["t_limitup_actual"] = np.where(ready, (t_close >= limit_px * 0.9985).astype(int), pd.NA)
     out["t_touch_limitup_actual"] = np.where(ready, (t_high >= limit_px * 0.9985).astype(int), pd.NA)
     out["t_limitup_verify_ready"] = ready.astype(int)
@@ -228,11 +234,15 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                     "-",
                 ),
                 "D Close": _fmt_num(r.get("close_T"), 2),
+                "Bucket": _clean_text(r.get("premium_bucket"), "WATCH"),
                 "T-Up": _fmt_pct(r.get("t_limitup_prob"), 2),
                 "T-Strength": _fmt_num(r.get("t_limitup_strength"), 2),
+                "T-Attack": _fmt_num(r.get("t_up_attack_score"), 2),
                 "T1-Up": _fmt_pct(r.get("t1_continue_up_rate"), 2),
+                "T1-Accept": _fmt_num(r.get("t1_accept_score"), 2),
                 "T1-Relay": _fmt_num(r.get("limitup_continuation_score"), 2),
-                "Score": _fmt_num(r.get("premium_adaptive_score", r.get("自适应排序评分")), 2),
+                "Score": _fmt_num(r.get("premium_final_score", r.get("premium_adaptive_score", r.get("自适应排序评分"))), 2),
+                "Gate": _clean_text(r.get("premium_exclude_reason"), "ok"),
                 "T Auction Action": _clean_text(
                     r.get("T日建议买入方式", r.get("T+1建议买入方式", r.get("t1_buy_method")))
                 ),
@@ -274,7 +284,7 @@ def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
                 cls = f' class="num {_score_class(val, 0.70, 0.45)}"'
             elif c == "T1-Up":
                 cls = f' class="num {_score_class(val, 0.70, 0.50)}"'
-            elif c in {"T-Strength", "T1-Relay", "Score"}:
+            elif c in {"T-Strength", "T-Attack", "T1-Accept", "T1-Relay", "Score"}:
                 cls = f' class="num {_score_class(val, 70.0, 55.0)}"'
             elif c in {"Rank", "D Close"}:
                 cls = ' class="num"'
@@ -432,6 +442,14 @@ def render_premium_report_html(
     w_t1_v = float(w_t1.iloc[0]) if len(w_t1) else float("nan")
     w_strength_v = float(w_strength.iloc[0]) if len(w_strength) else float("nan")
     w_exec_v = float(w_exec.iloc[0]) if len(w_exec) else float("nan")
+    buckets = df_top.get("premium_bucket", pd.Series([], dtype="object")).astype(str) if df_top is not None else pd.Series([], dtype="object")
+    bucket_eligible = int((buckets == "ELIGIBLE").sum()) if len(buckets) else 0
+    bucket_watch = int((buckets == "WATCH").sum()) if len(buckets) else 0
+    bucket_excluded = int((buckets == "EXCLUDED").sum()) if len(buckets) else 0
+    rank_mode_s = df_top.get("premium_rank_mode", pd.Series([], dtype="object")).dropna() if df_top is not None else pd.Series([], dtype="object")
+    rank_mode = _clean_text(rank_mode_s.iloc[0] if len(rank_mode_s) else "-", "-")
+    model_mode_s = df_top.get("model_rank_mode", pd.Series([], dtype="object")).dropna() if df_top is not None else pd.Series([], dtype="object")
+    model_mode = _clean_text(model_mode_s.iloc[0] if len(model_mode_s) else "-", "-")
 
     cards = [
         _metric_card("D Analysis Date", str(trade_date), "Uses post-close data from D only"),
@@ -487,6 +505,11 @@ def render_premium_report_html(
             "Adaptive Ranking Weights",
             f"Limit-up {_fmt_pct(w_limitup_v) if np.isfinite(w_limitup_v) else '-'} / T+1 {_fmt_pct(w_t1_v) if np.isfinite(w_t1_v) else '-'}",
             f"Strength {_fmt_pct(w_strength_v) if np.isfinite(w_strength_v) else '-'}; Execution {_fmt_pct(w_exec_v) if np.isfinite(w_exec_v) else '-'}",
+        ),
+        _metric_card(
+            "Professional Gate",
+            f"{bucket_eligible} eligible / {bucket_watch} watch",
+            f"Excluded {bucket_excluded}; rank {rank_mode}; model {model_mode}",
         ),
         _metric_card(
             "Tier Effectiveness",
