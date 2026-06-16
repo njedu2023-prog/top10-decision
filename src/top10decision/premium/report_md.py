@@ -9,11 +9,11 @@ Premium 子系统 — Markdown 报告渲染（V3.5：涨停接力实盘表头版
 - T：下一交易日集合竞价买入日
 - T+1：买入后的预测到期 / 盘中择时卖出日
 
-主表只展示人工下隔夜单最需要的 9 列：
-操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T日建议买入方式
+主表只展示人工下隔夜单最需要的核心列：
+操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T攻击分｜T+1承接分｜最终评分｜分组｜T日建议买入方式
 
 说明：
-- 操作排名 = 上游 predict.py 已按“涨停接力评分”降序重排后的 rank。
+- 操作排名 = 上游 predict.py 已按“Premium 最终评分 + 专业门槛”重排后的 rank。
 - E_ret_plus、价格区间、卖出计划、置信度等工程/辅助字段仍保留在 CSV，不在主报告表展开。
 - 保留 render_premium_md(...) 旧入口，避免历史链路引用时报错。
 """
@@ -227,15 +227,19 @@ _OPER_COLS = [
     "D日收盘价",
     "T日涨停概率",
     "T日涨停强度",
+    "T攻击分",
     "T+1延续上涨率",
+    "T+1承接分",
     "涨停接力评分",
+    "最终评分",
+    "分组",
     "T日建议买入方式",
 ]
 
 
 def _op_rank(row: pd.Series) -> object:
-    # 注意：rank 已由 predict.py 按“涨停接力评分”重排，报告层必须优先使用 rank。
-    for c in ("rank", "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50"):
+    # 注意：rank 已由 predict.py 按专业最终评分重排，报告层必须优先使用 rank。
+    for c in ("rank", "rank_premium_final", "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50"):
         if c in row.index and pd.notna(row.get(c)):
             try:
                 return int(float(row.get(c)))
@@ -280,10 +284,16 @@ def _continuation_score_text(row: pd.Series) -> str:
     return "-"
 
 
+def _score_text(row: pd.Series, cols: Sequence[str]) -> str:
+    for c in cols:
+        if c in row.index:
+            return _fmt_score(_num(row, c), 2)
+    return "-"
+
+
 def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFrame:
     """
-    预测表与验证表统一使用涨停接力实盘表头：
-    操作排名｜代码｜名称｜D日收盘价｜T日涨停概率｜T日涨停强度｜T+1延续上涨率｜涨停接力评分｜T日建议买入方式
+    预测表与验证表统一使用 Premium 专业实盘表头。
     """
     if df is None or df.empty:
         return pd.DataFrame(columns=_OPER_COLS)
@@ -298,8 +308,12 @@ def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFr
                 "D日收盘价": _fmt_price(_num(row, "close_T"), 2),
                 "T日涨停概率": _limitup_prob_text(row),
                 "T日涨停强度": _limitup_strength_text(row),
+                "T攻击分": _score_text(row, ["t_up_attack_score"]),
                 "T+1延续上涨率": _continue_up_text(row),
+                "T+1承接分": _score_text(row, ["t1_accept_score"]),
                 "涨停接力评分": _continuation_score_text(row),
+                "最终评分": _score_text(row, ["premium_final_score", "premium_adaptive_score", "自适应排序评分"]),
+                "分组": _first_existing_str(row, ["premium_bucket", "rank_group"], "-"),
                 "T日建议买入方式": _t_buy_method(row),
             }
         )
@@ -430,14 +444,17 @@ def render_premium_report_md(
         _append_ehx_summary(parts, df_verify)
 
     parts.append("")
-    parts.append("## 字段说明（V3.5 涨停接力实盘口径）")
+    parts.append("## 字段说明（V4 Premium 专业接力口径）")
     parts.append("")
-    parts.append("- 操作排名：按上游 `涨停接力评分` 降序排列后的名次；同分再参考 T日涨停概率、T+1延续上涨率、T日涨停强度。")
+    parts.append("- 操作排名：按上游 `premium_final_score` 与专业门槛分组后的名次；合格池优先，观察池补位，强制排除靠后。")
     parts.append("- D日收盘价：分析基准日 D 的收盘价。")
     parts.append("- T日涨停概率：模型/规则层对 T 日冲击涨停可能性的评分化概率。")
     parts.append("- T日涨停强度：衡量 T 日涨停攻击质量与封板强弱的 0~100 分。")
     parts.append("- T+1延续上涨率：T 日走强/涨停后，T+1 继续上涨并给出溢价的倾向率。")
-    parts.append("- 涨停接力评分：综合 T日涨停概率、T日涨停强度、T+1延续上涨率与执行安全分后的核心排序分。")
+    parts.append("- T攻击分：综合 T 日上涨、触板、封板、强度、E_ret_plus 与市场情绪后的攻击评分。")
+    parts.append("- T+1承接分：综合 T+1 上涨、承接、高收益、收益预测与执行安全后的承接评分。")
+    parts.append("- 最终评分：综合 T攻击分、T+1承接分、E_ret_plus、执行安全、市场情绪并扣除风险惩罚后的主排序分。")
+    parts.append("- 分组：ELIGIBLE 为合格池，WATCH 为观察池，EXCLUDED 为强制排除池。")
     parts.append("- T日建议买入方式：面向 T 日集合竞价的买入方式建议。")
     parts.append("")
     parts.append(
