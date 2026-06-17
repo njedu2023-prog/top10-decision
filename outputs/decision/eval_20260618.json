@@ -1,7 +1,7 @@
 {
   "signal_date": "20260617",
   "exec_date": "20260618",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260617",
   "regime": "RISK_ON",
   "risk_budget": 1.0,
   "topk": 88,
@@ -12,10 +12,10 @@
   "risk_penalty_mean": 0.01477779061628008,
   "risk_penalty_min": 0.005489901578910734,
   "risk_penalty_max": 0.028549459750946502,
-  "ev_base_mean": 0.004791311876074906,
-  "ev_final_mean": -0.009968561779918415,
-  "pfill_penalty_extra_mean": 0.0006909489497428991,
-  "risk_penalty_extra_mean": 0.014068924706250423,
+  "ev_base_mean": -0.0033256194789344907,
+  "ev_final_mean": -0.021867741469235563,
+  "pfill_penalty_extra_mean": 0.004473197284050651,
+  "risk_penalty_extra_mean": 0.01406892470625042,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
   "fs_degrade_reason": "",
@@ -758,10 +758,10 @@
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
     "p_fill_degrade_reason": "",
-    "eret_pred_src": "model:lr",
+    "eret_pred_src": "model:lgbm",
     "eret_model_loaded": true,
-    "eret_model_kind": "lr",
-    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lr.joblib",
+    "eret_model_kind": "lgbm",
+    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
     "eret_degrade_reason": ""
   },
   "paths": {
@@ -775,7 +775,7 @@
     "decision_report": "outputs/decision/decision_report_20260618.md"
   },
   "report_stats": {
-    "high_ev_low_risk_rows": 5,
+    "high_ev_low_risk_rows": 1,
     "topn_rows": 10,
     "full_candidate_rows": 78
   }
