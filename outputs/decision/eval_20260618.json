@@ -1,7 +1,7 @@
 {
   "signal_date": "20260617",
   "exec_date": "20260618",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260617",
   "regime": "RISK_ON",
   "risk_budget": 1.0,
   "topk": 88,
