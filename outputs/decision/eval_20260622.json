@@ -1,7 +1,7 @@
 {
   "signal_date": "20260618",
   "exec_date": "20260622",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260618",
   "regime": "RISK_ON",
   "risk_budget": 1.0,
   "topk": 93,
@@ -9,13 +9,13 @@
   "cost_est_mean": 0.0017284009139784948,
   "cost_est_min": 0.0011027615,
   "cost_est_max": 0.003329965,
-  "risk_penalty_mean": 0.015569442504483331,
+  "risk_penalty_mean": 0.01556944250448333,
   "risk_penalty_min": 0.006369294432435543,
   "risk_penalty_max": 0.033020937648193666,
-  "ev_base_mean": 0.02096349835175773,
-  "ev_final_mean": 0.003280749696926466,
-  "pfill_penalty_extra_mean": 0.0024082001500810744,
-  "risk_penalty_extra_mean": 0.015274548504750188,
+  "ev_base_mean": 0.014840763402377007,
+  "ev_final_mean": -0.0048155327984931665,
+  "pfill_penalty_extra_mean": 0.004381747696119983,
+  "risk_penalty_extra_mean": 0.015274548504750187,
   "ev_formula_version": "v1_1_exec_aware",
   "input_mode": "pred_plus_fs",
   "fs_degrade_reason": "",
@@ -775,7 +775,7 @@
     "decision_report": "outputs/decision/decision_report_20260622.md"
   },
   "report_stats": {
-    "high_ev_low_risk_rows": 2,
+    "high_ev_low_risk_rows": 3,
     "topn_rows": 10,
     "full_candidate_rows": 83
   }
