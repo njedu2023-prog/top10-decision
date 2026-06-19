@@ -21,7 +21,7 @@ jobs:
         || github.event.workflow_run.conclusion == 'success'
       }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -35,9 +35,20 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Localize and style Premium reports
+      - name: Install deps
         run: |
           set -e
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Backfill, rebuild, localize and style Premium reports
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -e
+          python scripts/backfill_premium_limitup_truth.py --verbose
+          python scripts/rebuild_premium_reports.py --verbose
           python scripts/localize_premium_reports.py --verbose
           python scripts/apple_style_premium_reports.py --verbose
 
@@ -46,10 +57,12 @@ jobs:
           set -e
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add outputs/premium || true
+          git add data/market || true
           git add docs/reports/premium_*.html docs/reports/premium_latest.html || true
           if git diff --cached --quiet; then
             echo 'No Premium report localization changes.'
             exit 0
           fi
-          git commit -m 'premium: localize and style report labels'
+          git commit -m 'premium: refresh validation truth and styled reports'
           git push origin HEAD:main
