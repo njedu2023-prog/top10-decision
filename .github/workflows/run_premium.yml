@@ -119,6 +119,13 @@ jobs:
           set -e
           python scripts/run_premium.py "$PREMIUM_CMD" --verbose
 
+      - name: Backfill matured Premium validation truth
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -e
+          python scripts/backfill_premium_limitup_truth.py --verbose
+
       - name: Rebuild Premium HTML report archive
         env:
           PYTHONPATH: "${{ github.workspace }}/src"
