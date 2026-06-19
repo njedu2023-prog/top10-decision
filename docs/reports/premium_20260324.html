@@ -27,14 +27,14 @@
     .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:12px;margin-bottom:16px}
     .metric{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:16px 17px;min-height:104px;box-shadow:var(--shadow)}
     .metric-wide{grid-column:span 2}
-    .metric span{display:block;color:var(--muted);font-size:12px;line-height:1.35;font-weight:600}
-    .metric strong{display:block;margin-top:9px;color:var(--ink);font-size:24px;line-height:1.12;font-weight:700}
-    .metric small{display:block;margin-top:8px;color:var(--muted);font-size:12px;line-height:1.42}
+    .metric span{display:block;color:var(--muted);font-size:11.5px;line-height:1.35;font-weight:600}
+    .metric strong{display:block;margin-top:9px;color:var(--ink);font-size:21px;line-height:1.2;font-weight:700}
+    .metric small{display:block;margin-top:8px;color:var(--muted);font-size:11.5px;line-height:1.42}
     .metric-lines{margin-top:10px;display:grid;gap:8px}
     .metric-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line-soft)}
     .metric-line:first-child{border-top:0;padding-top:0}
     .metric-line span{color:#424245;font-weight:600;line-height:1.3}
-    .metric-line strong{margin:0;font-size:20px;color:var(--accent);font-variant-numeric:tabular-nums}
+    .metric-line strong{margin:0;font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums}
     .metric-line small{margin:0;color:var(--muted);font-size:12px;white-space:nowrap}
     .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;background:rgba(255,255,255,.86);border:1px solid var(--line-soft);border-radius:8px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
     .hint{color:var(--muted);font-size:13px;line-height:1.35}
@@ -62,6 +62,14 @@
     .explain div{padding:8px 0;border-bottom:1px solid var(--line-soft)}
     .explain div:last-of-type{border-bottom:0}
     .explain ul{margin:8px 0 0;padding-left:18px}
+    .verify-table-wrap{overflow:auto;width:100%}
+    .verify-table{min-width:0;width:100%;table-layout:auto}
+    .verify-table th,.verify-table td{white-space:normal;font-size:13px;line-height:1.55;padding:12px 14px}
+    .verify-table th{position:static;top:auto;width:260px;background:#f7f7fa;color:#55555b}
+    .verify-table td{color:#424245;word-break:break-word}
+    .verify-table th:first-child,.verify-table td:first-child{position:static;left:auto;background:inherit}
+    .verify-table tbody tr:nth-child(even) th,.verify-table tbody tr:nth-child(even) td{background:#fbfbfd}
+    .verify-table tbody tr:hover th,.verify-table tbody tr:hover td{background:#fff7f5}
     .empty{margin:0;padding:16px 18px;color:var(--muted)}
     .footnote{color:var(--muted);font-size:12px;margin:14px 0 0;line-height:1.5}
     @media(max-width:900px){header{position:static}header,main{padding-left:16px;padding-right:16px}.topbar,.report-nav,.toolbar{align-items:flex-start;flex-direction:column}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-wide{grid-column:1 / -1}h1{font-size:24px}}
@@ -108,25 +116,7 @@
     </section>
     <section id="verify-panel" class="hidden">
       <div class="section-head"><h2>验证与学习</h2><span class="badge">已验证</span></div>
-      <div class="explain">
-        <div>验证状态： 正常</div>
-        <div>当前TOP10涨停预测命中率： 40.00% (4/10)</div>
-        <div>当前TOP20涨停预测命中率： 40.00% (8/20)</div>
-        <div>历史TOP1 / TOP3 / TOP5累计涨停命中率： TOP1 52.63% (30/57); TOP3 40.94% (70/171); TOP5 32.28% (92/285)</div>
-        <div>历史TOP1 / TOP3 / TOP5累计上涨率： TOP1 77.19% (44/57); TOP3 73.10% (125/171); TOP5 68.77% (196/285)</div>
-        <div>历史TOP10累计涨停命中率： 28.40% (161/567)</div>
-        <div>历史TOP20累计涨停命中率： 22.80% (259/1136)</div>
-        <div>滚动TOP10命中率： 近5日 26.00%; 近20日 25.00%; 近60日 28.40%</div>
-        <div>概率校准： Brier 0.3087; ECE 0.3786; 样本 180</div>
-        <div>涨停Rank IC： Spearman均值 0.2219; 近20日 0.2219; Kendall Tau 0.1842; 正值率 100.00%; 有效天数 6</div>
-        <div>T+1收益Rank IC： Spearman均值 -0.1889; 近20日 -0.1889; 正值率 16.67%; 有效天数 6</div>
-        <div>自适应排序权重： 涨停 -; T+1 -; 强度 -; 执行 -. 当T+1 Rank IC为负时，系统会降低T+1权重；转正后再逐步提高。</div>
-        <div>分层命中/收益摘要： TOP1-10:161/567/0.284/收益=0.0010 | TOP11-20:98/569/0.172/收益=-0.0014 | TOP21-30:100/565/0.177/收益=0.0049</div>
-        <div>D日市场情绪： 情绪 -; 上涨占比 -; 强势股 0</div>
-        <div>历史统计样本： 有效交易日 57; 来源： limitup_probability_training_samples.csv; 状态： 正常</div>
-        <div>模型版本： premium_v4_a_share_d_t_t1; 生成时间： 2026-06-19T18:48:40Z</div>
-        <ul><li>归档已重建=是</li><li>历史样本来源=limitup_probability_training_samples.csv</li><li>真值刷新=not_attempted</li></ul>
-      </div>
+      <div class="explain"><div class="verify-table-wrap"><table class="verify-table"><thead><tr><th>项目</th><th>内容</th></tr></thead><tbody><tr><th>验证状态</th><td>正常</td></tr><tr><th>当前TOP10涨停预测命中率</th><td>40.00% (4/10)</td></tr><tr><th>当前TOP20涨停预测命中率</th><td>40.00% (8/20)</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计涨停命中率</th><td>TOP1 52.63% (30/57); TOP3 40.94% (70/171); TOP5 32.28% (92/285)</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计上涨率</th><td>TOP1 77.19% (44/57); TOP3 73.10% (125/171); TOP5 68.77% (196/285)</td></tr><tr><th>历史TOP10累计涨停命中率</th><td>28.40% (161/567)</td></tr><tr><th>历史TOP20累计涨停命中率</th><td>22.80% (259/1136)</td></tr><tr><th>滚动TOP10命中率</th><td>近5日 26.00%; 近20日 25.00%; 近60日 28.40%</td></tr><tr><th>概率校准</th><td>Brier 0.3087; ECE 0.3786; 样本 180</td></tr><tr><th>涨停Rank IC</th><td>Spearman均值 0.2219; 近20日 0.2219; Kendall Tau 0.1842; 正值率 100.00%; 有效天数 6</td></tr><tr><th>T+1收益Rank IC</th><td>Spearman均值 -0.1889; 近20日 -0.1889; 正值率 16.67%; 有效天数 6</td></tr><tr><th>自适应排序权重</th><td>涨停 -; T+1 -; 强度 -; 执行 -. 当T+1 Rank IC为负时，系统会降低T+1权重；转正后再逐步提高。</td></tr><tr><th>分层命中/收益摘要</th><td>TOP1-10:161/567/0.284/收益=0.0010 | TOP11-20:98/569/0.172/收益=-0.0014 | TOP21-30:100/565/0.177/收益=0.0049</td></tr><tr><th>D日市场情绪</th><td>情绪 -; 上涨占比 -; 强势股 0</td></tr><tr><th>历史统计样本</th><td>有效交易日 57; 来源： limitup_probability_training_samples.csv; 状态： 正常</td></tr><tr><th>模型版本</th><td>premium_v4_a_share_d_t_t1; 生成时间： 2026-06-19T19:10:53Z</td></tr><tr><th>备注</th><td>归档已重建=是</td></tr><tr><th>备注</th><td>历史样本来源=limitup_probability_training_samples.csv</td></tr><tr><th>备注</th><td>真值刷新=not_attempted</td></tr></tbody></table></div></div>
     </section>
     <p class="footnote">本报告由 Premium 自动生成。上一页/下一页导航基于仓库中已有的历史HTML报告日期。</p>
   </main>
