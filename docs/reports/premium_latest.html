@@ -1,72 +1,48 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang='zh-CN'>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Premium Limit-up Relay Forecast 20260618</title>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>Premium Limit-up Relay TOP10 / TOP20</title>
   <style>
-    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;background:#eef2f6;color:#142033}
-    .loading{max-width:920px;margin:12vh auto;padding:24px;background:#fff;border:1px solid #d7dde7;border-radius:8px;box-shadow:0 12px 32px rgba(20,32,51,.08)}
-    h1{margin:0 0 12px;font-size:24px;line-height:1.18}.muted{color:#667085;line-height:1.7}.err{color:#b42318}
+    :root{color-scheme:light;--page:#f5f5f7;--panel:#fff;--ink:#1d1d1f;--muted:#6e6e73;--line:#d2d2d7;--line-soft:#ececf0;--accent:#c4251a;--warn:#b26a00;--shadow:0 8px 24px rgba(0,0,0,.06)}
+    *{box-sizing:border-box}html{background:var(--page)}body{margin:0;min-width:320px;font-family:-apple-system,BlinkMacSystemFont,SF Pro SC,SF Pro Text,PingFang SC,Microsoft YaHei,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--page);-webkit-font-smoothing:antialiased}.loading{max-width:860px;margin:14vh auto;padding:24px 26px;background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;box-shadow:var(--shadow)}h1{margin:0 0 10px;font-size:24px;line-height:1.18;letter-spacing:0}.muted{color:var(--muted);line-height:1.65}.err{color:var(--accent)}
   </style>
 </head>
 <body>
-  <main class="loading">
+  <main class='loading'>
     <h1>Premium Limit-up Relay TOP10 / TOP20</h1>
-    <p class="muted">正在加载报告...</p>
+    <p class='muted'>正在加载报告...</p>
   </main>
   <script>
-    const sourceUrl = 'premium_20260618.html?mixed=1&v=20260620';
+    const sourceUrl = 'premium_20260618.html?mixed=1&v=20260620-apple-ui';
+    const premiumStyle = `<style>
+    :root{color-scheme:light;--page:#f5f5f7;--panel:#ffffff;--panel-soft:#fbfbfd;--ink:#1d1d1f;--muted:#6e6e73;--line:#d2d2d7;--line-soft:#ececf0;--accent:#c4251a;--warn:#b26a00;--shadow:0 8px 24px rgba(0,0,0,.06)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;background:var(--page)}body{margin:0;min-width:320px;font-family:-apple-system,BlinkMacSystemFont,SF Pro SC,SF Pro Text,PingFang SC,Microsoft YaHei,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--page);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}header{position:sticky;top:0;z-index:10;padding:18px 28px 14px;background:rgba(251,251,253,.88);border-bottom:1px solid rgba(210,210,215,.72);backdrop-filter:saturate(180%) blur(18px)}.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1440px;margin:0 auto}.kicker{color:var(--muted);font-weight:600;font-size:12px;line-height:1.35;letter-spacing:0}h1{margin:5px 0 0;font-size:24px;line-height:1.18;letter-spacing:0;font-weight:700}.status-pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:7px 12px;color:var(--muted);font-size:13px;line-height:1;white-space:nowrap;background:rgba(255,255,255,.8)}.status-pill b{color:var(--ink)}main{padding:20px 28px 40px;max-width:1440px;margin:0 auto}.report-nav{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 16px;padding:10px;background:rgba(255,255,255,.72);border:1px solid var(--line-soft);border-radius:8px}.nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.nav-btn,.date-chip,.tab-btn{border:1px solid transparent;background:transparent;color:#1d1d1f;text-decoration:none;border-radius:999px;padding:8px 13px;font-size:13px;line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}.nav-btn:hover,.date-chip:hover,.tab-btn:hover{background:#fff;border-color:var(--line-soft)}.nav-btn.primary,.date-chip.active,.tab-btn.active{color:#fff;background:#1d1d1f;border-color:#1d1d1f;font-weight:600}.nav-btn.disabled{color:#a1a1a6;background:transparent;cursor:not-allowed}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:12px;margin-bottom:16px}.metric{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:16px 17px;min-height:104px;box-shadow:var(--shadow)}.metric-wide{grid-column:span 2}.metric span{display:block;color:var(--muted);font-size:12px;line-height:1.35;font-weight:600}.metric strong{display:block;margin-top:9px;color:var(--ink);font-size:24px;line-height:1.12;font-weight:700}.metric small{display:block;margin-top:8px;color:var(--muted);font-size:12px;line-height:1.42}.metric-lines{margin-top:10px;display:grid;gap:8px}.metric-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line-soft)}.metric-line:first-child{border-top:0;padding-top:0}.metric-line span{color:#424245;font-weight:600;line-height:1.3}.metric-line strong{margin:0;font-size:20px;color:var(--accent);font-variant-numeric:tabular-nums}.metric-line small{margin:0;color:var(--muted);font-size:12px;white-space:nowrap}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;background:rgba(255,255,255,.86);border:1px solid var(--line-soft);border-radius:8px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.03)}.hint{color:var(--muted);font-size:13px;line-height:1.35}section{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;margin-top:14px;overflow:hidden;box-shadow:var(--shadow)}section.hidden{display:none}.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid var(--line-soft);background:var(--panel)}h2{margin:0;font-size:18px;letter-spacing:0;font-weight:700}.badge{border:1px solid var(--line-soft);border-radius:999px;padding:5px 10px;font-size:12px;color:var(--muted);white-space:nowrap;background:var(--panel-soft)}.table-wrap{overflow:auto;width:100%;max-height:72vh}table{width:100%;border-collapse:collapse;min-width:1100px}th,td{padding:11px 13px;border-bottom:1px solid var(--line-soft);text-align:left;white-space:nowrap;font-size:13px;line-height:1.35;vertical-align:top}th{background:#f7f7fa;color:#55555b;font-weight:700;position:sticky;top:0;z-index:2}td{color:#1d1d1f}tbody tr:nth-child(even) td{background:#fbfbfd}tbody tr:hover td{background:#fff7f5}th:first-child,td:first-child{position:sticky;left:0;z-index:1;background:#fff}tbody tr:nth-child(even) td:first-child{background:#fbfbfd}tbody tr:hover td:first-child{background:#fff7f5}th:first-child{z-index:3}.num{font-variant-numeric:tabular-nums;font-weight:650}.good{color:var(--accent)}.mid{color:var(--warn)}.quiet{color:#5f6368}.explain{padding:16px 18px 18px;color:#424245;line-height:1.7}.explain div{padding:8px 0;border-bottom:1px solid var(--line-soft)}.explain div:last-of-type{border-bottom:0}.explain ul{margin:8px 0 0;padding-left:18px}.empty{margin:0;padding:16px 18px;color:var(--muted)}.footnote{color:var(--muted);font-size:12px;margin:14px 0 0;line-height:1.5}@media(max-width:900px){header{position:static}header,main{padding-left:16px;padding-right:16px}.topbar,.report-nav,.toolbar{align-items:flex-start;flex-direction:column}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-wide{grid-column:1 / -1}h1{font-size:24px}}@media(max-width:560px){.metrics{grid-template-columns:1fr}.metric-line{grid-template-columns:1fr auto}.metric-line small{grid-column:1 / -1}.section-head{align-items:flex-start;flex-direction:column}}
+  </style>`;
     const textReplacements = [
-      ['<html lang="en">','<html lang="zh-CN">'],
-      ['Premium V4 Quant Engine','Premium V4 量化引擎'],
-      ['Validation <b>PENDING</b>','验证状态 <b>待验证</b>'], ['Validation <b>READY</b>','验证状态 <b>已验证</b>'],
-      ['>PENDING<','>待验证<'], ['>READY<','>已验证<'],
-      ['Report navigation','报告导航'], ['Previous Report','上一份报告'], ['Latest Report','最新报告'], ['Next Report','下一份报告'],
-      ['D Analysis Date','D日分析日期'], ['Uses post-close data from D only','只使用D日收盘后可见数据'],
-      ['T Auction Buy Date','T日竞价买入日期'], ['Strict A-share trading calendar','严格按中国A股交易日历'],
-      ['T+1 Timing Exit Date','T+1择时卖出日期'], ['Continuation and validation date','接力验证和择时卖出日期'],
-      ['Current TOP10 Hit Rate','当前TOP10涨停命中率'], ['Historical TOP10 Limit-up Hit Rate','历史TOP10累计涨停命中率'],
-      ['Head Historical Limit-up Hit Rate','头部历史累计涨停命中率'], ['TOP1 Historical Limit-up Hit Rate','TOP1 历史累计涨停命中率'],
-      ['TOP3 Historical Limit-up Hit Rate','TOP3 历史累计涨停命中率'], ['TOP5 Historical Limit-up Hit Rate','TOP5 历史累计涨停命中率'],
-      ['Head Historical Up Rate','头部历史累计上涨率'], ['TOP1 Historical Up Rate','TOP1 历史累计上涨率'],
-      ['TOP3 Historical Up Rate','TOP3 历史累计上涨率'], ['TOP5 Historical Up Rate','TOP5 历史累计上涨率'],
-      ['T close &gt; D close','T日收盘&gt;D日收盘'], ['20D TOP10 Hit Rate','近20日TOP10命中率'],
-      ['5D ','近5日 '], ['60D ','近60日 '], ['20D ','近20日 '],
-      ['Probability Calibration Quality','概率校准质量'], ['Limit-up Rank IC','涨停Rank IC'], ['T+1 Return Rank IC','T+1收益Rank IC'],
-      ['Adaptive Ranking Weights','自适应排序权重'], ['Professional Gate','专业门槛'], ['Tier Effectiveness','分层有效性'], ['D Market Sentiment','D日市场情绪'],
-      ['List switcher','列表切换'], ['TOP10 Execution List','TOP10 执行名单'], ['TOP20 Watch List','TOP20 观察名单'], ['Validation & Learning','验证与学习'],
-      ['Tables scroll horizontally with the first column pinned; stronger colors indicate higher probability or score.','表格可横向滚动，首列固定；颜色越强表示概率或评分越高。'],
-      ['TOP10: Highest T-day Limit-up Probability','TOP10: T日涨停概率最高'], ['Core Execution List','核心执行名单'],
-      ['TOP20: T+1 Continuation Candidates','TOP20: T+1接力观察候选'], ['Extended Watch List','扩展观察名单'],
-      ['Validation status:','验证状态：'], ['Current TOP10 limit-up prediction hit rate:','当前TOP10涨停预测命中率：'],
-      ['Current TOP20 limit-up prediction hit rate:','当前TOP20涨停预测命中率：'],
-      ['Historical TOP1 / TOP3 / TOP5 cumulative limit-up hit rate:','历史TOP1 / TOP3 / TOP5累计涨停命中率：'],
-      ['Historical TOP1 / TOP3 / TOP5 cumulative up rate:','历史TOP1 / TOP3 / TOP5累计上涨率：'],
-      ['Historical TOP10 cumulative limit-up hit rate:','历史TOP10累计涨停命中率：'], ['Historical TOP20 cumulative limit-up hit rate:','历史TOP20累计涨停命中率：'],
-      ['Rolling TOP10 hit rate:','滚动TOP10命中率：'], ['Probability calibration:','概率校准：'], ['Adaptive ranking weights:','自适应排序权重：'],
-      ['T+1 weight is reduced when T+1 Rank IC is negative, then increases gradually after it turns positive.','当T+1 Rank IC为负时，系统会降低T+1权重；转正后再逐步提高。'],
-      ['Tier hit/return summary:','分层命中/收益摘要：'], ['D-day market sentiment:','D日市场情绪：'], ['Historical statistics sample:','历史统计样本：'],
-      ['Model version:','模型版本：'], ['generated at:','生成时间：'],
-      ['This report is generated automatically by Premium. Previous/next navigation is based on historical HTML report dates already present in the repository.','本报告由 Premium 自动生成。上一页/下一页导航基于仓库中已有的历史HTML报告日期。'],
-      ['>ELIGIBLE<','>合格池<'], ['>WATCH<','>观察池<'], ['>EXCLUDED<','>排除池<'], ['>ok<','>正常<'],
-      ['no_ready_limitup_rows','没有可验证的涨停样本'], ['t_daily_not_ready','T日行情未就绪'], ['fetch_remote_failed','远端拉取失败'], ['http_get_failed','HTTP请求失败'], ['Not Found','未找到'],
-      ['professional_score_rule_guarded','专业评分规则保护模式'], ['disabled_validation_not_pass','模型验证未通过，未接管排序'],
-      ['; rank ','；排序 '], ['; model ','；模型 '], ['Excluded ','排除 '], [' eligible / ',' 合格 / '], [' watch',' 观察'],
-      ['Limit-up ','涨停 '], ['limit-up ','涨停 '], ['Strength ','强度 '], ['strength ','强度 '], ['Execution ','执行 '], ['execution ','执行 '],
-      ['Up ratio ','上涨占比 '], ['up ratio ','上涨占比 '], ['strong stocks ','强势股 '], ['sentiment ','情绪 '], ['samples ','样本 '], ['days=','天数='], ['samples=','样本='],
-      ['valid trading days ','有效交易日 '], ['valid days ','有效天数 '], ['trading days ','交易日 '], ['positive rate ','正值率 '], ['Spearman mean ','Spearman均值 '], ['source:','来源：'], ['status:','状态：'], ['status=','状态='], ['ret=','收益='], ['url=','URL=']
+      ['Premium V4 Quant Engine','Premium V4 量化引擎'],['Validation <b>PENDING</b>','验证状态 <b>待验证</b>'],['Validation <b>READY</b>','验证状态 <b>已验证</b>'],['>PENDING<','>待验证<'],['>READY<','>已验证<'],['Report navigation','报告导航'],['Previous Report','上一份报告'],['Latest Report','最新报告'],['Next Report','下一份报告'],['D Analysis Date','D日分析日期'],['Uses post-close data from D only','只使用D日收盘后可见数据'],['T Auction Buy Date','T日竞价买入日期'],['Strict A-share trading calendar','严格按中国A股交易日历'],['T+1 Timing Exit Date','T+1择时卖出日期'],['Continuation and validation date','接力验证和择时卖出日期'],['Current TOP10 Hit Rate','当前TOP10涨停命中率'],['Historical TOP10 Limit-up Hit Rate','历史TOP10累计涨停命中率'],['Head Historical Limit-up Hit Rate','头部历史累计涨停命中率'],['TOP1 Historical Limit-up Hit Rate','TOP1 历史累计涨停命中率'],['TOP3 Historical Limit-up Hit Rate','TOP3 历史累计涨停命中率'],['TOP5 Historical Limit-up Hit Rate','TOP5 历史累计涨停命中率'],['Head Historical Up Rate','头部历史累计上涨率'],['TOP1 Historical Up Rate','TOP1 历史累计上涨率'],['TOP3 Historical Up Rate','TOP3 历史累计上涨率'],['TOP5 Historical Up Rate','TOP5 历史累计上涨率'],['T close &gt; D close','T日收盘&gt;D日收盘'],['20D TOP10 Hit Rate','近20日TOP10命中率'],['5D ','近5日 '],['60D ','近60日 '],['20D ','近20日 '],['Probability Calibration Quality','概率校准质量'],['Limit-up Rank IC','涨停Rank IC'],['T+1 Return Rank IC','T+1收益Rank IC'],['Adaptive Ranking Weights','自适应排序权重'],['Professional Gate','专业门槛'],['Tier Effectiveness','分层有效性'],['D Market Sentiment','D日市场情绪'],['List switcher','列表切换'],['TOP10 Execution List','TOP10 执行名单'],['TOP20 Watch List','TOP20 观察名单'],['Validation & Learning','验证与学习'],['Tables scroll horizontally with the first column pinned; stronger colors indicate higher probability or score.','表格可横向滚动，首列固定；颜色越强表示概率或评分越高。'],['TOP10: Highest T-day Limit-up Probability','TOP10: T日涨停概率最高'],['Core Execution List','核心执行名单'],['TOP20: T+1 Continuation Candidates','TOP20: T+1接力观察候选'],['Extended Watch List','扩展观察名单'],['Validation status:','验证状态：'],['Current TOP10 limit-up prediction hit rate:','当前TOP10涨停预测命中率：'],['Current TOP20 limit-up prediction hit rate:','当前TOP20涨停预测命中率：'],['Historical TOP1 / TOP3 / TOP5 cumulative limit-up hit rate:','历史TOP1 / TOP3 / TOP5累计涨停命中率：'],['Historical TOP1 / TOP3 / TOP5 cumulative up rate:','历史TOP1 / TOP3 / TOP5累计上涨率：'],['Historical TOP10 cumulative limit-up hit rate:','历史TOP10累计涨停命中率：'],['Historical TOP20 cumulative limit-up hit rate:','历史TOP20累计涨停命中率：'],['Rolling TOP10 hit rate:','滚动TOP10命中率：'],['Probability calibration:','概率校准：'],['Adaptive ranking weights:','自适应排序权重：'],['T+1 weight is reduced when T+1 Rank IC is negative, then increases gradually after it turns positive.','当T+1 Rank IC为负时，系统会降低T+1权重；转正后再逐步提高。'],['Tier hit/return summary:','分层命中/收益摘要：'],['D-day market sentiment:','D日市场情绪：'],['Historical statistics sample:','历史统计样本：'],['Model version:','模型版本：'],['generated at:','生成时间：'],['This report is generated automatically by Premium. Previous/next navigation is based on historical HTML report dates already present in the repository.','本报告由 Premium 自动生成。上一页/下一页导航基于仓库中已有的历史HTML报告日期。'],['>ELIGIBLE<','>合格池<'],['>WATCH<','>观察池<'],['>EXCLUDED<','>排除池<'],['>ok<','>正常<'],['no_ready_limitup_rows','没有可验证的涨停样本'],['t_daily_not_ready','T日行情未就绪'],['fetch_remote_failed','远端拉取失败'],['http_get_failed','HTTP请求失败'],['Not Found','未找到'],['professional_score_rule_guarded','专业评分规则保护模式'],['disabled_validation_not_pass','模型验证未通过，未接管排序'],['; rank ','；排序 '],['; model ','；模型 '],['Excluded ','排除 '],[' eligible / ',' 合格 / '],[' watch',' 观察'],['Limit-up ','涨停 '],['limit-up ','涨停 '],['Strength ','强度 '],['strength ','强度 '],['Execution ','执行 '],['execution ','执行 '],['Up ratio ','上涨占比 '],['up ratio ','上涨占比 '],['strong stocks ','强势股 '],['sentiment ','情绪 '],['samples ','样本 '],['days=','天数='],['samples=','样本='],['valid trading days ','有效交易日 '],['valid days ','有效天数 '],['trading days ','交易日 '],['positive rate ','正值率 '],['Spearman mean ','Spearman均值 '],['source:','来源：'],['status:','状态：'],['status=','状态='],['ret=','收益='],['url=','URL=']
     ];
-    const headerMap = {
-      '排名':'Rank','代码':'Code','名称':'Name','姓名':'Name','板块':'Sector','部门':'Sector','D日收盘':'D Close','D 关':'D Close','分组':'Bucket','桶':'Bucket',
-      'T涨停概率':'T-Up','T强度':'T-Strength','T力量':'T-Strength','T攻击':'T-Attack','T+1上涨概率':'T1-Up','T+1承接分':'T1-Accept','T1-接受':'T1-Accept','T+1接力分':'T1-Relay','T1中继':'T1-Relay','总分':'Score','分数':'Score','门槛原因':'Gate','门':'Gate','T日竞价动作':'T Auction Action','T 拍卖行动':'T Auction Action','价格':'Price','T+1卖出计划':'T+1 Sell Plan','T+1 销售计划':'T+1 Sell Plan'
-    };
-    function localize(html) {
-      for (const [a,b] of textReplacements) html = html.split(a).join(b);
-      for (const [a,b] of Object.entries(headerMap)) html = html.split('<th>'+a+'</th>').join('<th>'+b+'</th>');
+    const headerMap = {'排名':'Rank','代码':'Code','名称':'Name','姓名':'Name','板块':'Sector','部门':'Sector','D日收盘':'D Close','D 关':'D Close','分组':'Bucket','桶':'Bucket','T涨停概率':'T-Up','T强度':'T-Strength','T力量':'T-Strength','T攻击':'T-Attack','T+1上涨概率':'T1-Up','T+1承接分':'T1-Accept','T1-接受':'T1-Accept','T+1接力分':'T1-Relay','T1中继':'T1-Relay','总分':'Score','分数':'Score','门槛原因':'Gate','门':'Gate','T日竞价动作':'T Auction Action','T 拍卖行动':'T Auction Action','价格':'Price','T+1卖出计划':'T+1 Sell Plan','T+1 销售计划':'T+1 Sell Plan'};
+    function replaceStyle(html){
+      const a = html.indexOf('<style>');
+      const b = a >= 0 ? html.indexOf('</style>', a) : -1;
+      if (a >= 0 && b >= 0) return html.slice(0, a) + premiumStyle + html.slice(b + 8);
+      return html.replace('</head>', premiumStyle + '</head>');
+    }
+    function forceLang(html){
+      const a = html.indexOf('<html');
+      const b = a >= 0 ? html.indexOf('>', a) : -1;
+      if (a >= 0 && b >= 0) return html.slice(0, a) + `<html lang='zh-CN'` + html.slice(b);
+      return html;
+    }
+    function localize(html){
+      html = forceLang(replaceStyle(html));
+      for (const pair of textReplacements) html = html.split(pair[0]).join(pair[1]);
+      for (const key of Object.keys(headerMap)) html = html.split('<th>' + key + '</th>').join('<th>' + headerMap[key] + '</th>');
       return html.replace(/(\d+) days/g,'$1日').replace(/:天数=/g,'：天数=').replace(/;样本=/g,'；样本=').replace(/;t1_/g,'；t1_').replace(/, 没有/g,'，没有').replace(/, 交易日/g,'，交易日').replace(/状态： ok/g,'状态： 正常').replace(/<title>Premium 涨停 Relay Forecast/g,'<title>Premium Limit-up Relay Forecast').replace(/<h1>Premium 涨停 Relay TOP10 \/ TOP20<\/h1>/g,'<h1>Premium Limit-up Relay TOP10 / TOP20</h1>');
     }
-    fetch(sourceUrl, {cache:'no-store'})
+    fetch(sourceUrl,{cache:'no-store'})
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
       .then(html => { document.open(); document.write(localize(html)); document.close(); })
       .catch(err => { document.querySelector('.loading').innerHTML = '<h1>Premium Limit-up Relay TOP10 / TOP20</h1><p class="muted err">报告加载失败：' + String(err).replace(/[<>]/g,'') + '</p>'; });
