@@ -1,7 +1,7 @@
 {
   "trade_date": "20260618",
-  "created_at_utc": "2026-06-18T16:44:01+00:00",
-  "commit_sha": "aa268bca432b12bcec3ce1de651e50cc92c84e9b",
+  "created_at_utc": "2026-06-19T16:15:29+00:00",
+  "commit_sha": "fa960fb6e6951eb4352c76bac29871cc4cea0911",
   "fs_version": "v0.5-history-roll-features",
   "richness_target": 0.75,
   "richness_estimate": 0.989247,
@@ -150,7 +150,7 @@
     "namechange": {
       "path": "data/market/raw/2026/20260618/namechange.csv",
       "loaded": true,
-      "rows": 58,
+      "rows": 59,
       "columns": [
         "ts_code",
         "name_change_name",
@@ -164,7 +164,7 @@
       "loaded": true,
       "content": {
         "trade_date": "20260618",
-        "created_at_utc": "2026-06-18T16:42:32+00:00",
+        "created_at_utc": "2026-06-19T16:13:25+00:00",
         "source_repo": {
           "owner": "njedu2023-prog",
           "repo": "a-share-top3-data",
@@ -179,7 +179,7 @@
         "upstream_meta": {
           "requested_trade_date": null,
           "resolved_trade_date": "20260618",
-          "generated_at_bj": "2026-06-18 20:49:59",
+          "generated_at_bj": "2026-06-19 21:33:12",
           "jobs": [
             {
               "key": "limit_list_d",
@@ -271,7 +271,7 @@
                 "fields": "ts_code,name,start_date,end_date,change_reason"
               },
               "status": "ok",
-              "rows": 63,
+              "rows": 64,
               "error": null
             },
             {
@@ -482,7 +482,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260618/namechange.csv",
             "latest_path": "data/market/raw/latest/namechange.csv",
-            "bytes": 2666
+            "bytes": 2701
           },
           {
             "name": "stk_limit",
