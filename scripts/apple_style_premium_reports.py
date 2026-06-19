@@ -27,6 +27,8 @@ PREMIUM_STYLE = '''<style>
     .report-nav{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 16px;padding:10px;background:rgba(255,255,255,.72);border:1px solid var(--line-soft);border-radius:8px}
     .nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .nav-btn,.date-chip,.tab-btn{border:1px solid transparent;background:transparent;color:#1d1d1f;text-decoration:none;border-radius:999px;padding:8px 13px;font-size:13px;line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}
+    .nav-btn.nav-icon{width:42px;height:42px;min-width:42px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:600}
+    .nav-btn.nav-icon span{display:block;transform:translateY(-1px)}
     .nav-btn:hover,.date-chip:hover,.tab-btn:hover{background:#fff;border-color:var(--line-soft)}
     .nav-btn.primary,.date-chip.active,.tab-btn.active{color:#fff;background:#1d1d1f;border-color:#1d1d1f;font-weight:600}
     .nav-btn.disabled{color:#a1a1a6;background:transparent;cursor:not-allowed}
@@ -91,12 +93,36 @@ def iter_report_files(report_dir: Path) -> list[Path]:
     return sorted(report_dir.glob('premium_*.html')) + sorted(report_dir.glob('premium_latest.html'))
 
 
+def normalize_nav_arrows(text: str) -> str:
+    replacements = [
+        (
+            r'<a class="nav-btn" href="([^"]+)">(Previous Report|上一份报告)</a>',
+            r'<a class="nav-btn nav-icon" href="\1" aria-label="上一份报告" title="上一份报告"><span aria-hidden="true">&#8592;</span></a>',
+        ),
+        (
+            r'<span class="nav-btn disabled">(Previous Report|上一份报告)</span>',
+            r'<span class="nav-btn nav-icon disabled" aria-label="上一份报告" title="上一份报告"><span aria-hidden="true">&#8592;</span></span>',
+        ),
+        (
+            r'<a class="nav-btn" href="([^"]+)">(Next Report|下一份报告)</a>',
+            r'<a class="nav-btn nav-icon" href="\1" aria-label="下一份报告" title="下一份报告"><span aria-hidden="true">&#8594;</span></a>',
+        ),
+        (
+            r'<span class="nav-btn disabled">(Next Report|下一份报告)</span>',
+            r'<span class="nav-btn nav-icon disabled" aria-label="下一份报告" title="下一份报告"><span aria-hidden="true">&#8594;</span></span>',
+        ),
+    ]
+    for pattern, repl in replacements:
+        text = re.sub(pattern, repl, text)
+    return text
+
+
 def restyle_html(text: str) -> str:
-    text = re.sub(r'<html[^>]*>', '<html lang="zh-CN">', text, count=1, flags=re.I)
+    text = re.sub(r'<html[^>]*>', '<html lang=\"zh-CN\">', text, count=1, flags=re.I)
     text = re.sub(r'<style>.*?</style>', PREMIUM_STYLE, text, count=1, flags=re.S)
     for old, new in HEADER_MAP.items():
         text = text.replace(f'<th>{old}</th>', f'<th>{new}</th>')
-    return text
+    return normalize_nav_arrows(text)
 
 
 def main() -> int:
