@@ -19,6 +19,8 @@
     .report-nav{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 16px;padding:10px;background:rgba(255,255,255,.72);border:1px solid var(--line-soft);border-radius:8px}
     .nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .nav-btn,.date-chip,.tab-btn{border:1px solid transparent;background:transparent;color:#1d1d1f;text-decoration:none;border-radius:999px;padding:8px 13px;font-size:13px;line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}
+    .nav-btn.nav-icon{width:42px;height:42px;min-width:42px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:600}
+    .nav-btn.nav-icon span{display:block;transform:translateY(-1px)}
     .nav-btn:hover,.date-chip:hover,.tab-btn:hover{background:#fff;border-color:var(--line-soft)}
     .nav-btn.primary,.date-chip.active,.tab-btn.active{color:#fff;background:#1d1d1f;border-color:#1d1d1f;font-weight:600}
     .nav-btn.disabled{color:#a1a1a6;background:transparent;cursor:not-allowed}
@@ -80,9 +82,9 @@
     
       <nav class="report-nav" aria-label="报告导航">
         <div class="nav-actions">
-          <a class="nav-btn" href="premium_20260309.html">上一份报告</a>
+          <a class="nav-btn nav-icon" href="premium_20260309.html" aria-label="上一份报告" title="上一份报告"><span aria-hidden="true">&#8592;</span></a>
           <a class="nav-btn primary" href="premium_latest.html">最新报告</a>
-          <a class="nav-btn" href="premium_20260311.html">下一份报告</a>
+          <a class="nav-btn nav-icon" href="premium_20260311.html" aria-label="下一份报告" title="下一份报告"><span aria-hidden="true">&#8594;</span></a>
         </div>
         <div class="date-chips"><a class="date-chip" href="premium_20260610.html">20260610</a><a class="date-chip" href="premium_20260612.html">20260612</a><a class="date-chip" href="premium_20260615.html">20260615</a><a class="date-chip" href="premium_20260616.html">20260616</a><a class="date-chip" href="premium_20260617.html">20260617</a><a class="date-chip" href="premium_20260618.html">20260618</a></div>
       </nav>
@@ -122,7 +124,7 @@
         <div>分层命中/收益摘要： TOP1-10:161/567/0.284/收益=0.0010 | TOP11-20:98/569/0.172/收益=-0.0014 | TOP21-30:100/565/0.177/收益=0.0049</div>
         <div>D日市场情绪： 情绪 -; 上涨占比 -; 强势股 0</div>
         <div>历史统计样本： 有效交易日 57; 来源： limitup_probability_training_samples.csv; 状态： 正常</div>
-        <div>模型版本： premium_v4_a_share_d_t_t1; 生成时间： 2026-06-19T18:33:37Z</div>
+        <div>模型版本： premium_v4_a_share_d_t_t1; 生成时间： 2026-06-19T18:48:40Z</div>
         <ul><li>归档已重建=是</li><li>历史样本来源=limitup_probability_training_samples.csv</li><li>真值刷新=missing_buy_date</li></ul>
       </div>
     </section>
