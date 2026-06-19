@@ -35,14 +35,14 @@ PREMIUM_STYLE = '''<style>
     .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:12px;margin-bottom:16px}
     .metric{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:16px 17px;min-height:104px;box-shadow:var(--shadow)}
     .metric-wide{grid-column:span 2}
-    .metric span{display:block;color:var(--muted);font-size:12px;line-height:1.35;font-weight:600}
-    .metric strong{display:block;margin-top:9px;color:var(--ink);font-size:24px;line-height:1.12;font-weight:700}
-    .metric small{display:block;margin-top:8px;color:var(--muted);font-size:12px;line-height:1.42}
+    .metric span{display:block;color:var(--muted);font-size:11.5px;line-height:1.35;font-weight:600}
+    .metric strong{display:block;margin-top:9px;color:var(--ink);font-size:21px;line-height:1.2;font-weight:700}
+    .metric small{display:block;margin-top:8px;color:var(--muted);font-size:11.5px;line-height:1.42}
     .metric-lines{margin-top:10px;display:grid;gap:8px}
     .metric-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line-soft)}
     .metric-line:first-child{border-top:0;padding-top:0}
     .metric-line span{color:#424245;font-weight:600;line-height:1.3}
-    .metric-line strong{margin:0;font-size:20px;color:var(--accent);font-variant-numeric:tabular-nums}
+    .metric-line strong{margin:0;font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums}
     .metric-line small{margin:0;color:var(--muted);font-size:12px;white-space:nowrap}
     .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;background:rgba(255,255,255,.86);border:1px solid var(--line-soft);border-radius:8px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
     .hint{color:var(--muted);font-size:13px;line-height:1.35}
@@ -70,6 +70,14 @@ PREMIUM_STYLE = '''<style>
     .explain div{padding:8px 0;border-bottom:1px solid var(--line-soft)}
     .explain div:last-of-type{border-bottom:0}
     .explain ul{margin:8px 0 0;padding-left:18px}
+    .verify-table-wrap{overflow:auto;width:100%}
+    .verify-table{min-width:0;width:100%;table-layout:auto}
+    .verify-table th,.verify-table td{white-space:normal;font-size:13px;line-height:1.55;padding:12px 14px}
+    .verify-table th{position:static;top:auto;width:260px;background:#f7f7fa;color:#55555b}
+    .verify-table td{color:#424245;word-break:break-word}
+    .verify-table th:first-child,.verify-table td:first-child{position:static;left:auto;background:inherit}
+    .verify-table tbody tr:nth-child(even) th,.verify-table tbody tr:nth-child(even) td{background:#fbfbfd}
+    .verify-table tbody tr:hover th,.verify-table tbody tr:hover td{background:#fff7f5}
     .empty{margin:0;padding:16px 18px;color:var(--muted)}
     .footnote{color:var(--muted);font-size:12px;margin:14px 0 0;line-height:1.5}
     @media(max-width:900px){header{position:static}header,main{padding-left:16px;padding-right:16px}.topbar,.report-nav,.toolbar{align-items:flex-start;flex-direction:column}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-wide{grid-column:1 / -1}h1{font-size:24px}}
@@ -117,12 +125,61 @@ def normalize_nav_arrows(text: str) -> str:
     return text
 
 
+def trim_long_decimals(text: str) -> str:
+    return re.sub(r'(?<![\d.])(-?\d+\.\d{4})\d+', r'\1', text)
+
+
+def convert_validation_panel_to_table(text: str) -> str:
+    pattern = re.compile(
+        r'(<section id="verify-panel"[^>]*>.*?<div class="explain">)(.*?)(</div>\s*</section>)',
+        re.S,
+    )
+
+    def repl(match: re.Match[str]) -> str:
+        body = match.group(2)
+        if 'verify-table' in body:
+            return match.group(0)
+
+        rows: list[tuple[str, str]] = []
+        for item in re.findall(r'<div>(.*?)</div>', body, flags=re.S):
+            item = re.sub(r'\s+', ' ', item).strip()
+            if not item:
+                continue
+            if '：' in item:
+                label, value = item.split('：', 1)
+            elif ':' in item:
+                label, value = item.split(':', 1)
+            else:
+                label, value = '说明', item
+            rows.append((label.strip(), value.strip()))
+
+        for li in re.findall(r'<li>(.*?)</li>', body, flags=re.S):
+            li = re.sub(r'\s+', ' ', li).strip()
+            if li:
+                rows.append(('备注', li))
+
+        if not rows:
+            return match.group(0)
+
+        body_rows = ''.join(f'<tr><th>{label}</th><td>{value}</td></tr>' for label, value in rows)
+        table = (
+            '<div class="verify-table-wrap"><table class="verify-table">'
+            '<thead><tr><th>项目</th><th>内容</th></tr></thead>'
+            f'<tbody>{body_rows}</tbody></table></div>'
+        )
+        return f'{match.group(1)}{table}{match.group(3)}'
+
+    return pattern.sub(repl, text)
+
+
 def restyle_html(text: str) -> str:
     text = re.sub(r'<html[^>]*>', '<html lang=\"zh-CN\">', text, count=1, flags=re.I)
     text = re.sub(r'<style>.*?</style>', PREMIUM_STYLE, text, count=1, flags=re.S)
     for old, new in HEADER_MAP.items():
         text = text.replace(f'<th>{old}</th>', f'<th>{new}</th>')
-    return normalize_nav_arrows(text)
+    text = normalize_nav_arrows(text)
+    text = trim_long_decimals(text)
+    return convert_validation_panel_to_table(text)
 
 
 def main() -> int:
