@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/backfill_premium_limitup_truth.py'
+      - 'scripts/localize_premium_reports.py'
+      - 'scripts/apple_style_premium_reports.py'
       - '.github/workflows/run_premium.yml'
       - '.github/workflows/localize_premium_reports.yml'
   workflow_run:
