@@ -1,0 +1,54 @@
+name: Localize Premium Reports
+
+on:
+  workflow_run:
+    workflows: ["Run Premium (Follow Decision)"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: localize-premium-reports
+  cancel-in-progress: false
+
+jobs:
+  localize:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch'
+        || github.event.workflow_run.conclusion == 'success'
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Localize Premium reports
+        run: |
+          set -e
+          python scripts/localize_premium_reports.py --verbose
+
+      - name: Commit localized reports
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/reports/premium_*.html docs/reports/premium_latest.html || true
+          if git diff --cached --quiet; then
+            echo "No Premium report localization changes."
+            exit 0
+          fi
+          git commit -m "premium: localize report labels"
+          git push origin HEAD:main
