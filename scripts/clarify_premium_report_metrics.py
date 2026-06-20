@@ -37,8 +37,8 @@ def _num_from_text(value: str) -> float | None:
 
 
 def _clean_separators(value: str) -> str:
-    value = html.unescape(_plain(value))
-    value = value.replace(";", "；")
+    value = html.unescape(_plain(value)).replace(";", "；")
+    value = re.sub(r"\s*；\s*", "；", value)
     value = re.sub(r"\s+", " ", value)
     return value.strip(" ；")
 
