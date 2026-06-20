@@ -7,6 +7,7 @@ on:
       - 'scripts/backfill_premium_limitup_truth.py'
       - 'scripts/localize_premium_reports.py'
       - 'scripts/apple_style_premium_reports.py'
+      - 'scripts/clarify_premium_report_metrics.py'
       - '.github/workflows/run_premium.yml'
       - '.github/workflows/localize_premium_reports.yml'
   workflow_run:
@@ -60,6 +61,7 @@ jobs:
           python scripts/rebuild_premium_reports.py --verbose
           python scripts/localize_premium_reports.py --verbose
           python scripts/apple_style_premium_reports.py --verbose
+          python scripts/clarify_premium_report_metrics.py --verbose
 
       - name: Commit localized reports
         run: |
