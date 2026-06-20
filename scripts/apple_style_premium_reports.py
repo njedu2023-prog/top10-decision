@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import re
 from pathlib import Path
 
@@ -38,6 +39,7 @@ PREMIUM_STYLE = '''<style>
     .metric span{display:block;color:var(--muted);font-size:11.5px;line-height:1.35;font-weight:600}
     .metric strong{display:block;margin-top:9px;color:var(--ink);font-size:21px;line-height:1.2;font-weight:700}
     .metric small{display:block;margin-top:8px;color:var(--muted);font-size:11.5px;line-height:1.42}
+    .metric-verify-current small{color:#424245}
     .metric-lines{margin-top:10px;display:grid;gap:8px}
     .metric-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line-soft)}
     .metric-line:first-child{border-top:0;padding-top:0}
@@ -96,6 +98,12 @@ HEADER_MAP = {
     '价格': 'Price', 'T+1卖出计划': 'T+1 Sell Plan', 'T+1 销售计划': 'T+1 Sell Plan',
 }
 
+DATE_LABELS = {
+    'd': ('D日分析日期', 'D Analysis Date'),
+    't': ('T日竞价买入日期', 'T Auction Buy Date'),
+    't1': ('T+1择时卖出日期', 'T+1 Timing Exit Date'),
+}
+
 
 def iter_report_files(report_dir: Path) -> list[Path]:
     return sorted(report_dir.glob('premium_*.html')) + sorted(report_dir.glob('premium_latest.html'))
@@ -127,6 +135,107 @@ def normalize_nav_arrows(text: str) -> str:
 
 def trim_long_decimals(text: str) -> str:
     return re.sub(r'(?<![\d.])(-?\d+\.\d{4})\d+', r'\1', text)
+
+
+def _strip_tags(value: str) -> str:
+    return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', value or '')).strip()
+
+
+def _esc(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _extract_metric_value(text: str, labels: tuple[str, ...]) -> str:
+    label_alt = '|'.join(re.escape(x) for x in labels)
+    pattern = re.compile(
+        r'<div class="metric[^\"]*">\s*<span>(?:' + label_alt + r')</span>\s*<strong>(.*?)</strong>',
+        re.S,
+    )
+    match = pattern.search(text)
+    return _strip_tags(match.group(1)) if match else '-'
+
+
+def _extract_report_dates(text: str) -> tuple[str, str, str]:
+    d = _extract_metric_value(text, DATE_LABELS['d'])
+    t = _extract_metric_value(text, DATE_LABELS['t'])
+    t1 = _extract_metric_value(text, DATE_LABELS['t1'])
+    return d, t, t1
+
+
+def _parse_hits(value: str) -> tuple[int, int]:
+    match = re.search(r'(\d+)\s*/\s*(\d+)', _strip_tags(value))
+    if not match:
+        return 0, 0
+    return int(match.group(1)), int(match.group(2))
+
+
+def _parse_rate(value: str) -> str:
+    plain = _strip_tags(value)
+    match = re.search(r'(?:^|\s)(-|\d+(?:\.\d+)?%)', plain)
+    return match.group(1) if match else '-'
+
+
+def _truth_note(topn: int, rate: str, hits: int, total: int, d: str, t: str, t1: str) -> str:
+    if total > 0 and rate != '-':
+        return (
+            f'TOP{topn}：D {d} -> T {t}，T日收盘涨停命中 {hits}/{total}，命中率 {rate}；'
+            f'验证口径：T日收盘涨停=命中；T+1 {t1} 用于后续接力验证。'
+        )
+    return (
+        f'TOP{topn}：D {d} -> T {t}，等待T日收盘后的市场真值，当前不计入命中率；'
+        f'验证口径：T日收盘涨停=命中；T+1 {t1} 用于后续接力验证。'
+    )
+
+
+def _status_note(raw: str, d: str, t: str) -> str:
+    plain = _strip_tags(raw)
+    low = plain.lower()
+    if any(x in low for x in ('t_daily_not_ready', 'not_ready', '404', '未就绪', '未找到')):
+        return f'T日真值未就绪：D {d} 预测 T {t}，等待T日收盘后的市场真值数据；当前报告不计入实时命中率。'
+    if plain in {'正常', 'ok'} or low == 'ok':
+        return f'已验证：D {d} 预测 T {t}，已使用T日真实行情回填。'
+    return plain
+
+
+def enhance_current_limitup_truth(text: str) -> str:
+    d, t, t1 = _extract_report_dates(text)
+
+    current_card = re.compile(
+        r'<div class="metric[^\"]*">\s*<span>(?:当前TOP10涨停命中率|Current TOP10 Hit Rate)</span>'
+        r'\s*<strong>(.*?)</strong>\s*<small>(.*?)</small>\s*</div>',
+        re.S,
+    )
+
+    def card_repl(match: re.Match[str]) -> str:
+        value = _parse_rate(match.group(1))
+        hits, total = _parse_hits(match.group(2))
+        note = _truth_note(10, value, hits, total, d, t, t1)
+        return (
+            '<div class="metric metric-wide metric-verify-current">'
+            '<span>当前TOP10涨停命中率</span>'
+            f'<strong>{_esc(value)}</strong><small>{_esc(note)}</small></div>'
+        )
+
+    text = current_card.sub(card_repl, text, count=1)
+
+    row_specs = [
+        (10, ('当前TOP10涨停预测命中率', 'Current TOP10 limit-up prediction hit rate')),
+        (20, ('当前TOP20涨停预测命中率', 'Current TOP20 limit-up prediction hit rate')),
+    ]
+    for topn, labels in row_specs:
+        label_alt = '|'.join(re.escape(x) for x in labels)
+        row_pattern = re.compile(r'(<tr><th>(?:' + label_alt + r')</th><td>)(.*?)(</td></tr>)', re.S)
+
+        def row_repl(match: re.Match[str], n: int = topn) -> str:
+            value = _parse_rate(match.group(2))
+            hits, total = _parse_hits(match.group(2))
+            return f'{match.group(1)}{_esc(_truth_note(n, value, hits, total, d, t, t1))}{match.group(3)}'
+
+        text = row_pattern.sub(row_repl, text)
+
+    status_pattern = re.compile(r'(<tr><th>(?:验证状态|Validation status)</th><td>)(.*?)(</td></tr>)', re.S)
+    text = status_pattern.sub(lambda m: f'{m.group(1)}{_esc(_status_note(m.group(2), d, t))}{m.group(3)}', text)
+    return text
 
 
 def convert_validation_panel_to_table(text: str) -> str:
@@ -179,7 +288,8 @@ def restyle_html(text: str) -> str:
         text = text.replace(f'<th>{old}</th>', f'<th>{new}</th>')
     text = normalize_nav_arrows(text)
     text = trim_long_decimals(text)
-    return convert_validation_panel_to_table(text)
+    text = convert_validation_panel_to_table(text)
+    return enhance_current_limitup_truth(text)
 
 
 def main() -> int:
