@@ -1295,8 +1295,7 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
     c_date = pick("trade_date", "date", "dt", "交易日期", "日期")
     c_code = pick("ts_code", "code", "symbol", "ticker", "股票代码", "代码")
     c_name = pick("name", "stock_name", "股票名称", "名称")
-    c_sector = _first_existing_col(
-        dec,
+    c_sector = pick(
         "sector", "board", "industry", "sw_industry", "申万行业", "行业", "板块",
         "所属行业", "所属板块", "concept", "theme", "concept_name", "概念", "题材",
     )
