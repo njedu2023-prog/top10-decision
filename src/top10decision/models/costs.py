@@ -79,10 +79,21 @@ W_ST_LIKE = 0.020
 W_LIQUIDITY_AMOUNT = 0.006
 W_TAIL_RISK = 0.006
 
+# 分钟级摘要风险（来自 a-top10 outputs/decisio/pred_decisio_*.csv）
+# 约束：旧输入没有 intraday_* 字段时必须完全不惩罚，避免历史链路漂移。
+W_INTRADAY_HARD_RISK = 0.010
+W_INTRADAY_SOFT_RISK = 0.006
+W_INTRADAY_LOW_CONFIDENCE = 0.003
+W_INTRADAY_MISSING = 0.002
+W_LATE_WITHDRAW = 0.005
+W_RESEAL_WEAKNESS = 0.004
+W_AUCTION_WEAKNESS = 0.003
+
 # 精修参数：同类风险压缩上限
 EXECUTION_FRAGILITY_CAP = 0.018
 CROWDING_CAP = 0.010
 ST_WITH_OTHERS_CAP = 0.022
+INTRADAY_EXECUTION_CAP = 0.012
 
 # ============================================================
 # 基础工具
@@ -213,7 +224,7 @@ def _amp_pct(row: pd.Series) -> float:
 
 def _open_times(row: pd.Series) -> float:
     return _safe_float(
-        _pick_first(row, "open_times", "炸板次数", default=np.nan),
+        _pick_first(row, "open_times", "open_board_count", "炸板次数", default=np.nan),
         default=np.nan,
     )
 
@@ -338,6 +349,57 @@ def _is_st_like_flag(row: pd.Series) -> bool:
         return True
 
     return False
+
+
+def _intraday_fields_present(row: pd.Series) -> bool:
+    """
+    判断本行是否带有 a-top10 的分钟级摘要字段。
+
+    旧版 pred_source 不包含这些列时，Decision 主线必须保持原行为；
+    因此所有分钟风险惩罚都以本函数为入口闸门。
+    """
+    return any(
+        c in row.index
+        for c in (
+            "intraday_available",
+            "intraday_status",
+            "intraday_quality_score",
+            "intraday_soft_risk_score",
+            "intraday_hard_risk_flag",
+            "intraday_risk_score",
+            "late_withdraw_score",
+            "reseal_score",
+            "open_board_count",
+            "auction_strength_score",
+            "intraday_confidence_score",
+        )
+    )
+
+
+def _score_0_1(row: pd.Series, *cols: str, default: float = np.nan) -> float:
+    v = _safe_float(_pick_first(row, *cols, default=default), default=default)
+    if np.isnan(v):
+        return v
+    # 兼容 0~100 与 0~1 两种口径。
+    if v > 1.0 and v <= 100.0:
+        v = v / 100.0
+    return _clip(v, 0.0, 1.0)
+
+
+def _intraday_available_flag(row: pd.Series) -> bool:
+    if not _intraday_fields_present(row):
+        return False
+
+    v = _pick_first(row, "intraday_available", default=None)
+    if v is not None and not pd.isna(v):
+        return _safe_bool(v, default=False)
+
+    status = _safe_str(_pick_first(row, "intraday_status", default="")).lower()
+    return status in {"ok", "available", "matched", "ready", "valid"}
+
+
+def _intraday_status_text(row: pd.Series) -> str:
+    return _safe_str(_pick_first(row, "intraday_status", default="")).lower()
 
 
 def _slippage_bp_by_board(row: pd.Series) -> float:
@@ -742,6 +804,94 @@ def _risk_tail_penalty(row: pd.Series) -> float:
     return 0.0
 
 
+def _risk_intraday_hard_penalty(row: pd.Series) -> float:
+    if not _intraday_fields_present(row):
+        return 0.0
+    if _safe_bool(_pick_first(row, "intraday_hard_risk_flag", default=False), default=False):
+        return W_INTRADAY_HARD_RISK
+    return 0.0
+
+
+def _risk_intraday_soft_penalty(row: pd.Series) -> float:
+    if not _intraday_fields_present(row):
+        return 0.0
+
+    risk_score = _score_0_1(
+        row,
+        "intraday_risk_score",
+        "intraday_soft_risk_score",
+        default=np.nan,
+    )
+    if np.isnan(risk_score):
+        return 0.0
+    return float(risk_score * W_INTRADAY_SOFT_RISK)
+
+
+def _risk_intraday_confidence_penalty(row: pd.Series) -> float:
+    if not _intraday_fields_present(row):
+        return 0.0
+
+    confidence = _score_0_1(row, "intraday_confidence_score", default=np.nan)
+    quality = _score_0_1(row, "intraday_quality_score", default=np.nan)
+
+    vals = [v for v in (confidence, quality) if not np.isnan(v)]
+    if not vals:
+        return 0.0
+
+    weakness = 1.0 - max(vals)
+    if weakness <= 0.20:
+        return 0.0
+    return float(_smooth_step(weakness, 0.20, 0.70, 0.0005, W_INTRADAY_LOW_CONFIDENCE))
+
+
+def _risk_intraday_missing_penalty(row: pd.Series) -> float:
+    if not _intraday_fields_present(row):
+        return 0.0
+    if _intraday_available_flag(row):
+        return 0.0
+
+    status = _intraday_status_text(row)
+    if status in {"", "ok", "available", "matched", "ready", "valid"}:
+        return 0.0
+    return W_INTRADAY_MISSING
+
+
+def _risk_late_withdraw_penalty(row: pd.Series) -> float:
+    if not _intraday_fields_present(row):
+        return 0.0
+
+    score = _score_0_1(row, "late_withdraw_score", default=np.nan)
+    if np.isnan(score) or score <= 0.20:
+        return 0.0
+    return float(_smooth_step(score, 0.20, 0.80, 0.0005, W_LATE_WITHDRAW))
+
+
+def _risk_reseal_weakness_penalty(row: pd.Series) -> float:
+    if not _intraday_fields_present(row):
+        return 0.0
+
+    score = _score_0_1(row, "reseal_score", default=np.nan)
+    if np.isnan(score):
+        return 0.0
+    weakness = 1.0 - score
+    if weakness <= 0.25:
+        return 0.0
+    return float(_smooth_step(weakness, 0.25, 0.80, 0.0005, W_RESEAL_WEAKNESS))
+
+
+def _risk_auction_weakness_penalty(row: pd.Series) -> float:
+    if not _intraday_fields_present(row):
+        return 0.0
+
+    score = _score_0_1(row, "auction_strength_score", default=np.nan)
+    if np.isnan(score):
+        return 0.0
+    weakness = 1.0 - score
+    if weakness <= 0.30:
+        return 0.0
+    return float(_smooth_step(weakness, 0.30, 0.85, 0.0005, W_AUCTION_WEAKNESS))
+
+
 def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float]:
     # 原始分项
     risk_regime_penalty = _risk_regime_penalty(row, regime)
@@ -756,6 +906,27 @@ def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float
     risk_seal_penalty = _risk_seal_penalty(row)
     risk_st_penalty = _risk_st_penalty(row)
     risk_tail_penalty = _risk_tail_penalty(row)
+    risk_intraday_hard_penalty = _risk_intraday_hard_penalty(row)
+    risk_intraday_soft_penalty = _risk_intraday_soft_penalty(row)
+    risk_intraday_confidence_penalty = _risk_intraday_confidence_penalty(row)
+    risk_intraday_missing_penalty = _risk_intraday_missing_penalty(row)
+    risk_late_withdraw_penalty = _risk_late_withdraw_penalty(row)
+    risk_reseal_weakness_penalty = _risk_reseal_weakness_penalty(row)
+    risk_auction_weakness_penalty = _risk_auction_weakness_penalty(row)
+
+    intraday_execution_raw = (
+        risk_intraday_soft_penalty
+        + risk_intraday_confidence_penalty
+        + risk_intraday_missing_penalty
+        + risk_late_withdraw_penalty
+        + risk_reseal_weakness_penalty
+        + risk_auction_weakness_penalty
+    )
+    intraday_execution_penalty = _clip(
+        intraday_execution_raw,
+        0.0,
+        INTRADAY_EXECUTION_CAP,
+    )
 
     # -------------------------
     # 第二轮精修：执行脆弱性聚合
@@ -767,6 +938,7 @@ def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float
         0.60 * risk_seal_penalty
         + 0.55 * risk_liquidity_penalty
         + 0.45 * risk_liquidity_amount_penalty
+        + 0.75 * intraday_execution_penalty
     )
     execution_fragility_overlap = 0.30 * min(risk_open_penalty, risk_open_times_penalty)
 
@@ -815,6 +987,7 @@ def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float
         + execution_fragility_penalty
         + risk_volatility_penalty
         + risk_tail_penalty
+        + risk_intraday_hard_penalty
         + crowding_penalty
         + risk_board_penalty
         + st_penalty_effective
@@ -835,6 +1008,15 @@ def _risk_components(row: pd.Series, regime: str = "RISK_ON") -> dict[str, float
         "risk_seal_penalty": risk_seal_penalty,
         "risk_st_penalty": risk_st_penalty,
         "risk_tail_penalty": risk_tail_penalty,
+        "risk_intraday_hard_penalty": risk_intraday_hard_penalty,
+        "risk_intraday_soft_penalty": risk_intraday_soft_penalty,
+        "risk_intraday_confidence_penalty": risk_intraday_confidence_penalty,
+        "risk_intraday_missing_penalty": risk_intraday_missing_penalty,
+        "risk_late_withdraw_penalty": risk_late_withdraw_penalty,
+        "risk_reseal_weakness_penalty": risk_reseal_weakness_penalty,
+        "risk_auction_weakness_penalty": risk_auction_weakness_penalty,
+        "intraday_execution_raw": intraday_execution_raw,
+        "intraday_execution_penalty": intraday_execution_penalty,
 
         # 聚合分项
         "execution_fragility_primary": execution_fragility_primary,
@@ -883,6 +1065,15 @@ def risk_breakdown_df(regime: str, df: pd.DataFrame) -> pd.DataFrame:
                 "risk_seal_penalty",
                 "risk_st_penalty",
                 "risk_tail_penalty",
+                "risk_intraday_hard_penalty",
+                "risk_intraday_soft_penalty",
+                "risk_intraday_confidence_penalty",
+                "risk_intraday_missing_penalty",
+                "risk_late_withdraw_penalty",
+                "risk_reseal_weakness_penalty",
+                "risk_auction_weakness_penalty",
+                "intraday_execution_raw",
+                "intraday_execution_penalty",
                 "execution_fragility_primary",
                 "execution_fragility_support",
                 "execution_fragility_overlap",
