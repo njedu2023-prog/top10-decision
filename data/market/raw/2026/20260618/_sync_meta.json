@@ -1,6 +1,6 @@
 {
   "trade_date": "20260618",
-  "created_at_utc": "2026-06-22T07:57:00+00:00",
+  "created_at_utc": "2026-06-22T09:12:19+00:00",
   "source_repo": {
     "owner": "njedu2023-prog",
     "repo": "a-share-top3-data",
@@ -261,6 +261,18 @@
       "bytes": 292
     },
     {
+      "name": "intraday_features",
+      "upstream_name": "intraday_features.csv",
+      "required": false,
+      "success": true,
+      "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/intraday_features.csv",
+      "status_code": 200,
+      "error": "",
+      "dated_path": "data/market/raw/2026/20260618/intraday_features.csv",
+      "latest_path": "data/market/raw/latest/intraday_features.csv",
+      "bytes": 10773
+    },
+    {
       "name": "limit_break_d",
       "upstream_name": "limit_break_d.csv",
       "required": false,
@@ -321,6 +333,18 @@
       "bytes": 2701
     },
     {
+      "name": "stk_auction",
+      "upstream_name": "stk_auction.csv",
+      "required": false,
+      "success": true,
+      "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/stk_auction.csv",
+      "status_code": 200,
+      "error": "",
+      "dated_path": "data/market/raw/2026/20260618/stk_auction.csv",
+      "latest_path": "data/market/raw/latest/stk_auction.csv",
+      "bytes": 218429
+    },
+    {
       "name": "stk_limit",
       "upstream_name": "stk_limit.csv",
       "required": true,
@@ -365,7 +389,7 @@
     "removed_count": 0
   },
   "summary": {
-    "success_count": 11,
+    "success_count": 13,
     "failure_count": 0,
     "required_failure_count": 0
   }
