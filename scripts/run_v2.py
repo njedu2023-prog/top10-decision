@@ -430,6 +430,127 @@ def _safe_numeric_col(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Se
     return pd.Series(default, index=df.index, dtype=float)
 
 
+INTRADAY_INPUT_COLS = [
+    "intraday_available",
+    "intraday_status",
+    "intraday_quality_score",
+    "intraday_soft_risk_score",
+    "intraday_hard_risk_flag",
+    "intraday_risk_score",
+    "late_withdraw_score",
+    "reseal_score",
+    "open_board_count",
+    "auction_strength_score",
+    "intraday_confidence_score",
+]
+
+INTRADAY_PENALTY_COLS = [
+    "risk_intraday_hard_penalty",
+    "risk_intraday_soft_penalty",
+    "risk_intraday_confidence_penalty",
+    "risk_intraday_missing_penalty",
+    "risk_late_withdraw_penalty",
+    "risk_reseal_weakness_penalty",
+    "risk_auction_weakness_penalty",
+    "intraday_execution_penalty",
+]
+
+
+def _truthy_series(s: pd.Series) -> pd.Series:
+    text = s.astype(str).str.strip().str.lower()
+    return text.isin({"1", "1.0", "true", "yes", "y", "t", "ok", "available", "matched", "ready", "valid"})
+
+
+def _score_series_0_1(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
+    s = _safe_numeric_col(df, col, default=default)
+    s = s.where(s <= 1.0, s / 100.0)
+    return s.clip(lower=0.0, upper=1.0)
+
+
+def _json_float(v: Any) -> float:
+    try:
+        x = float(v)
+    except Exception:
+        return 0.0
+    if pd.isna(x):
+        return 0.0
+    return x
+
+
+def _build_intraday_risk_summary(df: pd.DataFrame) -> dict[str, Any]:
+    if df is None or df.empty:
+        return {
+            "fields_present": False,
+            "rows": 0,
+            "available_rows": 0,
+            "hard_risk_rows": 0,
+            "intraday_ev_bonus_mean": 0.0,
+            "intraday_penalty_extra_mean": 0.0,
+            "intraday_execution_penalty_mean": 0.0,
+            "status_counts": {},
+            "top_penalty_rows": [],
+        }
+
+    cols_present = [c for c in INTRADAY_INPUT_COLS if c in df.columns]
+    out: dict[str, Any] = {
+        "fields_present": bool(cols_present),
+        "present_columns": cols_present,
+        "rows": int(len(df)),
+    }
+
+    available = _truthy_series(df["intraday_available"]) if "intraday_available" in df.columns else pd.Series(False, index=df.index)
+    out["available_rows"] = int(available.sum())
+
+    if "intraday_status" in df.columns:
+        status = df["intraday_status"].fillna("").astype(str).str.strip()
+        out["status_counts"] = {str(k): int(v) for k, v in status.value_counts(dropna=False).head(12).items()}
+    else:
+        out["status_counts"] = {}
+
+    out["hard_risk_rows"] = int(_truthy_series(df["intraday_hard_risk_flag"]).sum()) if "intraday_hard_risk_flag" in df.columns else 0
+
+    for col in INTRADAY_PENALTY_COLS + ["intraday_ev_bonus", "intraday_penalty_extra"]:
+        s = _safe_numeric_col(df, col, 0.0)
+        out[f"{col}_mean"] = float(s.mean()) if len(s) else 0.0
+        out[f"{col}_max"] = float(s.max()) if len(s) else 0.0
+        out[f"{col}_sum"] = float(s.sum()) if len(s) else 0.0
+
+    if "intraday_execution_penalty" in df.columns:
+        top = df.copy()
+        top["_intraday_penalty_sort"] = _safe_numeric_col(top, "intraday_execution_penalty", 0.0)
+        top = top.sort_values(
+            by=["_intraday_penalty_sort", "ts_code"],
+            ascending=[False, True],
+            kind="mergesort",
+        ).head(10)
+        out["top_penalty_rows"] = [
+            {
+                "ts_code": str(r.get("ts_code", "")),
+                "name": str(r.get("name", "")),
+                "intraday_status": str(r.get("intraday_status", "")),
+                "intraday_execution_penalty": _json_float(r.get("intraday_execution_penalty", 0.0)),
+                "intraday_penalty_extra": _json_float(r.get("intraday_penalty_extra", 0.0)),
+                "intraday_ev_bonus": _json_float(r.get("intraday_ev_bonus", 0.0)),
+                "ev_pred": _json_float(r.get("ev_pred", 0.0)),
+            }
+            for _, r in top.iterrows()
+        ]
+    else:
+        out["top_penalty_rows"] = []
+
+    return out
+
+
+def _append_intraday_risk_summary(lines: List[str], stats: dict[str, Any]) -> None:
+    lines.append("## Intraday Risk Status\n\n")
+    lines.append(f"- fields_present: **{stats.get('fields_present', False)}**\n")
+    lines.append(f"- available_rows: **{stats.get('available_rows', 0)}** / **{stats.get('rows', 0)}**\n")
+    lines.append(f"- hard_risk_rows: **{stats.get('hard_risk_rows', 0)}**\n")
+    lines.append(f"- intraday_ev_bonus_mean: **{fmt_num(stats.get('intraday_ev_bonus_mean', 0.0), 6)}**\n")
+    lines.append(f"- intraday_penalty_extra_mean: **{fmt_num(stats.get('intraday_penalty_extra_mean', 0.0), 6)}**\n")
+    lines.append(f"- intraday_execution_penalty_mean: **{fmt_num(stats.get('intraday_execution_penalty_mean', 0.0), 6)}**\n\n")
+
+
 def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
     """
     EV 聚合升级 V1.1：
@@ -451,6 +572,19 @@ def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
         _safe_numeric_col(out, "risk_liquidity_penalty", 0.0).clip(lower=0.0)
         + _safe_numeric_col(out, "risk_liquidity_amount_penalty", 0.0).clip(lower=0.0)
     )
+    intraday_execution_penalty = _safe_numeric_col(out, "intraday_execution_penalty", 0.0).clip(lower=0.0)
+    intraday_hard_penalty = _safe_numeric_col(out, "risk_intraday_hard_penalty", 0.0).clip(lower=0.0)
+    intraday_missing_penalty = _safe_numeric_col(out, "risk_intraday_missing_penalty", 0.0).clip(lower=0.0)
+    intraday_available = (
+        _truthy_series(out["intraday_available"]).astype(float)
+        if "intraday_available" in out.columns
+        else pd.Series(0.0, index=out.index, dtype=float)
+    )
+    intraday_quality = _score_series_0_1(out, "intraday_quality_score", 0.0)
+    intraday_confidence = _score_series_0_1(out, "intraday_confidence_score", 0.0)
+    intraday_soft_risk = _score_series_0_1(out, "intraday_soft_risk_score", 0.0)
+    reseal_score = _score_series_0_1(out, "reseal_score", 0.0)
+    auction_strength = _score_series_0_1(out, "auction_strength_score", 0.0)
 
     out["ev_base"] = (p_fill * e_ret - cost_est - risk_penalty).astype(float)
 
@@ -471,15 +605,30 @@ def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
     fragility_extra = exec_fragility_penalty * 0.85
     crowding_extra = crowding_penalty * 0.45
     liquidity_extra = liquidity_penalty * 0.35
+    intraday_extra = (
+        intraday_execution_penalty * 1.10
+        + intraday_hard_penalty * 0.60
+        + intraday_missing_penalty * 0.35
+    ).clip(lower=0.0, upper=0.025)
+    intraday_bonus = (
+        intraday_available
+        * intraday_quality
+        * intraday_confidence
+        * (1.0 - intraday_soft_risk).clip(lower=0.0, upper=1.0)
+        * (0.50 + 0.25 * reseal_score + 0.25 * auction_strength)
+        * 0.006
+    ).clip(lower=0.0, upper=0.006)
+    out["intraday_penalty_extra"] = intraday_extra.astype(float)
+    out["intraday_ev_bonus"] = intraday_bonus.astype(float)
     out["risk_penalty_extra"] = (
-        risk_base_extra + fragility_extra + crowding_extra + liquidity_extra
+        risk_base_extra + fragility_extra + crowding_extra + liquidity_extra + intraday_extra
     ).astype(float)
 
     out["ev_penalty_total_extra"] = (
         out["pfill_penalty_extra"] + out["risk_penalty_extra"]
     ).astype(float)
-    out["ev_final"] = (out["ev_base"] - out["ev_penalty_total_extra"]).astype(float)
-    out["ev_formula_version"] = "v1_1_exec_aware"
+    out["ev_final"] = (out["ev_base"] + out["intraday_ev_bonus"] - out["ev_penalty_total_extra"]).astype(float)
+    out["ev_formula_version"] = "v1_2_intraday_weighted"
     out["ev_pred"] = out["ev_final"].astype(float)
 
     return out
@@ -665,10 +814,13 @@ def main() -> int:
         cand_snapshot["pfill_penalty_hard"] = 0.0
         cand_snapshot["pfill_penalty_extra"] = 0.0
         cand_snapshot["risk_penalty_extra"] = 0.0
+        cand_snapshot["intraday_penalty_extra"] = 0.0
+        cand_snapshot["intraday_ev_bonus"] = 0.0
         cand_snapshot["ev_penalty_total_extra"] = 0.0
         cand_snapshot["ev_final"] = 0.0
-        cand_snapshot["ev_formula_version"] = "v1_1_exec_aware_stop_zero"
+        cand_snapshot["ev_formula_version"] = "v1_2_intraday_weighted_stop_zero"
         cand_snapshot["ev_pred"] = 0.0
+        intraday_risk_stats = _build_intraday_risk_summary(cand_snapshot)
 
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
 
@@ -704,6 +856,8 @@ def main() -> int:
         report_lines.append("- p_fill_pred_src: **stop_zero**\n")
         report_lines.append("- eret_pred_src: **stop_zero**\n\n")
 
+        _append_intraday_risk_summary(report_lines, intraday_risk_stats)
+
         report_lines.append("## Artifacts\n\n")
         report_lines.append(f"- candidates_snapshot: `{cand_path}`\n")
         report_lines.append(f"- execution_table: `{exec_path}`\n")
@@ -723,9 +877,14 @@ def main() -> int:
                 "requested_trade_date": requested_trade_date,
                 "stop_trading": True,
                 "reason": stop_note,
+                "regime": regime_name,
+                "risk_budget": risk_budget,
+                "regime_reason": str(getattr(reg, "reason", "") or ""),
+                "guardrail_reason": str(getattr(gr, "reason", "") or ""),
                 "input_mode": input_mode,
                 "fs_degrade_reason": fs_degrade_reason,
                 "input_status": input_status,
+                "intraday_risk": intraday_risk_stats,
                 "engine_status": {
                     "p_fill_pred_src": "stop_zero",
                     "eret_pred_src": "stop_zero",
@@ -765,13 +924,14 @@ def main() -> int:
         ascending=[False, True],
         kind="mergesort",
     ).head(topk).reset_index(drop=True)
+    intraday_risk_stats = _build_intraday_risk_summary(routed_df)
 
     cand_path = write_candidates_snapshot(routed_df.copy(), signal_date=trade_date)
 
     caps = WeightCaps(
         w_max=W_MAX_DEFAULT,
         theme_cap=THEME_CAP_DEFAULT,
-        gross_cap=GROSS_CAP_DEFAULT,
+        gross_cap=GROSS_CAP_DEFAULT * max(0.0, min(1.0, risk_budget)),
     )
     targets, backups = build_weights_with_backups(routed_df, topn=TOPN_DEFAULT, caps=caps)
 
@@ -838,6 +998,8 @@ def main() -> int:
     lines.append(f"- requested_trade_date: **{requested_trade_date or 'auto'}**\n")
     lines.append(f"- regime: **{regime_name}**\n")
     lines.append(f"- risk_budget: **{fmt_num(risk_budget, 4)}**\n")
+    lines.append(f"- regime_reason: **{str(getattr(reg, 'reason', '') or 'none')}**\n")
+    lines.append(f"- guardrail_reason: **{str(getattr(gr, 'reason', '') or 'none')}**\n")
     lines.append(f"- input_mode: **{input_mode}**\n")
     lines.append(f"- fs_degrade_reason: **{fs_degrade_reason or 'none'}**\n\n")
 
@@ -862,6 +1024,8 @@ def main() -> int:
     lines.append(f"- eret_model_kind: **{eret_audit.get('eret_model_kind', '') or 'none'}**\n")
     lines.append(f"- eret_degrade_reason: **{eret_audit.get('eret_degrade_reason', '') or 'none'}**\n\n")
 
+    _append_intraday_risk_summary(lines, intraday_risk_stats)
+
     lines.append("## Artifacts\n\n")
     lines.append(f"- candidates_snapshot: `{cand_path}`\n")
     lines.append(f"- execution_table: `{exec_path}`\n")
@@ -883,6 +1047,8 @@ def main() -> int:
         "requested_trade_date": requested_trade_date,
         "regime": regime_name,
         "risk_budget": risk_budget,
+        "regime_reason": str(getattr(reg, "reason", "") or ""),
+        "guardrail_reason": str(getattr(gr, "reason", "") or ""),
         "topk": int(len(routed_df)),
         "picked": int(len(top_targets)),
         "cost_est_mean": float(pd.to_numeric(routed_df["cost_est"], errors="coerce").fillna(0.0).mean()),
@@ -895,10 +1061,13 @@ def main() -> int:
         "ev_final_mean": float(pd.to_numeric(routed_df["ev_final"], errors="coerce").fillna(0.0).mean()),
         "pfill_penalty_extra_mean": float(pd.to_numeric(routed_df["pfill_penalty_extra"], errors="coerce").fillna(0.0).mean()),
         "risk_penalty_extra_mean": float(pd.to_numeric(routed_df["risk_penalty_extra"], errors="coerce").fillna(0.0).mean()),
-        "ev_formula_version": str(_safe_first_value(routed_df, "ev_formula_version", "v1_1_exec_aware")),
+        "intraday_penalty_extra_mean": float(pd.to_numeric(routed_df["intraday_penalty_extra"], errors="coerce").fillna(0.0).mean()),
+        "intraday_ev_bonus_mean": float(pd.to_numeric(routed_df["intraday_ev_bonus"], errors="coerce").fillna(0.0).mean()),
+        "ev_formula_version": str(_safe_first_value(routed_df, "ev_formula_version", "v1_2_intraday_weighted")),
         "input_mode": input_mode,
         "fs_degrade_reason": fs_degrade_reason,
         "input_status": input_status,
+        "intraday_risk": intraday_risk_stats,
         "engine_status": {
             "p_fill_pred_src": pfill_audit.get("p_fill_pred_src", ""),
             "p_fill_model_loaded": pfill_audit.get("p_fill_model_loaded", False),
