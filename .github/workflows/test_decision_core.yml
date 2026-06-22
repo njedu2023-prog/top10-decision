@@ -7,12 +7,16 @@ on:
       - main
     paths:
       - "src/top10decision/models/costs.py"
-      - "tests/test_decision_intraday_costs.py"
+      - "src/top10decision/regime/simple_regime.py"
+      - "src/top10decision/risk/guardrails.py"
+      - "tests/test_decision_*.py"
       - ".github/workflows/test_decision_core.yml"
   pull_request:
     paths:
       - "src/top10decision/models/costs.py"
-      - "tests/test_decision_intraday_costs.py"
+      - "src/top10decision/regime/simple_regime.py"
+      - "src/top10decision/risk/guardrails.py"
+      - "tests/test_decision_*.py"
       - ".github/workflows/test_decision_core.yml"
 
 permissions:
@@ -38,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
 
-      - name: Run intraday risk regression tests
+      - name: Run decision core regression tests
         env:
           PYTHONPATH: ${{ github.workspace }}/src
-        run: pytest -q tests/test_decision_intraday_costs.py
+        run: pytest -q tests/test_decision_*.py
