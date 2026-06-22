@@ -245,7 +245,7 @@ jobs:
 
           # 运行期间 main 可能被 Pages/localize 等 workflow 推进；先 rebase 再 push。
           git fetch origin main
-          git rebase origin/main
+          git rebase -X theirs origin/main
 
           echo "git push origin HEAD:main"
           git push origin HEAD:main
