@@ -23,6 +23,8 @@ sync_pred_source.py
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -30,11 +32,27 @@ import sys
 import urllib.request
 import csv
 import io
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 SNAPSHOT_PATH = Path("data/pred/pred_source_latest.csv")
 ARCHIVE_DIR = Path("data/pred/archive")
+META_PATH = Path("data/pred/_pred_source_meta.json")
+
+INTRADAY_REQUIRED_COLS = {
+    "intraday_available",
+    "intraday_status",
+    "intraday_quality_score",
+    "intraday_soft_risk_score",
+    "intraday_hard_risk_flag",
+    "intraday_risk_score",
+    "late_withdraw_score",
+    "reseal_score",
+    "open_board_count",
+    "auction_strength_score",
+    "intraday_confidence_score",
+}
 
 
 def _download_bytes(url: str) -> bytes:
@@ -113,6 +131,111 @@ def _extract_trade_date_from_csv_bytes(data: bytes) -> str:
     return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
 
 
+def _decode_csv_text(data: bytes) -> str:
+    for enc in ("utf-8-sig", "utf-8", "gbk", "gb18030"):
+        try:
+            return data.decode(enc)
+        except Exception:
+            continue
+    return ""
+
+
+def _csv_profile(data: bytes) -> dict:
+    text = _decode_csv_text(data)
+    if not text:
+        return {
+            "rows_sampled": 0,
+            "columns": [],
+            "trade_date": "",
+            "target_trade_date": "",
+            "has_intraday_fields": False,
+            "missing_intraday_fields": sorted(INTRADAY_REQUIRED_COLS),
+        }
+
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        columns = list(reader.fieldnames or [])
+    except Exception:
+        columns = []
+        reader = None
+
+    trade_counts: dict[str, int] = {}
+    target_counts: dict[str, int] = {}
+    rows = 0
+    if reader is not None:
+        for i, row in enumerate(reader):
+            if i >= 1000:
+                break
+            rows += 1
+            td = _extract_trade_date(str(row.get("trade_date") or row.get("signal_date") or ""))
+            ttd = _extract_trade_date(str(row.get("verify_date") or row.get("target_trade_date") or ""))
+            if td:
+                trade_counts[td] = trade_counts.get(td, 0) + 1
+            if ttd:
+                target_counts[ttd] = target_counts.get(ttd, 0) + 1
+
+    col_set = set(columns)
+    missing_intraday = sorted(INTRADAY_REQUIRED_COLS - col_set)
+    return {
+        "rows_sampled": rows,
+        "columns": columns,
+        "trade_date": sorted(trade_counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] if trade_counts else "",
+        "target_trade_date": sorted(target_counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] if target_counts else "",
+        "has_intraday_fields": not missing_intraday,
+        "missing_intraday_fields": missing_intraday,
+    }
+
+
+def _now_utc() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _write_meta(*, source: str, source_ref: str, data: bytes, trade_date: str) -> None:
+    profile = _csv_profile(data)
+    payload = {
+        "created_at_utc": _now_utc(),
+        "source": source,
+        "source_ref": source_ref,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "resolved_trade_date": trade_date,
+        "csv_profile": profile,
+        "consistency": {
+            "snapshot_path": str(SNAPSHOT_PATH),
+            "archive_path": str(ARCHIVE_DIR / f"pred_source_{trade_date}.csv") if trade_date else "",
+            "has_intraday_fields": bool(profile.get("has_intraday_fields")),
+            "target_trade_date": profile.get("target_trade_date", ""),
+        },
+    }
+    META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    META_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[SYNC] wrote meta      -> {META_PATH}")
+
+
+def _existing_snapshot_trade_date() -> str:
+    if not SNAPSHOT_PATH.exists():
+        return ""
+    try:
+        return _extract_trade_date_from_csv_bytes(SNAPSHOT_PATH.read_bytes())
+    except Exception:
+        return ""
+
+
+def _guard_not_older_than_existing(new_trade_date: str) -> None:
+    if not new_trade_date:
+        return
+    if os.getenv("TRADE_DATE"):
+        return
+    if str(os.getenv("TOP10_ALLOW_OLDER_PRED", "")).strip().lower() in {"1", "true", "yes"}:
+        return
+
+    old_trade_date = _existing_snapshot_trade_date()
+    if old_trade_date and new_trade_date < old_trade_date:
+        raise RuntimeError(
+            f"拒绝用更旧的 pred_source 覆盖 latest：new={new_trade_date}, existing={old_trade_date}. "
+            "如为人工回放，请设置 TRADE_DATE 或 TOP10_ALLOW_OLDER_PRED=1。"
+        )
+
+
 def _resolve_trade_date(url: str, path: str, data: bytes | None = None) -> str:
     """
     trade_date 解析优先级：
@@ -172,9 +295,11 @@ def main() -> int:
             print(f"[SYNC] resolved trade_date={trade_date}")
         else:
             print("[SYNC][WARN] trade_date unresolved")
+        _guard_not_older_than_existing(trade_date)
         _write_bytes(SNAPSHOT_PATH, data)
         print(f"[SYNC] wrote snapshot -> {SNAPSHOT_PATH}")
         _write_archive_if_possible(data, trade_date)
+        _write_meta(source="url", source_ref=url, data=data, trade_date=trade_date)
         return 0
 
     p = Path(path)
@@ -189,9 +314,11 @@ def main() -> int:
         print(f"[SYNC] resolved trade_date={trade_date}")
     else:
         print("[SYNC][WARN] trade_date unresolved")
+    _guard_not_older_than_existing(trade_date)
     _write_bytes(SNAPSHOT_PATH, data)
     print(f"[SYNC] wrote snapshot -> {SNAPSHOT_PATH}")
     _write_archive_if_possible(data, trade_date)
+    _write_meta(source="path", source_ref=str(p), data=data, trade_date=trade_date)
     return 0
 
 
