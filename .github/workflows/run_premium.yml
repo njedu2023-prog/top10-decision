@@ -217,6 +217,7 @@ jobs:
 
           # 只提交 Premium 输出、模型、报告和 market cache。
           git add data/pred/pred_source_latest.csv || true
+          git add data/pred/_pred_source_meta.json || true
           git add data/pred/archive || true
           git add outputs/premium || true
           git add docs/reports || true
@@ -238,9 +239,13 @@ jobs:
 
           git commit -m "premium: update outputs + market cache (${TRADE_DATE})"
 
-          # 关键修复：
-          # 不再 commit 后执行 git pull --rebase / git rebase。
-          # 之前失败的根因就是 commit 后仍有 pycache 之类的 unstaged changes，rebase 被卡死。
-          # 这里直接 push；若远端领先，则明确失败，让下一次重新跑即可，不伪装成功。
+          # 输出提交完成后，恢复运行期产生但不应提交的缓存文件，保证 rebase 前工作区干净。
+          git reset --hard HEAD
+          git clean -fd src || true
+
+          # 运行期间 main 可能被 Pages/localize 等 workflow 推进；先 rebase 再 push。
+          git fetch origin main
+          git rebase origin/main
+
           echo "git push origin HEAD:main"
           git push origin HEAD:main
