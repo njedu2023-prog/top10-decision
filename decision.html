@@ -122,6 +122,97 @@
 
     .card-body{ padding:18px 20px; }
 
+    .report-card-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin:0 0 14px;
+    }
+
+    .report-card-head .section-title{
+      margin:0;
+    }
+
+    .report-body-collapsed .report-card-head{
+      margin-bottom:0;
+    }
+
+    .report-body-collapsed #reportBox{
+      display:none;
+    }
+
+    .circle-toggle{
+      appearance:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:30px;
+      height:30px;
+      flex:0 0 30px;
+      border:1px solid rgba(207,224,255,0.35);
+      border-radius:999px;
+      background:rgba(110,168,254,0.14);
+      color:#dce8ff;
+      font-size:21px;
+      font-weight:800;
+      line-height:1;
+      cursor:pointer;
+      transition:background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .circle-toggle:hover,
+    .circle-toggle:focus-visible{
+      border-color:rgba(207,224,255,0.68);
+      background:rgba(110,168,254,0.24);
+      outline:none;
+      transform:translateY(-1px);
+    }
+
+    .report-section.is-collapsible{
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:14px;
+      background:rgba(10,18,40,0.28);
+      overflow:hidden;
+    }
+
+    .report-section-toggle{
+      appearance:none;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      width:100%;
+      border:0;
+      background:transparent;
+      color:var(--text);
+      padding:14px 16px;
+      text-align:left;
+      cursor:pointer;
+    }
+
+    .report-section-toggle:hover,
+    .report-section-toggle:focus-visible{
+      background:rgba(110,168,254,0.08);
+      outline:none;
+    }
+
+    .report-section-toggle h2{
+      margin:0;
+    }
+
+    .report-section-toggle .circle-toggle{
+      pointer-events:none;
+    }
+
+    .report-section-body{
+      padding:0 16px 16px;
+    }
+
+    .report-section.is-collapsed .report-section-body{
+      display:none;
+    }
+
     .meta{
       display:grid;
       grid-template-columns:repeat(6, minmax(0,1fr));
@@ -388,9 +479,12 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card report-body-collapsed" id="reportCard">
         <div class="card-body">
-          <h2 class="section-title">报告正文</h2>
+          <div class="report-card-head">
+            <h2 class="section-title">报告正文</h2>
+            <button class="circle-toggle" id="reportBodyToggle" type="button" aria-expanded="false" aria-controls="reportBox" title="展开报告正文">+</button>
+          </div>
           <div id="reportBox" class="empty">等待加载...</div>
         </div>
       </section>
@@ -417,6 +511,8 @@
 
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
+    const reportCard = document.getElementById("reportCard");
+    const reportBodyToggle = document.getElementById("reportBodyToggle");
     const reportBox = document.getElementById("reportBox");
     const metaGrid = document.getElementById("metaGrid");
     const footerText = document.getElementById("footerText");
@@ -428,6 +524,58 @@
     let currentIndex = 0;
     let currentFileName = "";
     let lastLoadMode = "";
+
+    function setReportBodyCollapsed(collapsed) {
+      reportCard.classList.toggle("report-body-collapsed", collapsed);
+      reportBodyToggle.setAttribute("aria-expanded", String(!collapsed));
+      reportBodyToggle.textContent = collapsed ? "+" : "-";
+      reportBodyToggle.title = collapsed ? "展开报告正文" : "折叠报告正文";
+    }
+
+    function bindReportBodyToggle() {
+      setReportBodyCollapsed(true);
+      reportBodyToggle.addEventListener("click", () => {
+        setReportBodyCollapsed(!reportCard.classList.contains("report-body-collapsed"));
+      });
+    }
+
+    function setReportSectionCollapsed(section, collapsed) {
+      const toggle = section.querySelector(".report-section-toggle");
+      const icon = section.querySelector(".report-section-toggle .circle-toggle");
+      const title = section.getAttribute("data-section-title") || "本节";
+      section.classList.toggle("is-collapsed", collapsed);
+      if (toggle) {
+        toggle.setAttribute("aria-expanded", String(!collapsed));
+        toggle.title = `${collapsed ? "展开" : "折叠"}${title}`;
+      }
+      if (icon) icon.textContent = collapsed ? "+" : "-";
+    }
+
+    function bindReportSectionToggles(root) {
+      root.querySelectorAll(".report-section.is-collapsible").forEach(section => {
+        const toggle = section.querySelector(".report-section-toggle");
+        if (!toggle) return;
+        setReportSectionCollapsed(section, section.classList.contains("is-collapsed"));
+        toggle.addEventListener("click", () => {
+          setReportSectionCollapsed(section, !section.classList.contains("is-collapsed"));
+        });
+      });
+    }
+
+    function collapsibleSectionHtml(title, bodyHtml, collapsed = true) {
+      const safeTitle = escapeHtml(title);
+      return `
+        <div class="report-section is-collapsible${collapsed ? " is-collapsed" : ""}" data-section-title="${safeTitle}">
+          <button class="report-section-toggle" type="button" aria-expanded="${collapsed ? "false" : "true"}" title="${collapsed ? "展开" : "折叠"}${safeTitle}">
+            <h2>${safeTitle}</h2>
+            <span class="circle-toggle" aria-hidden="true">${collapsed ? "+" : "-"}</span>
+          </button>
+          <div class="report-section-body">
+            ${bodyHtml}
+          </div>
+        </div>
+      `;
+    }
 
     function saveCachedReport(info, mdRaw) {
       try {
@@ -756,18 +904,15 @@
           ])}
         </div>
 
-        <div class="report-section">
-          <h2>Artifacts</h2>
-          ${kvHtml(fields, [
-            ["candidates_snapshot", "候选快照"],
-            ["execution_table", "执行表"],
-            ["learning_table", "学习表"],
-            ["weights_latest", "weights_latest"],
-            ["weights_dated", "weights_dated"],
-            ["top_evr_latest", "TopEVR_latest"],
-            ["top_evr_dated", "TopEVR_dated"]
-          ])}
-        </div>
+        ${collapsibleSectionHtml("Artifacts", kvHtml(fields, [
+          ["candidates_snapshot", "候选快照"],
+          ["execution_table", "执行表"],
+          ["learning_table", "学习表"],
+          ["weights_latest", "weights_latest"],
+          ["weights_dated", "weights_dated"],
+          ["top_evr_latest", "TopEVR_latest"],
+          ["top_evr_dated", "TopEVR_dated"]
+        ]), true)}
 
         <div class="report-section">
           <h2>EV &gt; 3% &amp; RiskPenalty &lt; 1%</h2>
@@ -789,6 +934,7 @@
           <pre class="raw">${escapeHtml(md.slice(0, 8000))}</pre>
         </div>
       `;
+      bindReportSectionToggles(reportBox);
     }
 
     function updateNavButtons() {
@@ -919,6 +1065,7 @@
       `;
     });
 
+    bindReportBodyToggle();
     setStatus("", "正在定位报告...");
     loadReportByIndex(0);
   </script>
