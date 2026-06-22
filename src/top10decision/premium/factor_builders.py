@@ -96,14 +96,51 @@ def _load_first_existing(paths: List[Path]) -> Optional[pd.DataFrame]:
     return None
 
 
+def _repo_root(cfg: PremiumConfig) -> Path:
+    fn = getattr(cfg, "repo_root", None)
+    if callable(fn):
+        try:
+            return Path(fn()).resolve()
+        except Exception:
+            pass
+    return Path.cwd().resolve()
+
+
+def _market_cache_root(cfg: PremiumConfig) -> Path:
+    fn = getattr(cfg, "market_cache_root", None)
+    if callable(fn):
+        try:
+            return Path(fn()).resolve()
+        except Exception:
+            pass
+    return (_repo_root(cfg) / getattr(cfg, "market_cache_dir", "data/market")).resolve()
+
+
+def _optional_path_from_cfg(cfg: PremiumConfig, method_name: str, trade_date: str, fallback_parts: Tuple[str, ...]) -> Path:
+    fn = getattr(cfg, method_name, None)
+    if callable(fn):
+        try:
+            return Path(fn(trade_date)).resolve()
+        except Exception:
+            pass
+    return (_repo_root(cfg).joinpath(*fallback_parts)).resolve()
+
+
 def _list_market_dates(cfg: PremiumConfig) -> List[str]:
     # 通过文件名列出 data/market/daily_YYYYMMDD.csv 的日期（不依赖交易所日历）
-    root = cfg.market_daily_dir()
+    root = _market_cache_root(cfg)
     if not root.exists():
         return []
     out = []
-    for p in root.glob("daily_*.csv"):
-        s = p.stem.replace("daily_", "")
+    tpl = str(getattr(cfg, "market_daily_tpl", "daily_{trade_date}.csv"))
+    prefix = tpl.split("{trade_date}")[0] if "{trade_date}" in tpl else "daily_"
+    suffix = tpl.split("{trade_date}")[-1] if "{trade_date}" in tpl else ".csv"
+    for p in root.glob(f"{prefix}*{suffix}"):
+        s = p.name
+        if prefix and s.startswith(prefix):
+            s = s[len(prefix):]
+        if suffix and s.endswith(suffix):
+            s = s[: -len(suffix)]
         s = _to_yyyymmdd(s)
         if len(s) == 8 and s.isdigit():
             out.append(s)
@@ -246,7 +283,13 @@ def build_pack0_base(cfg: PremiumConfig, trade_date: str, pred_df: pd.DataFrame)
 
 
 def build_pack1_tushare_basic(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
-    p = cfg.market_basic_path(trade_date)
+    td = _to_yyyymmdd(trade_date)
+    p = _optional_path_from_cfg(
+        cfg,
+        "market_basic_path",
+        td,
+        ("data", "market_basic", f"daily_basic_{td}.csv"),
+    )
     df = _safe_read_csv(p)
     if df is None or df.empty:
         return pd.DataFrame(columns=["ts_code"])
@@ -265,7 +308,13 @@ def build_pack1_tushare_basic(cfg: PremiumConfig, trade_date: str) -> pd.DataFra
 
 
 def build_pack2_limit_micro(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
-    p = cfg.limit_micro_path(trade_date)
+    td = _to_yyyymmdd(trade_date)
+    p = _optional_path_from_cfg(
+        cfg,
+        "limit_micro_path",
+        td,
+        ("data", "limit", f"limit_micro_{td}.csv"),
+    )
     df = _safe_read_csv(p)
     if df is None or df.empty:
         return pd.DataFrame(columns=["ts_code"])
