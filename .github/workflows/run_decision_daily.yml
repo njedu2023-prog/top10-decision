@@ -158,6 +158,7 @@ jobs:
           grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
 
           git add data/pred/pred_source_latest.csv || true
+          git add data/pred/_pred_source_meta.json || true
           git add data/pred/archive/*.csv || true
           git add -A data/pred/archive || true
           git add data/pred/pred_top10_latest.csv || true
@@ -745,6 +746,7 @@ jobs:
           grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
 
           git add data/pred/pred_source_latest.csv || true
+          git add data/pred/_pred_source_meta.json || true
           git add data/pred/archive/*.csv || true
           git add -A data/pred/archive || true
           git add data/market/sample_maturity_candidates.csv || true
