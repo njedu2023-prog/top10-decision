@@ -1,7 +1,7 @@
 {
   "signal_date": "20260622",
   "exec_date": "20260623",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260622",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2411,volatility_mean=0.0554",
