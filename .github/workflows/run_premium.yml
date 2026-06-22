@@ -1,6 +1,16 @@
 name: Run Premium (Follow Decision)
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/run_premium.yml"
+      - "scripts/run_premium.py"
+      - "scripts/backfill_premium_limitup_truth.py"
+      - "scripts/rebuild_premium_reports.py"
+      - "scripts/sync_pred_source.py"
+      - "src/top10decision/premium/**"
+
   schedule:
     # Mon-Fri 21:15 Beijing (UTC+8) == 13:15 UTC, same as decision mainline.
     - cron: "15 13 * * 1-5"
@@ -40,6 +50,7 @@ jobs:
       ${{
         (
           github.event_name == 'workflow_dispatch'
+          || github.event_name == 'push'
           || github.event_name == 'schedule'
           || github.event.workflow_run.conclusion == 'success'
         )
