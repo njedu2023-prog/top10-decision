@@ -1,7 +1,7 @@
 {
   "signal_date": "20260622",
   "exec_date": "20260623",
-  "requested_trade_date": "20260622",
+  "requested_trade_date": "",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2411,volatility_mean=0.0554",
@@ -36,8 +36,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260622",
-      "created_at_utc": "2026-06-22T13:51:08+00:00",
-      "commit_sha": "00255bf7df9bd8ec4239c3bc57e3d85d68be391a",
+      "created_at_utc": "2026-06-22T17:49:28+00:00",
+      "commit_sha": "f31ae0b5e38ad4b867ffeb227f419d0c0e0f9472",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -245,7 +245,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260622",
-            "created_at_utc": "2026-06-22T13:49:41+00:00",
+            "created_at_utc": "2026-06-22T17:47:29+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -260,7 +260,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260622",
-              "generated_at_bj": "2026-06-22 21:22:28",
+              "generated_at_bj": "2026-06-22 23:22:27",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -933,7 +933,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.011275,
         "intraday_ev_bonus": 0.00186046875,
-        "ev_pred": -0.0675202566393148
+        "ev_pred": -0.06752025663931478
       },
       {
         "ts_code": "000960.SZ",
@@ -951,7 +951,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.011275,
         "intraday_ev_bonus": 0.00186046875,
-        "ev_pred": -0.05951496705284707
+        "ev_pred": -0.05951496705284706
       },
       {
         "ts_code": "300179.SZ",
@@ -996,7 +996,7 @@
         "intraday_execution_penalty": 0.010175,
         "intraday_penalty_extra": 0.011192500000000001,
         "intraday_ev_bonus": 0.0020655,
-        "ev_pred": -0.042317028118293076
+        "ev_pred": -0.04231702811829306
       },
       {
         "ts_code": "002842.SZ",
