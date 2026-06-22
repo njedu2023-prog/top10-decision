@@ -1,25 +1,25 @@
 {
   "signal_date": "20260622",
   "exec_date": "20260623",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260622",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2411,volatility_mean=0.0554",
   "guardrail_reason": "CAUTION:open_board_max=10.0,tail_risk_mean=0.2411,volatility_mean=0.0554",
   "topk": 70,
-  "picked": 10,
-  "cost_est_mean": 0.0016813956642857144,
+  "picked": 3,
+  "cost_est_mean": 0.001668038692857143,
   "cost_est_min": 0.0011116305000000001,
-  "cost_est_max": 0.002777235,
-  "risk_penalty_mean": 0.02103230097513342,
+  "cost_est_max": 0.002850165,
+  "risk_penalty_mean": 0.0200826438346967,
   "risk_penalty_min": 0.010597233140917869,
-  "risk_penalty_max": 0.04118156666666667,
-  "ev_base_mean": 0.03333543387519503,
-  "ev_final_mean": 0.0012169107467829552,
-  "pfill_penalty_extra_mean": 0.00020412248449079695,
-  "risk_penalty_extra_mean": 0.033078353768921286,
-  "intraday_penalty_extra_mean": 0.009924714285714288,
-  "intraday_ev_bonus_mean": 0.0011639531249999998,
+  "risk_penalty_max": 0.041667766666666675,
+  "ev_base_mean": -0.016241016270634807,
+  "ev_final_mean": -0.04695632727825568,
+  "pfill_penalty_extra_mean": 0.00010284098803755161,
+  "risk_penalty_extra_mean": 0.03160851689458332,
+  "intraday_penalty_extra_mean": 0.009368500000000002,
+  "intraday_ev_bonus_mean": 0.000996046875,
   "ev_formula_version": "v1_2_intraday_weighted",
   "input_mode": "pred_plus_fs",
   "fs_degrade_reason": "",
@@ -880,70 +880,43 @@
       "intraday_confidence_score"
     ],
     "rows": 70,
-    "available_rows": 37,
+    "available_rows": 31,
     "status_counts": {
-      "ok": 37,
-      "missing_stock": 33
+      "missing_stock": 39,
+      "ok": 31
     },
-    "hard_risk_rows": 5,
-    "risk_intraday_hard_penalty_mean": 0.0007142857142857143,
+    "hard_risk_rows": 2,
+    "risk_intraday_hard_penalty_mean": 0.00028571428571428574,
     "risk_intraday_hard_penalty_max": 0.01,
-    "risk_intraday_hard_penalty_sum": 0.05,
-    "risk_intraday_soft_penalty_mean": 0.003171428571428572,
+    "risk_intraday_hard_penalty_sum": 0.02,
+    "risk_intraday_soft_penalty_mean": 0.0026571428571428575,
     "risk_intraday_soft_penalty_max": 0.006,
-    "risk_intraday_soft_penalty_sum": 0.22200000000000003,
-    "risk_intraday_confidence_penalty_mean": 0.0006685714285714286,
+    "risk_intraday_soft_penalty_sum": 0.18600000000000003,
+    "risk_intraday_confidence_penalty_mean": 0.0007350000000000001,
     "risk_intraday_confidence_penalty_max": 0.0010500000000000002,
-    "risk_intraday_confidence_penalty_sum": 0.0468,
-    "risk_intraday_missing_penalty_mean": 0.0009428571428571429,
+    "risk_intraday_confidence_penalty_sum": 0.05145000000000001,
+    "risk_intraday_missing_penalty_mean": 0.0011142857142857144,
     "risk_intraday_missing_penalty_max": 0.002,
-    "risk_intraday_missing_penalty_sum": 0.066,
-    "risk_late_withdraw_penalty_mean": 0.00014285714285714287,
-    "risk_late_withdraw_penalty_max": 0.005,
-    "risk_late_withdraw_penalty_sum": 0.01,
+    "risk_intraday_missing_penalty_sum": 0.078,
+    "risk_late_withdraw_penalty_mean": 0.0,
+    "risk_late_withdraw_penalty_max": 0.0,
+    "risk_late_withdraw_penalty_sum": 0.0,
     "risk_reseal_weakness_penalty_mean": 0.0020909090909090908,
     "risk_reseal_weakness_penalty_max": 0.002090909090909091,
     "risk_reseal_weakness_penalty_sum": 0.14636363636363636,
     "risk_auction_weakness_penalty_mean": 0.0014090909090909095,
     "risk_auction_weakness_penalty_max": 0.001409090909090909,
     "risk_auction_weakness_penalty_sum": 0.09863636363636366,
-    "intraday_execution_penalty_mean": 0.008332857142857142,
-    "intraday_execution_penalty_max": 0.012,
-    "intraday_execution_penalty_sum": 0.5832999999999999,
-    "intraday_ev_bonus_mean": 0.0011639531249999998,
+    "intraday_execution_penalty_mean": 0.008006428571428572,
+    "intraday_execution_penalty_max": 0.010249999999999999,
+    "intraday_execution_penalty_sum": 0.56045,
+    "intraday_ev_bonus_mean": 0.000996046875,
     "intraday_ev_bonus_max": 0.0025059375,
-    "intraday_ev_bonus_sum": 0.08147671875,
-    "intraday_penalty_extra_mean": 0.009924714285714288,
-    "intraday_penalty_extra_max": 0.019200000000000002,
-    "intraday_penalty_extra_sum": 0.6947300000000002,
+    "intraday_ev_bonus_sum": 0.06972328124999999,
+    "intraday_penalty_extra_mean": 0.009368500000000002,
+    "intraday_penalty_extra_max": 0.017275,
+    "intraday_penalty_extra_sum": 0.6557950000000001,
     "top_penalty_rows": [
-      {
-        "ts_code": "000833.SZ",
-        "name": "粤桂股份",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.012,
-        "intraday_penalty_extra": 0.019200000000000002,
-        "intraday_ev_bonus": 0.00056109375,
-        "ev_pred": 0.008020485018293215
-      },
-      {
-        "ts_code": "002885.SZ",
-        "name": "京泉华",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.012,
-        "intraday_penalty_extra": 0.019200000000000002,
-        "intraday_ev_bonus": 0.0009534374999999999,
-        "ev_pred": -0.01014529531482905
-      },
-      {
-        "ts_code": "000048.SZ",
-        "name": "京基智农",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.010249999999999999,
-        "intraday_penalty_extra": 0.017275,
-        "intraday_ev_bonus": 0.0016655625,
-        "ev_pred": -0.02503504477053323
-      },
       {
         "ts_code": "000657.SZ",
         "name": "中钨高新",
@@ -951,7 +924,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.011275,
         "intraday_ev_bonus": 0.00186046875,
-        "ev_pred": -0.0028052137432160174
+        "ev_pred": -0.03156950513660599
       },
       {
         "ts_code": "000823.SZ",
@@ -960,7 +933,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.011275,
         "intraday_ev_bonus": 0.00186046875,
-        "ev_pred": -0.014218585285234356
+        "ev_pred": -0.0675202566393148
       },
       {
         "ts_code": "000960.SZ",
@@ -969,16 +942,34 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.017275,
         "intraday_ev_bonus": 0.0014807812500000005,
-        "ev_pred": -0.02756720164006967
+        "ev_pred": -0.039657822831662706
       },
       {
-        "ts_code": "300522.SZ",
-        "name": "世名科技",
+        "ts_code": "002601.SZ",
+        "name": "龙佰集团",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.010249999999999999,
+        "intraday_penalty_extra": 0.011275,
+        "intraday_ev_bonus": 0.00186046875,
+        "ev_pred": -0.05951496705284707
+      },
+      {
+        "ts_code": "300179.SZ",
+        "name": "四方达",
         "intraday_status": "ok",
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.017275,
         "intraday_ev_bonus": 0.0014807812500000005,
-        "ev_pred": -0.025856216483123542
+        "ev_pred": -0.0375024376491103
+      },
+      {
+        "ts_code": "301071.SZ",
+        "name": "力量钻石",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.010249999999999999,
+        "intraday_penalty_extra": 0.011275,
+        "intraday_ev_bonus": 0.00186046875,
+        "ev_pred": -0.02677600265896956
       },
       {
         "ts_code": "002068.SZ",
@@ -987,16 +978,16 @@
         "intraday_execution_penalty": 0.010175,
         "intraday_penalty_extra": 0.011192500000000001,
         "intraday_ev_bonus": 0.0020655,
-        "ev_pred": -0.012761982702846782
+        "ev_pred": -0.060143042376667954
       },
       {
-        "ts_code": "002354.SZ",
-        "name": "天娱数科",
+        "ts_code": "002421.SZ",
+        "name": "达实智能",
         "intraday_status": "ok",
         "intraday_execution_penalty": 0.010175,
         "intraday_penalty_extra": 0.011192500000000001,
         "intraday_ev_bonus": 0.0020655,
-        "ev_pred": -0.02596805140078689
+        "ev_pred": -0.062349690571256125
       },
       {
         "ts_code": "002655.SZ",
@@ -1005,7 +996,16 @@
         "intraday_execution_penalty": 0.010175,
         "intraday_penalty_extra": 0.011192500000000001,
         "intraday_ev_bonus": 0.0020655,
-        "ev_pred": 0.0010576508648440647
+        "ev_pred": -0.042317028118293076
+      },
+      {
+        "ts_code": "002842.SZ",
+        "name": "翔鹭钨业",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.010175,
+        "intraday_penalty_extra": 0.011192500000000001,
+        "intraday_ev_bonus": 0.0020655,
+        "ev_pred": -0.06751904043514906
       }
     ]
   },
@@ -1015,10 +1015,10 @@
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
     "p_fill_degrade_reason": "",
-    "eret_pred_src": "model:lgbm",
+    "eret_pred_src": "model:lr",
     "eret_model_loaded": true,
-    "eret_model_kind": "lgbm",
-    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
+    "eret_model_kind": "lr",
+    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lr.joblib",
     "eret_degrade_reason": ""
   },
   "paths": {
@@ -1033,8 +1033,8 @@
   },
   "report_stats": {
     "high_ev_low_risk_rows": 0,
-    "topn_rows": 10,
-    "full_candidate_rows": 60
+    "topn_rows": 3,
+    "full_candidate_rows": 67
   },
-  "intraday_execution_penalty_mean": 0.008332857142857133
+  "intraday_execution_penalty_mean": 0.00800642857142856
 }
