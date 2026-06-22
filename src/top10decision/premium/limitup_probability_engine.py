@@ -59,12 +59,15 @@ FEATURE_ALLOW_PREFIXES = [
     "d_", "factor_", "mkt_", "dec_", "eret_", "pfill_", "risk_", "theme_", "amount_",
     "ret_", "vol_", "close_pos_", "rank_", "t_limitup_prob_rule", "t_limitup_strength_rule",
     "t1_continue_up_rate_rule", "limitup_continuation_score_rule",
+    "intraday_", "auction_",
 ]
 FEATURE_ALLOW_EXACT = {
     "rank", "is_top10", "is_top20", "close_T", "p_premium", "e_premium", "score_ev",
     "confidence", "data_quality", "dec_weight", "dec_rank", "dec_p_fill",
     "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_conf_score",
     "t1_up_rate", "r_p50", "r_p25", "r_p75", "in_p10", "in_p50",
+    "late_withdraw_score", "reseal_score", "open_board_count", "auction_strength_score",
+    "intraday_attack_edge", "intraday_execution_edge", "intraday_risk_penalty",
 }
 FEATURE_DENY_KEYWORDS = [
     "actual", "hit", "label", "verify", "future",

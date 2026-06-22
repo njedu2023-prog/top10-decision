@@ -765,6 +765,47 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     p_fill = _score_01_from_percent_or_rank(out, "dec_p_fill", "p_fill_pred", "p_fill", default=0.5)
     conf_score = _score_01_from_percent_or_rank(out, "eret_plus_conf_score", "confidence", default=0.5)
     risk_raw = _score_01_from_percent_or_rank(out, "risk_penalty_total", "risk_penalty", "risk_score", default=0.0)
+    intraday_quality = _score_01_from_percent_or_rank(out, "factor_intraday_quality", "intraday_quality_score", default=0.5)
+    intraday_conf = _score_01_from_percent_or_rank(out, "factor_intraday_confidence", "intraday_confidence_score", default=0.5)
+    intraday_auction = _score_01_from_percent_or_rank(out, "factor_auction_strength", "auction_strength_score", default=0.5)
+    intraday_reseal = _score_01_from_percent_or_rank(out, "factor_reseal", "reseal_score", default=0.5)
+    intraday_late_withdraw = _score_01_from_percent_or_rank(out, "factor_late_withdraw", "late_withdraw_score", default=0.0)
+    intraday_soft_risk = _score_01_from_percent_or_rank(out, "factor_intraday_soft_risk", "intraday_soft_risk_score", default=0.0)
+    intraday_risk_raw = _score_01_from_percent_or_rank(out, "factor_intraday_risk", "intraday_risk_score", default=np.nan)
+    intraday_hard_risk = _score_01_from_percent_or_rank(out, "factor_intraday_hard_risk", "intraday_hard_risk_flag", default=0.0)
+    open_board_count = _num_series(out, "factor_open_board_count", "open_board_count", default=0.0).fillna(0.0).clip(0.0, 10.0)
+    intraday_attack_edge = _score_01_from_percent_or_rank(out, "factor_intraday_attack_edge", default=np.nan)
+    intraday_execution_edge = _score_01_from_percent_or_rank(out, "factor_intraday_execution_edge", default=np.nan)
+    intraday_risk_penalty = _score_01_from_percent_or_rank(out, "factor_intraday_risk_penalty", default=np.nan)
+    intraday_attack_edge = intraday_attack_edge.where(
+        intraday_attack_edge.notna(),
+        (
+            0.34 * intraday_auction
+            + 0.26 * intraday_reseal
+            + 0.22 * intraday_quality
+            + 0.12 * intraday_conf
+            - 0.16 * intraday_late_withdraw
+            - 0.08 * (open_board_count / 5.0).clip(0.0, 1.0)
+        ).clip(0.0, 1.0),
+    ).fillna(0.5).clip(0.0, 1.0)
+    intraday_execution_edge = intraday_execution_edge.where(
+        intraday_execution_edge.notna(),
+        (
+            0.40 * intraday_quality
+            + 0.28 * intraday_conf
+            + 0.20 * intraday_auction
+            + 0.12 * (1.0 - intraday_soft_risk)
+        ).clip(0.0, 1.0),
+    ).fillna(0.5).clip(0.0, 1.0)
+    intraday_risk_penalty = intraday_risk_penalty.where(
+        intraday_risk_penalty.notna(),
+        (
+            0.38 * intraday_soft_risk
+            + 0.24 * intraday_risk_raw.fillna(intraday_soft_risk)
+            + 0.22 * intraday_late_withdraw
+            + 0.16 * intraday_hard_risk
+        ).clip(0.0, 1.0),
+    ).fillna(0.0).clip(0.0, 1.0)
 
     t_up_prob = (model_alpha * t_up_model.fillna(rule_t1_up) + (1.0 - model_alpha) * rule_t1_up).clip(0.0, 1.0)
     t_high_profit_prob = (
@@ -802,25 +843,37 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         + (1.0 - model_alpha) * fallback_big_dd
     ).clip(0.0, 1.0)
 
-    execution_safety_score = (0.45 * p_fill + 0.35 * conf_score + 0.20 * (1.0 - risk_raw)).clip(0.0, 1.0)
+    execution_safety_score = (
+        0.36 * p_fill
+        + 0.28 * conf_score
+        + 0.18 * (1.0 - risk_raw)
+        + 0.18 * intraday_execution_edge
+    ).clip(0.0, 1.0)
     execution_score = execution_safety_score
-    risk_penalty_score = (0.45 * risk_raw + 0.30 * t1_big_drawdown_prob + 0.25 * t1_fail_prob).clip(0.0, 1.0)
+    risk_penalty_score = (
+        0.36 * risk_raw
+        + 0.24 * t1_big_drawdown_prob
+        + 0.20 * t1_fail_prob
+        + 0.20 * intraday_risk_penalty
+    ).clip(0.0, 1.0)
 
     t_up_attack_raw = (
-        0.20 * t_up_prob
-        + 0.25 * t_touch_prob
-        + 0.25 * t_limit_prob
-        + 0.15 * strength
-        + 0.10 * eret_plus_score
+        0.18 * t_up_prob
+        + 0.22 * t_touch_prob
+        + 0.22 * t_limit_prob
+        + 0.12 * strength
+        + 0.08 * eret_plus_score
         + 0.05 * market_score
+        + 0.13 * intraday_attack_edge
     ).clip(0.0, 1.0)
     t1_accept_raw = (
-        0.25 * t1_up_prob
-        + 0.25 * t1_accept_prob
-        + 0.20 * t1_high_profit_prob
-        + 0.15 * t1_close_ret_pred_score
-        + 0.10 * t1_high_ret_pred_score
+        0.23 * t1_up_prob
+        + 0.23 * t1_accept_prob
+        + 0.18 * t1_high_profit_prob
+        + 0.14 * t1_close_ret_pred_score
+        + 0.09 * t1_high_ret_pred_score
         + 0.05 * execution_safety_score
+        + 0.08 * intraday_execution_edge
     ).clip(0.0, 1.0)
     premium_final_raw = (
         0.30 * t_up_attack_raw
@@ -839,6 +892,10 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     out["t1_big_drawdown_prob_blend"] = t1_big_drawdown_prob.round(6)
     out["eret_plus_score"] = (100.0 * eret_plus_score).round(4)
     out["market_score"] = (100.0 * market_score).round(4)
+    out["intraday_attack_edge"] = (100.0 * intraday_attack_edge).round(4)
+    out["intraday_execution_edge"] = (100.0 * intraday_execution_edge).round(4)
+    out["intraday_risk_penalty"] = intraday_risk_penalty.round(6)
+    out["intraday_hard_risk_flag"] = intraday_hard_risk.round(6)
     out["execution_safety_score"] = (100.0 * execution_safety_score).round(4)
     out["execution_score"] = (100.0 * execution_score).round(4)
     out["risk_penalty_score"] = risk_penalty_score.round(6)
@@ -853,6 +910,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     score_ev = pd.to_numeric(out.get("score_ev", pd.Series([0.0] * len(out), index=idx)), errors="coerce").fillna(0.0)
     eret_gate = eret_plus.fillna(0.0)
 
+    intraday_block = (intraday_hard_risk >= 0.5) | (intraday_risk_penalty >= 0.85)
     force_excluded = (
         dec_can_buy.eq(0)
         | (score_ev < -0.002)
@@ -860,6 +918,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         | (t1_accept_raw < 0.45)
         | (t1_big_drawdown_prob >= 0.35)
         | (risk_penalty_score >= 0.75)
+        | intraday_block
     )
     eligible = (
         ~force_excluded
@@ -870,6 +929,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         & (t1_accept_raw >= 0.52)
         & (t1_high_profit_prob >= 0.50)
         & (risk_penalty_score <= 0.60)
+        & (intraday_risk_penalty <= 0.70)
     )
     out["premium_eligible"] = eligible.astype(int)
     out["premium_force_excluded"] = force_excluded.astype(int)
@@ -894,6 +954,10 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
             row_reasons.append("big_drawdown_prob>=0.35")
         if risk_penalty_score.loc[i] >= 0.75:
             row_reasons.append("risk_penalty>=0.75")
+        if intraday_hard_risk.loc[i] >= 0.5:
+            row_reasons.append("intraday_hard_risk=1")
+        if intraday_risk_penalty.loc[i] >= 0.85:
+            row_reasons.append("intraday_risk>=0.85")
         if not row_reasons and not eligible.loc[i]:
             if score_ev.loc[i] < 0:
                 row_reasons.append("score_ev<0")
@@ -907,12 +971,19 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
                 row_reasons.append("t1_high_profit<0.50")
             if risk_penalty_score.loc[i] > 0.60:
                 row_reasons.append("risk_penalty>0.60")
+            if intraday_risk_penalty.loc[i] > 0.70:
+                row_reasons.append("intraday_risk>0.70")
         reasons.append(";".join(row_reasons) if row_reasons else "ok")
     out["premium_exclude_reason"] = pd.Series(reasons, index=idx, dtype="object")
     out["premium_rank_mode"] = np.where(model_can_rank, "model_validated_professional_score", "professional_score_rule_guarded")
 
     trace = {
         "premium_score_mode": "t_attack_t1_accept_final_v1",
+        "premium_intraday_mode": "intraday_weighted_v1",
+        "premium_intraday_avg_attack_edge": float(intraday_attack_edge.mean()) if intraday_attack_edge.notna().any() else "",
+        "premium_intraday_avg_execution_edge": float(intraday_execution_edge.mean()) if intraday_execution_edge.notna().any() else "",
+        "premium_intraday_avg_risk_penalty": float(intraday_risk_penalty.mean()) if intraday_risk_penalty.notna().any() else "",
+        "premium_intraday_hard_risk_count": int((intraday_hard_risk >= 0.5).sum()),
         "premium_eligible_count": int(eligible.sum()),
         "premium_watch_count": int((out["premium_bucket"] == "WATCH").sum()),
         "premium_excluded_count": int(force_excluded.sum()),
@@ -1224,7 +1295,8 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
     c_date = pick("trade_date", "date", "dt", "交易日期", "日期")
     c_code = pick("ts_code", "code", "symbol", "ticker", "股票代码", "代码")
     c_name = pick("name", "stock_name", "股票名称", "名称")
-    c_sector = pick(
+    c_sector = _first_existing_col(
+        dec,
         "sector", "board", "industry", "sw_industry", "申万行业", "行业", "板块",
         "所属行业", "所属板块", "concept", "theme", "concept_name", "概念", "题材",
     )
@@ -2169,7 +2241,8 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     professional_cols = [
         "t_up_prob_model_blend", "t_high_profit_prob_model_blend", "t_touch_limitup_prob_blend",
         "t1_accept_prob_blend", "t1_fail_prob_blend", "t1_big_drawdown_prob_blend",
-        "eret_plus_score", "market_score", "execution_safety_score", "execution_score",
+        "eret_plus_score", "market_score", "intraday_attack_edge", "intraday_execution_edge",
+        "intraday_risk_penalty", "intraday_hard_risk_flag", "execution_safety_score", "execution_score",
         "risk_penalty_score", "t1_close_ret_pred_score", "t1_high_ret_pred_score",
         "t_up_attack_score", "t1_accept_score", "premium_final_score", "premium_final_score_raw",
         "premium_eligible", "premium_force_excluded", "premium_bucket", "premium_exclude_reason",

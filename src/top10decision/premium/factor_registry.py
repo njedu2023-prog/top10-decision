@@ -8,6 +8,7 @@ Premium — Factor Packs Registry / Detection
 - Pack0 永久保底：永远可用（不允许因 Pack0 检测失败导致主流程退出）
 - Pack1：可用则启用；不可用则自动降级并记录审计字段
 - Pack2：✅ 固定软启动（soft mode）—— 永远启用、永远不作为降级原因
+- Pack3：✅ 分钟/竞价软启动（soft mode）—— 优先吃 pred_source 中的分钟衍生字段
 - 检测阶段绝不抛异常（最多返回 missing_fields / missing_files / notes）
 - 兼容 cfg.market_daily_cache_path / cfg.market_daily_tpl
 """
@@ -121,6 +122,18 @@ def _pack2_soft(cfg, trade_date: str) -> Tuple[bool, List[str], List[str], List[
     return True, [], [], ["Pack2 enabled (soft mode, fixed)"]
 
 
+def _pack3_intraday_soft(cfg, trade_date: str) -> Tuple[bool, List[str], List[str], List[str]]:
+    """
+    Pack3：分钟级 / 竞价结构因子。
+
+    软启动原因：
+    - a-top10 的 pred_source_latest 已经可透传 intraday_* / auction_* 字段；
+    - 原始 intraday_features / stk_auction 文件可能按日期或 latest 存在；
+    - 缺失时应降为中性因子，而不是阻断 Premium 主流程。
+    """
+    return True, [], [], ["Pack3 enabled: intraday/auction soft factors"]
+
+
 # --------------------------
 # public API
 # --------------------------
@@ -158,7 +171,12 @@ def detect_factor_packs(cfg, trade_date: str) -> PackStatus:
     notes.extend(n2)
     packs_used.append("Pack2")
 
-    # 降级只由 Pack1 决定（Pack2 永远不触发）
+    # Pack3 分钟/竞价软启动（永远 used，不进入 missing）
+    ok3, mf3, mfile3, n3 = _pack3_intraday_soft(cfg, trade_date)
+    notes.extend(n3)
+    packs_used.append("Pack3")
+
+    # 降级只由 Pack1 决定（Pack2/Pack3 永远不触发）
     degrade_mode = "degraded" if packs_missing else "full"
 
     return PackStatus(
