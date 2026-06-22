@@ -246,11 +246,11 @@
     }
   ],
   "stats": {
-    "n_verify_files": 73,
+    "n_verify_files": 74,
     "ok_files": 58,
-    "skipped_files": 15,
+    "skipped_files": 16,
     "backfilled_files": 66,
-    "backfill_failed": 4,
+    "backfill_failed": 5,
     "notes": [
       "premium_verify_20260227.csv: backfilled:30/30:20260302->20260303",
       "premium_verify_20260302.csv: backfilled:30/30:20260303->20260304",
@@ -336,10 +336,12 @@
       "premium_verify_20260616.csv: backfilled:30/30:20260617->20260618",
       "premium_verify_20260617.csv: backfilled:30/30:20260618->20260622",
       "premium_verify_20260618.csv: backfill skipped: t1_daily_not_ready:20260623:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260623/daily.csv body_snippet=404: Not Found",
-      "skip premium_verify_20260618.csv: no matured limitup rows"
+      "skip premium_verify_20260618.csv: no matured limitup rows",
+      "premium_verify_20260622.csv: backfill skipped: t_daily_not_ready:20260623:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260623/daily.csv body_snippet=404: Not Found",
+      "skip premium_verify_20260622.csv: no matured limitup rows"
     ]
   },
-  "created_at_utc": "2026-06-22T14:07:59Z",
-  "commit_sha": "81ee9a84da09",
-  "run_id": "gh_27958100408"
+  "created_at_utc": "2026-06-22T18:02:29Z",
+  "commit_sha": "213fa248ac3d",
+  "run_id": "gh_27972784832"
 }
