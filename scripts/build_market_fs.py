@@ -56,7 +56,9 @@ KEY_COLS = ["trade_date", "ts_code"]
 SOURCE_FILE_MAP: dict[str, str] = {
     "daily": "daily.csv",
     "daily_basic": "daily_basic.csv",
+    "intraday_features": "intraday_features.csv",
     "stock_basic": "stock_basic.csv",
+    "stk_auction": "stk_auction.csv",
     "stk_limit": "stk_limit.csv",
     "limit_list_d": "limit_list_d.csv",
     "limit_break_d": "limit_break_d.csv",
@@ -603,6 +605,72 @@ def _std_hot_boards(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     return std
 
 
+def _std_intraday_features(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    """
+    标准化分钟级聚合特征。
+
+    上游 raw 明细仍保留在 a-share-top3-data；Decision 只同步聚合后的
+    intraday_features.csv，避免把大量 1min 明细塞进决策仓库。
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df, trade_date)
+    if out.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    std = out[KEY_COLS].copy()
+    has_minute = _to_numeric(out.get("has_minute_data")).fillna(0.0)
+    std["intraday_available"] = has_minute
+    std["intraday_status"] = has_minute.map(lambda x: "ok" if float(x or 0.0) > 0 else "missing_minute")
+    std["intraday_missing_reason"] = std["intraday_status"].map(lambda x: "" if x == "ok" else "no_minute_data")
+    std["minute_freq"] = out.get("minute_freq")
+    std["minute_rows"] = _to_numeric(out.get("minute_rows"))
+    std["first_limit_time"] = out.get("first_limit_time")
+    std["last_limit_time"] = out.get("last_limit_time")
+    std["limit_touch_count"] = _to_numeric(out.get("limit_touch_count"))
+    std["open_board_count"] = _to_numeric(out.get("open_board_count"))
+    std["max_drawdown_after_limit"] = _to_numeric(out.get("max_drawdown_after_limit"))
+    std["reseal_count"] = _to_numeric(out.get("reseal_count"))
+    std["reseal_minutes_avg"] = _to_numeric(out.get("reseal_minutes_avg"))
+    std["late_volume_ratio"] = _to_numeric(out.get("late_volume_ratio"))
+    std["late_price_weakness"] = _to_numeric(out.get("late_price_weakness"))
+    std["late_limit_hold_minutes"] = _to_numeric(out.get("late_limit_hold_minutes"))
+    std["late_withdraw_score"] = _to_numeric(out.get("late_withdraw_score"))
+    std["reseal_score"] = _to_numeric(out.get("reseal_acceptance_score"))
+    std["intraday_quality_score"] = _to_numeric(out.get("limitup_quality_score"))
+    std["intraday_confidence_score"] = _to_numeric(out.get("limitup_path_score"))
+    std["intraday_risk_score"] = _to_numeric(out.get("intraday_risk_score"))
+    std["intraday_soft_risk_score"] = std["intraday_risk_score"]
+    std["intraday_tag"] = out.get("intraday_tag")
+    risk_score = std["intraday_risk_score"].fillna(0.0)
+    std["intraday_hard_risk_flag"] = (
+        (risk_score >= 65.0)
+        | std["intraday_tag"].astype(str).str.contains("risk|weak|bad", case=False, na=False)
+    ).astype(float)
+    return std
+
+
+def _std_stk_auction(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    out = _ensure_keys(df, trade_date)
+    if out.empty:
+        return pd.DataFrame(columns=KEY_COLS)
+
+    std = out[KEY_COLS].copy()
+    std["auction_vol"] = _to_numeric(out.get("vol"))
+    std["auction_price"] = _to_numeric(out.get("price"))
+    std["auction_amount"] = _to_numeric(out.get("amount"))
+    amt = std["auction_amount"].replace([float("inf"), -float("inf")], pd.NA)
+    if amt.notna().sum() > 1:
+        std["auction_strength_score"] = amt.rank(pct=True).fillna(0.0)
+    else:
+        std["auction_strength_score"] = 0.0
+    return std
+
+
 def _std_top_list(df: pd.DataFrame, trade_date: str) -> pd.DataFrame:
     """
     已确认表头：
@@ -707,7 +775,9 @@ def load_raw_bundle(trade_date: str) -> dict[str, pd.DataFrame]:
     return {
         "daily": _std_daily(_load_raw_table("daily", trade_date), trade_date),
         "daily_basic": _std_daily_basic(_load_raw_table("daily_basic", trade_date), trade_date),
+        "intraday_features": _std_intraday_features(_load_raw_table("intraday_features", trade_date), trade_date),
         "stock_basic": _std_stock_basic(_load_raw_table("stock_basic", trade_date), trade_date),
+        "stk_auction": _std_stk_auction(_load_raw_table("stk_auction", trade_date), trade_date),
         "stk_limit": _std_stk_limit(_load_raw_table("stk_limit", trade_date), trade_date),
         "limit_list_d": _std_limit_list(_load_raw_table("limit_list_d", trade_date), trade_date),
         "limit_break_d": _std_limit_break(_load_raw_table("limit_break_d", trade_date), trade_date),
@@ -724,7 +794,9 @@ def load_raw_bundle(trade_date: str) -> dict[str, pd.DataFrame]:
 def build_master_table(bundle: dict[str, pd.DataFrame], trade_date: str) -> pd.DataFrame:
     daily = bundle.get("daily", pd.DataFrame())
     daily_basic = bundle.get("daily_basic", pd.DataFrame())
+    intraday_features = bundle.get("intraday_features", pd.DataFrame())
     stock_basic = bundle.get("stock_basic", pd.DataFrame())
+    stk_auction = bundle.get("stk_auction", pd.DataFrame())
     stk_limit = bundle.get("stk_limit", pd.DataFrame())
     limit_list_d = bundle.get("limit_list_d", pd.DataFrame())
     limit_break_d = bundle.get("limit_break_d", pd.DataFrame())
@@ -736,7 +808,17 @@ def build_master_table(bundle: dict[str, pd.DataFrame], trade_date: str) -> pd.D
         return pd.DataFrame(columns=KEY_COLS)
 
     master = daily.copy()
-    for tbl in [daily_basic, stock_basic, stk_limit, limit_list_d, limit_break_d, limit_up_tags, top_list]:
+    for tbl in [
+        daily_basic,
+        stock_basic,
+        stk_limit,
+        limit_list_d,
+        limit_break_d,
+        limit_up_tags,
+        top_list,
+        intraday_features,
+        stk_auction,
+    ]:
         master = _merge_left(master, tbl, on=KEY_COLS)
 
     # namechange 是静态 ts_code 级辅助表
@@ -861,6 +943,12 @@ def build_features_base(df: pd.DataFrame) -> pd.DataFrame:
     out["has_namechange_record"] = _to_numeric(df.get("has_namechange_record"))
     out["latest_change_reason"] = df.get("latest_change_reason")
 
+    # 竞价聚合特征（分钟/竞价红利的基础证据）
+    out["auction_vol"] = _to_numeric(df.get("auction_vol"))
+    out["auction_price"] = _to_numeric(df.get("auction_price"))
+    out["auction_amount"] = _to_numeric(df.get("auction_amount"))
+    out["auction_strength_score"] = _to_numeric(df.get("auction_strength_score"))
+
     return out
 
 
@@ -878,6 +966,34 @@ def build_features_limit(df: pd.DataFrame) -> pd.DataFrame:
     out["seal_amount"] = _to_numeric(df.get("seal_amount_limit"))
     out["first_seal_time"] = df.get("first_time_limit")
     out["last_seal_time"] = df.get("last_time_limit")
+
+    # 分钟级聚合特征。若 a-top10 pred 已经带同名字段，ingest 会保护 prior 字段；
+    # 若 pred 未带，则这些 FS 字段直接进入 Decision 排序和风险层。
+    out["intraday_available"] = _to_numeric(df.get("intraday_available"))
+    out["intraday_status"] = df.get("intraday_status")
+    out["intraday_missing_reason"] = df.get("intraday_missing_reason")
+    out["minute_freq"] = df.get("minute_freq")
+    out["minute_rows"] = _to_numeric(df.get("minute_rows"))
+    out["first_limit_time"] = df.get("first_limit_time")
+    out["last_limit_time"] = df.get("last_limit_time")
+    out["limit_touch_count"] = _to_numeric(df.get("limit_touch_count"))
+    out["open_board_count"] = _to_numeric(df.get("open_board_count"))
+    out["max_drawdown_after_limit"] = _to_numeric(df.get("max_drawdown_after_limit"))
+    out["reseal_count"] = _to_numeric(df.get("reseal_count"))
+    out["reseal_minutes_avg"] = _to_numeric(df.get("reseal_minutes_avg"))
+    out["late_volume_ratio"] = _to_numeric(df.get("late_volume_ratio"))
+    out["late_price_weakness"] = _to_numeric(df.get("late_price_weakness"))
+    out["late_limit_hold_minutes"] = _to_numeric(df.get("late_limit_hold_minutes"))
+    out["late_withdraw_score"] = _to_numeric(df.get("late_withdraw_score"))
+    out["reseal_score"] = _to_numeric(df.get("reseal_score"))
+    out["intraday_quality_score"] = _to_numeric(df.get("intraday_quality_score"))
+    out["intraday_confidence_score"] = _to_numeric(df.get("intraday_confidence_score"))
+    out["intraday_risk_score"] = _to_numeric(df.get("intraday_risk_score"))
+    out["intraday_soft_risk_score"] = _to_numeric(df.get("intraday_soft_risk_score"))
+    out["intraday_hard_risk_flag"] = _to_numeric(df.get("intraday_hard_risk_flag"))
+    out["intraday_tag"] = df.get("intraday_tag")
+    out["auction_strength_score"] = _to_numeric(df.get("auction_strength_score"))
+    out["auction_amount"] = _to_numeric(df.get("auction_amount"))
 
     # limit_break_d 补充
     out["open_times_break"] = _to_numeric(df.get("open_times_break"))
@@ -1021,11 +1137,15 @@ def build_meta(
         "north_money_market", "south_money_market",
         "hot_boards_score", "board_crowding_rank",
         "is_hot_board", "board_limit_up_count", "is_st_like",
+        "auction_amount", "auction_strength_score",
     ]
     limit_required = [
         "is_limit_up", "limit_type", "open_times", "seal_amount",
         "first_seal_time", "last_seal_time", "break_count_proxy",
         "is_hot_board", "board_rank", "limit_up_strength",
+        "intraday_available", "intraday_quality_score",
+        "intraday_risk_score", "late_withdraw_score", "reseal_score",
+        "open_board_count", "auction_strength_score",
     ]
     truth_required = ["close", "pre_close_est", "pct_chg"]
 
@@ -1045,7 +1165,7 @@ def build_meta(
         "trade_date": trade_date,
         "created_at_utc": _now_utc(),
         "commit_sha": sha,
-        "fs_version": "v0.5-history-roll-features",
+        "fs_version": "v0.6-intraday-auction-features",
         "richness_target": 0.75,
         "richness_estimate": richness_estimate,
         "raw_inputs": _raw_input_stats(bundle, trade_date),
@@ -1069,6 +1189,7 @@ def build_meta(
             "moneyflow_hsgt 当前按市场级数据处理，并按 trade_date 广播到个股特征层。",
             "limit_up_tags 当前已按真实个股热板属性表接入。",
             "namechange 当前作为审计/风险辅助层接入。",
+            "已接入 intraday_features.csv 和 stk_auction.csv，供 Decision 排序与风险层使用。",
         ],
     }
 
