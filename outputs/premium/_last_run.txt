@@ -1,8 +1,8 @@
 trade_date: 20260618
-run_id: gh_27836898477
-commit_sha: 558dc44f7344
+run_id: gh_27938167085
+commit_sha: 7ded3718c0f5
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-19T16:40:29Z
+created_at_utc: 2026-06-22T08:11:24Z
 ok: True
 buy_date: 20260622
 target_date: 20260623
@@ -38,7 +38,7 @@ limitup_model_feature_n: 24
 limitup_model_train_end_date: 20260525
 limitup_model_valid_start_date: 20260526
 limitup_model_can_rank: False
-limitup_model_rank_mode: disabled_validation_not_pass:days=15;samples=449;t1_accept_auc=0.5428829580205726;t1_accept_brier=0.272007132161777;t1_ret_spearman_ic=0.06347029048751722
+limitup_model_rank_mode: disabled_validation_not_pass:days=15;samples=449;t1_accept_auc=0.5372410097642296;t1_accept_brier=0.2791109994022032;t1_ret_spearman_ic=0.05367358778067446
 limitup_model_validation_days: 15
 limitup_model_validation_samples: 449
 limitup_calibration_mode: historical_bin_blend_v1
@@ -51,7 +51,7 @@ adaptive_weight_t1: 0.066011
 adaptive_weight_strength: 0.242041
 adaptive_weight_execution: 0.110019
 adaptive_limitup_ic: 0.221874
-adaptive_t1_ret_ic: -0.188869
+adaptive_t1_ret_ic: -0.166389
 adaptive_reason: t1_downweighted_negative_ic
 premium_score_mode: t_attack_t1_accept_final_v1
 premium_eligible_count: 67
@@ -110,13 +110,13 @@ history_limitup_spearman_ic_20d: 0.22187366850857596
 history_limitup_spearman_ic_positive_rate: 1.0
 history_limitup_kendall_tau_mean: 0.18415365975794704
 history_t1_ret_rank_ic_days: 6
-history_t1_ret_spearman_ic_mean: -0.18886863012200675
-history_t1_ret_spearman_ic_20d: -0.18886863012200675
+history_t1_ret_spearman_ic_mean: -0.16638854244602427
+history_t1_ret_spearman_ic_20d: -0.16638854244602427
 history_t1_ret_spearman_ic_positive_rate: 0.16666666666666666
 history_tier_top10_hit_rate: 0.2839506172839506
 history_tier_top20_tail_hit_rate: 0.17223198594024605
 history_tier_top10_vs_11_20_hit_spread: 0.11171863134370455
-history_tier_summary: TOP1-10:161/567/0.284/ret=0.0010 | TOP11-20:98/569/0.172/ret=-0.0014 | TOP21-30:100/565/0.177/ret=0.0049
+history_tier_summary: TOP1-10:161/567/0.284/ret=0.0021 | TOP11-20:98/569/0.172/ret=-0.0007 | TOP21-30:100/565/0.177/ret=0.0049
 out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260618.csv
 out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260618.csv
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260618.csv
