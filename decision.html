@@ -134,14 +134,6 @@
       margin:0;
     }
 
-    .report-body-collapsed .report-card-head{
-      margin-bottom:0;
-    }
-
-    .report-body-collapsed #reportBox{
-      display:none;
-    }
-
     .circle-toggle{
       appearance:none;
       display:inline-flex;
@@ -479,12 +471,8 @@
         </div>
       </section>
 
-      <section class="card report-body-collapsed" id="reportCard">
+      <section class="card" id="reportCard">
         <div class="card-body">
-          <div class="report-card-head">
-            <h2 class="section-title">报告正文</h2>
-            <button class="circle-toggle" id="reportBodyToggle" type="button" aria-expanded="false" aria-controls="reportBox" title="展开报告正文">+</button>
-          </div>
           <div id="reportBox" class="empty">等待加载...</div>
         </div>
       </section>
@@ -511,8 +499,6 @@
 
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
-    const reportCard = document.getElementById("reportCard");
-    const reportBodyToggle = document.getElementById("reportBodyToggle");
     const reportBox = document.getElementById("reportBox");
     const metaGrid = document.getElementById("metaGrid");
     const footerText = document.getElementById("footerText");
@@ -524,20 +510,6 @@
     let currentIndex = 0;
     let currentFileName = "";
     let lastLoadMode = "";
-
-    function setReportBodyCollapsed(collapsed) {
-      reportCard.classList.toggle("report-body-collapsed", collapsed);
-      reportBodyToggle.setAttribute("aria-expanded", String(!collapsed));
-      reportBodyToggle.textContent = collapsed ? "+" : "-";
-      reportBodyToggle.title = collapsed ? "展开报告正文" : "折叠报告正文";
-    }
-
-    function bindReportBodyToggle() {
-      setReportBodyCollapsed(true);
-      reportBodyToggle.addEventListener("click", () => {
-        setReportBodyCollapsed(!reportCard.classList.contains("report-body-collapsed"));
-      });
-    }
 
     function setReportSectionCollapsed(section, collapsed) {
       const toggle = section.querySelector(".report-section-toggle");
@@ -872,37 +844,39 @@
       reportBox.innerHTML = `
         ${rawNotice}
 
-        <div class="report-section">
-          <h2>报告状态</h2>
-          ${kvHtml(fields, [
-            ["signal_date", "信号日"],
-            ["exec_date", "执行日"],
-            ["requested_trade_date", "请求交易日"],
-            ["regime", "市场状态"],
-            ["risk_budget", "风险预算"],
-            ["input_mode", "输入模式"],
-            ["fs_degrade_reason", "FS降级原因"],
-            ["pred_loaded", "pred_loaded"],
-            ["pred_rows", "pred_rows"],
-            ["features_base_rows", "features_base_rows"],
-            ["features_limit_rows", "features_limit_rows"],
-            ["truth_close_rows", "truth_close_rows"]
-          ])}
-        </div>
+        ${collapsibleSectionHtml("报告正文", `
+          <div class="report-section">
+            <h2>报告状态</h2>
+            ${kvHtml(fields, [
+              ["signal_date", "信号日"],
+              ["exec_date", "执行日"],
+              ["requested_trade_date", "请求交易日"],
+              ["regime", "市场状态"],
+              ["risk_budget", "风险预算"],
+              ["input_mode", "输入模式"],
+              ["fs_degrade_reason", "FS降级原因"],
+              ["pred_loaded", "pred_loaded"],
+              ["pred_rows", "pred_rows"],
+              ["features_base_rows", "features_base_rows"],
+              ["features_limit_rows", "features_limit_rows"],
+              ["truth_close_rows", "truth_close_rows"]
+            ])}
+          </div>
 
-        <div class="report-section">
-          <h2>模型状态</h2>
-          ${kvHtml(fields, [
-            ["p_fill_pred_src", "P_fill来源"],
-            ["p_fill_model_loaded", "P_fill模型加载"],
-            ["p_fill_model_kind", "P_fill模型类型"],
-            ["p_fill_degrade_reason", "P_fill降级原因"],
-            ["eret_pred_src", "E_ret来源"],
-            ["eret_model_loaded", "E_ret模型加载"],
-            ["eret_model_kind", "E_ret模型类型"],
-            ["eret_degrade_reason", "E_ret降级原因"]
-          ])}
-        </div>
+          <div class="report-section">
+            <h2>模型状态</h2>
+            ${kvHtml(fields, [
+              ["p_fill_pred_src", "P_fill来源"],
+              ["p_fill_model_loaded", "P_fill模型加载"],
+              ["p_fill_model_kind", "P_fill模型类型"],
+              ["p_fill_degrade_reason", "P_fill降级原因"],
+              ["eret_pred_src", "E_ret来源"],
+              ["eret_model_loaded", "E_ret模型加载"],
+              ["eret_model_kind", "E_ret模型类型"],
+              ["eret_degrade_reason", "E_ret降级原因"]
+            ])}
+          </div>
+        `, true)}
 
         ${collapsibleSectionHtml("Artifacts", kvHtml(fields, [
           ["candidates_snapshot", "候选快照"],
@@ -1065,7 +1039,6 @@
       `;
     });
 
-    bindReportBodyToggle();
     setStatus("", "正在定位报告...");
     loadReportByIndex(0);
   </script>
