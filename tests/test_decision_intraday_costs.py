@@ -8,7 +8,7 @@ import pandas as pd
 from top10decision.models.costs import risk_breakdown_df, risk_penalty_rule
 
 
-def test_intraday_absent_keeps_legacy_risk_neutral() -> None:
+def test_intraday_absent_keeps_new_penalties_neutral() -> None:
     df = pd.DataFrame(
         [
             {
@@ -24,9 +24,12 @@ def test_intraday_absent_keeps_legacy_risk_neutral() -> None:
 
     assert float(breakdown.loc[0, "risk_intraday_hard_penalty"]) == 0.0
     assert float(breakdown.loc[0, "risk_intraday_soft_penalty"]) == 0.0
+    assert float(breakdown.loc[0, "risk_intraday_confidence_penalty"]) == 0.0
     assert float(breakdown.loc[0, "risk_intraday_missing_penalty"]) == 0.0
+    assert float(breakdown.loc[0, "risk_late_withdraw_penalty"]) == 0.0
+    assert float(breakdown.loc[0, "risk_reseal_weakness_penalty"]) == 0.0
+    assert float(breakdown.loc[0, "risk_auction_weakness_penalty"]) == 0.0
     assert float(breakdown.loc[0, "intraday_execution_penalty"]) == 0.0
-    assert float(risk_penalty_rule("RISK_ON", df).iloc[0]) == 0.0
 
 
 def test_intraday_fields_add_execution_and_hard_risk_penalty() -> None:
