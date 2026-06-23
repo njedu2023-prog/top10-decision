@@ -7,19 +7,19 @@
   "regime_reason": "tail_risk_mean=0.2251,volatility_mean=0.0494,intraday_risk_mean=0.825",
   "guardrail_reason": "CAUTION:intraday_risk_mean=0.825,open_board_max=20.0,tail_risk_mean=0.2251",
   "topk": 60,
-  "picked": 1,
-  "cost_est_mean": 0.0016445920249999997,
+  "picked": 2,
+  "cost_est_mean": 0.0016000050499999996,
   "cost_est_min": 0.001107294,
-  "cost_est_max": 0.003206695,
-  "risk_penalty_mean": 0.02139243388014034,
+  "cost_est_max": 0.00258808,
+  "risk_penalty_mean": 0.021189602532609965,
   "risk_penalty_min": 0.011563149106230054,
   "risk_penalty_max": 0.038224066666666674,
-  "ev_base_mean": -0.024458484774374598,
-  "ev_final_mean": -0.05725682760455851,
-  "pfill_penalty_extra_mean": 0.00020361155436425017,
-  "risk_penalty_extra_mean": 0.03429578752581965,
-  "intraday_penalty_extra_mean": 0.011457083333333335,
-  "intraday_ev_bonus_mean": 0.0017010562499999997,
+  "ev_base_mean": -0.009665298196033043,
+  "ev_final_mean": -0.04194998801507708,
+  "pfill_penalty_extra_mean": 4.523883854769295e-06,
+  "risk_penalty_extra_mean": 0.03402298781018927,
+  "intraday_penalty_extra_mean": 0.011499499999999998,
+  "intraday_ev_bonus_mean": 0.001742821875,
   "ev_formula_version": "v1_2_intraday_weighted",
   "input_mode": "pred_plus_fs",
   "fs_degrade_reason": "",
@@ -36,8 +36,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260623",
-      "created_at_utc": "2026-06-23T10:19:14+00:00",
-      "commit_sha": "2a415a386a11b3d69707ffecd5174daab0fc92a1",
+      "created_at_utc": "2026-06-23T16:08:25+00:00",
+      "commit_sha": "038f654642f6732e4030218788e30f4de5a8b0d7",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -245,7 +245,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260623",
-            "created_at_utc": "2026-06-23T10:17:16+00:00",
+            "created_at_utc": "2026-06-23T16:06:24+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -260,7 +260,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260623",
-              "generated_at_bj": "2026-06-23 18:06:25",
+              "generated_at_bj": "2026-06-23 20:30:51",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -880,24 +880,24 @@
       "intraday_confidence_score"
     ],
     "rows": 60,
-    "available_rows": 48,
+    "available_rows": 49,
     "status_counts": {
-      "ok": 48,
-      "missing_stock": 12
+      "ok": 49,
+      "missing_stock": 11
     },
     "hard_risk_rows": 10,
     "risk_intraday_hard_penalty_mean": 0.0016666666666666666,
     "risk_intraday_hard_penalty_max": 0.01,
     "risk_intraday_hard_penalty_sum": 0.09999999999999999,
-    "risk_intraday_soft_penalty_mean": 0.0048000000000000004,
+    "risk_intraday_soft_penalty_mean": 0.004900000000000001,
     "risk_intraday_soft_penalty_max": 0.006,
-    "risk_intraday_soft_penalty_sum": 0.28800000000000003,
-    "risk_intraday_confidence_penalty_mean": 0.000475,
+    "risk_intraday_soft_penalty_sum": 0.29400000000000004,
+    "risk_intraday_confidence_penalty_mean": 0.00045749999999999995,
     "risk_intraday_confidence_penalty_max": 0.0010500000000000002,
-    "risk_intraday_confidence_penalty_sum": 0.0285,
-    "risk_intraday_missing_penalty_mean": 0.0004,
+    "risk_intraday_confidence_penalty_sum": 0.02745,
+    "risk_intraday_missing_penalty_mean": 0.00036666666666666667,
     "risk_intraday_missing_penalty_max": 0.002,
-    "risk_intraday_missing_penalty_sum": 0.024,
+    "risk_intraday_missing_penalty_sum": 0.022,
     "risk_late_withdraw_penalty_mean": 0.0005833333333333334,
     "risk_late_withdraw_penalty_max": 0.005,
     "risk_late_withdraw_penalty_sum": 0.035,
@@ -907,15 +907,15 @@
     "risk_auction_weakness_penalty_mean": 0.0014090909090909093,
     "risk_auction_weakness_penalty_max": 0.001409090909090909,
     "risk_auction_weakness_penalty_sum": 0.08454545454545456,
-    "intraday_execution_penalty_mean": 0.009379166666666666,
+    "intraday_execution_penalty_mean": 0.009428333333333332,
     "intraday_execution_penalty_max": 0.012,
-    "intraday_execution_penalty_sum": 0.56275,
-    "intraday_ev_bonus_mean": 0.0017010562499999997,
+    "intraday_execution_penalty_sum": 0.5656999999999999,
+    "intraday_ev_bonus_mean": 0.001742821875,
     "intraday_ev_bonus_max": 0.0025059375,
-    "intraday_ev_bonus_sum": 0.10206337499999998,
-    "intraday_penalty_extra_mean": 0.011457083333333335,
+    "intraday_ev_bonus_sum": 0.1045693125,
+    "intraday_penalty_extra_mean": 0.011499499999999998,
     "intraday_penalty_extra_max": 0.019200000000000002,
-    "intraday_penalty_extra_sum": 0.6874250000000001,
+    "intraday_penalty_extra_sum": 0.6899699999999999,
     "top_penalty_rows": [
       {
         "ts_code": "000070.SZ",
@@ -924,7 +924,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00081253125,
-        "ev_pred": -0.06315462957704064
+        "ev_pred": -0.04729727278159838
       },
       {
         "ts_code": "002068.SZ",
@@ -933,7 +933,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00081253125,
-        "ev_pred": -0.06266485326253934
+        "ev_pred": -0.05345912277185135
       },
       {
         "ts_code": "002167.SZ",
@@ -942,7 +942,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.001265625,
-        "ev_pred": -0.06338136133041095
+        "ev_pred": -0.049555681913773825
       },
       {
         "ts_code": "300085.SZ",
@@ -951,7 +951,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00056109375,
-        "ev_pred": -0.06487431167852517
+        "ev_pred": -0.0275007893588904
       },
       {
         "ts_code": "600397.SH",
@@ -960,7 +960,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00056109375,
-        "ev_pred": -0.027584277011923904
+        "ev_pred": 0.010815632056007975
       },
       {
         "ts_code": "600470.SH",
@@ -969,7 +969,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.0009534374999999999,
-        "ev_pred": -0.07671737839502377
+        "ev_pred": -0.06232240414421313
       },
       {
         "ts_code": "601869.SH",
@@ -978,7 +978,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00110446875,
-        "ev_pred": -0.008075388291006756
+        "ev_pred": -0.015239358545794925
       },
       {
         "ts_code": "002830.SZ",
@@ -987,7 +987,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.011275,
         "intraday_ev_bonus": 0.00186046875,
-        "ev_pred": -0.06250508595501685
+        "ev_pred": -0.051773108555334346
       },
       {
         "ts_code": "300835.SZ",
@@ -996,7 +996,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.017275,
         "intraday_ev_bonus": 0.0016655625,
-        "ev_pred": 0.01128926878260808
+        "ev_pred": 0.03176691638666171
       },
       {
         "ts_code": "600172.SH",
@@ -1005,7 +1005,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.017275,
         "intraday_ev_bonus": 0.0016655625,
-        "ev_pred": -0.06766848682077213
+        "ev_pred": -0.05522179263213552
       }
     ]
   },
@@ -1033,8 +1033,8 @@
   },
   "report_stats": {
     "high_ev_low_risk_rows": 0,
-    "topn_rows": 1,
-    "full_candidate_rows": 59
+    "topn_rows": 2,
+    "full_candidate_rows": 58
   },
-  "intraday_execution_penalty_mean": 0.00937916666666666
+  "intraday_execution_penalty_mean": 0.009428333333333323
 }
