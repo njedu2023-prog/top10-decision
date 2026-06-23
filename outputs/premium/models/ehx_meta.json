@@ -27,7 +27,7 @@
   "delta_mae": 0.05453136911811578,
   "delta_rmse": 0.0744108108435069,
   "plus_improve_rate": 0.6465177398160316,
-  "created_at_utc": "2026-06-22T18:14:29Z",
-  "commit_sha": "3eb4ec186389",
-  "run_id": "gh_27972872139"
+  "created_at_utc": "2026-06-23T10:35:27Z",
+  "commit_sha": "b0448031f8ae",
+  "run_id": "gh_28019487792"
 }
