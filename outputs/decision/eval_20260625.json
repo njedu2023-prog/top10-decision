@@ -36,8 +36,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260624",
-      "created_at_utc": "2026-06-24T13:37:51+00:00",
-      "commit_sha": "1819c83a9280df5528aefd146dec633a7aa30280",
+      "created_at_utc": "2026-06-24T14:12:56+00:00",
+      "commit_sha": "16922495253ae03db72e5364664350a8e56b24ac",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -245,7 +245,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260624",
-            "created_at_utc": "2026-06-24T13:36:23+00:00",
+            "created_at_utc": "2026-06-24T14:11:29+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -260,7 +260,7 @@
             "upstream_meta": {
               "requested_trade_date": "20260624",
               "resolved_trade_date": "20260624",
-              "generated_at_bj": "2026-06-24 21:26:50",
+              "generated_at_bj": "2026-06-24 22:00:49",
               "jobs": [
                 {
                   "key": "limit_list_d",
