@@ -1,54 +1,54 @@
 {
-  "generated_at_utc": "2026-06-24T15:40:06+00:00",
-  "current_run_date": "20260624",
+  "generated_at_utc": "2026-06-25T12:16:12+00:00",
+  "current_run_date": "20260625",
   "pfill": {
+    "anchor_trade_date": "20260624",
+    "status": "trained",
+    "loaded_trade_dates": 8,
+    "missing_trade_dates": 0,
+    "metrics_valid": {
+      "lr": {
+        "auc": 0.8829787234042553,
+        "logloss": 0.245138070472323,
+        "brier": 0.03359177679721899
+      },
+      "lgbm": {
+        "auc": 0.7845744680851063,
+        "logloss": 0.24493666318759635,
+        "brier": 0.04238766869324246
+      }
+    },
+    "acceptance_pass": true
+  },
+  "eret": {
     "anchor_trade_date": "20260623",
     "status": "trained",
     "loaded_trade_dates": 8,
     "missing_trade_dates": 0,
     "metrics_valid": {
       "lr": {
-        "auc": 0.9894736842105263,
-        "logloss": 0.11823962291255523,
-        "brier": 0.03049099050835881
+        "mae": 0.0627097064395787,
+        "rmse": 0.07958762947306253,
+        "r2": -0.14738440822337662,
+        "corr": -0.044688130453889176,
+        "directional_acc": 0.5578947368421052
       },
       "lgbm": {
-        "auc": 0.9368421052631579,
-        "logloss": 0.0900228798517049,
-        "brier": 0.020139999975959052
-      }
-    },
-    "acceptance_pass": true
-  },
-  "eret": {
-    "anchor_trade_date": "20260622",
-    "status": "trained",
-    "loaded_trade_dates": 8,
-    "missing_trade_dates": 0,
-    "metrics_valid": {
-      "lr": {
-        "mae": 0.06367977700272376,
-        "rmse": 0.08152886861341276,
-        "r2": -0.5629899197853405,
-        "corr": -0.02790839191585365,
-        "directional_acc": 0.5378787878787878
-      },
-      "lgbm": {
-        "mae": 0.0573647620452865,
-        "rmse": 0.0719812327689945,
-        "r2": -0.21834954754814784,
-        "corr": 0.07043069186025071,
-        "directional_acc": 0.4393939393939394
+        "mae": 0.06216626720801306,
+        "rmse": 0.07516955112765585,
+        "r2": -0.023532692527409305,
+        "corr": 0.17013193825872855,
+        "directional_acc": 0.49473684210526314
       }
     },
     "fs_v2_still_all_missing": [],
     "selected_model": "lgbm",
     "selected_model_metrics": {
-      "mae": 0.0573647620452865,
-      "rmse": 0.0719812327689945,
-      "r2": -0.21834954754814784,
-      "corr": 0.07043069186025071,
-      "directional_acc": 0.4393939393939394
+      "mae": 0.06216626720801306,
+      "rmse": 0.07516955112765585,
+      "r2": -0.023532692527409305,
+      "corr": 0.17013193825872855,
+      "directional_acc": 0.49473684210526314
     },
     "selected_model_pass": false,
     "acceptance_pass": false

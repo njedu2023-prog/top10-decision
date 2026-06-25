@@ -1,18 +1,18 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-06-24T15:40:06+00:00
-- current_run_date: 20260624
+- generated_at_utc: 2026-06-25T12:16:12+00:00
+- current_run_date: 20260625
 - overall_pass: FAIL
 
 ## P_fill
-- anchor_trade_date: 20260623
+- anchor_trade_date: 20260624
 - status: trained
 - loaded_trade_dates: 8
 - missing_trade_dates: 0
 - acceptance_pass: PASS
 
 ## E_ret
-- anchor_trade_date: 20260622
+- anchor_trade_date: 20260623
 - status: trained
 - loaded_trade_dates: 8
 - missing_trade_dates: 0
