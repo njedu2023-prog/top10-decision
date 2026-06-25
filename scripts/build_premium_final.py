@@ -134,16 +134,99 @@ def _h(value: object) -> str:
     return html.escape(s, quote=True)
 
 
+def _cn_action(value: object) -> str:
+    return {
+        "BUY_MARKET": "市价竞价",
+        "BUY_LIMIT": "限价竞价",
+        "SMALL_BUY": "小仓试买",
+        "WATCH_ONLY": "只观察不追",
+        "REJECT": "禁止买入",
+    }.get(str(value), str(value))
+
+
+def _cn_reason(value: object) -> str:
+    mapping = {
+        "market_no_trade": "市场模式禁止交易",
+        "premium_reject": "Premium动作为放弃",
+        "premium_watch_only": "Premium动作为只观察不追",
+        "premium_excluded": "Premium专业门槛剔除",
+        "decision_veto": "Decision否决",
+        "minute_hard_risk": "分钟硬风险",
+        "minute_risk_penalty": "分钟风险惩罚高",
+        "t1_fail_risk": "T+1失败概率高",
+        "t1_drawdown_risk": "T+1大回撤概率高",
+        "market_cap_overflow": "超过市场模式允许买入数量，降为观察",
+        "pass": "执行条件通过",
+    }
+    parts = []
+    for item in str(value if value is not None else "").split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        if item.startswith("premium_gate:"):
+            parts.append(f"Premium门槛：{item.split(':', 1)[1]}")
+        else:
+            parts.append(mapping.get(item, item))
+    return "；".join(parts)
+
+
+def _cn_columns(df: pd.DataFrame) -> pd.DataFrame:
+    return df.rename(
+        columns={
+            "FinalRank": "最终排名",
+            "PremiumRank": "Premium排名",
+            "Code": "代码",
+            "Name": "股票",
+            "Sector": "行业",
+            "Action": "最终动作",
+            "FinalScore": "最终分",
+            "Position": "建议仓位",
+            "MaxBuyPrice": "最高买入价",
+            "T-Up": "T日涨停概率",
+            "T-Strength": "T日强度",
+            "T1-Up": "T+1延续率",
+            "Bucket": "候选池",
+            "PremiumAction": "Premium原建议",
+            "Reason": "原因",
+            "T+1 SellPlan": "T+1卖出计划",
+        }
+    )
+
+
+def _cn_market(value: object) -> str:
+    return {
+        "NO_DATA": "无数据",
+        "NO_TRADE": "禁止交易",
+        "DEFENSIVE": "防守",
+        "CAUTION": "谨慎",
+        "NORMAL": "正常",
+    }.get(str(value), str(value))
+
+
+def _cn_t1_mode(value: object) -> str:
+    return {
+        "FROZEN_NEGATIVE_IC": "负IC冻结",
+        "LOW_IC": "低IC降权",
+        "NORMAL": "正常",
+        "UNKNOWN": "未知",
+    }.get(str(value), str(value))
+
+
 def _table_html(df: pd.DataFrame, empty_text: str) -> str:
     show = final_display_columns(df)
     if show.empty:
         return f'<p class="empty">{_h(empty_text)}</p>'
-    if "Position" in show.columns:
-        show["Position"] = show["Position"].map(_fmt_pct)
-    for c in ("T-Up", "T1-Up"):
+    show = _cn_columns(show)
+    if "最终动作" in show.columns:
+        show["最终动作"] = show["最终动作"].map(_cn_action)
+    if "原因" in show.columns:
+        show["原因"] = show["原因"].map(_cn_reason)
+    if "建议仓位" in show.columns:
+        show["建议仓位"] = show["建议仓位"].map(_fmt_pct)
+    for c in ("T日涨停概率", "T+1延续率"):
         if c in show.columns:
             show[c] = pd.to_numeric(show[c], errors="coerce").map(_fmt_pct)
-    for c in ("FinalScore", "T-Strength"):
+    for c in ("最终分", "T日强度"):
         if c in show.columns:
             show[c] = pd.to_numeric(show[c], errors="coerce").map(lambda x: _fmt_num(x, 2))
 
@@ -164,9 +247,9 @@ def _render_html(
     gen_ts: str,
 ) -> str:
     buy_count = len(buy)
-    strategy = "EMPTY"
+    strategy = "空仓"
     if buy_count > 0:
-        actions = ",".join(sorted(set(buy.get("final_action", pd.Series(dtype=str)).astype(str).tolist())))
+        actions = "、".join(sorted(set(buy.get("final_action", pd.Series(dtype=str)).astype(str).map(_cn_action).tolist())))
         strategy = f"{actions} {buy_count}只"
     t1_ic_text = "-" if not np.isfinite(stats.t1_rank_ic) else f"{stats.t1_rank_ic:.4f}"
     return f"""<!doctype html>
@@ -174,7 +257,7 @@ def _render_html(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Premium Final Buy List {trade_date}</title>
+  <title>Premium 最终竞价买入名单 {trade_date}</title>
   <style>
     :root {{
       --bg:#f5f5f7; --panel:#fff; --ink:#1d1d1f; --muted:#6e6e73;
@@ -214,9 +297,9 @@ def _render_html(
   <header>
     <div class="top">
       <div>
-        <div class="kicker">Premium Final Trade Layer</div>
+        <div class="kicker">Premium 最终交易执行层</div>
         <h1>最终竞价买入名单</h1>
-        <p class="sub">只基于 Premium 产物生成，不改动 a-top10、Decision、a-share-top3-data 主线。Final Buy List 才是可执行名单；Watch/Reject 不参与实盘买入。</p>
+        <p class="sub">只基于 Premium 产物生成，不改动 a-top10、Decision、a-share-top3-data 主线。最终买入名单才是可执行名单；观察名单和剔除名单不参与实盘买入。</p>
       </div>
       <div class="pill">D日 {trade_date}</div>
     </div>
@@ -224,25 +307,25 @@ def _render_html(
   <main>
     <div class="metrics">
       <div class="metric"><span>今日策略</span><strong>{_h(strategy)}</strong></div>
-      <div class="metric"><span>市场模式</span><strong>{_h(stats.market_mode)}</strong></div>
+      <div class="metric"><span>市场模式</span><strong>{_h(_cn_market(stats.market_mode))}</strong></div>
       <div class="metric"><span>允许买入数量</span><strong>{stats.max_trade_count}</strong></div>
-      <div class="metric"><span>T+1因子状态</span><strong>{_h(stats.t1_weight_mode)}</strong></div>
+      <div class="metric"><span>T+1因子状态</span><strong>{_h(_cn_t1_mode(stats.t1_weight_mode))}</strong></div>
       <div class="metric"><span>T+1 Rank IC</span><strong>{_h(t1_ic_text)}</strong></div>
       <div class="metric"><span>生成时间</span><strong>{_h(gen_ts)}</strong></div>
     </div>
     <section>
-      <div class="section-head"><h2>Final Buy List</h2><span class="badge">最多 0-3 只，可执行</span></div>
+      <div class="section-head"><h2>最终买入名单</h2><span class="badge">最多 0-3 只，可执行</span></div>
       {_table_html(buy, "今日无可执行买入名单，策略为空仓或只观察。")}
     </section>
     <section>
-      <div class="section-head"><h2>Watch List</h2><span class="badge">观察，不追</span></div>
+      <div class="section-head"><h2>观察名单</h2><span class="badge">观察，不追</span></div>
       {_table_html(watch.head(30), "暂无观察名单")}
     </section>
     <section>
-      <div class="section-head"><h2>Reject List</h2><span class="badge">禁止买入</span></div>
+      <div class="section-head"><h2>剔除名单</h2><span class="badge">禁止买入</span></div>
       {_table_html(reject.head(50), "暂无剔除名单")}
     </section>
-    <p class="note">规则摘要：放弃/只观察不追不能进入 Final Buy List；Decision 否决、分钟硬风险、市场 NO_TRADE 直接剔除；T+1 Rank IC 为负时自动冻结 T+1 因子权重。</p>
+    <p class="note">规则摘要：放弃/只观察不追不能进入最终买入名单；Decision 否决、分钟硬风险、市场禁止交易会直接剔除；T+1 Rank IC 为负时自动冻结 T+1 因子权重。</p>
   </main>
 </body>
 </html>
