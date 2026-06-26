@@ -1402,9 +1402,13 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     dec = pd.concat(hit, ignore_index=True)
     dec["trade_date"] = dec["trade_date"].astype(str).map(_to_yyyymmdd)
     dec["ts_code"] = dec["ts_code"].astype(str).str.strip()
+    dec = dec.loc[dec["trade_date"].astype(str) == str(trade_date)].copy()
+    if dec.empty:
+        return pd.DataFrame()
     if "name" in dec.columns:
         dec["name"] = dec["name"].astype(str).str.strip()
-    c_sector = pick(
+    c_sector = _first_existing_col(
+        dec,
         "sector", "board", "industry", "sw_industry", "申万行业", "行业", "板块",
         "所属行业", "所属板块", "concept", "theme", "concept_name", "概念", "题材",
     )
@@ -1428,6 +1432,42 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
         out[out_col] = dec[c] if c else pd.NA
 
     return out.drop_duplicates(subset=["trade_date", "ts_code"], keep="last").reset_index(drop=True)
+
+
+def _decision_merge_trace(dec: pd.DataFrame, merged: pd.DataFrame) -> Dict[str, object]:
+    total = int(len(merged)) if merged is not None else 0
+    rows = int(len(dec)) if dec is not None else 0
+    if total <= 0:
+        coverage = 0.0
+        pfill_coverage = 0.0
+        can_buy_coverage = 0.0
+        weight_coverage = 0.0
+    else:
+        dec_rank = pd.to_numeric(merged.get("dec_rank", pd.Series([np.nan] * total)), errors="coerce")
+        dec_p_fill = pd.to_numeric(merged.get("dec_p_fill", pd.Series([np.nan] * total)), errors="coerce")
+        dec_can_buy = merged.get("dec_can_buy", pd.Series([pd.NA] * total))
+        dec_weight = pd.to_numeric(merged.get("dec_weight", pd.Series([np.nan] * total)), errors="coerce")
+        coverage = float((dec_rank.notna() | dec_p_fill.notna() | dec_can_buy.notna() | dec_weight.notna()).mean())
+        pfill_coverage = float(dec_p_fill.notna().mean())
+        can_buy_coverage = float(dec_can_buy.notna().mean())
+        weight_coverage = float(dec_weight.notna().mean())
+
+    if rows <= 0:
+        reason = "decision_merge_empty"
+    elif coverage <= 0:
+        reason = "decision_merge_no_symbol_match"
+    else:
+        reason = "ok"
+
+    return {
+        "decision_merge_mode": "decision_label_left_join_v1",
+        "decision_merge_rows": rows,
+        "decision_merge_coverage": round(coverage, 6),
+        "decision_merge_dec_p_fill_coverage": round(pfill_coverage, 6),
+        "decision_merge_dec_can_buy_coverage": round(can_buy_coverage, 6),
+        "decision_merge_dec_weight_coverage": round(weight_coverage, 6),
+        "decision_merge_reason": reason,
+    }
 
 
 # ========= EHX（优先加载训练模型，失败再回退冷启动） =========
@@ -2129,6 +2169,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     else:
         for c in ("dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"):
             df[c] = pd.NA
+    decision_trace = _decision_merge_trace(dec, df)
 
     p, e, s, conf, dq, risk = _pick_pred_fields(df)
     df["p_premium"] = p
@@ -2462,6 +2503,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "mkt_strong_count": market_sentiment.get("mkt_strong_count", ""),
             "mkt_touch_strong_count": market_sentiment.get("mkt_touch_strong_count", ""),
             "mkt_emotion_score": market_sentiment.get("mkt_emotion_score", ""),
+            **decision_trace,
             "eret_plus_src": eret_plus_src,
             **ehx_trace,
             "limitup_model_src": limitup_model_src,
