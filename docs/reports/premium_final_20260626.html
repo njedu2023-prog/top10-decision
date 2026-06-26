@@ -75,6 +75,18 @@
     .footnote{color:var(--muted);font-size:12px;margin:14px 0 0;line-height:1.5}
     @media(max-width:900px){header{position:static}header,main{padding-left:16px;padding-right:16px}.topbar,.report-nav,.toolbar{align-items:flex-start;flex-direction:column}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-wide{grid-column:1 / -1}h1{font-size:24px}}
     @media(max-width:560px){.metrics{grid-template-columns:1fr}.metric-line{grid-template-columns:1fr auto}.metric-line small{grid-column:1 / -1}.section-head{align-items:flex-start;flex-direction:column}}
+    .metrics-collapsible{margin:0 0 16px;padding:10px;background:rgba(255,255,255,.72);border:1px solid var(--line-soft);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
+    .metrics-collapse-head{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:42px;padding:2px 4px 2px 8px}
+    .metrics-collapse-title{display:flex;align-items:baseline;gap:10px;min-width:0}
+    .metrics-collapse-title span{color:var(--muted);font-size:12px;line-height:1.35;font-weight:600;white-space:nowrap}
+    .metrics-collapse-title strong{color:var(--ink);font-size:16px;line-height:1.2;font-weight:700;white-space:nowrap}
+    .metrics-toggle{width:34px;height:34px;min-width:34px;border:1px solid #1d1d1f;border-radius:50%;background:#1d1d1f;color:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.10);transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease}
+    .metrics-toggle:hover{background:#000;border-color:#000;transform:translateY(-1px)}
+    .metrics-toggle span{display:block;font-size:22px;line-height:1;font-weight:500;transform:translateY(-1px)}
+    .metrics-collapsible .metrics{margin:10px 0 0}
+    .metrics-collapsible.collapsed .metrics{display:none}
+    @media(max-width:560px){.metrics-collapse-title{flex-direction:column;align-items:flex-start;gap:2px}.metrics-collapse-head{padding-left:4px}}
+
   </style>
 </head>
 <body>
@@ -95,7 +107,7 @@
       <div class="metric"><span>允许买入数量</span><strong>0</strong></div>
       <div class="metric"><span>T+1因子状态</span><strong>负IC冻结</strong></div>
       <div class="metric"><span>T+1 Rank IC</span><strong>-0.1313</strong></div>
-      <div class="metric"><span>生成时间</span><strong>2026-06-26T12:24:15Z</strong></div>
+      <div class="metric"><span>生成时间</span><strong>2026-06-26T12:38:06Z</strong></div>
     </div>
     <section>
       <div class="section-head"><h2>最终买入名单</h2><span class="badge">最多 0-3 只，可执行</span></div>
@@ -111,5 +123,27 @@
     </section>
     <p class="note">规则摘要：放弃/只观察不追不能进入最终买入名单；Decision 否决、分钟硬风险、市场禁止交易会直接剔除；T+1 Rank IC 为负时自动冻结 T+1 因子权重。</p>
   </main>
+  <script>
+    (function premiumMetricsCollapse(){
+      const box = document.querySelector('.metrics-collapsible');
+      if (!box) return;
+      const btn = box.querySelector('.metrics-toggle');
+      if (!btn) return;
+      const icon = btn.querySelector('span');
+      const sync = () => {
+        const collapsed = box.classList.contains('collapsed');
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('title', collapsed ? '展开指标' : '折叠指标');
+        btn.setAttribute('aria-label', collapsed ? '展开指标' : '折叠指标');
+        if (icon) icon.textContent = collapsed ? '+' : '-';
+      };
+      btn.addEventListener('click', () => {
+        box.classList.toggle('collapsed');
+        sync();
+      });
+      sync();
+    })();
+
+  </script>
 </body>
 </html>

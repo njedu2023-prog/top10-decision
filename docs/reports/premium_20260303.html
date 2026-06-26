@@ -75,6 +75,18 @@
     .footnote{color:var(--muted);font-size:12px;margin:14px 0 0;line-height:1.5}
     @media(max-width:900px){header{position:static}header,main{padding-left:16px;padding-right:16px}.topbar,.report-nav,.toolbar{align-items:flex-start;flex-direction:column}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-wide{grid-column:1 / -1}h1{font-size:24px}}
     @media(max-width:560px){.metrics{grid-template-columns:1fr}.metric-line{grid-template-columns:1fr auto}.metric-line small{grid-column:1 / -1}.section-head{align-items:flex-start;flex-direction:column}}
+    .metrics-collapsible{margin:0 0 16px;padding:10px;background:rgba(255,255,255,.72);border:1px solid var(--line-soft);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
+    .metrics-collapse-head{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:42px;padding:2px 4px 2px 8px}
+    .metrics-collapse-title{display:flex;align-items:baseline;gap:10px;min-width:0}
+    .metrics-collapse-title span{color:var(--muted);font-size:12px;line-height:1.35;font-weight:600;white-space:nowrap}
+    .metrics-collapse-title strong{color:var(--ink);font-size:16px;line-height:1.2;font-weight:700;white-space:nowrap}
+    .metrics-toggle{width:34px;height:34px;min-width:34px;border:1px solid #1d1d1f;border-radius:50%;background:#1d1d1f;color:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.10);transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease}
+    .metrics-toggle:hover{background:#000;border-color:#000;transform:translateY(-1px)}
+    .metrics-toggle span{display:block;font-size:22px;line-height:1;font-weight:500;transform:translateY(-1px)}
+    .metrics-collapsible .metrics{margin:10px 0 0}
+    .metrics-collapsible.collapsed .metrics{display:none}
+    @media(max-width:560px){.metrics-collapse-title{flex-direction:column;align-items:flex-start;gap:2px}.metrics-collapse-head{padding-left:4px}}
+
   </style>
 </head>
 <body>
@@ -98,7 +110,13 @@
         <div class="date-chips"><a class="date-chip" href="premium_20260618.html">20260618</a><a class="date-chip" href="premium_20260622.html">20260622</a><a class="date-chip" href="premium_20260623.html">20260623</a><a class="date-chip" href="premium_20260624.html">20260624</a><a class="date-chip" href="premium_20260625.html">20260625</a><a class="date-chip" href="premium_20260626.html">20260626</a></div>
       </nav>
     
-    <div class="metrics"><div class="metric"><span>D日分析日期</span><strong>20260303</strong><small>只使用D日收盘后可见数据</small></div><div class="metric"><span>T日竞价买入日期</span><strong>-</strong><small>严格按中国A股交易日历</small></div><div class="metric"><span>T+1择时卖出日期</span><strong>20260305</strong><small>接力验证和择时卖出日期</small></div><div class="metric metric-wide metric-verify-current"><span>当前TOP10涨停命中率</span><strong>20.00%</strong><small>TOP10：D 20260303 -&gt; T -，T日收盘涨停命中 2/10，命中率 20.00%。</small></div><div class="metric"><span>历史TOP10累计涨停命中率</span><strong>27.88%</strong><small>172/617，交易日 62, limitup_probability_training_samples.csv</small></div><div class="metric metric-wide"><span>头部历史累计涨停命中率</span><div class="metric-lines"><div class="metric-line"><span>TOP1 历史累计涨停命中率</span><strong>51.61%</strong><small>32/62</small></div><div class="metric-line"><span>TOP3 历史累计涨停命中率</span><strong>39.78%</strong><small>74/186</small></div><div class="metric-line"><span>TOP5 历史累计涨停命中率</span><strong>31.61%</strong><small>98/310</small></div></div></div><div class="metric metric-wide"><span>头部历史累计上涨率</span><div class="metric-lines"><div class="metric-line"><span>TOP1 历史累计上涨率</span><strong>75.81%</strong><small>47/62，T日收盘&gt;D日收盘</small></div><div class="metric-line"><span>TOP3 历史累计上涨率</span><strong>71.51%</strong><small>133/186，T日收盘&gt;D日收盘</small></div><div class="metric-line"><span>TOP5 历史累计上涨率</span><strong>67.42%</strong><small>209/310，T日收盘&gt;D日收盘</small></div></div></div><div class="metric"><span>近20日TOP10命中率</span><strong>23.00%</strong><small>近5日 22.00%; 近60日 27.30%</small></div><div class="metric"><span>概率校准质量</span><strong>Brier 0.3438</strong><small>Brier/ECE越低越好；最佳0，最差1；当前偏弱；ECE 0.4008；样本 330</small></div><div class="metric"><span>涨停Rank IC</span><strong>0.0922</strong><small>越高越好；&gt;0有效，&lt;0反向；当前有效；近20日 0.0922；正值率 72.73%；11日</small></div><div class="metric"><span>T+1收益Rank IC</span><strong>-0.1313</strong><small>越高越好；&gt;0有效，&lt;0反向；当前反向；近20日 -0.1313；正值率 18.18%；11日</small></div><div class="metric"><span>自适应排序权重</span><strong>涨停 - / T+1 -</strong><small>强度 -; 执行 -</small></div><div class="metric"><span>专业门槛</span><strong>0 合格 / 0 观察</strong><small>排除 0；排序 -；模型 -</small></div><div class="metric"><span>分层有效性</span><strong>10.91%</strong><small>TOP10 27.88%; 11-20 16.96%</small></div><div class="metric"><span>D日市场情绪</span><strong>-</strong><small>上涨占比 -; 强势股 0</small></div></div>
+    <div class="metrics-collapsible collapsed" aria-label="关键指标">
+      <div class="metrics-collapse-head">
+        <div class="metrics-collapse-title"><span>Report Metrics</span><strong>关键指标</strong></div>
+        <button class="metrics-toggle" type="button" aria-expanded="false" aria-controls="premium-metrics-grid" aria-label="展开指标" title="展开指标"><span aria-hidden="true">+</span></button>
+      </div>
+      <div class="metrics" id="premium-metrics-grid"><div class="metric"><span>D日分析日期</span><strong>20260303</strong><small>只使用D日收盘后可见数据</small></div><div class="metric"><span>T日竞价买入日期</span><strong>-</strong><small>严格按中国A股交易日历</small></div><div class="metric"><span>T+1择时卖出日期</span><strong>20260305</strong><small>接力验证和择时卖出日期</small></div><div class="metric metric-wide metric-verify-current"><span>当前TOP10涨停命中率</span><strong>20.00%</strong><small>TOP10：D 20260303 -&gt; T -，T日收盘涨停命中 2/10，命中率 20.00%。</small></div><div class="metric"><span>历史TOP10累计涨停命中率</span><strong>27.88%</strong><small>172/617，交易日 62, limitup_probability_training_samples.csv</small></div><div class="metric metric-wide"><span>头部历史累计涨停命中率</span><div class="metric-lines"><div class="metric-line"><span>TOP1 历史累计涨停命中率</span><strong>51.61%</strong><small>32/62</small></div><div class="metric-line"><span>TOP3 历史累计涨停命中率</span><strong>39.78%</strong><small>74/186</small></div><div class="metric-line"><span>TOP5 历史累计涨停命中率</span><strong>31.61%</strong><small>98/310</small></div></div></div><div class="metric metric-wide"><span>头部历史累计上涨率</span><div class="metric-lines"><div class="metric-line"><span>TOP1 历史累计上涨率</span><strong>75.81%</strong><small>47/62，T日收盘&gt;D日收盘</small></div><div class="metric-line"><span>TOP3 历史累计上涨率</span><strong>71.51%</strong><small>133/186，T日收盘&gt;D日收盘</small></div><div class="metric-line"><span>TOP5 历史累计上涨率</span><strong>67.42%</strong><small>209/310，T日收盘&gt;D日收盘</small></div></div></div><div class="metric"><span>近20日TOP10命中率</span><strong>23.00%</strong><small>近5日 22.00%; 近60日 27.30%</small></div><div class="metric"><span>概率校准质量</span><strong>Brier 0.3438</strong><small>Brier/ECE越低越好；最佳0，最差1；当前偏弱；ECE 0.4008；样本 330</small></div><div class="metric"><span>涨停Rank IC</span><strong>0.0922</strong><small>越高越好；&gt;0有效，&lt;0反向；当前有效；近20日 0.0922；正值率 72.73%；11日</small></div><div class="metric"><span>T+1收益Rank IC</span><strong>-0.1313</strong><small>越高越好；&gt;0有效，&lt;0反向；当前反向；近20日 -0.1313；正值率 18.18%；11日</small></div><div class="metric"><span>自适应排序权重</span><strong>涨停 - / T+1 -</strong><small>强度 -; 执行 -</small></div><div class="metric"><span>专业门槛</span><strong>0 合格 / 0 观察</strong><small>排除 0；排序 -；模型 -</small></div><div class="metric"><span>分层有效性</span><strong>10.91%</strong><small>TOP10 27.88%; 11-20 16.96%</small></div><div class="metric"><span>D日市场情绪</span><strong>-</strong><small>上涨占比 -; 强势股 0</small></div></div>
+    </div>
     <div class="toolbar">
       <div class="tabs" role="tablist" aria-label="列表切换">
         <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 执行名单</button>
@@ -117,7 +135,7 @@
     </section>
     <section id="verify-panel" class="hidden">
       <div class="section-head"><h2>验证与学习</h2><span class="badge">已验证</span></div>
-      <div class="explain"><div class="verify-table-wrap"><table class="verify-table"><thead><tr><th>项目</th><th>内容</th></tr></thead><tbody><tr><th>验证状态</th><td>已验证：D 20260303 预测 T -，已使用T日真实行情回填。</td></tr><tr><th>当前TOP10涨停预测命中率</th><td>TOP10：D 20260303 -&gt; T -，T日收盘涨停命中 2/10，命中率 20.00%。</td></tr><tr><th>当前TOP20涨停预测命中率</th><td>TOP20：D 20260303 -&gt; T -，T日收盘涨停命中 4/20，命中率 20.00%。</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计涨停命中率</th><td>TOP1 51.61% (32/62); TOP3 39.78% (74/186); TOP5 31.61% (98/310)</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计上涨率</th><td>TOP1 75.81% (47/62); TOP3 71.51% (133/186); TOP5 67.42% (209/310)</td></tr><tr><th>历史TOP10累计涨停命中率</th><td>27.88% (172/617)</td></tr><tr><th>历史TOP20累计涨停命中率</th><td>22.41% (277/1236)</td></tr><tr><th>滚动TOP10命中率</th><td>近5日 22.00%; 近20日 23.00%; 近60日 27.30%</td></tr><tr><th>概率校准</th><td>Brier 0.3438; ECE 0.4008; 样本 330</td></tr><tr><th>涨停Rank IC</th><td>Spearman均值 0.0922; 近20日 0.0922; Kendall Tau 0.0765; 正值率 72.73%; 有效天数 11</td></tr><tr><th>T+1收益Rank IC</th><td>Spearman均值 -0.1313; 近20日 -0.1313; 正值率 18.18%; 有效天数 11</td></tr><tr><th>自适应排序权重</th><td>涨停 -; T+1 -; 强度 -; 执行 -. 当T+1 Rank IC为负时，系统会降低T+1权重；转正后再逐步提高。</td></tr><tr><th>分层命中/收益摘要</th><td>TOP1-10:172/617/0.279/收益=0.0020 | TOP11-20:105/619/0.170/收益=0.0001 | TOP21-30:107/615/0.174/收益=0.0049</td></tr><tr><th>D日市场情绪</th><td>情绪 -; 上涨占比 -; 强势股 0</td></tr><tr><th>历史统计样本</th><td>有效交易日 62; 来源： limitup_probability_training_samples.csv; 状态： 正常</td></tr><tr><th>模型版本</th><td>premium_v4_a_share_d_t_t1; 生成时间： 2026-06-26T12:24:05Z</td></tr><tr><th>备注</th><td>归档已重建=是</td></tr><tr><th>备注</th><td>历史样本来源=limitup_probability_training_samples.csv</td></tr><tr><th>备注</th><td>真值刷新=not_attempted</td></tr></tbody></table></div></div>
+      <div class="explain"><div class="verify-table-wrap"><table class="verify-table"><thead><tr><th>项目</th><th>内容</th></tr></thead><tbody><tr><th>验证状态</th><td>已验证：D 20260303 预测 T -，已使用T日真实行情回填。</td></tr><tr><th>当前TOP10涨停预测命中率</th><td>TOP10：D 20260303 -&gt; T -，T日收盘涨停命中 2/10，命中率 20.00%。</td></tr><tr><th>当前TOP20涨停预测命中率</th><td>TOP20：D 20260303 -&gt; T -，T日收盘涨停命中 4/20，命中率 20.00%。</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计涨停命中率</th><td>TOP1 51.61% (32/62); TOP3 39.78% (74/186); TOP5 31.61% (98/310)</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计上涨率</th><td>TOP1 75.81% (47/62); TOP3 71.51% (133/186); TOP5 67.42% (209/310)</td></tr><tr><th>历史TOP10累计涨停命中率</th><td>27.88% (172/617)</td></tr><tr><th>历史TOP20累计涨停命中率</th><td>22.41% (277/1236)</td></tr><tr><th>滚动TOP10命中率</th><td>近5日 22.00%; 近20日 23.00%; 近60日 27.30%</td></tr><tr><th>概率校准</th><td>Brier 0.3438; ECE 0.4008; 样本 330</td></tr><tr><th>涨停Rank IC</th><td>Spearman均值 0.0922; 近20日 0.0922; Kendall Tau 0.0765; 正值率 72.73%; 有效天数 11</td></tr><tr><th>T+1收益Rank IC</th><td>Spearman均值 -0.1313; 近20日 -0.1313; 正值率 18.18%; 有效天数 11</td></tr><tr><th>自适应排序权重</th><td>涨停 -; T+1 -; 强度 -; 执行 -. 当T+1 Rank IC为负时，系统会降低T+1权重；转正后再逐步提高。</td></tr><tr><th>分层命中/收益摘要</th><td>TOP1-10:172/617/0.279/收益=0.0020 | TOP11-20:105/619/0.170/收益=0.0001 | TOP21-30:107/615/0.174/收益=0.0049</td></tr><tr><th>D日市场情绪</th><td>情绪 -; 上涨占比 -; 强势股 0</td></tr><tr><th>历史统计样本</th><td>有效交易日 62; 来源： limitup_probability_training_samples.csv; 状态： 正常</td></tr><tr><th>模型版本</th><td>premium_v4_a_share_d_t_t1; 生成时间： 2026-06-26T12:37:56Z</td></tr><tr><th>备注</th><td>归档已重建=是</td></tr><tr><th>备注</th><td>历史样本来源=limitup_probability_training_samples.csv</td></tr><tr><th>备注</th><td>真值刷新=not_attempted</td></tr></tbody></table></div></div>
     </section>
     <p class="footnote">本报告由 Premium 自动生成。上一页/下一页导航基于仓库中已有的历史HTML报告日期。</p>
   </main>
@@ -132,6 +150,26 @@
         if (panel) panel.classList.remove('hidden');
       });
     });
+    (function premiumMetricsCollapse(){
+      const box = document.querySelector('.metrics-collapsible');
+      if (!box) return;
+      const btn = box.querySelector('.metrics-toggle');
+      if (!btn) return;
+      const icon = btn.querySelector('span');
+      const sync = () => {
+        const collapsed = box.classList.contains('collapsed');
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('title', collapsed ? '展开指标' : '折叠指标');
+        btn.setAttribute('aria-label', collapsed ? '展开指标' : '折叠指标');
+        if (icon) icon.textContent = collapsed ? '+' : '-';
+      };
+      btn.addEventListener('click', () => {
+        box.classList.toggle('collapsed');
+        sync();
+      });
+      sync();
+    })();
+
   </script>
 </body>
 </html>
