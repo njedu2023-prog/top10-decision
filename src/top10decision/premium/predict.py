@@ -1378,22 +1378,17 @@ def _pick_pred_fields(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, pd.Series
 
 def _decision_merge_candidate_paths(cfg: PremiumConfig, trade_date: str) -> List[Path]:
     repo_root = cfg.repo_root()
-    patterns: List[str] = []
+    patterns: List[str] = [
+        f"data/decision/decision_candidates_{trade_date}.csv",
+        f"outputs/decision/decision_candidates_{trade_date}.csv",
+    ]
 
     cfg_glob = str(getattr(cfg, "decision_glob", "") or "").strip()
     if cfg_glob:
         patterns.append(cfg_glob)
 
-    # Decision 主线的逐票候选文件实际落在 data/decision；保留 cfg.decision_glob
-    # 兼容老路径，同时固定接入当前生产路径。
-    patterns.extend(
-        [
-            f"data/decision/decision_candidates_{trade_date}.csv",
-            "data/decision/decision_candidates_*.csv",
-            f"outputs/decision/decision_candidates_{trade_date}.csv",
-            "outputs/decision/decision_candidates_*.csv",
-        ]
-    )
+    # Decision 主线的逐票候选文件实际落在 data/decision。必须优先读取
+    # 当天精确文件，不能扫全历史 candidates，否则 Premium 云端运行会被拖慢。
 
     out: List[Path] = []
     seen = set()
