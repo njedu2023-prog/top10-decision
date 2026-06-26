@@ -1,8 +1,8 @@
 trade_date: 20260625
-run_id: gh_28232454266
-commit_sha: 37c5e5ab1663
+run_id: gh_28232650868
+commit_sha: 1617bf5b2af9
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-06-26T10:41:10Z
+created_at_utc: 2026-06-26T10:53:02Z
 ok: True
 buy_date: 20260626
 target_date: 20260629
@@ -21,6 +21,13 @@ mkt_up_ratio: 0.22272644763114902
 mkt_strong_count: 134.0
 mkt_touch_strong_count: 242.0
 mkt_emotion_score: 0.21825226024634542
+decision_merge_mode: decision_label_left_join_v1
+decision_merge_rows: 0
+decision_merge_coverage: 0.0
+decision_merge_dec_p_fill_coverage: 0.0
+decision_merge_dec_can_buy_coverage: 0.0
+decision_merge_dec_weight_coverage: 0.0
+decision_merge_reason: decision_merge_empty
 eret_plus_src: ehx:model_v1
 ehx_mode: model_v1
 ehx_reason: ok
