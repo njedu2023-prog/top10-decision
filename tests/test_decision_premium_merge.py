@@ -68,3 +68,30 @@ def test_premium_loads_decision_labels_without_report_schema_change(tmp_path) ->
     assert trace["decision_merge_rows"] == 1
     assert trace["decision_merge_coverage"] == 0.5
     assert trace["decision_merge_dec_p_fill_coverage"] == 0.5
+
+
+def test_premium_loads_decision_candidates_from_data_decision_fallback(tmp_path) -> None:
+    root = tmp_path
+    data_dir = root / "data" / "decision"
+    data_dir.mkdir(parents=True)
+    pd.DataFrame(
+        [
+            {
+                "trade_date": "20260625",
+                "verify_date": "20260626",
+                "ts_code": "600010.SH",
+                "name": "B",
+                "rank": 3,
+                "p_fill_pred_final": 0.81,
+                "weight_exec": 0.07,
+                "risk_label": "低",
+            }
+        ]
+    ).to_csv(data_dir / "decision_candidates_20260625.csv", index=False)
+
+    cfg = DummyPremiumConfig(root)
+    dec = _load_decision_merge(cfg, "20260625")
+
+    assert list(dec["ts_code"]) == ["600010.SH"]
+    assert float(dec.loc[0, "dec_rank"]) == 3.0
+    assert float(dec.loc[0, "dec_p_fill"]) == 0.81
