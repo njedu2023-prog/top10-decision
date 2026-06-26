@@ -1,18 +1,8 @@
 name: Localize Premium Reports
 
+# Manual fallback only.
+# The main Premium workflow now backfills, rebuilds, localizes, styles and clarifies reports inline.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/backfill_premium_limitup_truth.py'
-      - 'scripts/localize_premium_reports.py'
-      - 'scripts/apple_style_premium_reports.py'
-      - 'scripts/clarify_premium_report_metrics.py'
-      - '.github/workflows/run_premium.yml'
-      - '.github/workflows/localize_premium_reports.yml'
-  workflow_run:
-    workflows: ['Run Premium (Follow Decision)']
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -20,16 +10,11 @@ permissions:
 
 concurrency:
   group: localize-premium-reports
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   localize:
-    if: >-
-      ${{
-        github.event_name == 'workflow_dispatch'
-        || github.event_name == 'push'
-        || github.event.workflow_run.conclusion == 'success'
-      }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
