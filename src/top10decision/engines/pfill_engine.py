@@ -42,6 +42,11 @@ from top10decision.models.fill_model import fill_model_rule
 
 PRED_MIN = 0.02
 PRED_MAX = 0.98
+CALIBRATED_PRED_MAX = 0.93
+CALIBRATION_BASE_FLOOR = 0.55
+CALIBRATION_BASE_CAP = 0.84
+MODEL_LOGIT_SHRINK = 0.34
+RULE_LOGIT_SHRINK = 0.55
 ERRMSG_MAXLEN = 240
 MISSING_CATEGORY_TOKEN = "__MISSING__"
 
@@ -96,6 +101,7 @@ class PFillModelBundle:
     model_path: str
     feature_mode: str
     meta_path: str
+    fill_base_rate: Optional[float]
     feature_cols: list[str]
     categorical_cols: list[str]
     numeric_cols: list[str]
@@ -107,6 +113,21 @@ def _load_pfill_meta(meta_path: Path) -> Dict[str, Any]:
         return json.loads(meta_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def _resolve_fill_base_rate(meta: Dict[str, Any]) -> Optional[float]:
+    dist = meta.get("label_distribution", {}) if isinstance(meta, dict) else {}
+    if not isinstance(dist, dict):
+        return None
+    try:
+        pos = float(dist.get("ready_all_pos", 0) or 0)
+        neg = float(dist.get("ready_all_neg", 0) or 0)
+    except Exception:
+        return None
+    total = pos + neg
+    if total <= 0:
+        return None
+    return pos / total
 
 
 def _resolve_feature_cols(meta: Dict[str, Any]) -> list[str]:
@@ -203,10 +224,13 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
 
     if meta_path is not None:
         meta = _load_pfill_meta(meta_path)
+        fill_base_rate = _resolve_fill_base_rate(meta)
         feature_cols = _resolve_feature_cols(meta)
         categorical_cols = _resolve_category_cols(meta, feature_cols)
         numeric_cols = _resolve_numeric_cols(meta, feature_cols, categorical_cols)
         category_like_cols_detected = _resolve_category_like_cols(meta, feature_cols)
+    else:
+        fill_base_rate = None
 
     try:
         model = joblib.load(chosen)
@@ -218,6 +242,7 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             model_path=str(chosen),
             feature_mode=feature_mode,
             meta_path=str(meta_path) if meta_path else "",
+            fill_base_rate=fill_base_rate,
             feature_cols=feature_cols,
             categorical_cols=categorical_cols,
             numeric_cols=numeric_cols,
@@ -426,6 +451,134 @@ def _predict_by_model(bundle: PFillModelBundle, df: pd.DataFrame) -> Tuple[pd.Se
     return _clip_prob_series(out), audit
 
 
+def _effective_calibration_base(fill_base_rate: Optional[float]) -> float:
+    if fill_base_rate is None or not np.isfinite(fill_base_rate):
+        return CALIBRATION_BASE_CAP
+    return float(np.clip(fill_base_rate, CALIBRATION_BASE_FLOOR, CALIBRATION_BASE_CAP))
+
+
+def _logit(p: pd.Series) -> pd.Series:
+    x = pd.to_numeric(p, errors="coerce").fillna(PRED_MIN).clip(lower=PRED_MIN, upper=PRED_MAX)
+    return np.log(x / (1.0 - x))
+
+
+def _sigmoid(x: pd.Series) -> pd.Series:
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def _score_0_1_series(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series([default] * len(df), index=df.index, dtype="float64")
+    s = pd.to_numeric(df[col], errors="coerce").fillna(default).astype("float64")
+    s = s.where(~((s > 1.0) & (s <= 100.0)), s / 100.0)
+    return s.clip(lower=0.0, upper=1.0)
+
+
+def _bool_0_1_series(df: pd.DataFrame, col: str, default: bool = False) -> pd.Series:
+    if col not in df.columns:
+        return pd.Series([1.0 if default else 0.0] * len(df), index=df.index, dtype="float64")
+    s = df[col]
+    if pd.api.types.is_bool_dtype(s):
+        return s.fillna(default).astype("float64")
+    if pd.api.types.is_numeric_dtype(s):
+        return pd.to_numeric(s, errors="coerce").fillna(1.0 if default else 0.0).ne(0).astype("float64")
+    normalized = s.astype("string").str.strip().str.lower()
+    truthy = normalized.isin({"1", "1.0", "true", "yes", "y", "t", "ok", "available", "matched", "ready", "valid"})
+    falsy = normalized.isin({"0", "0.0", "false", "no", "n", "f", "", "missing", "unavailable", "invalid"})
+    out = pd.Series([default] * len(df), index=df.index)
+    out = out.where(~truthy, True)
+    out = out.where(~falsy, False)
+    return out.astype("float64")
+
+
+def _pfill_execution_adjustment(df: pd.DataFrame) -> pd.Series:
+    adj = pd.Series([0.0] * len(df), index=df.index, dtype="float64")
+    if df.empty:
+        return adj
+
+    has_intraday = any(
+        c in df.columns
+        for c in (
+            "intraday_available",
+            "intraday_quality_score",
+            "intraday_confidence_score",
+            "intraday_soft_risk_score",
+            "intraday_risk_score",
+            "intraday_hard_risk_flag",
+            "late_withdraw_score",
+            "reseal_score",
+            "auction_strength_score",
+            "open_board_count",
+            "max_drawdown_after_limit",
+        )
+    )
+    if not has_intraday:
+        return adj
+
+    available = _bool_0_1_series(df, "intraday_available", default=False)
+    hard_risk = _bool_0_1_series(df, "intraday_hard_risk_flag", default=False)
+    quality = _score_0_1_series(df, "intraday_quality_score", default=0.0)
+    confidence = _score_0_1_series(df, "intraday_confidence_score", default=0.0)
+    soft_risk = _score_0_1_series(df, "intraday_soft_risk_score", default=0.0)
+    risk = _score_0_1_series(df, "intraday_risk_score", default=soft_risk.mean() if len(df) else 0.0)
+    late = _score_0_1_series(df, "late_withdraw_score", default=0.0)
+    reseal = _score_0_1_series(df, "reseal_score", default=0.0)
+    auction = _score_0_1_series(df, "auction_strength_score", default=0.0)
+    drawdown = _score_0_1_series(df, "max_drawdown_after_limit", default=0.0)
+    open_board_raw = df["open_board_count"] if "open_board_count" in df.columns else pd.Series([0.0] * len(df), index=df.index)
+    open_board = pd.to_numeric(open_board_raw, errors="coerce").fillna(0.0).clip(lower=0.0, upper=5.0) / 5.0
+
+    adj += (quality - 0.5) * 0.040
+    adj += (confidence - 0.5) * 0.030
+    adj += auction * 0.025
+    adj += reseal * 0.020
+    adj -= soft_risk * 0.050
+    adj -= risk * 0.030
+    adj -= hard_risk * 0.080
+    adj -= late * 0.040
+    adj -= drawdown * 0.035
+    adj -= open_board * 0.030
+    adj -= (1.0 - available) * 0.015
+
+    return adj.clip(lower=-0.16, upper=0.08)
+
+
+def _rank_spread_adjustment(reference: pd.Series, width: float = 0.050) -> pd.Series:
+    ref = pd.to_numeric(reference, errors="coerce")
+    if len(ref) < 2 or ref.nunique(dropna=True) < 2:
+        return pd.Series([0.0] * len(ref), index=ref.index, dtype="float64")
+    return (ref.rank(method="average", pct=True) - 0.5) * width
+
+
+def _calibrate_pfill_output(
+    raw_pred: pd.Series,
+    rule_pred: pd.Series,
+    df: pd.DataFrame,
+    fill_base_rate: Optional[float] = None,
+) -> pd.Series:
+    """
+    Convert the model/rule probability into the displayed and ranked P_fill.
+
+    The learned P_fill label is heavily imbalanced toward ready-fill positives.
+    A direct model probability therefore saturates near 0.98 and loses ranking
+    power. This calibration keeps the same public field while shrinking the
+    imbalanced base rate, blending rule evidence, and applying minute/auction
+    execution quality as an internal adjustment.
+    """
+    raw = _clip_prob_series(raw_pred)
+    rule = _clip_prob_series(rule_pred)
+    base = _effective_calibration_base(fill_base_rate)
+    base_logit = float(np.log(base / (1.0 - base)))
+
+    model_component = _sigmoid(base_logit + MODEL_LOGIT_SHRINK * (_logit(raw) - base_logit))
+    rule_component = _sigmoid(base_logit + RULE_LOGIT_SHRINK * (_logit(rule) - base_logit))
+    calibrated = model_component * 0.72 + rule_component * 0.28
+
+    reference = raw * 0.55 + rule * 0.45
+    calibrated = calibrated + _rank_spread_adjustment(reference) + _pfill_execution_adjustment(df)
+    return pd.to_numeric(calibrated, errors="coerce").fillna(PRED_MIN).clip(lower=PRED_MIN, upper=CALIBRATED_PRED_MAX)
+
+
 def apply_pfill_engine(
     df: pd.DataFrame,
     project_root: Optional[Path] = None,
@@ -482,9 +635,14 @@ def apply_pfill_engine(
             pred_src = "rule"
             degrade_reason = f"model_predict_failed:{type(e).__name__}:{_safe_errmsg(e)}"
 
-    final_pred = pd.to_numeric(model_pred, errors="coerce")
-    final_pred = final_pred.where(final_pred.notna(), rule_pred)
-    final_pred = _clip_prob_series(final_pred)
+    final_pred_raw = pd.to_numeric(model_pred, errors="coerce")
+    final_pred_raw = final_pred_raw.where(final_pred_raw.notna(), rule_pred)
+    final_pred = _calibrate_pfill_output(
+        raw_pred=final_pred_raw,
+        rule_pred=rule_pred,
+        df=out,
+        fill_base_rate=bundle.fill_base_rate if bundle is not None else None,
+    )
 
     out["p_fill_pred_rule"] = rule_pred
     out["p_fill_pred_model"] = pd.to_numeric(model_pred, errors="coerce")
