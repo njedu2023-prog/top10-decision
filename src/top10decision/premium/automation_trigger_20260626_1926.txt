@@ -1,0 +1,2 @@
+Automation trigger for 2026-06-26 A-share evening chain.
+This file is intentionally inert; it exists only to trigger the Premium workflow push path when workflow_run dispatch is delayed.
