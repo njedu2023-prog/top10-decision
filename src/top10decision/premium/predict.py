@@ -1376,9 +1376,41 @@ def _pick_pred_fields(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, pd.Series
 
 # ========= decision merge（仅标签，不过滤） =========
 
+def _decision_merge_candidate_paths(cfg: PremiumConfig, trade_date: str) -> List[Path]:
+    repo_root = cfg.repo_root()
+    patterns: List[str] = []
+
+    cfg_glob = str(getattr(cfg, "decision_glob", "") or "").strip()
+    if cfg_glob:
+        patterns.append(cfg_glob)
+
+    # Decision 主线的逐票候选文件实际落在 data/decision；保留 cfg.decision_glob
+    # 兼容老路径，同时固定接入当前生产路径。
+    patterns.extend(
+        [
+            f"data/decision/decision_candidates_{trade_date}.csv",
+            "data/decision/decision_candidates_*.csv",
+            f"outputs/decision/decision_candidates_{trade_date}.csv",
+            "outputs/decision/decision_candidates_*.csv",
+        ]
+    )
+
+    out: List[Path] = []
+    seen = set()
+    for pattern in patterns:
+        for raw in glob.glob(str((repo_root / pattern).resolve())):
+            p = Path(raw).resolve()
+            key = str(p)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(p)
+    return sorted(out)
+
+
 def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     repo_root = cfg.repo_root()
-    paths = [Path(p).resolve() for p in glob.glob(str((repo_root / cfg.decision_glob).resolve()))]
+    paths = _decision_merge_candidate_paths(cfg, trade_date)
     if not paths:
         return pd.DataFrame()
 
