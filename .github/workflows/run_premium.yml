@@ -9,6 +9,9 @@ on:
       - "scripts/backfill_premium_limitup_truth.py"
       - "scripts/rebuild_premium_reports.py"
       - "scripts/build_premium_final.py"
+      - "scripts/localize_premium_reports.py"
+      - "scripts/apple_style_premium_reports.py"
+      - "scripts/clarify_premium_report_metrics.py"
       - "scripts/sync_pred_source.py"
       - "src/top10decision/premium/**"
 
@@ -25,7 +28,7 @@ on:
       cmd:
         description: "执行命令：predict / train / all"
         required: false
-        default: "all"
+        default: "predict"
         type: choice
         options:
           - predict
@@ -41,7 +44,7 @@ env:
 
 concurrency:
   group: premium-follow-decision
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   premium:
@@ -110,13 +113,13 @@ jobs:
           set -e
           EVENT_NAME="${{ github.event_name }}"
 
-          # Premium V3 / E_ret_plus / EHX 阶段：默认跑 all。
-          # train.py 只写 _last_train.txt，不覆盖 _last_run.txt。
-          if [ "$EVENT_NAME" = "workflow_run" ] || [ "$EVENT_NAME" = "schedule" ]; then
-            CMD="all"
+          # 日常发布优先走 predict：使用已训练模型快速预测、回填真值、刷新报告。
+          # 需要刷新模型时，手动运行 workflow 并选择 all 或 train。
+          if [ "$EVENT_NAME" = "workflow_run" ] || [ "$EVENT_NAME" = "schedule" ] || [ "$EVENT_NAME" = "push" ]; then
+            CMD="predict"
           else
             CMD="${{ github.event.inputs.cmd }}"
-            if [ -z "$CMD" ]; then CMD="all"; fi
+            if [ -z "$CMD" ]; then CMD="predict"; fi
           fi
 
           echo "PREMIUM_CMD=$CMD" >> "$GITHUB_ENV"
@@ -154,6 +157,16 @@ jobs:
           set -e
           python scripts/build_premium_final.py --verbose
 
+      - name: Localize and style Premium HTML reports
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -e
+          python scripts/localize_premium_reports.py --verbose
+          python scripts/apple_style_premium_reports.py --verbose
+          python scripts/clarify_premium_report_metrics.py --verbose
+
       - name: Sanity check outputs
         run: |
           set -e
@@ -179,6 +192,7 @@ jobs:
           test -f outputs/premium/premium_final_watch_latest.csv
           test -f outputs/premium/premium_final_reject_latest.csv
           test -f docs/reports/premium_final_latest.html
+          test -f docs/reports/premium_latest.html
           head -n 5 outputs/premium/premium_final_buy_latest.csv || true
 
           echo "=== Premium V3 last_run contract ==="
@@ -259,7 +273,7 @@ jobs:
           git reset --hard HEAD
           git clean -fd src || true
 
-          # 运行期间 main 可能被 Pages/localize 等 workflow 推进；先 rebase 再 push。
+          # 运行期间 main 可能被其他 workflow 推进；先 rebase 再 push。
           git fetch origin main
           git rebase -X theirs origin/main
 
