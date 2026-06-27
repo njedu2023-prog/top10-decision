@@ -629,6 +629,85 @@
       return await res.json();
     }
 
+    function parseCsvLine(line) {
+      const out = [];
+      let cur = "";
+      let quoted = false;
+      const s = String(line || "");
+
+      for (let i = 0; i < s.length; i += 1) {
+        const ch = s[i];
+        const next = s[i + 1];
+        if (ch === '"' && quoted && next === '"') {
+          cur += '"';
+          i += 1;
+        } else if (ch === '"') {
+          quoted = !quoted;
+        } else if (ch === "," && !quoted) {
+          out.push(cur);
+          cur = "";
+        } else {
+          cur += ch;
+        }
+      }
+      out.push(cur);
+      return out.map(x => x.trim());
+    }
+
+    function csvTextToRows(csvText) {
+      const lines = String(csvText || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .split("\n")
+        .filter(line => line.trim() !== "");
+      if (lines.length < 2) return [];
+
+      const header = parseCsvLine(lines[0]).map(x => x.replace(/^\ufeff/, ""));
+      return lines.slice(1).map(line => {
+        const cells = parseCsvLine(line);
+        const row = {};
+        header.forEach((key, idx) => {
+          row[key] = cells[idx] ?? "";
+        });
+        return row;
+      });
+    }
+
+    function normalizeArtifactPath(path) {
+      return String(path || "")
+        .replace(/^`|`$/g, "")
+        .replace(/^\.?\//, "")
+        .trim();
+    }
+
+    function firstNonEmpty(row, keys) {
+      for (const key of keys) {
+        const v = row && row[key] != null ? String(row[key]).trim() : "";
+        if (v) return v;
+      }
+      return "";
+    }
+
+    async function loadIndustryMap(fields) {
+      const path = normalizeArtifactPath(fields && fields.candidates_snapshot);
+      if (!path || !/\.csv$/i.test(path)) return {};
+
+      try {
+        const csv = await fetchText(`${RAW_BASE}/${path}`);
+        const rows = csvTextToRows(csv);
+        const map = {};
+        rows.forEach(row => {
+          const code = firstNonEmpty(row, ["ts_code", "code", "symbol"]);
+          const industry = firstNonEmpty(row, ["industry", "board", "industry_tag", "sector", "concept"]);
+          if (code && industry && !map[code]) map[code] = industry;
+        });
+        return map;
+      } catch (err) {
+        console.warn("Decision industry map load failed.", err);
+        return {};
+      }
+    }
+
     function normalizeReport(md) {
       let s = String(md || "")
         .replace(/\r\n/g, "\n")
@@ -663,6 +742,9 @@
       const patterns = [
         new RegExp(`(?:^|\\n)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i"),
         new RegExp(`(?:^|\\s)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i"),
+        new RegExp(`(?:^|\\n)-\\s*${key}:\\s*` + "`([^`]+)`", "i"),
+        new RegExp(`(?:^|\\s)-\\s*${key}:\\s*` + "`([^`]+)`", "i"),
+        new RegExp(`(?:^|\\n)-\\s*${key}:\\s*([^\\n]+)`, "i"),
         new RegExp(`${key}:\\s*\\*\\*(.*?)\\*\\*`, "i")
       ];
 
@@ -752,6 +834,27 @@
       return { header, rows };
     }
 
+    function tableWithIndustry(table, industryMap) {
+      if (!table || !Array.isArray(table.header) || !Array.isArray(table.rows)) return table;
+
+      const keys = table.header.map(h => String(h).toLowerCase());
+      const nameIdx = keys.indexOf("name");
+      const codeIdx = keys.indexOf("ts_code");
+      if (nameIdx < 0 || codeIdx < 0 || keys.includes("industry") || keys.includes("行业板块")) return table;
+
+      const header = table.header.slice();
+      header.splice(nameIdx + 1, 0, "行业板块");
+
+      const rows = table.rows.map(row => {
+        const next = row.slice();
+        const code = String(row[codeIdx] || "").trim();
+        next.splice(nameIdx + 1, 0, industryMap && industryMap[code] ? industryMap[code] : "");
+        return next;
+      });
+
+      return { header, rows };
+    }
+
     function tableHtml(table, emptyText) {
       if (!table || !table.header || table.header.length === 0) {
         return `<div class="empty">${escapeHtml(emptyText || "未解析到表格")}</div>`;
@@ -822,12 +925,12 @@
       ].join("");
     }
 
-    function renderReport(mdRaw) {
+    function renderReport(mdRaw, industryMap = {}) {
       const md = normalizeReport(mdRaw);
       const fields = extractFields(md);
-      const evTable = parseSectionTable(md, "EV > 3% & RiskPenalty < 1%");
-      const topnTable = parseSectionTable(md, "TopN Targets");
-      const fullTable = parseSectionTable(md, "Full Candidate Pool");
+      const evTable = tableWithIndustry(parseSectionTable(md, "EV > 3% & RiskPenalty < 1%"), industryMap);
+      const topnTable = tableWithIndustry(parseSectionTable(md, "TopN Targets"), industryMap);
+      const fullTable = tableWithIndustry(parseSectionTable(md, "Full Candidate Pool"), industryMap);
 
       renderMeta(
         fields,
@@ -911,6 +1014,12 @@
       bindReportSectionToggles(reportBox);
     }
 
+    async function renderReportWithIndustry(mdRaw) {
+      const fields = extractFields(normalizeReport(mdRaw));
+      const industryMap = await loadIndustryMap(fields);
+      renderReport(mdRaw, industryMap);
+    }
+
     function updateNavButtons() {
       prevBtn.disabled = currentIndex >= reportFiles.length - 1;
       nextBtn.disabled = currentIndex <= 0;
@@ -979,7 +1088,7 @@
           try {
             setStatus("", `正在读取：${info.name}`);
             const mdRaw = await fetchText(info.rawUrl);
-            renderReport(mdRaw);
+            await renderReportWithIndustry(mdRaw);
             saveCachedReport(info, mdRaw);
             setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
             footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
@@ -1000,7 +1109,7 @@
           reportFiles = [cached.info];
           currentIndex = 0;
           updateNavButtons();
-          renderReport(cached.mdRaw);
+          await renderReportWithIndustry(cached.mdRaw);
           setStatus("warn", `已显示本地缓存：${currentFileName}`);
           footerText.textContent = `Top10 Decision · ${currentFileName} · 缓存时间：${new Date(cached.savedAt || Date.now()).toLocaleString("zh-CN")}`;
           return;
