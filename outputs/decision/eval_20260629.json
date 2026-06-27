@@ -1,7 +1,7 @@
 {
   "signal_date": "20260626",
   "exec_date": "20260629",
-  "requested_trade_date": "20260626",
+  "requested_trade_date": "",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2334,volatility_mean=0.0533,intraday_risk_mean=1.000",
@@ -36,8 +36,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260626",
-      "created_at_utc": "2026-06-26T15:32:13+00:00",
-      "commit_sha": "503490dfbca8823706876b7b06e80dfa14c58344",
+      "created_at_utc": "2026-06-27T10:09:53+00:00",
+      "commit_sha": "bcfd89bab335c11b1dc48d37a9bfc7d035c76c56",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -245,7 +245,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260626",
-            "created_at_utc": "2026-06-26T15:30:44+00:00",
+            "created_at_utc": "2026-06-27T10:07:55+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
