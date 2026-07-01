@@ -1,8 +1,8 @@
 trade_date: 20260701
-run_id: gh_28522868271
-commit_sha: e1c5f4bb968b
+run_id: gh_28530100285
+commit_sha: 6fc7d72cbd9f
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-07-01T13:57:00Z
+created_at_utc: 2026-07-01T15:50:27Z
 ok: True
 buy_date: 20260702
 target_date: 20260703
@@ -136,10 +136,10 @@ out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premiu
 out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260701.csv
 report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260701.md
 report_html: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260701.html
-degrade_mode: degraded
-packs_used: ['Pack0', 'Pack2', 'Pack3']
-packs_missing: ['Pack1']
+degrade_mode: full
+packs_used: ['Pack0', 'Pack1', 'Pack2', 'Pack3']
+packs_missing: []
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 disabled: market cache missing -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260701.csv', 'Pack2 enabled (soft mode, fixed)', 'Pack3 enabled: intraday/auction soft factors']
+notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260701.csv', 'Pack2 enabled (soft mode, fixed)', 'Pack3 enabled: intraday/auction soft factors']
 extra_prefix: factor
