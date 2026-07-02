@@ -1,7 +1,7 @@
 {
   "trade_date": "20260701",
-  "created_at_utc": "2026-07-02T06:03:21+00:00",
-  "commit_sha": "c4e0df2b2ad0161ffeb03ff2eb5958091c199672",
+  "created_at_utc": "2026-07-02T06:37:22+00:00",
+  "commit_sha": "a8578796e552a963bf09fcf99f88a5780a0737ad",
   "fs_version": "v0.6-intraday-auction-features",
   "richness_target": 0.75,
   "richness_estimate": 0.969697,
@@ -72,7 +72,7 @@
     "stock_basic": {
       "path": "data/market/raw/2026/20260701/stock_basic.csv",
       "loaded": true,
-      "rows": 5532,
+      "rows": 5534,
       "columns": [
         "trade_date",
         "ts_code",
@@ -203,7 +203,7 @@
       "loaded": true,
       "content": {
         "trade_date": "20260701",
-        "created_at_utc": "2026-07-02T06:01:52+00:00",
+        "created_at_utc": "2026-07-02T06:35:21+00:00",
         "source_repo": {
           "owner": "njedu2023-prog",
           "repo": "a-share-top3-data",
@@ -218,16 +218,16 @@
         "upstream_meta": {
           "requested_trade_date": "20260701",
           "resolved_trade_date": "20260701",
-          "generated_at_bj": "2026-07-01 21:39:29",
+          "generated_at_bj": "2026-07-02 14:23:32",
           "jobs": [
             {
               "key": "limit_list_d",
-              "note": "涨停池（日）（会在后处理中强制推导为“收盘真实涨停”并回填 up_limit/down_limit/limit_type）",
+              "note": "涨停池（日）（优先拉取 Tushare limit_times/up_stat；后处理中仍强制保留收盘真实涨停池口径）",
               "allow_empty": true,
               "required": false,
               "kwargs": {
                 "trade_date": "20260701",
-                "fields": "trade_date,ts_code,name,limit_type,close,up_limit,down_limit,open_times,fd_amount,first_time,last_time"
+                "fields": "trade_date,ts_code,name,limit_type,close,up_limit,down_limit,open_times,fd_amount,first_time,last_time,limit_times,up_stat,industry,turnover_ratio,amount,float_mv,total_mv"
               },
               "status": "ok",
               "rows": 232,
@@ -296,7 +296,7 @@
                 "fields": "ts_code,symbol,name,area,industry,market,list_date"
               },
               "status": "ok",
-              "rows": 5532,
+              "rows": 5534,
               "error": null
             },
             {
@@ -310,7 +310,7 @@
                 "fields": "ts_code,name,start_date,end_date,change_reason"
               },
               "status": "ok",
-              "rows": 55,
+              "rows": 56,
               "error": null
             },
             {
@@ -346,7 +346,9 @@
                 "has_seal_amount": 1,
                 "has_limit_type": 0,
                 "has_up_limit": 0,
-                "has_down_limit": 0
+                "has_down_limit": 0,
+                "has_limit_times": 1,
+                "has_up_stat": 1
               },
               "limit_break_d": {
                 "has_open_times": 1,
@@ -354,7 +356,9 @@
                 "has_seal_amount": 1,
                 "has_limit_type": 0,
                 "has_up_limit": 0,
-                "has_down_limit": 0
+                "has_down_limit": 0,
+                "has_limit_times": 0,
+                "has_up_stat": 0
               }
             },
             "limit_list_d_policy": {
@@ -368,11 +372,30 @@
               "filled_down_limit": 232,
               "warn": ""
             },
+            "limit_stage": {
+              "source": "limit_list_d.limit_times",
+              "limit_list_rows": 155,
+              "limit_step_rows": 40,
+              "rows": 155,
+              "limit_times_nonnull": 152,
+              "missing_reason": ""
+            },
             "hot_board_tags": {
               "hot_board_topn": 10,
               "hot_boards": 10,
               "tagged": 155
             }
+          },
+          "limit_step": {
+            "ok": true,
+            "api_name": "limit_step",
+            "rows": 40,
+            "columns": [
+              "trade_date",
+              "ts_code",
+              "name"
+            ],
+            "error": ""
           },
           "auction": {
             "enabled": true,
@@ -461,7 +484,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260701/hot_boards.csv",
             "latest_path": "data/market/raw/latest/hot_boards.csv",
-            "bytes": 293
+            "bytes": 301
           },
           {
             "name": "intraday_features",
@@ -497,7 +520,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260701/limit_list_d.csv",
             "latest_path": "data/market/raw/latest/limit_list_d.csv",
-            "bytes": 13596
+            "bytes": 23699
           },
           {
             "name": "limit_up_tags",
@@ -509,7 +532,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260701/limit_up_tags.csv",
             "latest_path": "data/market/raw/latest/limit_up_tags.csv",
-            "bytes": 8119
+            "bytes": 8107
           },
           {
             "name": "moneyflow_hsgt",
@@ -533,7 +556,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260701/namechange.csv",
             "latest_path": "data/market/raw/latest/namechange.csv",
-            "bytes": 2289
+            "bytes": 2339
           },
           {
             "name": "stk_auction",
@@ -569,7 +592,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260701/stock_basic.csv",
             "latest_path": "data/market/raw/latest/stock_basic.csv",
-            "bytes": 360867
+            "bytes": 361013
           },
           {
             "name": "top_list",
@@ -706,10 +729,10 @@
         "float_mv": 0.0,
         "north_money_market": 0.0,
         "south_money_market": 0.0,
-        "hot_boards_score": 0.012158,
-        "board_crowding_rank": 0.012158,
+        "hot_boards_score": 0.010524,
+        "board_crowding_rank": 0.010524,
         "is_hot_board": 0.028126,
-        "board_limit_up_count": 0.012158,
+        "board_limit_up_count": 0.010524,
         "is_st_like": 0.028126,
         "auction_amount": 0.998911,
         "auction_strength_score": 0.998911
@@ -778,7 +801,7 @@
         "last_seal_time": 0.027581,
         "break_count_proxy": 1.0,
         "is_hot_board": 0.028126,
-        "board_rank": 0.012158,
+        "board_rank": 0.010524,
         "limit_up_strength": 1.0,
         "intraday_available": 0.014516,
         "intraday_quality_score": 0.014516,
