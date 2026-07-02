@@ -1,8 +1,8 @@
 trade_date: 20260701
-run_id: gh_28568511696
-commit_sha: e06e6c313c42
+run_id: gh_28569178677
+commit_sha: e65655fd863f
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-07-02T05:50:42Z
+created_at_utc: 2026-07-02T06:06:06Z
 ok: True
 buy_date: 20260702
 target_date: 20260703
@@ -78,7 +78,7 @@ exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨�
 limitup_model_fields: t_up_prob_model|t_high_profit_prob_model|t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_accept_prob_model|t1_fail_prob_model|t1_big_drawdown_prob_model|t_close_ret_pred|t_intraday_ret_pred|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 premium_professional_fields: t_up_attack_score|t1_accept_score|premium_final_score|premium_bucket|premium_exclude_reason
 rank_groups: TOP10|TOP20
-limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260702/daily.csv body_snippet=404: Not Found
+limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: daily.csv after normalize is empty for trade_date=20260702
 limitup_validation_ready: False
 limitup_validation_reason: t_daily_not_ready
 top10_limitup_total: 0
