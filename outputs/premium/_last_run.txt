@@ -1,8 +1,8 @@
 trade_date: 20260701
-run_id: gh_28530100285
-commit_sha: 6fc7d72cbd9f
+run_id: gh_28568511696
+commit_sha: e06e6c313c42
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-07-01T15:50:27Z
+created_at_utc: 2026-07-02T05:50:42Z
 ok: True
 buy_date: 20260702
 target_date: 20260703
@@ -65,6 +65,10 @@ premium_intraday_mode: intraday_weighted_v1
 premium_intraday_avg_attack_edge: 0.5209032679738562
 premium_intraday_avg_execution_edge: 0.6077986928104575
 premium_intraday_avg_risk_penalty: 0.18016339869281048
+premium_stage_mode: tushare_limit_times_hump_v1
+premium_stage_rows: 0
+premium_stage_avg_quality_weight: 1.0
+premium_stage_avg_risk_weight: 0.0
 premium_intraday_hard_risk_count: 10
 premium_eligible_count: 39
 premium_watch_count: 98
