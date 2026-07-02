@@ -224,6 +224,7 @@ _OPER_COLS = [
     "操作排名",
     "代码",
     "名称",
+    "晋阶",
     "D日收盘价",
     "T日涨停概率",
     "T日涨停强度",
@@ -246,6 +247,22 @@ def _op_rank(row: pd.Series) -> object:
             except Exception:
                 return row.get(c)
     return "-"
+
+
+def _stage_text(row: pd.Series) -> str:
+    text = _first_existing_str(row, ["晋阶", "advance_stage", "stage", "limit_stage"], "")
+    if text and text not in {"-", "nan", "None", "<NA>"}:
+        return text
+    raw = row.get("limit_times", row.get("连板数", pd.NA))
+    try:
+        if pd.isna(raw):
+            return "-"
+        n = int(float(raw))
+    except Exception:
+        return "-"
+    if n <= 0:
+        return "-"
+    return f"{n}进{n + 1}"
 
 
 def _t_buy_method(row: pd.Series) -> str:
@@ -305,6 +322,7 @@ def _format_operation_table(df: pd.DataFrame, verify: bool = False) -> pd.DataFr
                 "操作排名": _op_rank(row),
                 "代码": _str_val(row, "ts_code", "-"),
                 "名称": _str_val(row, "name", "-"),
+                "晋阶": _stage_text(row),
                 "D日收盘价": _fmt_price(_num(row, "close_T"), 2),
                 "T日涨停概率": _limitup_prob_text(row),
                 "T日涨停强度": _limitup_strength_text(row),
