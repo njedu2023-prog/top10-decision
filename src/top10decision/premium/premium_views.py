@@ -225,7 +225,7 @@ def _stage_text(row: pd.Series) -> str:
         return "-"
     if n <= 0:
         return "-"
-    return f"{n}进{n + 1}"
+    return f"{n}→{n + 1}"
 
 
 def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
