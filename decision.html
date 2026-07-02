@@ -602,11 +602,24 @@
       return `${y}${m}${day}`;
     }
 
-    function getDateCandidates(daysBack = 60, daysForward = 10) {
+    function todayYmd() {
+      return formatDateYmd(new Date());
+    }
+
+    function reportDateFromName(name) {
+      const m = String(name || "").match(/^decision_report_(\d{8})\.md$/);
+      return m ? m[1] : "";
+    }
+
+    function isCurrentOrPastReport(name) {
+      const ymd = reportDateFromName(name);
+      return Boolean(ymd && ymd <= todayYmd());
+    }
+
+    function getDateCandidates(daysBack = 60) {
       const out = [];
       const d = new Date();
       const offsets = [0];
-      for (let i = 1; i <= daysForward; i += 1) offsets.push(i);
       for (let i = 1; i <= daysBack; i += 1) offsets.push(-i);
 
       for (const i of offsets) {
@@ -1031,6 +1044,7 @@
 
       return rows
         .filter(x => x && x.type === "file" && /^decision_report_\d{8}\.md$/.test(x.name))
+        .filter(x => isCurrentOrPastReport(x.name))
         .sort((a, b) => b.name.localeCompare(a.name))
         .map(x => ({
           name: x.name,
