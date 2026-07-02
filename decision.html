@@ -606,14 +606,69 @@
       return formatDateYmd(new Date());
     }
 
+    const A_SHARE_EXCHANGE_HOLIDAYS = new Set([
+      "20260101",
+      "20260102",
+      "20260216",
+      "20260217",
+      "20260218",
+      "20260219",
+      "20260220",
+      "20260223",
+      "20260406",
+      "20260501",
+      "20260504",
+      "20260505",
+      "20260619",
+      "20260925",
+      "20261001",
+      "20261002",
+      "20261005",
+      "20261006",
+      "20261007"
+    ]);
+
+    function parseYmd(ymd) {
+      const s = String(ymd || "");
+      if (!/^\d{8}$/.test(s)) return null;
+      const y = Number(s.slice(0, 4));
+      const m = Number(s.slice(4, 6));
+      const d = Number(s.slice(6, 8));
+      return new Date(y, m - 1, d);
+    }
+
+    function isAShareTradingDay(ymd) {
+      const d = parseYmd(ymd);
+      if (!d) return false;
+      const day = d.getDay();
+      if (day === 0 || day === 6) return false;
+      return !A_SHARE_EXCHANGE_HOLIDAYS.has(String(ymd));
+    }
+
+    function nextAShareTradingDay(ymd) {
+      const d = parseYmd(ymd);
+      if (!d) return ymd;
+      for (let i = 1; i <= 30; i += 1) {
+        const x = new Date(d);
+        x.setDate(d.getDate() + i);
+        const candidate = formatDateYmd(x);
+        if (isAShareTradingDay(candidate)) return candidate;
+      }
+      return ymd;
+    }
+
+    function latestAllowedReportYmd() {
+      return nextAShareTradingDay(todayYmd());
+    }
+
     function reportDateFromName(name) {
       const m = String(name || "").match(/^decision_report_(\d{8})\.md$/);
       return m ? m[1] : "";
     }
 
-    function isCurrentOrPastReport(name) {
+    function isAllowedReport(name) {
       const ymd = reportDateFromName(name);
-      return Boolean(ymd && ymd <= todayYmd());
+      return Boolean(ymd && ymd <= latestAllowedReportYmd());
     }
 
     function getDateCandidates(daysBack = 60) {
@@ -1044,7 +1099,7 @@
 
       return rows
         .filter(x => x && x.type === "file" && /^decision_report_\d{8}\.md$/.test(x.name))
-        .filter(x => isCurrentOrPastReport(x.name))
+        .filter(x => isAllowedReport(x.name))
         .sort((a, b) => b.name.localeCompare(a.name))
         .map(x => ({
           name: x.name,
