@@ -640,7 +640,7 @@ def _build_report_candidate_view(
 ) -> pd.DataFrame:
     """
     生成报告展示用的候选池精简表，字段口径与 TopN Targets 保持一致：
-    ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty
+    ts_code | name | 晋阶 | weight | EV | P_fill | E_ret | Cost | RiskPenalty
 
     说明：
     - 不在这里生成 rank；rank 由后续排序后再生成
@@ -659,9 +659,16 @@ def _build_report_candidate_view(
     view = base.merge(weight_view, on="ts_code", how="left")
     view["weight"] = pd.to_numeric(view["weight"], errors="coerce").fillna(0.0).astype(float)
 
+    stage = pd.Series([""] * len(view), index=view.index, dtype="object")
+    for c in ("晋阶", "advance_stage", "stage"):
+        if c in view.columns:
+            stage = view[c].astype(str).replace({"nan": "", "None": "", "<NA>": ""})
+            break
+
     out = pd.DataFrame({
         "ts_code": view.get("ts_code", "").astype(str),
         "name": view.get("name", "").astype(str),
+        "晋阶": stage,
         "weight": pd.to_numeric(view.get("weight", 0.0), errors="coerce").fillna(0.0).astype(float),
         "EV": pd.to_numeric(view.get("ev_pred", 0.0), errors="coerce").fillna(0.0).astype(float),
         "P_fill": pd.to_numeric(view.get("p_fill_pred", 0.0), errors="coerce").fillna(0.0).astype(float),
@@ -679,7 +686,7 @@ def _sort_report_candidate_view(df: pd.DataFrame) -> pd.DataFrame:
     - ts_code 升序作为稳定次序
     """
     if df is None or df.empty:
-        return pd.DataFrame(columns=["ts_code", "name", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"])
+        return pd.DataFrame(columns=["ts_code", "name", "晋阶", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"])
 
     out = df.copy()
     out["EV"] = pd.to_numeric(out["EV"], errors="coerce").fillna(0.0).astype(float)
@@ -702,7 +709,7 @@ def _build_high_ev_low_risk_view(df: pd.DataFrame) -> pd.DataFrame:
     - 本函数只做筛选，不再二次改写排序逻辑
     """
     if df is None or df.empty:
-        return pd.DataFrame(columns=["rank", "ts_code", "name", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"])
+        return pd.DataFrame(columns=["rank", "ts_code", "name", "晋阶", "weight", "EV", "P_fill", "E_ret", "Cost", "RiskPenalty"])
 
     out = df.copy()
     out["EV"] = pd.to_numeric(out["EV"], errors="coerce")
@@ -726,14 +733,15 @@ def _append_candidate_markdown_table(
     向报告 lines 追加统一格式的候选表 markdown。
     """
     lines.append(f"## {title}\n\n")
-    lines.append("| rank | ts_code | name | weight | EV | P_fill | E_ret | Cost | RiskPenalty |\n")
-    lines.append("|---:|---|---|---:|---:|---:|---:|---:|---:|\n")
+    lines.append("| rank | ts_code | name | 晋阶 | weight | EV | P_fill | E_ret | Cost | RiskPenalty |\n")
+    lines.append("|---:|---|---|---|---:|---:|---:|---:|---:|---:|\n")
 
     for _, r in df.iterrows():
         lines.append(
             f"| {int(pd.to_numeric(r.get('rank', 0), errors='coerce'))} | "
             f"{r.get('ts_code', '')} | "
             f"{r.get('name', '')} | "
+            f"{r.get('晋阶', '')} | "
             f"{fmt_num(r.get('weight', 0.0), 6)} | "
             f"{fmt_num(r.get('EV', 0.0), 6)} | "
             f"{fmt_num(r.get('P_fill', 0.0), 6)} | "
