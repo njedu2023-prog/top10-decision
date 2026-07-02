@@ -741,7 +741,7 @@ def _stage_label_from_limit_times(v: object) -> str:
         return ""
     if n <= 0:
         return ""
-    return f"{n}进{n + 1}"
+    return f"{n}→{n + 1}"
 
 
 def _stage_quality_weight_from_limit_times(v: object) -> float:
