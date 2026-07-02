@@ -732,6 +732,60 @@ def _ret_score_01(s: pd.Series, neutral: float = 0.50) -> pd.Series:
     return (0.65 * rank + 0.35 * level).clip(0.0, 1.0).astype(float)
 
 
+def _stage_label_from_limit_times(v: object) -> str:
+    try:
+        if pd.isna(v):
+            return ""
+        n = int(float(v))
+    except Exception:
+        return ""
+    if n <= 0:
+        return ""
+    return f"{n}进{n + 1}"
+
+
+def _stage_quality_weight_from_limit_times(v: object) -> float:
+    try:
+        if pd.isna(v):
+            return float("nan")
+        n = int(float(v))
+    except Exception:
+        return float("nan")
+    if n <= 1:
+        return 0.78
+    if n == 2:
+        return 0.92
+    if n in (3, 4):
+        return 1.10
+    if n == 5:
+        return 1.00
+    if n == 6:
+        return 0.88
+    return 0.72
+
+
+def _stage_risk_weight_from_limit_times(v: object) -> float:
+    try:
+        if pd.isna(v):
+            return float("nan")
+        n = int(float(v))
+    except Exception:
+        return float("nan")
+    if n <= 1:
+        return 0.035
+    if n == 2:
+        return 0.015
+    if n == 3:
+        return 0.000
+    if n == 4:
+        return 0.005
+    if n == 5:
+        return 0.045
+    if n == 6:
+        return 0.095
+    return 0.160
+
+
 def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
     """
     Professional two-stage Premium scorer.
@@ -777,6 +831,13 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     intraday_attack_edge = _score_01_from_percent_or_rank(out, "factor_intraday_attack_edge", default=np.nan)
     intraday_execution_edge = _score_01_from_percent_or_rank(out, "factor_intraday_execution_edge", default=np.nan)
     intraday_risk_penalty = _score_01_from_percent_or_rank(out, "factor_intraday_risk_penalty", default=np.nan)
+    limit_times = _num_series(out, "limit_times", "连板数", default=np.nan)
+    mapped_stage_quality = limit_times.map(_stage_quality_weight_from_limit_times)
+    mapped_stage_risk = limit_times.map(_stage_risk_weight_from_limit_times)
+    stage_quality_weight = _num_series(out, "stage_quality_weight", default=np.nan).fillna(mapped_stage_quality).fillna(1.0).clip(0.65, 1.20)
+    stage_risk_weight = _num_series(out, "stage_risk_weight", default=np.nan).fillna(mapped_stage_risk).fillna(0.0).clip(0.0, 0.25)
+    stage_quality_score = (0.50 + (stage_quality_weight - 1.0) * 1.25).clip(0.0, 1.0)
+    stage_risk_score = (stage_risk_weight / 0.25).clip(0.0, 1.0)
     intraday_attack_edge = intraday_attack_edge.where(
         intraday_attack_edge.notna(),
         (
@@ -851,29 +912,32 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     ).clip(0.0, 1.0)
     execution_score = execution_safety_score
     risk_penalty_score = (
-        0.36 * risk_raw
-        + 0.24 * t1_big_drawdown_prob
-        + 0.20 * t1_fail_prob
-        + 0.20 * intraday_risk_penalty
+        0.32 * risk_raw
+        + 0.22 * t1_big_drawdown_prob
+        + 0.18 * t1_fail_prob
+        + 0.18 * intraday_risk_penalty
+        + 0.10 * stage_risk_score
     ).clip(0.0, 1.0)
 
     t_up_attack_raw = (
-        0.18 * t_up_prob
-        + 0.22 * t_touch_prob
-        + 0.22 * t_limit_prob
-        + 0.12 * strength
+        0.17 * t_up_prob
+        + 0.21 * t_touch_prob
+        + 0.21 * t_limit_prob
+        + 0.11 * strength
         + 0.08 * eret_plus_score
         + 0.05 * market_score
         + 0.13 * intraday_attack_edge
+        + 0.04 * stage_quality_score
     ).clip(0.0, 1.0)
     t1_accept_raw = (
-        0.23 * t1_up_prob
-        + 0.23 * t1_accept_prob
-        + 0.18 * t1_high_profit_prob
+        0.22 * t1_up_prob
+        + 0.22 * t1_accept_prob
+        + 0.17 * t1_high_profit_prob
         + 0.14 * t1_close_ret_pred_score
         + 0.09 * t1_high_ret_pred_score
         + 0.05 * execution_safety_score
-        + 0.08 * intraday_execution_edge
+        + 0.07 * intraday_execution_edge
+        + 0.04 * stage_quality_score
     ).clip(0.0, 1.0)
     premium_final_raw = (
         0.30 * t_up_attack_raw
@@ -983,6 +1047,10 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         "premium_intraday_avg_attack_edge": float(intraday_attack_edge.mean()) if intraday_attack_edge.notna().any() else "",
         "premium_intraday_avg_execution_edge": float(intraday_execution_edge.mean()) if intraday_execution_edge.notna().any() else "",
         "premium_intraday_avg_risk_penalty": float(intraday_risk_penalty.mean()) if intraday_risk_penalty.notna().any() else "",
+        "premium_stage_mode": "tushare_limit_times_hump_v1",
+        "premium_stage_rows": int(limit_times.notna().sum()),
+        "premium_stage_avg_quality_weight": float(stage_quality_weight.mean()) if stage_quality_weight.notna().any() else "",
+        "premium_stage_avg_risk_weight": float(stage_risk_weight.mean()) if stage_risk_weight.notna().any() else "",
         "premium_intraday_hard_risk_count": int((intraday_hard_risk >= 0.5).sum()),
         "premium_eligible_count": int(eligible.sum()),
         "premium_watch_count": int((out["premium_bucket"] == "WATCH").sum()),
@@ -1299,6 +1367,8 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
         "sector", "board", "industry", "sw_industry", "申万行业", "行业", "板块",
         "所属行业", "所属板块", "concept", "theme", "concept_name", "概念", "题材",
     )
+    c_stage = pick("晋阶", "advance_stage", "stage", "limit_stage", "连板晋阶")
+    c_limit_times = pick("limit_times", "连板数", "连板高度", "lianban", "lb")
 
     if c_date:
         df["trade_date"] = df[c_date].astype(str).map(_to_yyyymmdd)
@@ -1308,6 +1378,16 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
         df["name"] = df[c_name].astype(str).str.strip()
     if c_sector:
         df["sector"] = df[c_sector].astype(str).str.strip()
+    if c_stage:
+        df["晋阶"] = df[c_stage].astype(str).str.strip().replace({"nan": "", "None": "", "<NA>": ""})
+    if c_limit_times:
+        df["limit_times"] = pd.to_numeric(df[c_limit_times], errors="coerce")
+        if "晋阶" not in df.columns:
+            df["晋阶"] = df["limit_times"].map(_stage_label_from_limit_times)
+        else:
+            fallback_stage = df["limit_times"].map(_stage_label_from_limit_times)
+            stage = df["晋阶"].astype(str).str.strip()
+            df["晋阶"] = stage.where(stage.ne("") & stage.ne("nan") & stage.ne("None") & stage.ne("<NA>"), fallback_stage)
     return df
 
 
@@ -1454,6 +1534,10 @@ def _load_decision_merge(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
         "dec_can_buy": ("dec_can_buy", "can_buy", "可买提示"),
         "dec_p_fill": ("dec_p_fill", "p_fill", "p_fill_pred", "p_fill_pred_final"),
         "dec_reason": ("dec_reason", "reason", "label", "决策原因", "决策标签"),
+        "晋阶": ("晋阶", "advance_stage", "stage", "limit_stage", "连板晋阶"),
+        "limit_times": ("limit_times", "连板数", "连板高度", "lianban", "lb"),
+        "stage_quality_weight": ("stage_quality_weight",),
+        "stage_risk_weight": ("stage_risk_weight",),
     }.items():
         c = _first_existing_col(dec, *names)
         out[out_col] = dec[c] if c else pd.NA
@@ -2192,10 +2276,21 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             else:
                 m["sector"] = m["sector"].where(m["sector"].notna() & (m["sector"].astype(str).str.strip() != ""), m["sector_dec"])
             m = m.drop(columns=["sector_dec"])
+        for base_col in ("晋阶", "limit_times", "stage_quality_weight", "stage_risk_weight"):
+            dec_col = f"{base_col}_dec"
+            if dec_col not in m.columns:
+                continue
+            if base_col not in m.columns:
+                m[base_col] = m[dec_col]
+            else:
+                base_txt = m[base_col].astype(str).str.strip()
+                m[base_col] = m[base_col].where(m[base_col].notna() & base_txt.ne("") & base_txt.ne("nan") & base_txt.ne("<NA>"), m[dec_col])
+            m = m.drop(columns=[dec_col])
         df = m
     else:
-        for c in ("dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason"):
-            df[c] = pd.NA
+        for c in ("dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason", "晋阶", "limit_times", "stage_quality_weight", "stage_risk_weight"):
+            if c not in df.columns:
+                df[c] = pd.NA
     decision_trace = _decision_merge_trace(dec, df)
 
     p, e, s, conf, dq, risk = _pick_pred_fields(df)
@@ -2322,7 +2417,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     ]
 
     out_cols = [
-        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "晋阶", "sector", "close_T",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         *exec_cols,
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
@@ -2363,7 +2458,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     verify_pending = True
     verify_reason = "pending"
     verify_cols = [
-        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "sector", "close_T",
+        "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "晋阶", "sector", "close_T",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         "T日建议买入方式", "T日可接受买入价",
         "T+1建议买入方式", "T+1可接受买入价", "T+1卖出计划", "T+2卖出计划",
