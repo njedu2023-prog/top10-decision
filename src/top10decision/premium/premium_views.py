@@ -212,6 +212,22 @@ def _html_escape(x: object) -> str:
     return html.escape(_clean_text(x, ""), quote=True)
 
 
+def _stage_text(row: pd.Series) -> str:
+    text = _clean_text(row.get("晋阶", row.get("advance_stage", row.get("stage", row.get("limit_stage", "")))), "")
+    if text and text not in {"nan", "None", "<NA>"}:
+        return text
+    raw = row.get("limit_times", row.get("连板数", None))
+    try:
+        if pd.isna(raw):
+            return "-"
+        n = int(float(raw))
+    except Exception:
+        return "-"
+    if n <= 0:
+        return "-"
+    return f"{n}进{n + 1}"
+
+
 def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
@@ -223,6 +239,7 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                 "Rank": _clean_text(r.get("rank")),
                 "Code": _clean_text(r.get("ts_code")),
                 "Name": _clean_text(r.get("name")),
+                "晋阶": _stage_text(r),
                 "Sector": _clean_text(
                     r.get(
                         "sector",
