@@ -1,9 +1,9 @@
 {
-  "current_run_date": "20260703",
+  "current_run_date": "20260706",
   "raw_root": "data/market/raw",
   "trade_calendar_file": "",
-  "trade_calendar_count": 180,
-  "count": 86,
+  "trade_calendar_count": 182,
+  "count": 87,
   "rows": [
     {
       "trade_date": "20260227",
@@ -765,15 +765,24 @@
       "trade_date": "20260702",
       "exec_date": "20260703",
       "target_date": "20260706",
+      "sample_maturity": "FULLY_READY",
+      "PFILL_READY": 1,
+      "ERET_READY": 1,
+      "FULLY_READY": 1
+    },
+    {
+      "trade_date": "20260703",
+      "exec_date": "20260706",
+      "target_date": "20260707",
       "sample_maturity": "PFILL_READY",
       "PFILL_READY": 1,
       "ERET_READY": 0,
       "FULLY_READY": 0
     },
     {
-      "trade_date": "20260703",
-      "exec_date": "20260706",
-      "target_date": "20260707",
+      "trade_date": "20260706",
+      "exec_date": "20260707",
+      "target_date": "20260708",
       "sample_maturity": "UNREADY",
       "PFILL_READY": 0,
       "ERET_READY": 0,
