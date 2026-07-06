@@ -8,18 +8,18 @@
   "guardrail_reason": "CAUTION:intraday_risk_mean=1.000,open_board_max=13.0,tail_risk_mean=0.2286",
   "topk": 60,
   "picked": 0,
-  "cost_est_mean": 0.0016249084583333333,
+  "cost_est_mean": 0.0016319945833333334,
   "cost_est_min": 0.0011124775,
-  "cost_est_max": 0.00230817,
-  "risk_penalty_mean": 0.020525419580580722,
+  "cost_est_max": 0.00253971,
+  "risk_penalty_mean": 0.02083462801326175,
   "risk_penalty_min": 0.012673576728086526,
-  "risk_penalty_max": 0.03099677716535481,
-  "ev_base_mean": -0.03351149629997902,
-  "ev_final_mean": -0.07187124689036598,
-  "pfill_penalty_extra_mean": 0.00622302876845813,
-  "risk_penalty_extra_mean": 0.03445547338442883,
-  "intraday_penalty_extra_mean": 0.011247833333333334,
-  "intraday_ev_bonus_mean": 0.0023187515625,
+  "risk_penalty_max": 0.037461754346402455,
+  "ev_base_mean": -0.03051708797126018,
+  "ev_final_mean": -0.068512998328453,
+  "pfill_penalty_extra_mean": 0.005584777476137279,
+  "risk_penalty_extra_mean": 0.03472158756855555,
+  "intraday_penalty_extra_mean": 0.0113295,
+  "intraday_ev_bonus_mean": 0.0023104546874999996,
   "ev_formula_version": "v1_2_intraday_weighted",
   "input_mode": "pred_plus_fs",
   "fs_degrade_reason": "",
@@ -907,37 +907,37 @@
     "status_counts": {
       "ok": 60
     },
-    "hard_risk_rows": 4,
-    "risk_intraday_hard_penalty_mean": 0.0006666666666666666,
+    "hard_risk_rows": 5,
+    "risk_intraday_hard_penalty_mean": 0.0008333333333333334,
     "risk_intraday_hard_penalty_max": 0.01,
-    "risk_intraday_hard_penalty_sum": 0.04,
+    "risk_intraday_hard_penalty_sum": 0.05,
     "risk_intraday_soft_penalty_mean": 0.006,
     "risk_intraday_soft_penalty_max": 0.006,
     "risk_intraday_soft_penalty_sum": 0.36,
-    "risk_intraday_confidence_penalty_mean": 0.00024499999999999994,
+    "risk_intraday_confidence_penalty_mean": 0.00025749999999999997,
     "risk_intraday_confidence_penalty_max": 0.00075,
-    "risk_intraday_confidence_penalty_sum": 0.014699999999999996,
+    "risk_intraday_confidence_penalty_sum": 0.015449999999999998,
     "risk_intraday_missing_penalty_mean": 0.0,
     "risk_intraday_missing_penalty_max": 0.0,
     "risk_intraday_missing_penalty_sum": 0.0,
-    "risk_late_withdraw_penalty_mean": 0.0003333333333333333,
+    "risk_late_withdraw_penalty_mean": 0.00025,
     "risk_late_withdraw_penalty_max": 0.005,
-    "risk_late_withdraw_penalty_sum": 0.02,
+    "risk_late_withdraw_penalty_sum": 0.015,
     "risk_reseal_weakness_penalty_mean": 0.0020909090909090908,
     "risk_reseal_weakness_penalty_max": 0.002090909090909091,
     "risk_reseal_weakness_penalty_sum": 0.12545454545454546,
     "risk_auction_weakness_penalty_mean": 0.0014090909090909093,
     "risk_auction_weakness_penalty_max": 0.001409090909090909,
     "risk_auction_weakness_penalty_sum": 0.08454545454545456,
-    "intraday_execution_penalty_mean": 0.009861666666666664,
+    "intraday_execution_penalty_mean": 0.009844999999999998,
     "intraday_execution_penalty_max": 0.012,
-    "intraday_execution_penalty_sum": 0.5916999999999999,
-    "intraday_ev_bonus_mean": 0.0023187515625,
+    "intraday_execution_penalty_sum": 0.5906999999999999,
+    "intraday_ev_bonus_mean": 0.0023104546874999996,
     "intraday_ev_bonus_max": 0.0025059375,
-    "intraday_ev_bonus_sum": 0.13912509375,
-    "intraday_penalty_extra_mean": 0.011247833333333334,
+    "intraday_ev_bonus_sum": 0.13862728124999998,
+    "intraday_penalty_extra_mean": 0.0113295,
     "intraday_penalty_extra_max": 0.019200000000000002,
-    "intraday_penalty_extra_sum": 0.67487,
+    "intraday_penalty_extra_sum": 0.67977,
     "top_penalty_rows": [
       {
         "ts_code": "002457.SZ",
@@ -946,7 +946,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00110446875,
-        "ev_pred": -0.10771320771991111
+        "ev_pred": -0.11300676795194356
       },
       {
         "ts_code": "002919.SZ",
@@ -955,7 +955,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.001265625,
-        "ev_pred": -0.08907437394285382
+        "ev_pred": -0.08991382508645093
       },
       {
         "ts_code": "601368.SH",
@@ -964,16 +964,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.001265625,
-        "ev_pred": -0.10331021374624169
-      },
-      {
-        "ts_code": "603087.SH",
-        "name": "甘李药业",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.012,
-        "intraday_penalty_extra": 0.019200000000000002,
-        "intraday_ev_bonus": 0.0009534374999999999,
-        "ev_pred": -0.10289928715660449
+        "ev_pred": -0.10258223036618387
       },
       {
         "ts_code": "002860.SZ",
@@ -982,7 +973,25 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.011275,
         "intraday_ev_bonus": 0.00186046875,
-        "ev_pred": -0.06318375984436578
+        "ev_pred": -0.07993708415338248
+      },
+      {
+        "ts_code": "300684.SZ",
+        "name": "中石科技",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.010249999999999999,
+        "intraday_penalty_extra": 0.017275,
+        "intraday_ev_bonus": 0.0014807812500000005,
+        "ev_pred": -0.11242831066459219
+      },
+      {
+        "ts_code": "603903.SH",
+        "name": "中持股份",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.010249999999999999,
+        "intraday_penalty_extra": 0.017275,
+        "intraday_ev_bonus": 0.0014807812500000005,
+        "ev_pred": -0.1070199025418182
       },
       {
         "ts_code": "603090.SH",
@@ -991,7 +1000,7 @@
         "intraday_execution_penalty": 0.010175,
         "intraday_penalty_extra": 0.011192500000000001,
         "intraday_ev_bonus": 0.0020655,
-        "ev_pred": -0.09068736948536277
+        "ev_pred": -0.06405602581202363
       },
       {
         "ts_code": "603268.SH",
@@ -1000,7 +1009,7 @@
         "intraday_execution_penalty": 0.010175,
         "intraday_penalty_extra": 0.011192500000000001,
         "intraday_ev_bonus": 0.0020655,
-        "ev_pred": -0.05442065661489397
+        "ev_pred": -0.068874442089513
       },
       {
         "ts_code": "603819.SH",
@@ -1009,7 +1018,7 @@
         "intraday_execution_penalty": 0.010175,
         "intraday_penalty_extra": 0.011192500000000001,
         "intraday_ev_bonus": 0.0020655,
-        "ev_pred": -0.03632123009342245
+        "ev_pred": -0.03176568063082947
       },
       {
         "ts_code": "002042.SZ",
@@ -1018,16 +1027,7 @@
         "intraday_execution_penalty": 0.010025,
         "intraday_penalty_extra": 0.0110275,
         "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.0821916022859995
-      },
-      {
-        "ts_code": "002245.SZ",
-        "name": "蔚蓝锂芯",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.010025,
-        "intraday_penalty_extra": 0.0110275,
-        "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.07857233092313326
+        "ev_pred": -0.10246826528356025
       }
     ]
   },
@@ -1058,5 +1058,5 @@
     "topn_rows": 0,
     "full_candidate_rows": 60
   },
-  "intraday_execution_penalty_mean": 0.009861666666666661
+  "intraday_execution_penalty_mean": 0.009844999999999993
 }
