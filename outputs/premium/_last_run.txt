@@ -1,30 +1,30 @@
-trade_date: 20260703
-run_id: gh_28669831633
-commit_sha: 220908356626
+trade_date: 20260706
+run_id: gh_28800521769
+commit_sha: c268fa50d7e8
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-07-03T15:28:42Z
+created_at_utc: 2026-07-06T14:51:39Z
 ok: True
-buy_date: 20260706
-target_date: 20260707
+buy_date: 20260707
+target_date: 20260708
 pending: True
 pending_reason: buy_date:trade_cal_ok;target_date:trade_cal_ok
 truth_T_ok: True
 truth_T_reason: ok
 verify_pending: True
 verify_reason: truth_not_ready: T_ok=True T2_ok=False (buy_date:trade_cal_ok;target_date:trade_cal_ok)
-market_sentiment_reason: ok:prev=20260702
+market_sentiment_reason: ok:prev=20260703
 calendar_contract: strict_a_share_trade_calendar_only
 analysis_date_calendar_reason: trade_cal_ok
 buy_date_calendar_reason: trade_cal_ok
 target_date_calendar_reason: trade_cal_ok
-mkt_up_ratio: 0.6874546773023931
-mkt_strong_count: 174.0
-mkt_touch_strong_count: 347.0
-mkt_emotion_score: 0.5713937968448013
+mkt_up_ratio: 0.3383499546690843
+mkt_strong_count: 102.0
+mkt_touch_strong_count: 240.0
+mkt_emotion_score: 0.2722570977248072
 decision_merge_mode: decision_label_left_join_v1
 decision_merge_rows: 60
-decision_merge_coverage: 0.555556
-decision_merge_dec_p_fill_coverage: 0.555556
+decision_merge_coverage: 0.909091
+decision_merge_dec_p_fill_coverage: 0.909091
 decision_merge_dec_can_buy_coverage: 0.0
 decision_merge_dec_weight_coverage: 0.0
 decision_merge_reason: ok
@@ -51,7 +51,7 @@ limitup_model_validation_samples: 480
 limitup_calibration_mode: historical_bin_blend_v1
 limitup_calibration_reason: ok
 limitup_calibration_bins: 5
-limitup_calibration_avg_delta: -0.08509854175307828
+limitup_calibration_avg_delta: -0.13395075479698165
 adaptive_rank_mode: history_ic_weighted_v1
 adaptive_weight_limitup: 0.581002
 adaptive_weight_t1: 0.066158
@@ -62,23 +62,23 @@ adaptive_t1_ret_ic: -0.13127
 adaptive_reason: t1_downweighted_negative_ic
 premium_score_mode: t_attack_t1_accept_final_v1
 premium_intraday_mode: intraday_weighted_v1
-premium_intraday_avg_attack_edge: 0.5505435185185186
-premium_intraday_avg_execution_edge: 0.6649601851851854
-premium_intraday_avg_risk_penalty: 0.24465740740740743
+premium_intraday_avg_attack_edge: 0.5697000000000001
+premium_intraday_avg_execution_edge: 0.7233363636363636
+premium_intraday_avg_risk_penalty: 0.35463636363636364
 premium_stage_mode: tushare_limit_times_hump_v1
-premium_stage_rows: 107
-premium_stage_avg_quality_weight: 0.8077777777777778
-premium_stage_avg_risk_weight: 0.03134259259259261
-premium_intraday_hard_risk_count: 6
-premium_eligible_count: 20
-premium_watch_count: 66
-premium_excluded_count: 22
+premium_stage_rows: 64
+premium_stage_avg_quality_weight: 0.8103030303030304
+premium_stage_avg_risk_weight: 0.03159090909090909
+premium_intraday_hard_risk_count: 9
+premium_eligible_count: 26
+premium_watch_count: 26
+premium_excluded_count: 14
 premium_model_can_rank_count: 0
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划
 limitup_model_fields: t_up_prob_model|t_high_profit_prob_model|t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_accept_prob_model|t1_fail_prob_model|t1_big_drawdown_prob_model|t_close_ret_pred|t_intraday_ret_pred|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 premium_professional_fields: t_up_attack_score|t1_accept_score|premium_final_score|premium_bucket|premium_exclude_reason
 rank_groups: TOP10|TOP20
-limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260706/daily.csv body_snippet=404: Not Found
+limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260707/daily.csv body_snippet=404: Not Found
 limitup_validation_ready: False
 limitup_validation_reason: t_daily_not_ready
 top10_limitup_total: 0
@@ -133,17 +133,17 @@ history_tier_top10_hit_rate: 0.2787682333873582
 history_tier_top20_tail_hit_rate: 0.16962843295638125
 history_tier_top10_vs_11_20_hit_spread: 0.10913980043097693
 history_tier_summary: TOP1-10:172/617/0.279/ret=0.0020 | TOP11-20:105/619/0.170/ret=0.0001 | TOP21-30:107/615/0.174/ret=0.0049
-out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260703.csv
-out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260703.csv
-out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260703.csv
-out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260703.csv
-out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260703.csv
-report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260703.md
-report_html: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260703.html
-degrade_mode: full
-packs_used: ['Pack0', 'Pack1', 'Pack2', 'Pack3']
-packs_missing: []
+out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260706.csv
+out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260706.csv
+out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260706.csv
+out_full: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_full_20260706.csv
+out_verify: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_verify_20260706.csv
+report_md: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260706.md
+report_html: /home/runner/work/top10-decision/top10-decision/docs/reports/premium_20260706.html
+degrade_mode: degraded
+packs_used: ['Pack0', 'Pack2', 'Pack3']
+packs_missing: ['Pack1']
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260703.csv', 'Pack2 enabled (soft mode, fixed)', 'Pack3 enabled: intraday/auction soft factors']
+notes: ['Pack0 baseline always on', 'Pack1 disabled: market cache missing -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260706.csv', 'Pack2 enabled (soft mode, fixed)', 'Pack3 enabled: intraday/auction soft factors']
 extra_prefix: factor
