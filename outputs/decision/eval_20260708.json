@@ -1,7 +1,7 @@
 {
   "signal_date": "20260707",
   "exec_date": "20260708",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260707",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2437,volatility_mean=0.0562,intraday_risk_mean=1.000",
@@ -14,8 +14,8 @@
   "risk_penalty_mean": 0.022814535814131728,
   "risk_penalty_min": 0.01454573474245712,
   "risk_penalty_max": 0.03470591232170026,
-  "ev_base_mean": -0.11587751091623011,
-  "ev_final_mean": -0.15934949141937788,
+  "ev_base_mean": -0.1158775109162296,
+  "ev_final_mean": -0.15934949141937738,
   "pfill_penalty_extra_mean": 0.00800425194077417,
   "risk_penalty_extra_mean": 0.037618881971464506,
   "intraday_penalty_extra_mean": 0.012094242424242424,
@@ -980,7 +980,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00056109375,
-        "ev_pred": -0.20805700569063426
+        "ev_pred": -0.20805700569063393
       },
       {
         "ts_code": "600288.SH",
@@ -989,7 +989,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00056109375,
-        "ev_pred": -0.17019994009535153
+        "ev_pred": -0.17019994009535158
       },
       {
         "ts_code": "603065.SH",
@@ -998,7 +998,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.0009534374999999999,
-        "ev_pred": -0.16297272714234665
+        "ev_pred": -0.16297272714234673
       },
       {
         "ts_code": "603823.SH",
@@ -1007,7 +1007,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.0009534374999999999,
-        "ev_pred": -0.16432658678993783
+        "ev_pred": -0.16432658678993733
       },
       {
         "ts_code": "000973.SZ",
@@ -1025,7 +1025,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.017275,
         "intraday_ev_bonus": 0.0014807812500000005,
-        "ev_pred": -0.20371612696766686
+        "ev_pred": -0.20371612696766683
       },
       {
         "ts_code": "688432.SH",
@@ -1034,7 +1034,7 @@
         "intraday_execution_penalty": 0.010249999999999999,
         "intraday_penalty_extra": 0.011275,
         "intraday_ev_bonus": 0.00186046875,
-        "ev_pred": -0.11655019401970487
+        "ev_pred": -0.11655019401970418
       },
       {
         "ts_code": "002137.SZ",
@@ -1052,7 +1052,7 @@
         "intraday_execution_penalty": 0.010025,
         "intraday_penalty_extra": 0.0110275,
         "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.14735488657154588
+        "ev_pred": -0.14735488657154566
       },
       {
         "ts_code": "002129.SZ",
@@ -1061,7 +1061,7 @@
         "intraday_execution_penalty": 0.010025,
         "intraday_penalty_extra": 0.0110275,
         "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.14126392936215582
+        "ev_pred": -0.1412639293621556
       }
     ]
   },
