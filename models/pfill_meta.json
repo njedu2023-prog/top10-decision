@@ -1,5 +1,5 @@
 {
-  "train_time_utc": "2026-07-07T13:38:50+00:00",
+  "train_time_utc": "2026-07-07T15:52:22+00:00",
   "anchor_trade_date": "20260706",
   "status": "trained",
   "skip_reason": "",
@@ -389,8 +389,8 @@
   "metrics_valid": {
     "lr": {
       "auc": 1.0,
-      "logloss": 3.213177055576274,
-      "brier": 0.5909745562540003
+      "logloss": 3.213177055576163,
+      "brier": 0.5909745562539949
     },
     "lgbm": {
       "auc": 1.0,
