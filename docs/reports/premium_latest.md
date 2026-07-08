@@ -6,7 +6,7 @@
 - 竞价买入日（T）：**20260709**
 - 预测到期日（T+1）：**20260710**
 - 周期：**2 个交易日（D→T+1）**
-- 生成时间：2026-07-08T13:04:51Z
+- 生成时间：2026-07-08T15:36:39Z
 - 模型版本：**premium_v4_a_share_d_t_t1**
 
 ## 预测表（Top30）
@@ -39,13 +39,13 @@
 
 ---
 ## 审计（Factor Packs / Degrade）
-- degrade_mode: **degraded**
-- packs_used: `Pack0, Pack2, Pack3`
-- packs_missing: `Pack1`
+- degrade_mode: **full**
+- packs_used: `Pack0, Pack1, Pack2, Pack3`
+- packs_missing: `-`
 
 ### notes
 - 01. Pack0 baseline always on
-- 02. Pack1 disabled: market cache missing -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260708.csv
+- 02. Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260708.csv
 - 03. Pack2 enabled (soft mode, fixed)
 - 04. Pack3 enabled: intraday/auction soft factors
 
