@@ -14,9 +14,9 @@
   "risk_penalty_mean": 0.019310065021534484,
   "risk_penalty_min": 0.011162029376143369,
   "risk_penalty_max": 0.03886916666666667,
-  "ev_base_mean": -0.13711055863468163,
-  "ev_final_mean": -0.17170364437017696,
-  "pfill_penalty_extra_mean": 0.005044601709898524,
+  "ev_base_mean": -0.0424876143122818,
+  "ev_final_mean": -0.07679621774459923,
+  "pfill_penalty_extra_mean": 0.004760119406720623,
   "risk_penalty_extra_mean": 0.031008435197471807,
   "intraday_penalty_extra_mean": 0.009673020833333336,
   "intraday_ev_bonus_mean": 0.0014599511718750003,
@@ -952,9 +952,9 @@
     "risk_intraday_confidence_penalty_mean": 0.000475,
     "risk_intraday_confidence_penalty_max": 0.0010500000000000002,
     "risk_intraday_confidence_penalty_sum": 0.0228,
-    "risk_intraday_missing_penalty_mean": 0.0007916666666666666,
+    "risk_intraday_missing_penalty_mean": 0.0007916666666666668,
     "risk_intraday_missing_penalty_max": 0.002,
-    "risk_intraday_missing_penalty_sum": 0.038,
+    "risk_intraday_missing_penalty_sum": 0.038000000000000006,
     "risk_late_withdraw_penalty_mean": 0.00010416666666666667,
     "risk_late_withdraw_penalty_max": 0.005,
     "risk_late_withdraw_penalty_sum": 0.005,
@@ -964,9 +964,9 @@
     "risk_auction_weakness_penalty_mean": 0.001409090909090909,
     "risk_auction_weakness_penalty_max": 0.001409090909090909,
     "risk_auction_weakness_penalty_sum": 0.06763636363636363,
-    "intraday_execution_penalty_mean": 0.008428125000000002,
+    "intraday_execution_penalty_mean": 0.008428125,
     "intraday_execution_penalty_max": 0.012,
-    "intraday_execution_penalty_sum": 0.4045500000000001,
+    "intraday_execution_penalty_sum": 0.40455,
     "intraday_ev_bonus_mean": 0.0014599511718750003,
     "intraday_ev_bonus_max": 0.0025059375,
     "intraday_ev_bonus_sum": 0.07007765625000001,
@@ -981,7 +981,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.019200000000000002,
         "intraday_ev_bonus": 0.00081253125,
-        "ev_pred": -0.2684759130948797
+        "ev_pred": -0.1292680755626037
       },
       {
         "ts_code": "001207.SZ",
@@ -990,7 +990,7 @@
         "intraday_execution_penalty": 0.010025,
         "intraday_penalty_extra": 0.0110275,
         "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.16801600966859054
+        "ev_pred": -0.07568952005244137
       },
       {
         "ts_code": "300017.SZ",
@@ -999,7 +999,7 @@
         "intraday_execution_penalty": 0.010025,
         "intraday_penalty_extra": 0.0110275,
         "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.1892979929457232
+        "ev_pred": -0.09515436957541731
       },
       {
         "ts_code": "300369.SZ",
@@ -1008,7 +1008,7 @@
         "intraday_execution_penalty": 0.010025,
         "intraday_penalty_extra": 0.0110275,
         "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.166935391924164
+        "ev_pred": -0.10593415025800297
       },
       {
         "ts_code": "300454.SZ",
@@ -1017,7 +1017,7 @@
         "intraday_execution_penalty": 0.010025,
         "intraday_penalty_extra": 0.0110275,
         "intraday_ev_bonus": 0.0022806562499999997,
-        "ev_pred": -0.16623473586637005
+        "ev_pred": -0.08887725279536185
       },
       {
         "ts_code": "000506.SZ",
@@ -1026,7 +1026,7 @@
         "intraday_execution_penalty": 0.0095,
         "intraday_penalty_extra": 0.010450000000000001,
         "intraday_ev_bonus": 0.0025059375,
-        "ev_pred": -0.12289078472068958
+        "ev_pred": -0.054094806257945056
       },
       {
         "ts_code": "000524.SZ",
@@ -1035,7 +1035,7 @@
         "intraday_execution_penalty": 0.0095,
         "intraday_penalty_extra": 0.010450000000000001,
         "intraday_ev_bonus": 0.0025059375,
-        "ev_pred": -0.16892462278140657
+        "ev_pred": -0.12485880348952752
       },
       {
         "ts_code": "000759.SZ",
@@ -1044,7 +1044,7 @@
         "intraday_execution_penalty": 0.0095,
         "intraday_penalty_extra": 0.010450000000000001,
         "intraday_ev_bonus": 0.0025059375,
-        "ev_pred": -0.13488124285983957
+        "ev_pred": -0.09192730467745018
       },
       {
         "ts_code": "000948.SZ",
@@ -1053,7 +1053,7 @@
         "intraday_execution_penalty": 0.0095,
         "intraday_penalty_extra": 0.010450000000000001,
         "intraday_ev_bonus": 0.0025059375,
-        "ev_pred": -0.16688794275518137
+        "ev_pred": -0.0249387152847362
       },
       {
         "ts_code": "000977.SZ",
@@ -1062,7 +1062,7 @@
         "intraday_execution_penalty": 0.0095,
         "intraday_penalty_extra": 0.010450000000000001,
         "intraday_ev_bonus": 0.0025059375,
-        "ev_pred": -0.15877284123883287
+        "ev_pred": -0.11456007343464533
       }
     ]
   },
@@ -1072,10 +1072,10 @@
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
     "p_fill_degrade_reason": "",
-    "eret_pred_src": "model:lr",
+    "eret_pred_src": "model:lgbm",
     "eret_model_loaded": true,
-    "eret_model_kind": "lr",
-    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lr.joblib",
+    "eret_model_kind": "lgbm",
+    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
     "eret_degrade_reason": ""
   },
   "paths": {
@@ -1093,5 +1093,5 @@
     "topn_rows": 0,
     "full_candidate_rows": 48
   },
-  "intraday_execution_penalty_mean": 0.008428125000000002
+  "intraday_execution_penalty_mean": 0.008428125
 }
