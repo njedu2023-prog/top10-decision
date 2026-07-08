@@ -1,7 +1,7 @@
 {
   "signal_date": "20260708",
   "exec_date": "20260709",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260708",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2355,volatility_mean=0.0546,intraday_risk_mean=0.604",
@@ -16,7 +16,7 @@
   "risk_penalty_max": 0.03886916666666667,
   "ev_base_mean": -0.0424876143122818,
   "ev_final_mean": -0.07679621774459923,
-  "pfill_penalty_extra_mean": 0.004760119406720623,
+  "pfill_penalty_extra_mean": 0.004760119406720622,
   "risk_penalty_extra_mean": 0.031008435197471807,
   "intraday_penalty_extra_mean": 0.009673020833333336,
   "intraday_ev_bonus_mean": 0.0014599511718750003,

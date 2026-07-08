@@ -2,7 +2,7 @@
 
 - signal_date: **20260708**
 - exec_date: **20260709**
-- requested_trade_date: **auto**
+- requested_trade_date: **20260708**
 - regime: **CAUTION**
 - risk_budget: **0.7**
 - regime_reason: **tail_risk_mean=0.2355,volatility_mean=0.0546,intraday_risk_mean=0.604**
