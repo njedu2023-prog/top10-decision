@@ -8,16 +8,16 @@
   "guardrail_reason": "CAUTION:tail_risk_mean=0.2713,volatility_mean=0.0599",
   "topk": 70,
   "picked": 0,
-  "cost_est_mean": 0.0016303029285714284,
+  "cost_est_mean": 0.0016213199214285714,
   "cost_est_min": 0.0011036365,
   "cost_est_max": 0.00255029,
-  "risk_penalty_mean": 0.018839246552398308,
+  "risk_penalty_mean": 0.018751121430178395,
   "risk_penalty_min": 0.012006324815712432,
   "risk_penalty_max": 0.036000000000000004,
-  "ev_base_mean": -0.051151861209473674,
-  "ev_final_mean": -0.0835300995049328,
-  "pfill_penalty_extra_mean": 0.004217137711561539,
-  "risk_penalty_extra_mean": 0.02816110058389759,
+  "ev_base_mean": -0.04327780490723244,
+  "ev_final_mean": -0.07559397405977906,
+  "pfill_penalty_extra_mean": 0.004289659244365865,
+  "risk_penalty_extra_mean": 0.028026509908180786,
   "intraday_penalty_extra_mean": 0.007905000000000006,
   "intraday_ev_bonus_mean": 0.0,
   "ev_formula_version": "v1_2_intraday_weighted",
@@ -980,7 +980,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.05926031225595824
+        "ev_pred": -0.02661492612886593
       },
       {
         "ts_code": "000417.SZ",
@@ -989,7 +989,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.09207857010058418
+        "ev_pred": -0.0828120091801672
       },
       {
         "ts_code": "000672.SZ",
@@ -998,7 +998,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.10065008756857363
+        "ev_pred": -0.06284342478504629
       },
       {
         "ts_code": "000811.SZ",
@@ -1007,7 +1007,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.08726965946938599
+        "ev_pred": -0.057439818373764016
       },
       {
         "ts_code": "000887.SZ",
@@ -1016,7 +1016,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.09615836197360778
+        "ev_pred": -0.07373950156054215
       },
       {
         "ts_code": "000892.SZ",
@@ -1025,7 +1025,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.08348169857219737
+        "ev_pred": -0.048040749288671844
       },
       {
         "ts_code": "000977.SZ",
@@ -1034,7 +1034,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.1119606448222481
+        "ev_pred": -0.08565855267389465
       },
       {
         "ts_code": "001395.SZ",
@@ -1043,7 +1043,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.11065005976777165
+        "ev_pred": -0.11745827412905419
       },
       {
         "ts_code": "002067.SZ",
@@ -1052,7 +1052,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.07400996509768795
+        "ev_pred": -0.04550302882570482
       },
       {
         "ts_code": "002156.SZ",
@@ -1061,7 +1061,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.08939189821104507
+        "ev_pred": -0.07718610293327109
       }
     ]
   },
