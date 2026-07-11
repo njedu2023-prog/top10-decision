@@ -395,7 +395,8 @@ class PremiumSafetyTests(unittest.TestCase):
             }).to_csv(root / "learning" / "limitup_probability_training_samples.csv", index=False)
             pd.DataFrame({
                 "trade_date": ["20260702"], "ts_code": ["000001.SZ"], "rank": [1],
-                "t_limitup_verify_ready": [1], "t_limitup_actual": [0], "t_up_actual": [1],
+                "label_matured": [0], "t_limitup_verify_ready": [1],
+                "t_limitup_actual": [0], "t_up_actual": [1],
                 "t_limitup_prob": [0.2], "t1_close_ret": [-0.01],
             }).to_csv(root / "premium_verify_20260702.csv", index=False)
             stats = module._collect_historical_limitup_stats(Cfg(root))
