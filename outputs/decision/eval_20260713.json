@@ -1,23 +1,23 @@
 {
   "signal_date": "20260710",
   "exec_date": "20260713",
-  "requested_trade_date": "20260710",
+  "requested_trade_date": "",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2466,volatility_mean=0.0540",
   "guardrail_reason": "CAUTION:tail_risk_mean=0.2466",
   "topk": 70,
-  "picked": 6,
-  "cost_est_mean": 0.001681755257142857,
+  "picked": 0,
+  "cost_est_mean": 0.00166548495,
   "cost_est_min": 0.0011018515,
-  "cost_est_max": 0.002701665,
-  "risk_penalty_mean": 0.01913103448627419,
+  "cost_est_max": 0.002651915,
+  "risk_penalty_mean": 0.01873588425879536,
   "risk_penalty_min": 0.011825913233709748,
   "risk_penalty_max": 0.028050766666666668,
-  "ev_base_mean": 0.001836290254368188,
-  "ev_final_mean": -0.03047468780903669,
-  "pfill_penalty_extra_mean": 0.003355924774225901,
-  "risk_penalty_extra_mean": 0.028955053289178967,
+  "ev_base_mean": -0.08792401291348188,
+  "ev_final_mean": -0.1199677561064345,
+  "pfill_penalty_extra_mean": 0.0034246073473838123,
+  "risk_penalty_extra_mean": 0.028619135845568796,
   "intraday_penalty_extra_mean": 0.007905000000000006,
   "intraday_ev_bonus_mean": 0.0,
   "ev_formula_version": "v1_2_intraday_weighted",
@@ -36,8 +36,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260710",
-      "created_at_utc": "2026-07-10T13:27:17+00:00",
-      "commit_sha": "9448b705cf5b3c84d45a447f8dd54eac06720dee",
+      "created_at_utc": "2026-07-11T12:41:29+00:00",
+      "commit_sha": "59eb96a40895c87c43bdd8e080270098258f1424",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -245,18 +245,18 @@
           "loaded": true,
           "content": {
             "trade_date": "20260710",
-            "created_at_utc": "2026-07-10T13:25:49+00:00",
+            "created_at_utc": "2026-07-11T12:39:25+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
               "branch": "main"
             },
-            "requested_trade_date": "20260710",
+            "requested_trade_date": null,
             "resolved_trade_date": "20260710",
             "raw_storage_pattern": "data/market/raw/{YYYY}/{YYYYMMDD}/{filename}",
             "raw_latest_pattern": "data/market/raw/latest/{filename}",
             "upstream_primary_pattern": "data/raw/{YYYY}/{YYYYMMDD}/{filename}",
-            "upstream_meta_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/_meta.json",
+            "upstream_meta_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/_meta.json",
             "upstream_meta": {
               "requested_trade_date": "20260710",
               "resolved_trade_date": "20260710",
@@ -531,7 +531,7 @@
                 "upstream_name": "daily.csv",
                 "required": true,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/daily.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/daily.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/daily.csv",
@@ -543,7 +543,7 @@
                 "upstream_name": "daily_basic.csv",
                 "required": true,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/daily_basic.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/daily_basic.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/daily_basic.csv",
@@ -555,7 +555,7 @@
                 "upstream_name": "hot_boards.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/hot_boards.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/hot_boards.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/hot_boards.csv",
@@ -567,7 +567,7 @@
                 "upstream_name": "intraday_features.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/intraday_features.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/intraday_features.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/intraday_features.csv",
@@ -579,7 +579,7 @@
                 "upstream_name": "limit_break_d.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/limit_break_d.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/limit_break_d.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/limit_break_d.csv",
@@ -591,7 +591,7 @@
                 "upstream_name": "limit_list_d.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/limit_list_d.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/limit_list_d.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/limit_list_d.csv",
@@ -603,7 +603,7 @@
                 "upstream_name": "limit_up_tags.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/limit_up_tags.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/limit_up_tags.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/limit_up_tags.csv",
@@ -615,7 +615,7 @@
                 "upstream_name": "moneyflow_hsgt.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/moneyflow_hsgt.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/moneyflow_hsgt.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/moneyflow_hsgt.csv",
@@ -627,7 +627,7 @@
                 "upstream_name": "namechange.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/namechange.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/namechange.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/namechange.csv",
@@ -639,7 +639,7 @@
                 "upstream_name": "stk_auction.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/stk_auction.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/stk_auction.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/stk_auction.csv",
@@ -651,7 +651,7 @@
                 "upstream_name": "stk_limit.csv",
                 "required": true,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/stk_limit.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/stk_limit.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/stk_limit.csv",
@@ -663,7 +663,7 @@
                 "upstream_name": "stock_basic.csv",
                 "required": true,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/stock_basic.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/stock_basic.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/stock_basic.csv",
@@ -675,7 +675,7 @@
                 "upstream_name": "top_list.csv",
                 "required": false,
                 "success": true,
-                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260710/top_list.csv",
+                "source_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/latest/top_list.csv",
                 "status_code": 200,
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260710/top_list.csv",
@@ -699,7 +699,7 @@
         }
       },
       "upstream_sync_summary": {
-        "requested_trade_date": "20260710",
+        "requested_trade_date": null,
         "resolved_trade_date": "20260710",
         "summary": {
           "success_count": 13,
@@ -974,22 +974,22 @@
     "intraday_penalty_extra_sum": 0.5533500000000005,
     "top_penalty_rows": [
       {
+        "ts_code": "000048.SZ",
+        "name": "京基智农",
+        "intraday_status": "missing_stock",
+        "intraday_execution_penalty": 0.006550000000000001,
+        "intraday_penalty_extra": 0.007905000000000002,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.13764905207782024
+      },
+      {
         "ts_code": "000547.SZ",
         "name": "航天发展",
         "intraday_status": "missing_stock",
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.04385042986289743
-      },
-      {
-        "ts_code": "000573.SZ",
-        "name": "粤宏远Ａ",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.006550000000000001,
-        "intraday_penalty_extra": 0.007905000000000002,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.045528798491334274
+        "ev_pred": -0.12149394161001126
       },
       {
         "ts_code": "000620.SZ",
@@ -998,7 +998,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.054709167689841715
+        "ev_pred": -0.12751245864062433
       },
       {
         "ts_code": "000810.SZ",
@@ -1007,7 +1007,16 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.042351823374227535
+        "ev_pred": -0.12559036687902944
+      },
+      {
+        "ts_code": "000887.SZ",
+        "name": "中鼎股份",
+        "intraday_status": "missing_stock",
+        "intraday_execution_penalty": 0.006550000000000001,
+        "intraday_penalty_extra": 0.007905000000000002,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.13823074191950954
       },
       {
         "ts_code": "000892.SZ",
@@ -1016,7 +1025,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.014840881412247115
+        "ev_pred": -0.1070395296884694
       },
       {
         "ts_code": "000901.SZ",
@@ -1025,7 +1034,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.05450161713790309
+        "ev_pred": -0.1369594351086017
       },
       {
         "ts_code": "000933.SZ",
@@ -1034,7 +1043,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.05123439518382506
+        "ev_pred": -0.11681281665187548
       },
       {
         "ts_code": "001208.SZ",
@@ -1043,7 +1052,7 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.03127625947276603
+        "ev_pred": -0.10106377437820777
       },
       {
         "ts_code": "002038.SZ",
@@ -1052,16 +1061,139 @@
         "intraday_execution_penalty": 0.006550000000000001,
         "intraday_penalty_extra": 0.007905000000000002,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.0022339898550813343
+        "ev_pred": -0.10137497915598508
+      }
+    ]
+  },
+  "decision_diagnostics": {
+    "rows_scored": 70,
+    "selected_rows": 0,
+    "risk_budget": 0.7,
+    "stop_reason": "",
+    "p_fill_pred_min": 0.7434734387984787,
+    "p_fill_pred_max": 0.9043655237428639,
+    "p_fill_pred_mean": 0.8355210179135962,
+    "e_ret_pred_min": -0.11663873606152238,
+    "e_ret_pred_max": -0.0011499291132291388,
+    "e_ret_pred_mean": -0.08110804518674875,
+    "cost_est_min": 0.0011018515,
+    "cost_est_max": 0.002651915,
+    "cost_est_mean": 0.00166548495,
+    "risk_penalty_min": 0.011825913233709748,
+    "risk_penalty_max": 0.028050766666666668,
+    "risk_penalty_mean": 0.01873588425879536,
+    "ev_base_min": -0.11195429390199664,
+    "ev_base_max": -0.029374165455424567,
+    "ev_base_mean": -0.08792401291348188,
+    "pfill_penalty_extra_min": 0.000997765335199808,
+    "pfill_penalty_extra_max": 0.01085960299774908,
+    "pfill_penalty_extra_mean": 0.0034246073473838123,
+    "risk_penalty_extra_min": 0.018588374978855494,
+    "risk_penalty_extra_max": 0.03963838166666667,
+    "risk_penalty_extra_mean": 0.028619135845568796,
+    "intraday_penalty_extra_min": 0.007905000000000002,
+    "intraday_penalty_extra_max": 0.007905000000000002,
+    "intraday_penalty_extra_mean": 0.007905000000000006,
+    "intraday_ev_bonus_min": 0.0,
+    "intraday_ev_bonus_max": 0.0,
+    "intraday_ev_bonus_mean": 0.0,
+    "ev_penalty_total_extra_min": 0.02194163788053465,
+    "ev_penalty_total_extra_max": 0.04136967139795922,
+    "ev_penalty_total_extra_mean": 0.0320437431929526,
+    "ev_final_min": -0.140190485347312,
+    "ev_final_max": -0.061556797460510376,
+    "ev_final_mean": -0.1199677561064345,
+    "ev_pred_min": -0.140190485347312,
+    "ev_pred_max": -0.061556797460510376,
+    "ev_pred_mean": -0.1199677561064345,
+    "positive_ev_rows": 0,
+    "positive_ev_base_rows": 0,
+    "positive_e_ret_rows": 0,
+    "high_pfill_rows": 2,
+    "low_risk_rows": 0,
+    "top_mean_penalty_drivers": [
+      {
+        "name": "risk_penalty_extra",
+        "mean": 0.028619135845568796
       },
       {
-        "ts_code": "002144.SZ",
-        "name": "宏达高科",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.006550000000000001,
-        "intraday_penalty_extra": 0.007905000000000002,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.031342343398537774
+        "name": "risk_penalty",
+        "mean": 0.01873588425879536
+      },
+      {
+        "name": "intraday_penalty_extra",
+        "mean": 0.007905000000000006
+      },
+      {
+        "name": "pfill_penalty_extra",
+        "mean": 0.0034246073473838123
+      },
+      {
+        "name": "cost_est",
+        "mean": 0.00166548495
+      }
+    ],
+    "primary_no_trade_reason": "no_positive_e_ret_after_model",
+    "top_ev_rows": [
+      {
+        "ts_code": "920267.BJ",
+        "name": "鑫汇科",
+        "ev_pred": -0.061556797460510376,
+        "ev_base": -0.03362672399210277,
+        "p_fill_pred": 0.8441914989032597,
+        "e_ret_pred": -0.015487270067891546,
+        "cost_est": 0.00204567,
+        "risk_penalty": 0.018506832259569818,
+        "extra_penalty": 0.027930073468407604,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "603538.SH",
+        "name": "美诺华",
+        "ev_pred": -0.06785200643460249,
+        "ev_base": -0.029374165455424567,
+        "p_fill_pred": 0.9003906793150744,
+        "e_ret_pred": -0.0011499291132291388,
+        "cost_est": 0.00226158,
+        "risk_penalty": 0.026077200000000002,
+        "extra_penalty": 0.03847784097917792,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "920943.BJ",
+        "name": "优机股份",
+        "ev_pred": -0.08310413757943634,
+        "ev_base": -0.06042366331683852,
+        "p_fill_pred": 0.8190385279326753,
+        "e_ret_pred": -0.055738593191785854,
+        "cost_est": 0.001159108,
+        "risk_penalty": 0.013612500000000001,
+        "extra_penalty": 0.02268047426259782,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "603698.SH",
+        "name": "航天工程",
+        "ev_pred": -0.09528129714727351,
+        "ev_base": -0.06610040432187501,
+        "p_fill_pred": 0.7463414503763877,
+        "e_ret_pred": -0.07063695807385975,
+        "cost_est": 0.001155048,
+        "risk_penalty": 0.012226066582854444,
+        "extra_penalty": 0.029180892825398506,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "001208.SZ",
+        "name": "华菱线缆",
+        "ev_pred": -0.10106377437820777,
+        "ev_base": -0.0788633605844891,
+        "p_fill_pred": 0.8255927708301564,
+        "e_ret_pred": -0.07807610970476167,
+        "cost_est": 0.0013012079999999999,
+        "risk_penalty": 0.013103080837695652,
+        "extra_penalty": 0.022200413793718666,
+        "intraday_ev_bonus": 0.0
       }
     ]
   },
@@ -1071,10 +1203,10 @@
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
     "p_fill_degrade_reason": "",
-    "eret_pred_src": "model:lgbm",
+    "eret_pred_src": "model:lr",
     "eret_model_loaded": true,
-    "eret_model_kind": "lgbm",
-    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
+    "eret_model_kind": "lr",
+    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lr.joblib",
     "eret_degrade_reason": ""
   },
   "paths": {
@@ -1089,8 +1221,8 @@
   },
   "report_stats": {
     "high_ev_low_risk_rows": 0,
-    "topn_rows": 6,
-    "full_candidate_rows": 64
+    "topn_rows": 0,
+    "full_candidate_rows": 70
   },
   "intraday_execution_penalty_mean": 0.00655
 }
