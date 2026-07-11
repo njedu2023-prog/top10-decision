@@ -258,7 +258,7 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                 "T1-Up": _fmt_pct(r.get("t1_continue_up_rate"), 2),
                 "T1-Accept": _fmt_num(r.get("t1_accept_score"), 2),
                 "T1-Relay": _fmt_num(r.get("limitup_continuation_score"), 2),
-                "Score": _fmt_num(r.get("premium_final_score", r.get("premium_adaptive_score", r.get("自适应排序评分"))), 2),
+                "Score": _fmt_num(r.get("premium_rank_score", r.get("premium_final_score", r.get("premium_adaptive_score", r.get("自适应排序评分")))), 2),
                 "Gate": _clean_text(r.get("premium_exclude_reason"), "ok"),
                 "T Auction Action": _clean_text(
                     r.get("T日建议买入方式", r.get("T+1建议买入方式", r.get("t1_buy_method")))
@@ -573,7 +573,16 @@ def render_premium_report_html(
     .nav-btn:hover, .date-chip:hover, .tab-btn:hover {{ border-color:#b6c0d0; background:#f8fafc; }}
     .nav-btn.primary, .date-chip.active, .tab-btn.active {{ border-color:#1f6f54; color:#0f5b43; background:#edf8f3; font-weight:700; }}
     .nav-btn.disabled {{ color:#a0a8b5; background:#f4f6f9; cursor:not-allowed; }}
+    .metrics-details {{ margin:0 0 16px; }}
+    .metrics-details > summary {{ display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:52px; padding:10px 14px; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer; color:#344054; font-size:14px; font-weight:700; user-select:none; }}
+    .metrics-details > summary::-webkit-details-marker {{ display:none; }}
+    .metrics-details > summary::marker {{ content:""; }}
+    .metrics-toggle {{ width:30px; height:30px; flex:0 0 30px; display:grid; place-items:center; border:1px solid #aeb8c7; border-radius:50%; color:#1d2939; background:#fff; font-size:20px; line-height:1; font-weight:400; }}
+    .metrics-toggle::before {{ content:"+"; transform:translateY(-1px); }}
+    .metrics-details[open] .metrics-toggle::before {{ content:"−"; transform:none; }}
+    .metrics-details[open] > summary {{ border-bottom-left-radius:0; border-bottom-right-radius:0; }}
     .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-bottom:16px; }}
+    .metrics-details .metrics {{ padding:12px; margin:0; border:1px solid var(--line); border-top:0; border-radius:0 0 8px 8px; background:#f7f9fc; }}
     .metric {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-height:98px; box-shadow:var(--shadow); }}
     .metric-wide {{ grid-column:span 2; }}
     .metric span {{ display:block; color:var(--muted); font-size:13px; }}
@@ -636,7 +645,10 @@ def render_premium_report_html(
   </header>
   <main>
     {nav}
-    <div class="metrics">{''.join(cards)}</div>
+    <details class="metrics-details">
+      <summary><span>核心指标</span><span class="metrics-toggle" aria-hidden="true"></span></summary>
+      <div class="metrics">{''.join(cards)}</div>
+    </details>
     <div class="toolbar">
       <div class="tabs" role="tablist" aria-label="List switcher">
         <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 Execution List</button>

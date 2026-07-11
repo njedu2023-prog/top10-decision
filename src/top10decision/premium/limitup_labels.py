@@ -196,9 +196,15 @@ def build_limitup_labels(
     s["d_trade_date"] = s["_trade_date_norm"]
     s["t_trade_date"] = s["d_trade_date"].map(lambda d: next_map.get(d, (None, None))[0])
     s["t1_trade_date"] = s["d_trade_date"].map(lambda d: next_map.get(d, (None, None))[1])
-    s["label_matured"] = (
-        s["t_trade_date"].notna()
+    strict_date_order = (
+        s["d_trade_date"].notna()
+        & s["t_trade_date"].notna()
         & s["t1_trade_date"].notna()
+        & (s["d_trade_date"].astype(str) < s["t_trade_date"].astype(str))
+        & (s["t_trade_date"].astype(str) < s["t1_trade_date"].astype(str))
+    )
+    s["label_matured"] = (
+        strict_date_order
         & (s["t1_trade_date"].astype(str) <= str(as_of_date))
     ).astype(int)
 
@@ -289,12 +295,15 @@ def build_limitup_labels(
     if "d_close" not in out.columns:
         out["d_close"] = pd.to_numeric(out[m_close], errors="coerce") if m_close in out.columns else np.nan
 
-    if "t_limit_up" in out.columns:
-        out["_t_limit_price"] = pd.to_numeric(out["t_limit_up"], errors="coerce")
-    else:
-        pre = pd.to_numeric(out.get("t_pre_close", np.nan), errors="coerce")
-        rates = out["_ts_code_norm"].map(_limit_rate_for_code).astype(float)
-        out["_t_limit_price"] = (pre * (1.0 + rates)).round(2)
+    d_close = pd.to_numeric(out["d_close"], errors="coerce")
+    pre = pd.to_numeric(out.get("t_pre_close", d_close), errors="coerce")
+    pre = pre.where(pre.gt(0), d_close)
+    rates = out["_ts_code_norm"].map(_limit_rate_for_code).astype(float)
+    fallback_limit = (pre * (1.0 + rates)).round(2)
+    official_limit = pd.to_numeric(out.get("t_limit_up", np.nan), errors="coerce")
+    if not isinstance(official_limit, pd.Series):
+        official_limit = pd.Series(np.nan, index=out.index, dtype="float64")
+    out["_t_limit_price"] = official_limit.where(official_limit.gt(0), fallback_limit)
 
     out["t_limit_price"] = out["_t_limit_price"]
     t_open = pd.to_numeric(out.get("t_open", np.nan), errors="coerce")
@@ -306,8 +315,10 @@ def build_limitup_labels(
     t1_low = pd.to_numeric(out.get("t1_low", np.nan), errors="coerce")
     t1_close = pd.to_numeric(out.get("t1_close", np.nan), errors="coerce")
     t1_high = pd.to_numeric(out.get("t1_high", np.nan), errors="coerce")
-    d_close = pd.to_numeric(out["d_close"], errors="coerce")
-    buy_base = t_close.where(t_close.notna(), d_close)
+    # 日频环境中以 T 日开盘价作为集合竞价成交代理，所有 T+1 收益口径统一使用它。
+    buy_base = t_open.where(t_open.gt(0), np.nan)
+    out["entry_price_proxy"] = buy_base
+    out["entry_price_proxy_type"] = np.where(buy_base.notna(), "t_open_daily_proxy", "")
 
     out["t_touch_limitup"] = ((t_high >= t_limit * (1.0 - limit_tolerance)) & t_limit.notna()).astype(float)
     out["t_open_up_hit"] = (t_open > d_close).astype(float)
@@ -329,9 +340,16 @@ def build_limitup_labels(
     out["t1_big_drawdown_hit"] = (pd.to_numeric(out["t1_low_ret"], errors="coerce") <= -0.04).astype(float)
     out["t1_limitdown_risk_hit"] = (pd.to_numeric(out["t1_low_ret"], errors="coerce") <= -0.08).astype(float)
 
-    valid_t = t_close.notna() & t_high.notna()
-    valid_t1 = t1_close.notna() & t1_high.notna()
-    valid_all = out["label_matured"].eq(1) & valid_t & valid_t1
+    valid_t = t_open.notna() & t_high.notna() & t_low.notna() & t_close.notna()
+    valid_t1 = t1_open.notna() & t1_high.notna() & t1_low.notna() & t1_close.notna()
+    strict_order = (
+        out["d_trade_date"].notna()
+        & out["t_trade_date"].notna()
+        & out["t1_trade_date"].notna()
+        & (out["d_trade_date"].astype(str) < out["t_trade_date"].astype(str))
+        & (out["t_trade_date"].astype(str) < out["t1_trade_date"].astype(str))
+    )
+    valid_all = out["label_matured"].eq(1) & strict_order & valid_t & valid_t1
 
     label_cols = [
         "t_open_up_hit",
@@ -362,10 +380,11 @@ def build_limitup_labels(
         [
             out["t_trade_date"].isna(),
             out["t1_trade_date"].isna(),
+            ~strict_order,
             out["label_matured"].ne(1),
             valid_all,
         ],
-        ["missing_t_trade_date", "missing_t1_trade_date", "not_matured", "ok"],
+        ["missing_t_trade_date", "missing_t1_trade_date", "invalid_D_T_T1_order", "not_matured", "ok"],
         default="missing_price",
     )
     out["calendar_reason"] = np.where(

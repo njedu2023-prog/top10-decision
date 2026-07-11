@@ -69,6 +69,23 @@ def _file_exists(p: Path) -> bool:
         return False
 
 
+def _repo_root(cfg) -> Path:
+    fn = _safe_getattr(cfg, "repo_root", None)
+    if callable(fn):
+        try:
+            return Path(fn()).resolve()
+        except Exception:
+            pass
+    return Path.cwd().resolve()
+
+
+def _first_available(paths: List[Path]) -> Path | None:
+    for path in paths:
+        if _file_exists(path):
+            return path
+    return None
+
+
 def _dedup(xs: List[str]) -> List[str]:
     out: List[str] = []
     seen = set()
@@ -102,10 +119,17 @@ def _pack1_ok(cfg, trade_date: str) -> Tuple[bool, List[str], List[str], List[st
     miss_files: List[str] = []
     notes: List[str] = []
 
-    p = _market_daily_path(cfg, trade_date)
-    if not _file_exists(p):
-        miss_files.append(str(p))
-        notes.append(f"Pack1 disabled: market cache missing -> {p}")
+    td = str(trade_date)[:8]
+    root = _repo_root(cfg)
+    candidates = [
+        root / "data" / "market" / f"features_base_{td}.csv",
+        root / "data" / "market" / "raw" / td[:4] / td / "daily_basic.csv",
+        _market_daily_path(cfg, td),
+    ]
+    p = _first_available(candidates)
+    if p is None:
+        miss_files.extend(str(x) for x in candidates)
+        notes.append("Pack1 disabled: no base/daily-basic source")
         return False, miss_fields, miss_files, notes
 
     notes.append(f"Pack1 enabled: market cache found -> {p}")
@@ -119,7 +143,17 @@ def _pack2_soft(cfg, trade_date: str) -> Tuple[bool, List[str], List[str], List[
     - 不检查依赖
     - 不会导致 degrade
     """
-    return True, [], [], ["Pack2 enabled (soft mode, fixed)"]
+    td = str(trade_date)[:8]
+    root = _repo_root(cfg)
+    candidates = [
+        root / "data" / "market" / f"features_limit_{td}.csv",
+        root / "data" / "market" / "raw" / td[:4] / td / "limit_list_d.csv",
+        root / "data" / "limit" / f"limit_micro_{td}.csv",
+    ]
+    hit = _first_available(candidates)
+    if hit is None:
+        return False, [], [str(x) for x in candidates], ["Pack2 unavailable: no limit-structure source"]
+    return True, [], [], [f"Pack2 enabled: {hit}"]
 
 
 def _pack3_intraday_soft(cfg, trade_date: str) -> Tuple[bool, List[str], List[str], List[str]]:
@@ -131,7 +165,17 @@ def _pack3_intraday_soft(cfg, trade_date: str) -> Tuple[bool, List[str], List[st
     - 原始 intraday_features / stk_auction 文件可能按日期或 latest 存在；
     - 缺失时应降为中性因子，而不是阻断 Premium 主流程。
     """
-    return True, [], [], ["Pack3 enabled: intraday/auction soft factors"]
+    td = str(trade_date)[:8]
+    root = _repo_root(cfg)
+    candidates = [
+        root / "data" / "market" / f"features_limit_{td}.csv",
+        root / "data" / "market" / "raw" / td[:4] / td / "intraday_features.csv",
+        root / "data" / "market" / "raw" / td[:4] / td / "stk_auction.csv",
+    ]
+    hit = _first_available(candidates)
+    if hit is None:
+        return False, [], [str(x) for x in candidates], ["Pack3 unavailable: no intraday/auction source"]
+    return True, [], [], [f"Pack3 enabled: {hit}"]
 
 
 # --------------------------
@@ -166,17 +210,27 @@ def detect_factor_packs(cfg, trade_date: str) -> PackStatus:
         missing_fields.extend(mf1)
         missing_files.extend(mfile1)
 
-    # Pack2 固定软启动（永远 used，不进入 missing）
+    # Pack2: soft at scoring time, but registry reports real availability.
     ok2, mf2, mfile2, n2 = _pack2_soft(cfg, trade_date)
     notes.extend(n2)
-    packs_used.append("Pack2")
+    if ok2:
+        packs_used.append("Pack2")
+    else:
+        packs_missing.append("Pack2")
+        missing_fields.extend(mf2)
+        missing_files.extend(mfile2)
 
-    # Pack3 分钟/竞价软启动（永远 used，不进入 missing）
+    # Pack3: soft at scoring time, but never claim full mode without a source.
     ok3, mf3, mfile3, n3 = _pack3_intraday_soft(cfg, trade_date)
     notes.extend(n3)
-    packs_used.append("Pack3")
+    if ok3:
+        packs_used.append("Pack3")
+    else:
+        packs_missing.append("Pack3")
+        missing_fields.extend(mf3)
+        missing_files.extend(mfile3)
 
-    # 降级只由 Pack1 决定（Pack2/Pack3 永远不触发）
+    # Any unavailable pack is visible in audit output; Pack0 still guarantees a run.
     degrade_mode = "degraded" if packs_missing else "full"
 
     return PackStatus(

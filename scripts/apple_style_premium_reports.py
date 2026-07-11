@@ -33,7 +33,16 @@ PREMIUM_STYLE = '''<style>
     .nav-btn:hover,.date-chip:hover,.tab-btn:hover{background:#fff;border-color:var(--line-soft)}
     .nav-btn.primary,.date-chip.active,.tab-btn.active{color:#fff;background:#1d1d1f;border-color:#1d1d1f;font-weight:600}
     .nav-btn.disabled{color:#a1a1a6;background:transparent;cursor:not-allowed}
+    .metrics-details{margin:0 0 16px}
+    .metrics-details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;color:#3a3a3c;font-size:14px;font-weight:600;user-select:none}
+    .metrics-details>summary::-webkit-details-marker{display:none}
+    .metrics-details>summary::marker{content:""}
+    .metrics-toggle{width:30px;height:30px;flex:0 0 30px;display:grid;place-items:center;border:1px solid #b8b8bd;border-radius:50%;color:#1d1d1f;background:#fff;font-size:20px;line-height:1;font-weight:400}
+    .metrics-toggle::before{content:"+";transform:translateY(-1px)}
+    .metrics-details[open] .metrics-toggle::before{content:"−";transform:none}
+    .metrics-details[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
     .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:12px;margin-bottom:16px}
+    .metrics-details .metrics{padding:12px;margin:0;border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px;background:#f7f7f9}
     .metric{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:16px 17px;min-height:104px;box-shadow:var(--shadow)}
     .metric-wide{grid-column:span 2}
     .metric span{display:block;color:var(--muted);font-size:11.5px;line-height:1.35;font-weight:600}
@@ -177,14 +186,8 @@ def _parse_rate(value: str) -> str:
 
 def _truth_note(topn: int, rate: str, hits: int, total: int, d: str, t: str, t1: str) -> str:
     if total > 0 and rate != '-':
-        return (
-            f'TOP{topn}：D {d} -> T {t}，T日收盘涨停命中 {hits}/{total}，命中率 {rate}；'
-            f'验证口径：T日收盘涨停=命中；T+1 {t1} 用于后续接力验证。'
-        )
-    return (
-        f'TOP{topn}：D {d} -> T {t}，等待T日收盘后的市场真值，当前不计入命中率；'
-        f'验证口径：T日收盘涨停=命中；T+1 {t1} 用于后续接力验证。'
-    )
+        return f'TOP{topn}：D {d} -> T {t}，T日收盘涨停命中 {hits}/{total}，命中率 {rate}'
+    return f'TOP{topn}：D {d} -> T {t}，等待T日收盘后的市场真值，当前不计入命中率'
 
 
 def _status_note(raw: str, d: str, t: str) -> str:
@@ -322,3 +325,4 @@ def main() -> int:
 
 if __name__ == '__main__':
     raise SystemExit(main())
+

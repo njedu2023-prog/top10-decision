@@ -407,23 +407,19 @@ def _real_ret_from_verify_df(df: pd.DataFrame) -> pd.Series:
     y = _safe_numeric_series(
         df,
         [
+            "t1_close_ret",
+            "premium_ret_t1_to_t2",
+            "realized_ret_t1_to_t2",
             "real_premium_ret",
             "real_ret",
-            "actual_ret",
             "premium_real_ret",
-            "ret_real",
-            "y_true",
-            "truth_ret",
-            "t2_ret",
-            "close_t2_ret",
-            "r_actual",
         ],
         default=np.nan,
     )
     if y.notna().any():
         return y
 
-    c2 = _safe_numeric_series(df, ["close_T", "close_2", "close_t1", "buy_close", "entry_close", "close_buy"], default=np.nan)
+    c2 = _safe_numeric_series(df, ["entry_price_proxy", "open_T_actual", "t_open", "open_t"], default=np.nan)
     c3 = _safe_numeric_series(df, ["close_T2_actual", "close_3", "close_t2", "sell_close", "exit_close", "close_sell"], default=np.nan)
     with np.errstate(divide="ignore", invalid="ignore"):
         derived = c3 / c2 - 1.0
@@ -847,25 +843,16 @@ def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.Dat
             "p_fill_pred": ["p_fill_pred", "p_fill", "P_fill", "dec_p_fill"],
             "cost_total": ["cost_total", "cost", "trade_cost"],
             "risk_penalty_total": ["risk_penalty_total", "risk_penalty", "risk_score"],
-            "ev": ["ev", "EV", "score_ev", "pred_ev", "final_score", "score"],
+            "ev": ["ev", "EV", "score_ev", "pred_ev"],
             "turnover_rate": ["turnover_rate", "换手率"],
             "amount": ["amount", "成交额"],
             "vol": ["vol", "volume", "成交量"],
             "close": ["close", "close_t", "收盘价", "close_T", "close_2", "close_t1"],
             "pct_chg": ["pct_chg", "pct_change", "涨跌幅"],
             "amplitude": ["amplitude", "range_1d", "振幅"],
-            "rank_eret_plus": ["rank_eret_plus", "rank", "E_ret_plus排名"],
-            "eret_plus_conf_score": ["eret_plus_conf_score", "EHX置信分"],
-            "r_p50": ["r_p50"],
-            "in_p10": ["in_p10"],
-            "in_p50": ["in_p50"],
         }
         for target, candidates in feature_candidates.items():
             s = _safe_numeric_series(df, candidates, default=np.nan)
-            if s.isna().all() and target in ("in_p10", "in_p50"):
-                col = _first_existing_col(df, candidates)
-                if col:
-                    s = df[col].astype(str).str.lower().isin(["true", "1", "yes", "是"]).astype(float)
             out[target] = s
 
         out["delta_ret"] = out["real_premium_ret"] - out["eret_pred_raw"]
@@ -890,10 +877,10 @@ def _collect_ehx_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd.Dat
 # ========= premium_verify 回收涨停概率引擎样本 =========
 
 def _t1_close_ret_from_verify_df(df: pd.DataFrame) -> pd.Series:
-    """优先用 T 日可接受买入价做 T+1 收盘收益，缺失时退回旧 actual_ret。"""
+    """Return T+1 close return using the canonical T-open execution proxy."""
     explicit = _safe_numeric_series(
         df,
-        ["t1_close_ret", "premium_ret_t1_to_t2", "realized_ret_t1_to_t2", "actual_ret", "r_actual"],
+        ["t1_close_ret", "premium_ret_t1_to_t2", "realized_ret_t1_to_t2"],
         default=np.nan,
     )
     if explicit.notna().any():
@@ -902,7 +889,7 @@ def _t1_close_ret_from_verify_df(df: pd.DataFrame) -> pd.Series:
     close_t1 = _safe_numeric_series(df, ["close_T2_actual", "close_t2", "sell_close", "exit_close"], default=np.nan)
     entry = _safe_numeric_series(
         df,
-        ["t_max_buy_price", "T日可接受买入价", "entry_price_t1", "entry_price_proxy_t1", "close_T", "close_2"],
+        ["entry_price_proxy", "open_T_actual", "t_open", "open_t"],
         default=np.nan,
     )
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -918,7 +905,7 @@ def _t1_high_ret_from_verify_df(df: pd.DataFrame, close_ret: pd.Series) -> pd.Se
     high_t1 = _safe_numeric_series(df, ["high_T2_actual", "high_t2", "high_sell"], default=np.nan)
     entry = _safe_numeric_series(
         df,
-        ["t_max_buy_price", "T日可接受买入价", "entry_price_t1", "entry_price_proxy_t1", "close_T", "close_2"],
+        ["entry_price_proxy", "open_T_actual", "t_open", "open_t"],
         default=np.nan,
     )
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -972,7 +959,8 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             stats["notes"].append(f"skip {path.name}: missing ts_code")
             continue
 
-        ready = _bool_numeric_series(df, ["t_limitup_verify_ready", "label_matured"], default=np.nan)
+        ready_t = _bool_numeric_series(df, ["t_limitup_verify_ready"], default=np.nan)
+        ready_t1 = _bool_numeric_series(df, ["t1_verify_ready", "label_matured"], default=np.nan)
         t_up = _bool_numeric_series(df, ["t_up_actual", "t_up_hit"], default=np.nan)
         t_limitup = _bool_numeric_series(df, ["t_limitup_actual", "t_limitup_hit"], default=np.nan)
         t_touch = _bool_numeric_series(df, ["t_touch_limitup_actual", "t_touch_limitup"], default=np.nan)
@@ -986,10 +974,10 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         t1_low_actual = _safe_numeric_series(df, ["low_T2_actual", "t1_low", "low_t1"], default=np.nan)
         entry_price = _price_numeric_series(
             df,
-            ["t_max_buy_price", "T日可接受买入价", "entry_price_t1", "entry_price_proxy_t1", "close_T_actual", "close_T"],
+            ["entry_price_proxy", "open_T_actual", "t_open", "open_t"],
             default=np.nan,
         )
-        entry_price = entry_price.where(entry_price > 0, t_close_actual)
+        entry_price = entry_price.where(entry_price > 0, t_open_actual)
         t_close_ret = _safe_numeric_series(df, ["t_close_ret"], default=np.nan)
         with np.errstate(divide="ignore", invalid="ignore"):
             t_close_ret = t_close_ret.where(t_close_ret.notna(), t_close_actual / d_close - 1.0)
@@ -1015,7 +1003,16 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         out["ts_code"] = df[ts_col].astype(str).str.strip()
         out["name"] = df[name_col].astype(str) if name_col else pd.NA
 
-        out["label_matured"] = np.where(ready.notna(), ready, 1.0)
+        date_order_ok = (
+            out["d_trade_date"].notna()
+            & out["t_trade_date"].notna()
+            & out["t1_trade_date"].notna()
+            & (out["d_trade_date"].astype(str) < out["t_trade_date"].astype(str))
+            & (out["t_trade_date"].astype(str) < out["t1_trade_date"].astype(str))
+        )
+        out["label_matured"] = np.where(ready_t1.notna(), ready_t1, 0.0)
+        out["t_verify_ready"] = np.where(ready_t.notna(), ready_t, 0.0)
+        out["date_order_valid"] = date_order_ok.astype(float)
         out["t_up_hit"] = t_up
         out["t_open_up_hit"] = (pd.to_numeric(t_open_ret, errors="coerce") > 0).where(pd.to_numeric(t_open_ret, errors="coerce").notna(), np.nan).astype(float)
         out["t_limitup_hit"] = t_limitup
@@ -1059,17 +1056,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             "eret_pred_raw": ["eret_pred_raw", "e_ret_pred_raw", "raw_eret_pred", "E_ret"],
             "eret_plus_value": ["eret_plus_value", "eret_plus", "E_ret_plus"],
             "eret_plus_delta": ["eret_plus_delta"],
-            "eret_plus_conf_score": ["eret_plus_conf_score"],
             "t1_up_rate": ["t1_up_rate", "T+1上涨率"],
-            "rank_limitup_continuation": ["rank_limitup_continuation"],
-            "rank_eret_plus": ["rank_eret_plus"],
-            "rank_r_p50": ["rank_r_p50"],
-            "premium_adaptive_score": ["premium_adaptive_score", "自适应排序评分"],
-            "t_up_attack_score": ["t_up_attack_score"],
-            "t1_accept_score": ["t1_accept_score"],
-            "premium_final_score": ["premium_final_score"],
-            "risk_penalty_score": ["risk_penalty_score"],
-            "execution_score": ["execution_score"],
             "market_score": ["market_score"],
             "mkt_stock_count": ["mkt_stock_count"],
             "mkt_up_ratio": ["mkt_up_ratio"],
@@ -1085,6 +1072,26 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         for target, candidates in feature_candidates.items():
             out[target] = _safe_numeric_series(df, candidates, default=np.nan)
 
+        point_in_time_factor_cols = [
+            "turnover_rate", "turnover_rate_f", "volume_ratio", "circ_mv", "float_mv", "total_mv",
+            "pe_ttm", "pb", "returns_1d", "volatility_5d", "volatility_10d", "volatility_20d",
+            "max_drawdown_20d", "tail_risk_score", "hot_boards_score", "board_crowding_rank",
+            "is_hot_board", "board_rank", "board_limit_up_count", "is_st_like",
+            "open_times", "fd_amount", "seal_amount", "limit_touch_count", "open_board_count",
+            "max_drawdown_after_limit", "reseal_count", "reseal_minutes_avg", "late_volume_ratio",
+            "late_price_weakness", "late_limit_hold_minutes", "late_withdraw_score", "reseal_score",
+            "intraday_quality_score", "intraday_confidence_score", "intraday_risk_score",
+            "intraday_soft_risk_score", "intraday_hard_risk_flag", "auction_strength_score",
+            "auction_amount", "is_limit_up", "break_count_proxy", "limit_up_strength",
+            "factor_intraday_available", "factor_auction_available", "factor_intraday_quality",
+            "factor_intraday_confidence", "factor_intraday_soft_risk", "factor_intraday_risk",
+            "factor_intraday_hard_risk", "factor_late_withdraw", "factor_reseal",
+            "factor_open_board_count", "factor_auction_strength", "factor_intraday_attack_edge",
+            "factor_intraday_execution_edge", "factor_intraday_risk_penalty",
+        ]
+        for name in point_in_time_factor_cols:
+            out[name] = _safe_numeric_series(df, [name], default=np.nan)
+
         for c in df.columns:
             name = str(c).strip()
             if re.fullmatch(r"r_p\d{2}", name) or re.fullmatch(r"close_T2_p\d{2}", name):
@@ -1095,6 +1102,8 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
 
         valid = (
             pd.to_numeric(out["label_matured"], errors="coerce").fillna(0).eq(1)
+            & pd.to_numeric(out["t_verify_ready"], errors="coerce").fillna(0).eq(1)
+            & pd.to_numeric(out["date_order_valid"], errors="coerce").fillna(0).eq(1)
             & out["t_up_hit"].notna()
             & out["t_high_profit_hit"].notna()
             & out["t_limitup_hit"].notna()
@@ -1129,13 +1138,13 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
 
 def _build_limitup_feature_cols(samples: pd.DataFrame) -> List[str]:
     allow = [
-        "rank", "is_top10", "is_top20", "close_T",
+        "close_T",
         "p_premium", "e_premium", "score_ev", "confidence", "data_quality",
         "dec_rank", "dec_weight", "dec_p_fill",
         "t_limitup_prob_rule", "t_limitup_strength_rule", "t1_continue_up_rate_rule",
         "limitup_continuation_score_rule",
-        "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_conf_score",
-        "t1_up_rate", "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50",
+        "eret_pred_raw", "eret_plus_value", "eret_plus_delta",
+        "t1_up_rate",
         "mkt_stock_count", "mkt_up_ratio", "mkt_avg_ret", "mkt_median_ret",
         "mkt_strong_count", "mkt_strong_ratio", "mkt_touch_strong_count",
         "mkt_touch_strong_ratio", "mkt_amount_sum", "mkt_emotion_score",
@@ -1148,6 +1157,14 @@ def _build_limitup_feature_cols(samples: pd.DataFrame) -> List[str]:
         "factor_auction_strength", "factor_intraday_attack_edge",
         "factor_intraday_execution_edge", "factor_intraday_risk_penalty",
         "intraday_attack_edge", "intraday_execution_edge", "intraday_risk_penalty",
+        "turnover_rate", "turnover_rate_f", "volume_ratio", "circ_mv", "float_mv", "total_mv",
+        "pe_ttm", "pb", "returns_1d", "volatility_5d", "volatility_10d", "volatility_20d",
+        "max_drawdown_20d", "tail_risk_score", "hot_boards_score", "board_crowding_rank",
+        "is_hot_board", "board_rank", "board_limit_up_count", "is_st_like",
+        "open_times", "fd_amount", "seal_amount", "limit_touch_count", "open_board_count",
+        "max_drawdown_after_limit", "reseal_count", "reseal_minutes_avg", "late_volume_ratio",
+        "late_price_weakness", "late_limit_hold_minutes", "auction_amount", "is_limit_up",
+        "break_count_proxy", "limit_up_strength", "factor_auction_available",
     ]
     allow += [c for c in samples.columns if re.fullmatch(r"r_p\d{2}", str(c)) or re.fullmatch(r"close_T2_p\d{2}", str(c))]
     cols = []
@@ -1176,6 +1193,7 @@ def _train_limitup_probability_from_verify(
     stats: Dict,
 ) -> Dict:
     model_path = cfg.out_root() / "models" / "limitup_probability_engine.joblib"
+    candidate_path = cfg.out_root() / "models" / "limitup_probability_engine_candidate.joblib"
     metrics_path = cfg.out_root() / "models" / "limitup_probability_engine_metrics.csv"
     meta_path = cfg.out_root() / "models" / "limitup_probability_engine_meta.json"
     trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
@@ -1218,16 +1236,22 @@ def _train_limitup_probability_from_verify(
         bundle = fit_limitup_probability_engine(
             samples,
             feature_cols=feature_cols,
-            valid_ratio=0.25,
+            valid_ratio=0.30,
             min_samples=_limitup_probability_min_samples(cfg),
         )
-        save_limitup_probability_bundle(bundle, model_path)
+        save_limitup_probability_bundle(bundle, candidate_path)
+        promoted = bool(getattr(bundle, "model_can_rank", False))
+        if promoted:
+            save_limitup_probability_bundle(bundle, model_path)
         bundle.metrics.to_csv(metrics_path, index=False, encoding="utf-8-sig")
 
         state.update({
-            "limitup_trained": True,
-            "limitup_reason": "ok",
-            "limitup_model_path": str(model_path),
+            "limitup_trained": promoted,
+            "limitup_candidate_trained": True,
+            "limitup_promoted": promoted,
+            "limitup_reason": "ok_promoted" if promoted else str(bundle.gate_reason),
+            "limitup_model_path": str(model_path) if promoted else "",
+            "limitup_candidate_path": str(candidate_path),
             "limitup_metrics_path": str(metrics_path),
             "limitup_trainset_path": str(trainset_path),
             "limitup_feature_n": int(len(feature_cols)),
@@ -1240,7 +1264,10 @@ def _train_limitup_probability_from_verify(
                 "kind": "limitup_probability_engine",
                 "model_version": cfg.model_version,
                 "trained": True,
-                "reason": "ok",
+                "reason": "ok_promoted" if promoted else str(bundle.gate_reason),
+                "promoted": promoted,
+                "model_can_rank": promoted,
+                "gate_reason": str(bundle.gate_reason),
                 "source": "premium_verify",
                 "feature_cols": feature_cols,
                 "n_samples": n_samples,
@@ -1248,6 +1275,10 @@ def _train_limitup_probability_from_verify(
                 "min_samples": _limitup_probability_min_samples(cfg),
                 "train_end_date": bundle.train_end_date,
                 "valid_start_date": bundle.valid_start_date,
+                "validation_days": int(bundle.validation_days),
+                "validation_samples": int(bundle.validation_samples),
+                "candidate_model_path": str(candidate_path),
+                "active_model_path": str(model_path) if model_path.exists() else "",
                 "metrics": bundle.metrics.to_dict(orient="records"),
                 "stats": stats,
                 "created_at_utc": utc_now_iso(),
@@ -1303,11 +1334,6 @@ def _build_ehx_feature_cols(samples: pd.DataFrame) -> List[str]:
         "close",
         "pct_chg",
         "amplitude",
-        "rank_eret_plus",
-        "eret_plus_conf_score",
-        "r_p50",
-        "in_p10",
-        "in_p50",
         "intraday_quality_score",
         "intraday_soft_risk_score",
         "intraday_hard_risk_flag",
@@ -1421,6 +1447,116 @@ def _ehx_min_samples(cfg: PremiumConfig) -> int:
     return max(10, min(30, int(getattr(cfg, "min_train_days", 3)) * 5))
 
 
+def _daily_ehx_rank_ic(frame: pd.DataFrame, pred_col: str) -> float:
+    values: List[float] = []
+    for _, day in frame.groupby("trade_date", sort=True):
+        if len(day) < 3:
+            continue
+        ic = _spearman_rank_ic(
+            pd.to_numeric(day[pred_col], errors="coerce").to_numpy(),
+            pd.to_numeric(day["real_premium_ret"], errors="coerce").to_numpy(),
+        )
+        if np.isfinite(ic):
+            values.append(float(ic))
+    return float(np.mean(values)) if values else float("nan")
+
+
+def _fit_validated_ehx(
+    samples: pd.DataFrame,
+    feature_cols: List[str],
+) -> Tuple[Optional[object], object, Dict[str, object]]:
+    """Train EHX with a purged date holdout and return only a validated model."""
+    data = samples.copy()
+    data["trade_date"] = data["trade_date"].astype(str).map(_to_yyyymmdd)
+    dates = sorted(d for d in data["trade_date"].dropna().unique() if len(str(d)) == 8)
+    if len(dates) < 8:
+        raise ValueError(f"ehx_validation_days_not_enough:{len(dates)}<8")
+
+    cut = max(1, int(len(dates) * 0.70))
+    cut = min(cut, len(dates) - 1)
+    train_cut = max(1, cut - 2)
+    train_dates = set(dates[:train_cut])
+    valid_dates = set(dates[cut:])
+    train = data[data["trade_date"].isin(train_dates)].copy()
+    valid = data[data["trade_date"].isin(valid_dates)].copy()
+    if len(train) < 30 or len(valid) < 30:
+        raise ValueError(f"ehx_validation_samples_not_enough:train={len(train)};valid={len(valid)}")
+
+    X_train = _prepare_numeric_matrix(train, feature_cols)
+    y_train = pd.to_numeric(train["delta_ret"], errors="coerce").fillna(0.0)
+    candidate = fit_ehx_delta_regressor(X_train, y_train, feature_cols=list(X_train.columns))
+
+    X_valid = _prepare_numeric_matrix(valid, feature_cols)
+    delta_hat = np.asarray(candidate.predict(X_valid), dtype=float)
+    real = pd.to_numeric(valid["real_premium_ret"], errors="coerce").to_numpy(dtype=float)
+    raw = pd.to_numeric(valid["eret_pred_raw"], errors="coerce").to_numpy(dtype=float)
+    plus = raw + delta_hat
+    raw_mae = _mae(real, raw)
+    plus_mae = _mae(real, plus)
+    delta_true = real - raw
+    delta_mae = _mae(delta_true, delta_hat)
+    delta_rmse = _rmse(delta_true, delta_hat)
+    improve_rate = float(np.mean(np.abs(real - plus) < np.abs(real - raw)))
+
+    eval_frame = valid[["trade_date", "real_premium_ret"]].copy()
+    eval_frame["raw_pred"] = raw
+    eval_frame["plus_pred"] = plus
+    raw_daily_ic = _daily_ehx_rank_ic(eval_frame, "raw_pred")
+    plus_daily_ic = _daily_ehx_rank_ic(eval_frame, "plus_pred")
+    bias = float(abs(np.nanmean(plus - real)))
+    raw_bias = float(abs(np.nanmean(raw - real)))
+    validation_days = int(valid["trade_date"].nunique())
+    validation_samples = int(len(valid))
+
+    rank_ok = np.isfinite(plus_daily_ic) and plus_daily_ic > 0.02
+    if np.isfinite(raw_daily_ic):
+        rank_ok = rank_ok and plus_daily_ic >= raw_daily_ic
+    validation_pass = bool(
+        validation_days >= 5
+        and validation_samples >= 30
+        and np.isfinite(raw_mae)
+        and np.isfinite(plus_mae)
+        and plus_mae <= raw_mae * 0.99
+        and improve_rate >= 0.52
+        and rank_ok
+        and bias <= raw_bias + 0.005
+    )
+    reason = (
+        "validation_pass"
+        if validation_pass
+        else (
+            "validation_not_pass:"
+            f"days={validation_days};samples={validation_samples};"
+            f"raw_mae={raw_mae};plus_mae={plus_mae};improve_rate={improve_rate};"
+            f"raw_daily_ic={raw_daily_ic};plus_daily_ic={plus_daily_ic};bias={bias}"
+        )
+    )
+    metrics: Dict[str, object] = {
+        "validation_pass": validation_pass,
+        "validation_reason": reason,
+        "validation_days": validation_days,
+        "validation_samples": validation_samples,
+        "train_end_date": max(train_dates),
+        "valid_start_date": min(valid_dates),
+        "raw_mae": raw_mae,
+        "plus_mae": plus_mae,
+        "delta_mae": delta_mae,
+        "delta_rmse": delta_rmse,
+        "plus_improve_rate": improve_rate,
+        "raw_daily_rank_ic": raw_daily_ic,
+        "plus_daily_rank_ic": plus_daily_ic,
+        "plus_bias": bias,
+    }
+
+    if not validation_pass:
+        return None, candidate, metrics
+
+    X_full = _prepare_numeric_matrix(data, feature_cols)
+    y_full = pd.to_numeric(data["delta_ret"], errors="coerce").fillna(0.0)
+    promoted = fit_ehx_delta_regressor(X_full, y_full, feature_cols=list(X_full.columns))
+    return promoted, candidate, metrics
+
+
 def _train_ehx_only(
     cfg: PremiumConfig,
     ehx_samples: pd.DataFrame,
@@ -1486,22 +1622,24 @@ def _train_ehx_only(
         )
         return TrainResult(False, ehx_reason, n_samples, n_days, cfg.model_version)
 
-    X_ehx = _prepare_numeric_matrix(ehx_samples, ehx_feature_cols)
-    y_delta = pd.to_numeric(ehx_samples["delta_ret"], errors="coerce").fillna(0.0)
-    ehx_bundle = fit_ehx_delta_regressor(X_ehx, y_delta, feature_cols=list(X_ehx.columns))
-    save_ehx(ehx_bundle, str(ehx_model_path))
+    candidate_path = cfg.out_root() / "models" / "ehx_delta_candidate.joblib"
+    try:
+        ehx_bundle, candidate_bundle, validation = _fit_validated_ehx(ehx_samples, ehx_feature_cols)
+        save_ehx(candidate_bundle, str(candidate_path))
+    except Exception as exc:
+        ehx_bundle = None
+        validation = {
+            "validation_pass": False,
+            "validation_reason": f"validation_error:{type(exc).__name__}:{exc}",
+        }
 
-    delta_pred = np.asarray(ehx_bundle.predict(X_ehx), dtype=float)
-    delta_true = np.asarray(y_delta, dtype=float)
-    delta_mae = _mae(delta_true, delta_pred)
-    delta_rmse = _rmse(delta_true, delta_pred)
-
-    raw_ret = pd.to_numeric(ehx_samples["eret_pred_raw"], errors="coerce").values
-    real_ret = pd.to_numeric(ehx_samples["real_premium_ret"], errors="coerce").values
-    plus_ret = raw_ret + delta_pred
-    raw_abs_err = np.abs(real_ret - raw_ret)
-    plus_abs_err = np.abs(real_ret - plus_ret)
-    plus_improve_rate = float(np.mean(plus_abs_err < raw_abs_err)) if len(raw_abs_err) > 0 else float("nan")
+    validation_pass = bool(validation.get("validation_pass", False))
+    if validation_pass and ehx_bundle is not None:
+        save_ehx(ehx_bundle, str(ehx_model_path))
+    delta_mae = float(validation.get("delta_mae", np.nan))
+    delta_rmse = float(validation.get("delta_rmse", np.nan))
+    plus_improve_rate = float(validation.get("plus_improve_rate", np.nan))
+    ehx_reason = "ok_validated" if validation_pass else str(validation.get("validation_reason", "validation_not_pass"))
 
     last_td = sorted(ehx_samples["trade_date"].dropna().astype(str).unique())[-1] if n_days > 0 else "unknown"
 
@@ -1510,15 +1648,16 @@ def _train_ehx_only(
         {
             "kind": "ehx_delta_regressor",
             "model_version": cfg.model_version,
-            "trained": True,
-            "reason": "ok",
+            "trained": validation_pass,
+            "validation_pass": validation_pass,
+            "reason": ehx_reason,
             "source": reason_prefix,
-            "feature_cols": list(X_ehx.columns),
+            "feature_cols": list(ehx_feature_cols),
             "n_samples": n_samples,
             "n_days": n_days,
-            "delta_mae": delta_mae,
-            "delta_rmse": delta_rmse,
-            "plus_improve_rate": plus_improve_rate,
+            "candidate_model_path": str(candidate_path),
+            "active_model_path": str(ehx_model_path) if ehx_model_path.exists() else "",
+            **validation,
             "created_at_utc": utc_now_iso(),
             "commit_sha": get_commit_sha(cfg.repo_root()),
             "run_id": get_run_id(),
@@ -1533,13 +1672,15 @@ def _train_ehx_only(
         "hit_rate_at_k": float("nan"),
         "mean_ret_at_k": float("nan"),
         "rank_ic": float("nan"),
-        "ehx_trained": 1,
-        "ehx_reason": f"ok:{reason_prefix}",
+        "ehx_trained": int(validation_pass),
+        "ehx_reason": ehx_reason,
         "ehx_n_samples": n_samples,
         "ehx_min_samples": ehx_min_samples,
         "delta_mae": delta_mae,
         "delta_rmse": delta_rmse,
         "plus_improve_rate": plus_improve_rate,
+        "ehx_validation_pass": int(bool(validation.get("validation_pass", False))),
+        "ehx_plus_daily_rank_ic": validation.get("plus_daily_rank_ic", np.nan),
         "model_version": cfg.model_version,
         "run_id": get_run_id(),
         "commit_sha": get_commit_sha(cfg.repo_root()),
@@ -1551,23 +1692,26 @@ def _train_ehx_only(
         cfg,
         trade_date=str(last_td),
         extra={
-            "trained": True,
-            "reason": f"ok:{reason_prefix}",
+            "trained": validation_pass,
+            "reason": ehx_reason,
             "n_samples": n_samples,
             "n_days": n_days,
-            "ehx_trained": True,
-            "ehx_reason": "ok",
+            "ehx_trained": validation_pass,
+            "ehx_reason": ehx_reason,
             "ehx_n_samples": n_samples,
             "ehx_min_samples": ehx_min_samples,
-            "ehx_model_path": str(ehx_model_path),
+            "ehx_model_path": str(ehx_model_path) if validation_pass else "",
+            "ehx_candidate_path": str(candidate_path),
             "ehx_meta_path": str(ehx_meta_path),
             "delta_mae": delta_mae,
             "delta_rmse": delta_rmse,
             "plus_improve_rate": plus_improve_rate,
+            "ehx_validation_pass": bool(validation.get("validation_pass", False)),
+            "ehx_plus_daily_rank_ic": validation.get("plus_daily_rank_ic", np.nan),
             **extra_train_state,
         },
     )
-    return TrainResult(True, f"ok:{reason_prefix}", n_samples, n_days, cfg.model_version)
+    return TrainResult(validation_pass, ehx_reason, n_samples, n_days, cfg.model_version)
 
 
 # ========= 主训练入口 =========
@@ -1760,8 +1904,10 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     delta_rmse = float("nan")
 
     ehx_model_path = cfg.out_root() / "models" / "ehx_delta.joblib"
+    ehx_candidate_path = cfg.out_root() / "models" / "ehx_delta_candidate.joblib"
     ehx_meta_path = cfg.out_root() / "models" / "ehx_meta.json"
     ehx_bundle = None
+    ehx_validation: Dict[str, object] = {}
 
     if len(ehx_samples) < ehx_min_samples:
         ehx_reason = f"ehx_samples_not_enough:{len(ehx_samples)}<{ehx_min_samples}"
@@ -1784,40 +1930,42 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     elif not ehx_feature_cols:
         ehx_reason = "ehx_feature_cols_empty"
     else:
-        X_ehx = _prepare_numeric_matrix(ehx_samples, ehx_feature_cols)
-        y_delta = pd.to_numeric(ehx_samples["delta_ret"], errors="coerce").fillna(0.0)
-        ehx_bundle = fit_ehx_delta_regressor(
-            X_ehx,
-            y_delta,
-            feature_cols=list(X_ehx.columns),
-        )
-        save_ehx(ehx_bundle, str(ehx_model_path))
-
-        delta_pred = np.asarray(ehx_bundle.predict(X_ehx), dtype=float)
-        delta_true = np.asarray(y_delta, dtype=float)
-        delta_mae = _mae(delta_true, delta_pred)
-        delta_rmse = _rmse(delta_true, delta_pred)
+        try:
+            ehx_bundle, candidate_bundle, ehx_validation = _fit_validated_ehx(ehx_samples, ehx_feature_cols)
+            save_ehx(candidate_bundle, str(ehx_candidate_path))
+        except Exception as exc:
+            ehx_bundle = None
+            ehx_validation = {
+                "validation_pass": False,
+                "validation_reason": f"validation_error:{type(exc).__name__}:{exc}",
+            }
+        ehx_trained = bool(ehx_validation.get("validation_pass", False) and ehx_bundle is not None)
+        ehx_reason = "ok_validated" if ehx_trained else str(ehx_validation.get("validation_reason", "validation_not_pass"))
+        delta_mae = float(ehx_validation.get("delta_mae", np.nan))
+        delta_rmse = float(ehx_validation.get("delta_rmse", np.nan))
+        if ehx_trained and ehx_bundle is not None:
+            save_ehx(ehx_bundle, str(ehx_model_path))
 
         _save_ehx_meta(
             ehx_meta_path,
             {
                 "kind": "ehx_delta_regressor",
                 "model_version": cfg.model_version,
-                "trained": True,
-                "reason": "ok",
+                "trained": ehx_trained,
+                "validation_pass": ehx_trained,
+                "reason": ehx_reason,
                 "source": "decision_plus_verify" if not verify_samples.empty else "decision",
-                "feature_cols": list(X_ehx.columns),
+                "feature_cols": list(ehx_feature_cols),
                 "n_samples": int(len(ehx_samples)),
                 "n_days": int(ehx_samples["trade_date"].nunique()) if "trade_date" in ehx_samples.columns else 0,
-                "delta_mae": delta_mae,
-                "delta_rmse": delta_rmse,
+                "candidate_model_path": str(ehx_candidate_path),
+                "active_model_path": str(ehx_model_path) if ehx_model_path.exists() else "",
+                **ehx_validation,
                 "created_at_utc": utc_now_iso(),
                 "commit_sha": get_commit_sha(cfg.repo_root()),
                 "run_id": get_run_id(),
             },
         )
-        ehx_trained = True
-        ehx_reason = "ok"
 
     # ========== 评估：最后一个 trade_date ==========
     last_td = sorted(samples["trade_date"].unique())[-1]
@@ -1836,23 +1984,7 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
     mean_ret = float(np.nanmean(real_topk)) if len(real_topk) > 0 else float("nan")
     rank_ic = _spearman_rank_ic(pred_ev, real)
 
-    plus_improve_rate = float("nan")
-    if ehx_trained and ehx_bundle is not None:
-        df_last_ehx = df_last[
-            df_last["eret_pred_raw"].notna()
-            & df_last["real_premium_ret"].notna()
-        ].reset_index(drop=True)
-        if not df_last_ehx.empty:
-            X_last_ehx = _prepare_numeric_matrix(df_last_ehx, ehx_feature_cols)
-            delta_hat_last = np.asarray(ehx_bundle.predict(X_last_ehx), dtype=float)
-            raw_ret_last = pd.to_numeric(df_last_ehx["eret_pred_raw"], errors="coerce").values
-            real_ret_last = pd.to_numeric(df_last_ehx["real_premium_ret"], errors="coerce").values
-            plus_ret_last = raw_ret_last + delta_hat_last
-
-            raw_abs_err = np.abs(real_ret_last - raw_ret_last)
-            plus_abs_err = np.abs(real_ret_last - plus_ret_last)
-            plus_improve_rate = float(np.mean(plus_abs_err < raw_abs_err)) if len(raw_abs_err) > 0 else float("nan")
-
+    plus_improve_rate = float(ehx_validation.get("plus_improve_rate", np.nan))
     run_id = get_run_id()
     sha = get_commit_sha(cfg.repo_root())
     now = utc_now_iso()
@@ -1902,10 +2034,13 @@ def train_models(cfg: Optional[PremiumConfig] = None) -> TrainResult:
             "ehx_n_samples": int(len(ehx_samples)),
             "ehx_min_samples": int(ehx_min_samples),
             "ehx_model_path": str(ehx_model_path) if ehx_trained else "",
+            "ehx_candidate_path": str(ehx_candidate_path),
             "ehx_meta_path": str(ehx_meta_path),
             "delta_mae": delta_mae,
             "delta_rmse": delta_rmse,
             "plus_improve_rate": plus_improve_rate,
+            "ehx_validation_pass": bool(ehx_validation.get("validation_pass", False)),
+            "ehx_plus_daily_rank_ic": ehx_validation.get("plus_daily_rank_ic", np.nan),
             **limitup_state,
         },
     )

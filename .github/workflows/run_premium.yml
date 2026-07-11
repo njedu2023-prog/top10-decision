@@ -7,6 +7,7 @@ on:
       - ".github/workflows/run_premium.yml"
       - "scripts/run_premium.py"
       - "scripts/backfill_premium_limitup_truth.py"
+      - "scripts/maybe_train_premium.py"
       - "scripts/rebuild_premium_reports.py"
       - "scripts/build_premium_final.py"
       - "scripts/localize_premium_reports.py"
@@ -14,6 +15,7 @@ on:
       - "scripts/clarify_premium_report_metrics.py"
       - "scripts/sync_pred_source.py"
       - "src/top10decision/premium/**"
+      - "tests/test_premium_*.py"
 
   schedule:
     # Mon-Fri 21:15 Beijing (UTC+8) == 13:15 UTC, same as decision mainline.
@@ -90,6 +92,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Premium safety tests
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+        run: |
+          set -e
+          python -m unittest discover -s tests -p 'test_premium_*.py' -v
+
       - name: Sync latest Premium candidate pool
         env:
           A_TOP10_PRED_URL: "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv"
@@ -125,6 +134,23 @@ jobs:
           echo "PREMIUM_CMD=$CMD" >> "$GITHUB_ENV"
           echo "[run_premium] event=$EVENT_NAME cmd=$CMD"
 
+      - name: Backfill matured Premium T and T+1 truth
+        env:
+          TUSHARE_TOKEN: "${{ secrets.TUSHARE_TOKEN }}"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -e
+          python scripts/backfill_premium_limitup_truth.py --verbose
+
+      - name: Incremental Premium training
+        if: env.PREMIUM_CMD == 'predict'
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -e
+          python scripts/maybe_train_premium.py --min-new-days 5 --verbose
+
       - name: Run Premium
         env:
           PYTHONPATH: "${{ github.workspace }}/src"
@@ -133,13 +159,6 @@ jobs:
         run: |
           set -e
           python scripts/run_premium.py "$PREMIUM_CMD" --verbose
-
-      - name: Backfill matured Premium validation truth
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: |
-          set -e
-          python scripts/backfill_premium_limitup_truth.py --verbose
 
       - name: Rebuild Premium HTML report archive
         env:

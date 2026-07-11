@@ -284,13 +284,15 @@ def build_pack0_base(cfg: PremiumConfig, trade_date: str, pred_df: pd.DataFrame)
 
 def build_pack1_tushare_basic(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     td = _to_yyyymmdd(trade_date)
-    p = _optional_path_from_cfg(
-        cfg,
-        "market_basic_path",
-        td,
-        ("data", "market_basic", f"daily_basic_{td}.csv"),
+    root = _repo_root(cfg)
+    legacy = _optional_path_from_cfg(
+        cfg, "market_basic_path", td, ("data", "market_basic", f"daily_basic_{td}.csv")
     )
-    df = _safe_read_csv(p)
+    df = _load_first_existing([
+        root / "data" / "market" / f"features_base_{td}.csv",
+        root / "data" / "market" / "raw" / td[:4] / td / "daily_basic.csv",
+        legacy,
+    ])
     if df is None or df.empty:
         return pd.DataFrame(columns=["ts_code"])
     df = df.copy()
@@ -302,20 +304,29 @@ def build_pack1_tushare_basic(cfg: PremiumConfig, trade_date: str) -> pd.DataFra
 
     # 统一字段名
     out = pd.DataFrame({"ts_code": df["ts_code"]})
-    for c in ("turnover_rate", "circ_mv", "total_mv", "volume_ratio"):
+    for c in (
+        "turnover_rate", "turnover_rate_f", "volume_ratio", "circ_mv", "float_mv", "total_mv",
+        "pe_ttm", "pb", "returns_1d", "volatility_5d", "volatility_10d", "volatility_20d",
+        "max_drawdown_20d", "tail_risk_score", "hot_boards_score", "board_crowding_rank",
+        "is_hot_board", "board_rank", "board_limit_up_count", "is_st_like", "auction_strength_score",
+    ):
         out[c] = df[c] if c in df.columns else pd.NA
+    if "circ_mv" not in df.columns and "float_mv" in df.columns:
+        out["circ_mv"] = df["float_mv"]
     return out
 
 
 def build_pack2_limit_micro(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     td = _to_yyyymmdd(trade_date)
-    p = _optional_path_from_cfg(
-        cfg,
-        "limit_micro_path",
-        td,
-        ("data", "limit", f"limit_micro_{td}.csv"),
+    root = _repo_root(cfg)
+    legacy = _optional_path_from_cfg(
+        cfg, "limit_micro_path", td, ("data", "limit", f"limit_micro_{td}.csv")
     )
-    df = _safe_read_csv(p)
+    df = _load_first_existing([
+        root / "data" / "market" / f"features_limit_{td}.csv",
+        root / "data" / "market" / "raw" / td[:4] / td / "limit_list_d.csv",
+        legacy,
+    ])
     if df is None or df.empty:
         return pd.DataFrame(columns=["ts_code"])
     df = df.copy()
@@ -326,7 +337,15 @@ def build_pack2_limit_micro(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame
     df["ts_code"] = df["ts_code"].astype(str).str.strip()
 
     out = pd.DataFrame({"ts_code": df["ts_code"]})
-    for c in ("open_times", "seal_amount", "first_limit_time", "last_limit_time"):
+    for c in (
+        "open_times", "fd_amount", "seal_amount", "first_limit_time", "last_limit_time",
+        "limit_touch_count", "open_board_count", "max_drawdown_after_limit", "reseal_count",
+        "reseal_minutes_avg", "late_volume_ratio", "late_price_weakness", "late_limit_hold_minutes",
+        "late_withdraw_score", "reseal_score", "intraday_quality_score", "intraday_confidence_score",
+        "intraday_risk_score", "intraday_soft_risk_score", "intraday_hard_risk_flag",
+        "auction_strength_score", "auction_amount", "up_limit", "down_limit", "is_limit_up",
+        "break_count_proxy", "limit_up_strength",
+    ):
         out[c] = df[c] if c in df.columns else pd.NA
     return out
 
@@ -344,6 +363,29 @@ def build_pack3_intraday(cfg: PremiumConfig, trade_date: str, pred_df: pd.DataFr
     src["ts_code"] = src["ts_code"].astype(str).str.strip()
     src = src.drop_duplicates("ts_code", keep="last")
 
+    td = _to_yyyymmdd(trade_date)
+    limit_features = _load_first_existing([
+        _repo_root(cfg) / "data" / "market" / f"features_limit_{td}.csv",
+        _repo_root(cfg) / "data" / "market" / "raw" / td[:4] / td / "intraday_features.csv",
+    ])
+    if limit_features is not None and not limit_features.empty:
+        code_col = _first_existing(limit_features, "ts_code", "code", "symbol", "ticker", "股票代码", "代码")
+        if code_col is not None:
+            extra = limit_features.copy()
+            extra["ts_code"] = extra[code_col].astype(str).str.strip()
+            extra = extra.drop_duplicates("ts_code", keep="last")
+            drop_cols = [] if str(code_col) == "ts_code" else [code_col]
+            src = src.merge(extra.drop(columns=drop_cols, errors="ignore"), on="ts_code", how="left", suffixes=("", "_pack3"))
+            for c in list(src.columns):
+                if not str(c).endswith("_pack3"):
+                    continue
+                base_col = str(c)[:-6]
+                if base_col in src.columns:
+                    src[base_col] = src[base_col].where(src[base_col].notna(), src[c])
+                else:
+                    src[base_col] = src[c]
+                src = src.drop(columns=[c])
+
     out = base.merge(src[["ts_code"]], on="ts_code", how="left")
     idx = out.index
 
@@ -355,6 +397,8 @@ def build_pack3_intraday(cfg: PremiumConfig, trade_date: str, pred_df: pd.DataFr
 
     raw = pd.DataFrame({"ts_code": src["ts_code"].astype(str)})
     raw["factor_intraday_available"] = _num_clip(src_col("intraday_available", default=0.0), 0.0, 1.0, 0.0)
+    auction_raw = src_col("auction_strength_score", "auction_amount", default=np.nan)
+    raw["factor_auction_available"] = auction_raw.notna().astype(float)
     raw["factor_intraday_quality"] = _num01(src_col("intraday_quality_score", "intraday_confidence_score", default=np.nan), default=0.5)
     raw["factor_intraday_confidence"] = _num01(src_col("intraday_confidence_score", "intraday_quality_score", default=np.nan), default=0.5)
     raw["factor_intraday_soft_risk"] = _num01(src_col("intraday_soft_risk_score", "intraday_risk_score", default=np.nan), default=0.0)

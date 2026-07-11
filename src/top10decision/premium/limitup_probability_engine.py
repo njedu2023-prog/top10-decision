@@ -62,10 +62,10 @@ FEATURE_ALLOW_PREFIXES = [
     "intraday_", "auction_",
 ]
 FEATURE_ALLOW_EXACT = {
-    "rank", "is_top10", "is_top20", "close_T", "p_premium", "e_premium", "score_ev",
+    "close_T", "p_premium", "e_premium", "score_ev",
     "confidence", "data_quality", "dec_weight", "dec_rank", "dec_p_fill",
     "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_conf_score",
-    "t1_up_rate", "r_p50", "r_p25", "r_p75", "in_p10", "in_p50",
+    "t1_up_rate", "r_p50", "r_p25", "r_p75",
     "late_withdraw_score", "reseal_score", "open_board_count", "auction_strength_score",
     "intraday_attack_edge", "intraday_execution_edge", "intraday_risk_penalty",
 }
@@ -205,7 +205,12 @@ def _make_X(df: pd.DataFrame, feature_cols: Sequence[str]) -> pd.DataFrame:
     return X.astype(float)
 
 
-def time_split(df: pd.DataFrame, date_col: str = "d_trade_date", valid_ratio: float = 0.25) -> Tuple[pd.DataFrame, pd.DataFrame, str, str]:
+def time_split(
+    df: pd.DataFrame,
+    date_col: str = "d_trade_date",
+    valid_ratio: float = 0.30,
+    embargo_days: int = 2,
+) -> Tuple[pd.DataFrame, pd.DataFrame, str, str]:
     data = df.copy()
     if date_col not in data.columns:
         raise ValueError(f"缺少时间切分字段 {date_col}")
@@ -215,7 +220,10 @@ def time_split(df: pd.DataFrame, date_col: str = "d_trade_date", valid_ratio: fl
         raise ValueError("可用交易日太少，无法做时间切分验证")
     cut = max(1, int(len(dates) * (1 - valid_ratio)))
     cut = min(cut, len(dates) - 1)
-    train_dates = set(dates[:cut])
+    # D-day features can be close to the validation boundary. Purging the last
+    # two training dates avoids accidental overlap with T/T+1 label horizons.
+    train_cut = max(1, cut - max(0, int(embargo_days)))
+    train_dates = set(dates[:train_cut])
     valid_dates = set(dates[cut:])
     train = data[data[date_col].isin(train_dates)].copy()
     valid = data[data[date_col].isin(valid_dates)].copy()
@@ -260,13 +268,48 @@ def _fit_regressor(X: pd.DataFrame, y: pd.Series, min_samples: int = 80):
     return model, float(yy.mean())
 
 
-def _eval_classifier(model, prior: float, X: pd.DataFrame, y: pd.Series, target: str) -> dict:
+def _daily_rank_metrics(prob: pd.Series, actual: pd.Series, dates: pd.Series) -> dict:
+    frame = pd.DataFrame({
+        "prob": pd.to_numeric(prob, errors="coerce"),
+        "actual": pd.to_numeric(actual, errors="coerce"),
+        "date": dates.astype(str),
+    }).dropna(subset=["prob", "actual"])
+    top10_rates: List[float] = []
+    base_rates: List[float] = []
+    daily_ics: List[float] = []
+    for _, day in frame.groupby("date", sort=True):
+        if day.empty:
+            continue
+        top = day.nlargest(min(10, len(day)), "prob")
+        top10_rates.append(float(top["actual"].mean()))
+        base_rates.append(float(day["actual"].mean()))
+        ic = _safe_spearman(day["prob"], day["actual"])
+        if np.isfinite(ic):
+            daily_ics.append(float(ic))
+    return {
+        "daily_precision_top10": float(np.mean(top10_rates)) if top10_rates else np.nan,
+        "daily_base_rate": float(np.mean(base_rates)) if base_rates else np.nan,
+        "daily_top10_lift": float(np.mean(np.asarray(top10_rates) - np.asarray(base_rates))) if top10_rates else np.nan,
+        "daily_spearman_ic": float(np.mean(daily_ics)) if daily_ics else np.nan,
+        "daily_positive_ic_rate": float(np.mean(np.asarray(daily_ics) > 0)) if daily_ics else np.nan,
+        "daily_metric_days": int(len(top10_rates)),
+    }
+
+
+def _eval_classifier(
+    model,
+    prior: float,
+    X: pd.DataFrame,
+    y: pd.Series,
+    target: str,
+    dates: Optional[pd.Series] = None,
+) -> dict:
     yy = pd.to_numeric(y, errors="coerce")
     valid = yy.notna()
     yy = yy[valid].astype(int)
     Xv = X.loc[valid]
     if len(yy) == 0:
-        return {"target": target, "type": "class", "samples": 0, "positive_rate": np.nan, "auc": np.nan, "brier": np.nan, "accuracy": np.nan, "precision_top10": np.nan, "recall": np.nan, "calibration_ece": np.nan}
+        return {"target": target, "type": "class", "samples": 0, "positive_rate": np.nan, "auc": np.nan, "brier": np.nan, "baseline_brier": np.nan, "brier_skill": np.nan, "accuracy": np.nan, "precision_top10": np.nan, "recall": np.nan, "calibration_ece": np.nan}
     if model is None:
         prob = np.full(len(yy), prior, dtype=float)
     elif hasattr(model, "predict_proba"):
@@ -278,21 +321,38 @@ def _eval_classifier(model, prior: float, X: pd.DataFrame, y: pd.Series, target:
     order = np.argsort(-prob)[:top_n] if top_n > 0 else np.array([], dtype=int)
     positives = int(yy.sum())
     ece = _calibration_ece(pd.Series(prob), pd.Series(yy.values))
+    brier = float(brier_score_loss(yy, prob))
+    baseline_prob = np.full(len(yy), float(np.clip(prior, 0.0, 1.0)), dtype=float)
+    baseline_brier = float(brier_score_loss(yy, baseline_prob))
+    daily = {}
+    if dates is not None:
+        date_values = dates.loc[valid]
+        daily = _daily_rank_metrics(pd.Series(prob, index=yy.index), yy, date_values)
     return {
         "target": target,
         "type": "class",
         "samples": int(len(yy)),
         "positive_rate": float(yy.mean()) if len(yy) else np.nan,
         "auc": float(roc_auc_score(yy, prob)) if yy.nunique() == 2 else np.nan,
-        "brier": float(brier_score_loss(yy, prob)),
+        "brier": brier,
+        "baseline_brier": baseline_brier,
+        "brier_skill": float(1.0 - brier / baseline_brier) if baseline_brier > 0 else np.nan,
         "accuracy": float(accuracy_score(yy, pred)),
         "precision_top10": float(yy.iloc[order].mean()) if len(order) else np.nan,
         "recall": float(yy.iloc[order].sum() / positives) if positives > 0 and len(order) else np.nan,
         "calibration_ece": ece,
+        **daily,
     }
 
 
-def _eval_regressor(model, mean_value: float, X: pd.DataFrame, y: pd.Series, target: str) -> dict:
+def _eval_regressor(
+    model,
+    mean_value: float,
+    X: pd.DataFrame,
+    y: pd.Series,
+    target: str,
+    dates: Optional[pd.Series] = None,
+) -> dict:
     yy = pd.to_numeric(y, errors="coerce").replace([np.inf, -np.inf], np.nan)
     valid = yy.notna()
     yy = yy[valid].astype(float)
@@ -301,6 +361,17 @@ def _eval_regressor(model, mean_value: float, X: pd.DataFrame, y: pd.Series, tar
         return {"target": target, "type": "reg", "samples": 0, "mae": np.nan, "rmse": np.nan, "spearman_ic": np.nan, "positive_ic_rate": np.nan}
     pred = np.full(len(yy), mean_value, dtype=float) if model is None else np.asarray(model.predict(Xv), dtype=float)
     ic = _safe_spearman(pd.Series(pred), yy.reset_index(drop=True))
+    daily_ics: List[float] = []
+    if dates is not None:
+        frame = pd.DataFrame({
+            "pred": pred,
+            "actual": yy.to_numpy(),
+            "date": dates.loc[valid].astype(str).to_numpy(),
+        })
+        for _, day in frame.groupby("date", sort=True):
+            day_ic = _safe_spearman(day["pred"], day["actual"])
+            if np.isfinite(day_ic):
+                daily_ics.append(float(day_ic))
     return {
         "target": target,
         "type": "reg",
@@ -309,6 +380,9 @@ def _eval_regressor(model, mean_value: float, X: pd.DataFrame, y: pd.Series, tar
         "rmse": float(np.sqrt(mean_squared_error(yy, pred))),
         "spearman_ic": ic,
         "positive_ic_rate": float(ic > 0) if np.isfinite(ic) else np.nan,
+        "daily_spearman_ic": float(np.mean(daily_ics)) if daily_ics else np.nan,
+        "daily_positive_ic_rate": float(np.mean(np.asarray(daily_ics) > 0)) if daily_ics else np.nan,
+        "daily_metric_days": int(len(daily_ics)),
     }
 
 
@@ -346,14 +420,22 @@ def _metric_value(metrics: pd.DataFrame, target: str, col: str) -> float:
 
 
 def _model_gate(metrics: pd.DataFrame, validation_days: int, validation_samples: int) -> Tuple[bool, str]:
+    t_limit_auc = _metric_value(metrics, "t_limitup_hit", "auc")
+    t_limit_brier_skill = _metric_value(metrics, "t_limitup_hit", "brier_skill")
+    t_limit_top10_lift = _metric_value(metrics, "t_limitup_hit", "daily_top10_lift")
+    t_limit_daily_ic = _metric_value(metrics, "t_limitup_hit", "daily_spearman_ic")
     t1_accept_auc = _metric_value(metrics, "t1_accept_hit", "auc")
-    t1_accept_brier = _metric_value(metrics, "t1_accept_hit", "brier")
-    t1_ret_ic = _metric_value(metrics, "t1_close_ret", "spearman_ic")
+    t1_accept_brier_skill = _metric_value(metrics, "t1_accept_hit", "brier_skill")
+    t1_ret_ic = _metric_value(metrics, "t1_close_ret", "daily_spearman_ic")
     ok = (
-        int(validation_days) >= 20
-        and int(validation_samples) >= 500
-        and np.isfinite(t1_accept_auc) and t1_accept_auc >= 0.53
-        and np.isfinite(t1_accept_brier) and t1_accept_brier <= 0.25
+        int(validation_days) >= 12
+        and int(validation_samples) >= 250
+        and np.isfinite(t_limit_auc) and t_limit_auc >= 0.52
+        and np.isfinite(t_limit_brier_skill) and t_limit_brier_skill > 0
+        and np.isfinite(t_limit_top10_lift) and t_limit_top10_lift >= 0.015
+        and np.isfinite(t_limit_daily_ic) and t_limit_daily_ic > 0
+        and np.isfinite(t1_accept_auc) and t1_accept_auc >= 0.51
+        and np.isfinite(t1_accept_brier_skill) and t1_accept_brier_skill > -0.02
         and np.isfinite(t1_ret_ic) and t1_ret_ic > 0
     )
     if ok:
@@ -361,15 +443,17 @@ def _model_gate(metrics: pd.DataFrame, validation_days: int, validation_samples:
     return False, (
         "disabled_validation_not_pass:"
         f"days={validation_days};samples={validation_samples};"
-        f"t1_accept_auc={t1_accept_auc};t1_accept_brier={t1_accept_brier};"
-        f"t1_ret_spearman_ic={t1_ret_ic}"
+        f"t_limit_auc={t_limit_auc};t_limit_brier_skill={t_limit_brier_skill};"
+        f"t_limit_top10_lift={t_limit_top10_lift};t_limit_daily_ic={t_limit_daily_ic};"
+        f"t1_accept_auc={t1_accept_auc};t1_accept_brier_skill={t1_accept_brier_skill};"
+        f"t1_ret_daily_ic={t1_ret_ic}"
     )
 
 
 def fit_limitup_probability_engine(
     df: pd.DataFrame,
     feature_cols: Optional[Sequence[str]] = None,
-    valid_ratio: float = 0.25,
+    valid_ratio: float = 0.30,
     min_samples: int = 80,
 ) -> LimitupModelBundle:
     data = df.copy()
@@ -397,13 +481,13 @@ def fit_limitup_probability_engine(
         model, prior = _fit_classifier(X_train, train[target], min_samples=min_samples)
         class_models[target] = model
         class_priors[target] = prior
-        metric_rows.append(_eval_classifier(model, prior, X_valid, valid[target], target))
+        metric_rows.append(_eval_classifier(model, prior, X_valid, valid[target], target, valid["d_trade_date"]))
 
     for target in REG_TARGETS:
         model, mean_value = _fit_regressor(X_train, train[target], min_samples=min_samples)
         reg_models[target] = model
         reg_means[target] = mean_value
-        metric_rows.append(_eval_regressor(model, mean_value, X_valid, valid[target], target))
+        metric_rows.append(_eval_regressor(model, mean_value, X_valid, valid[target], target, valid["d_trade_date"]))
 
     metrics = pd.DataFrame(metric_rows)
     validation_days = int(valid["d_trade_date"].nunique()) if "d_trade_date" in valid.columns else 0

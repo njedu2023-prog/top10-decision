@@ -375,7 +375,8 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
 
     rank = _num_series(df, "rank", "dec_rank", default=np.nan)
     actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
-    ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
+    ready = _bool_like_series(df, ["t_limitup_verify_ready", "label_matured"], default=np.nan)
+    ready_t1 = _bool_like_series(df, ["t1_verify_ready", "label_matured"], default=np.nan)
     prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
     t1_score = _prob_series(
         df,
@@ -423,7 +424,7 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     top3_up_total, top3_up_hits, top3_up_rate = calc_up(3)
     top5_up_total, top5_up_hits, top5_up_rate = calc_up(5)
 
-    date_col = _first_existing_col(df, "d_trade_date", "trade_date", "base_date", "d_analysis_trade_date")
+    date_col = _first_existing_col(df, "_history_date", "d_trade_date", "trade_date", "base_date", "d_analysis_trade_date")
     if date_col is not None:
         date_s = df[date_col].astype(str).map(_to_yyyymmdd)
     else:
@@ -465,7 +466,10 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
 
     rank_quality: Dict[str, object] = {}
     rank_quality.update(_daily_rank_ic_stats(df, valid & prob.notna(), prob, actual, date_s, "limitup"))
-    rank_quality.update(_daily_rank_ic_stats(df, valid & t1_score.notna() & t1_ret.notna(), t1_score, t1_ret, date_s, "t1_ret"))
+    t1_valid = valid & t1_score.notna() & t1_ret.notna()
+    if ready_t1.notna().any():
+        t1_valid = t1_valid & ready_t1.fillna(0).eq(1)
+    rank_quality.update(_daily_rank_ic_stats(df, t1_valid, t1_score, t1_ret, date_s, "t1_ret"))
     rank_quality.update(_rank_tier_stats(rank, valid, actual, t1_ret))
 
     return {
@@ -507,21 +511,17 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
 
 
 def _collect_historical_limitup_stats(cfg: PremiumConfig) -> Dict[str, object]:
-    """
-    Prefer the limit-up training sample set because it includes backfilled historical labels.
-    Fall back to raw premium_verify files when the training set has not been generated yet.
-    """
+    """Merge the training archive with newer verify files before summarizing."""
     trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+    rows: List[pd.DataFrame] = []
     if trainset_path.exists():
         try:
             df = _read_csv_smart(trainset_path)
-            stats = _historical_limitup_stats_from_df(df, "limitup_probability_training_samples.csv")
-            if stats.get("ready"):
-                return stats
-        except Exception as e:
-            return {"ready": False, "reason": f"trainset_read_error:{type(e).__name__}", "source": str(trainset_path.name)}
+            if not df.empty:
+                rows.append(df)
+        except Exception:
+            pass
 
-    rows: List[pd.DataFrame] = []
     for p in sorted(cfg.out_root().glob("premium_verify_*.csv")):
         try:
             d = _read_csv_smart(p)
@@ -534,7 +534,22 @@ def _collect_historical_limitup_stats(cfg: PremiumConfig) -> Dict[str, object]:
             continue
     if not rows:
         return {"ready": False, "reason": "no_history_verify_files", "source": "premium_verify_*.csv"}
-    return _historical_limitup_stats_from_df(pd.concat(rows, ignore_index=True, sort=False), "premium_verify_*.csv")
+    history = pd.concat(rows, ignore_index=True, sort=False)
+    code_col = _first_existing_col(history, "ts_code", "code", "symbol")
+    if code_col is not None:
+        history["_history_date"] = ""
+        for date_col in ("d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"):
+            if date_col not in history.columns:
+                continue
+            candidate_dates = history[date_col].astype(str).map(_to_yyyymmdd)
+            missing = ~history["_history_date"].astype(str).str.match(r"^20\d{6}$", na=False)
+            history.loc[missing, "_history_date"] = candidate_dates.loc[missing]
+        history["_history_code"] = history[code_col].astype(str).str.strip()
+        history = history.drop_duplicates(["_history_date", "_history_code"], keep="last")
+    return _historical_limitup_stats_from_df(
+        history,
+        "limitup_probability_training_samples.csv+premium_verify_*.csv",
+    )
 
 
 def _load_limitup_calibration_bins(cfg: PremiumConfig, min_bin_samples: int = 20) -> Tuple[List[Dict[str, float]], str]:
@@ -550,7 +565,7 @@ def _load_limitup_calibration_bins(cfg: PremiumConfig, min_bin_samples: int = 20
 
     actual = _bool_like_series(df, ["t_limitup_hit", "t_limitup_actual"], default=np.nan)
     prob = _prob_series(df, ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"], default=np.nan)
-    ready = _bool_like_series(df, ["label_matured", "t_limitup_verify_ready"], default=np.nan)
+    ready = _bool_like_series(df, ["t_limitup_verify_ready", "label_matured"], default=np.nan)
     valid = actual.notna() & prob.notna()
     if ready.notna().any():
         valid = valid & ready.fillna(0).eq(1)
@@ -575,19 +590,173 @@ def _load_limitup_calibration_bins(cfg: PremiumConfig, min_bin_samples: int = 20
     return bins, "ok"
 
 
+def _load_validated_platt_calibrator(
+    cfg: PremiumConfig,
+    model_enabled: bool,
+    target: str = "limitup",
+) -> Tuple[Optional[Tuple[float, float]], str, Dict[str, object]]:
+    """Fit a monotonic logit calibrator and promote it only on later dates."""
+    trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+    if not trainset_path.exists():
+        return None, "platt_trainset_missing", {}
+    try:
+        df = _read_csv_smart(trainset_path)
+    except Exception as exc:
+        return None, f"platt_trainset_read_error:{type(exc).__name__}", {}
+    if df.empty:
+        return None, "platt_trainset_empty", {}
+
+    if target == "t1_up":
+        actual_names = ["t1_up_hit"]
+        prob_names = ["t1_continue_up_rate", "t1_up_prob_model", "t1_continue_up_rate_rule", "t1_up_rate", "T+1延续上涨率"]
+        ready_names = ["t1_verify_ready", "label_matured"]
+    else:
+        actual_names = ["t_limitup_hit", "t_limitup_actual"]
+        prob_names = ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"]
+        ready_names = ["t_limitup_verify_ready", "label_matured"]
+    actual = _bool_like_series(df, actual_names, default=np.nan)
+    prob = _prob_series(df, prob_names, default=np.nan)
+    ready = _bool_like_series(df, ready_names, default=np.nan)
+    sample_mode = _bool_like_series(df, ["model_can_rank"], default=0.0).fillna(0).ge(0.5)
+    valid = actual.notna() & prob.notna() & ready.fillna(0).eq(1) & sample_mode.eq(bool(model_enabled))
+
+    date_s = pd.Series("", index=df.index, dtype="object")
+    for date_col in ("d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"):
+        if date_col not in df.columns:
+            continue
+        candidate = df[date_col].astype(str).map(_to_yyyymmdd)
+        missing = ~date_s.str.match(r"^20\d{6}$", na=False)
+        date_s.loc[missing] = candidate.loc[missing]
+    valid = valid & date_s.str.match(r"^20\d{6}$", na=False)
+    dates = sorted(date_s[valid].unique().tolist())
+    if len(dates) < 8 or int(valid.sum()) < 160:
+        return None, f"platt_samples_not_enough:rows={int(valid.sum())};days={len(dates)}", {}
+
+    cut = max(1, int(len(dates) * 0.70))
+    cut = min(cut, len(dates) - 1)
+    train_dates = set(dates[:cut])
+    holdout_dates = set(dates[cut:])
+    train_mask = valid & date_s.isin(train_dates)
+    holdout_mask = valid & date_s.isin(holdout_dates)
+    if len(holdout_dates) < 4 or int(train_mask.sum()) < 100 or int(holdout_mask.sum()) < 40:
+        return None, (
+            "platt_holdout_not_enough:"
+            f"train={int(train_mask.sum())};holdout={int(holdout_mask.sum())};days={len(holdout_dates)}"
+        ), {}
+
+    y_train = actual[train_mask].astype(int)
+    y_holdout = actual[holdout_mask].astype(int)
+    if y_train.nunique() < 2 or y_holdout.nunique() < 2:
+        return None, "platt_single_class", {}
+
+    try:
+        from sklearn.linear_model import LogisticRegression
+
+        def logit(values: pd.Series) -> np.ndarray:
+            p = pd.to_numeric(values, errors="coerce").clip(0.01, 0.99).to_numpy(dtype=float)
+            return np.log(p / (1.0 - p)).reshape(-1, 1)
+
+        candidate = LogisticRegression(C=1.0, solver="lbfgs", max_iter=500, random_state=42)
+        candidate.fit(logit(prob[train_mask]), y_train.to_numpy())
+        raw_holdout = prob[holdout_mask].clip(0.01, 0.99).to_numpy(dtype=float)
+        calibrated_holdout = candidate.predict_proba(logit(prob[holdout_mask]))[:, 1]
+        y_holdout_np = y_holdout.to_numpy(dtype=float)
+        raw_brier = float(np.mean((raw_holdout - y_holdout_np) ** 2))
+        calibrated_brier = float(np.mean((calibrated_holdout - y_holdout_np) ** 2))
+        base_rate = float(actual[valid].astype(float).mean())
+        constant_brier = float(np.mean((np.full(len(y_holdout_np), base_rate) - y_holdout_np) ** 2))
+        candidate_pass = np.isfinite(calibrated_brier) and calibrated_brier <= raw_brier * 0.99
+        constant_pass = np.isfinite(constant_brier) and constant_brier <= raw_brier * 0.99
+        if not candidate_pass and not constant_pass:
+            return None, (
+                "platt_validation_not_pass:"
+                f"raw_brier={raw_brier};calibrated_brier={calibrated_brier};constant_brier={constant_brier}"
+            ), {"raw_brier": raw_brier, "calibrated_brier": calibrated_brier, "constant_brier": constant_brier}
+
+        final_model = LogisticRegression(C=1.0, solver="lbfgs", max_iter=500, random_state=42)
+        final_model.fit(logit(prob[valid]), actual[valid].astype(int).to_numpy())
+        slope = float(final_model.coef_[0][0])
+        intercept = float(final_model.intercept_[0])
+        calibration_mode = "platt_monotonic"
+        selected_brier = calibrated_brier
+        if np.isfinite(slope) and slope <= 0 and constant_pass:
+            clipped_rate = float(np.clip(base_rate, 0.01, 0.99))
+            slope = 0.0
+            intercept = float(np.log(clipped_rate / (1.0 - clipped_rate)))
+            selected_brier = constant_brier
+            calibration_mode = "constant_base_rate_nonpositive_slope"
+        if not np.isfinite(slope) or slope < 0 or not np.isfinite(intercept):
+            return None, f"platt_non_monotonic:slope={slope};intercept={intercept}", {}
+        return (
+            (slope, intercept),
+            "ok",
+            {
+                "raw_brier": raw_brier,
+                "calibrated_brier": selected_brier,
+                "constant_brier": constant_brier,
+                "calibration_mode": calibration_mode,
+                "validation_days": float(len(holdout_dates)),
+                "validation_samples": float(holdout_mask.sum()),
+            },
+        )
+    except Exception as exc:
+        return None, f"platt_error:{type(exc).__name__}", {}
+
+
 def _apply_limitup_probability_calibration(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
     out = df.copy()
-    bins, reason = _load_limitup_calibration_bins(cfg)
+    if "t_limitup_prob" not in out.columns:
+        out["limitup_calibration_src"] = "none:probability_missing"
+        return out, {
+            "limitup_calibration_mode": "off",
+            "limitup_calibration_reason": "probability_missing",
+        }
+
+    model_enabled = bool((_field_01(out, "model_can_rank", 0.0) >= 0.5).any())
+    platt, platt_reason, platt_metrics = _load_validated_platt_calibrator(cfg, model_enabled)
     trace: Dict[str, object] = {
         "limitup_calibration_mode": "off",
-        "limitup_calibration_reason": reason,
-        "limitup_calibration_bins": len(bins),
+        "limitup_calibration_reason": platt_reason,
+        "limitup_calibration_platt_raw_brier": platt_metrics.get("raw_brier", ""),
+        "limitup_calibration_platt_brier": platt_metrics.get("calibrated_brier", ""),
+        "limitup_calibration_platt_kind": platt_metrics.get("calibration_mode", ""),
     }
-    if not bins or "t_limitup_prob" not in out.columns:
-        out["limitup_calibration_src"] = f"none:{reason}"
-        return out, trace
 
     p = pd.to_numeric(out["t_limitup_prob"], errors="coerce").clip(0.01, 0.99)
+    if platt is not None:
+        slope, intercept = platt
+        logit = np.log(p / (1.0 - p))
+        z = (slope * logit + intercept).clip(-30.0, 30.0)
+        calibrated = (1.0 / (1.0 + np.exp(-z))).clip(0.01, 0.99)
+        delta = calibrated - p
+        out["t_limitup_prob_raw_before_calibration"] = p
+        out["t_limitup_prob_calibrated"] = calibrated.round(6)
+        out["t_limitup_prob"] = out["t_limitup_prob_calibrated"]
+        out["T日涨停概率"] = out["t_limitup_prob"]
+        calibration_mode = "validated_base_rate_v1" if slope == 0 else "validated_platt_v1"
+        out["limitup_calibration_src"] = calibration_mode
+        trace.update({
+            "limitup_calibration_mode": calibration_mode,
+            "limitup_calibration_reason": "ok",
+            "limitup_calibration_avg_delta": float(delta.mean()) if delta.notna().any() else 0.0,
+            "limitup_calibration_platt_slope": slope,
+            "limitup_calibration_platt_intercept": intercept,
+        })
+        return out, trace
+
+    if model_enabled:
+        out["limitup_calibration_src"] = f"none:{platt_reason}"
+        trace["limitup_calibration_reason"] = platt_reason
+        return out, trace
+
+    bins, bin_reason = _load_limitup_calibration_bins(cfg)
+    trace["limitup_calibration_bins"] = len(bins)
+    if not bins:
+        reason = f"platt={platt_reason};bins={bin_reason}"
+        out["limitup_calibration_src"] = f"none:{reason}"
+        trace["limitup_calibration_reason"] = reason
+        return out, trace
+
     calibrated = p.copy()
     for b in bins:
         lo = float(b["lo"])
@@ -602,15 +771,51 @@ def _apply_limitup_probability_calibration(cfg: PremiumConfig, df: pd.DataFrame)
     out["t_limitup_prob_calibrated"] = calibrated.round(6)
     out["t_limitup_prob"] = out["t_limitup_prob_calibrated"]
     out["T日涨停概率"] = out["t_limitup_prob"]
-    if "limitup_continuation_score" in out.columns:
-        score = pd.to_numeric(out["limitup_continuation_score"], errors="coerce")
-        out["limitup_continuation_score"] = (score + 20.0 * delta).clip(0.0, 100.0).round(4)
-        out["涨停接力评分"] = out["limitup_continuation_score"]
     out["limitup_calibration_src"] = "historical_bin_blend_v1"
     trace.update({
         "limitup_calibration_mode": "historical_bin_blend_v1",
         "limitup_calibration_reason": "ok",
         "limitup_calibration_avg_delta": float(delta.mean()) if delta.notna().any() else 0.0,
+    })
+    return out, trace
+
+
+def _apply_t1_probability_calibration(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    out = df.copy()
+    if "t1_continue_up_rate" not in out.columns:
+        out["t1_calibration_src"] = "none:probability_missing"
+        return out, {"t1_calibration_mode": "off", "t1_calibration_reason": "probability_missing"}
+
+    model_enabled = bool((_field_01(out, "model_can_rank", 0.0) >= 0.5).any())
+    platt, reason, metrics = _load_validated_platt_calibrator(cfg, model_enabled, target="t1_up")
+    trace: Dict[str, object] = {
+        "t1_calibration_mode": "off",
+        "t1_calibration_reason": reason,
+        "t1_calibration_raw_brier": metrics.get("raw_brier", ""),
+        "t1_calibration_brier": metrics.get("calibrated_brier", ""),
+        "t1_calibration_kind": metrics.get("calibration_mode", ""),
+    }
+    if platt is None:
+        out["t1_calibration_src"] = f"none:{reason}"
+        return out, trace
+
+    p = pd.to_numeric(out["t1_continue_up_rate"], errors="coerce").clip(0.01, 0.99)
+    slope, intercept = platt
+    logit = np.log(p / (1.0 - p))
+    z = (slope * logit + intercept).clip(-30.0, 30.0)
+    calibrated = (1.0 / (1.0 + np.exp(-z))).clip(0.01, 0.99)
+    out["t1_continue_up_rate_raw_before_calibration"] = p
+    out["t1_continue_up_rate_calibrated"] = calibrated.round(6)
+    out["t1_continue_up_rate"] = out["t1_continue_up_rate_calibrated"]
+    out["T+1延续上涨率"] = out["t1_continue_up_rate"]
+    calibration_mode = "validated_base_rate_v1" if slope == 0 else "validated_platt_v1"
+    out["t1_calibration_src"] = calibration_mode
+    trace.update({
+        "t1_calibration_mode": calibration_mode,
+        "t1_calibration_reason": "ok",
+        "t1_calibration_avg_delta": float((calibrated - p).mean()) if calibrated.notna().any() else 0.0,
+        "t1_calibration_slope": slope,
+        "t1_calibration_intercept": intercept,
     })
     return out, trace
 
@@ -655,12 +860,15 @@ def _apply_adaptive_rank_score(df: pd.DataFrame, history: Dict[str, object]) -> 
     idx = out.index
 
     limitup_prob = pd.to_numeric(out.get("t_limitup_prob", pd.Series([0.5] * len(out), index=idx)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
-    touch_prob = pd.to_numeric(out.get("t_touch_limitup_prob_model", limitup_prob), errors="coerce").fillna(limitup_prob).clip(0.0, 1.0)
+    model_can_rank = _field_01(out, "model_can_rank", 0.0) >= 0.5
+    touch_model = pd.to_numeric(out.get("t_touch_limitup_prob_model", limitup_prob), errors="coerce").fillna(limitup_prob).clip(0.0, 1.0)
+    touch_prob = touch_model.where(model_can_rank, limitup_prob)
     strength = pd.to_numeric(out.get("t_limitup_strength", out.get("t_limitup_strength_rule", pd.Series([50.0] * len(out), index=idx))), errors="coerce").fillna(50.0).clip(0.0, 100.0) / 100.0
     t1_prob = pd.to_numeric(out.get("t1_continue_up_rate", out.get("t1_up_rate", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
-    t1_model_prob = pd.to_numeric(out.get("t1_up_prob_model", t1_prob), errors="coerce").fillna(t1_prob).clip(0.0, 1.0)
-    t1_ret_pred = pd.to_numeric(out.get("t1_close_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce")
-    t1_high_pred = pd.to_numeric(out.get("t1_high_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce")
+    t1_model_raw = pd.to_numeric(out.get("t1_up_prob_model", t1_prob), errors="coerce").fillna(t1_prob).clip(0.0, 1.0)
+    t1_model_prob = t1_model_raw.where(model_can_rank, t1_prob)
+    t1_ret_pred = pd.to_numeric(out.get("t1_close_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce").where(model_can_rank, np.nan)
+    t1_high_pred = pd.to_numeric(out.get("t1_high_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce").where(model_can_rank, np.nan)
     p_fill = pd.to_numeric(out.get("dec_p_fill", out.get("p_fill_pred", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
     conf_score = pd.to_numeric(out.get("eret_plus_conf_score", out.get("confidence", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
 
@@ -797,10 +1005,10 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     idx = out.index
 
     rule_t_limit = _field_01(out, "t_limitup_prob", 0.5)
-    rule_touch = _field_01(out, "t_touch_limitup_prob_model", float("nan")).fillna(rule_t_limit)
+    rule_touch = _field_01(out, "t_touch_limitup_prob_rule", float("nan")).fillna(rule_t_limit)
     rule_t1_up = _field_01(out, "t1_continue_up_rate", 0.5)
     model_can_rank = _field_01(out, "model_can_rank", 0.0) >= 0.5
-    model_alpha = pd.Series(np.where(model_can_rank, 0.72, 0.28), index=idx, dtype="float64")
+    model_alpha = pd.Series(np.where(model_can_rank, 0.72, 0.0), index=idx, dtype="float64")
 
     t_up_model = _field_01(out, "t_up_prob_model", float("nan"))
     t_high_profit_model = _field_01(out, "t_high_profit_prob_model", float("nan"))
@@ -814,7 +1022,15 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
 
     strength = _score_01_from_percent_or_rank(out, "t_limitup_strength", "t_limitup_strength_rule", default=0.5)
     eret_plus = _num_series(out, "eret_plus_value", "eret_plus", "E_ret_plus", default=np.nan)
-    eret_plus_score = _ret_score_01(eret_plus, neutral=0.50)
+    eret_plus_score_raw = _ret_score_01(eret_plus, neutral=0.50)
+    if "eret_plus_src" in out.columns:
+        ehx_validated = out["eret_plus_src"].astype(str).str.startswith("ehx:model_v1")
+    else:
+        ehx_validated = pd.Series(False, index=idx)
+    eret_plus_score = eret_plus_score_raw.where(
+        ehx_validated,
+        0.50 + 0.25 * (eret_plus_score_raw - 0.50),
+    ).clip(0.0, 1.0)
     market_score = _field_01(out, "mkt_emotion_score", 0.5)
     p_fill = _score_01_from_percent_or_rank(out, "dec_p_fill", "p_fill_pred", "p_fill", default=0.5)
     conf_score = _score_01_from_percent_or_rank(out, "eret_plus_conf_score", "confidence", default=0.5)
@@ -834,8 +1050,10 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     limit_times = _num_series(out, "limit_times", "连板数", default=np.nan)
     mapped_stage_quality = limit_times.map(_stage_quality_weight_from_limit_times)
     mapped_stage_risk = limit_times.map(_stage_risk_weight_from_limit_times)
-    stage_quality_weight = _num_series(out, "stage_quality_weight", default=np.nan).fillna(mapped_stage_quality).fillna(1.0).clip(0.65, 1.20)
-    stage_risk_weight = _num_series(out, "stage_risk_weight", default=np.nan).fillna(mapped_stage_risk).fillna(0.0).clip(0.0, 0.25)
+    # Unknown board height is treated conservatively; missing data must never
+    # score better than a known first-board candidate.
+    stage_quality_weight = _num_series(out, "stage_quality_weight", default=np.nan).fillna(mapped_stage_quality).fillna(0.78).clip(0.65, 1.20)
+    stage_risk_weight = _num_series(out, "stage_risk_weight", default=np.nan).fillna(mapped_stage_risk).fillna(0.05).clip(0.0, 0.25)
     stage_quality_score = (0.50 + (stage_quality_weight - 1.0) * 1.25).clip(0.0, 1.0)
     stage_risk_score = (stage_risk_weight / 0.25).clip(0.0, 1.0)
     intraday_attack_edge = intraday_attack_edge.where(
@@ -868,7 +1086,8 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         ).clip(0.0, 1.0),
     ).fillna(0.0).clip(0.0, 1.0)
 
-    t_up_prob = (model_alpha * t_up_model.fillna(rule_t1_up) + (1.0 - model_alpha) * rule_t1_up).clip(0.0, 1.0)
+    rule_t_up = (0.55 * rule_touch + 0.45 * rule_t_limit).clip(0.0, 1.0)
+    t_up_prob = (model_alpha * t_up_model.fillna(rule_t_up) + (1.0 - model_alpha) * rule_t_up).clip(0.0, 1.0)
     t_high_profit_prob = (
         model_alpha * t_high_profit_model.fillna((rule_touch + rule_t_limit) / 2.0)
         + (1.0 - model_alpha) * ((rule_touch + rule_t_limit) / 2.0)
@@ -876,8 +1095,8 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     t_limit_prob = (model_alpha * t_limit_model.fillna(rule_t_limit) + (1.0 - model_alpha) * rule_t_limit).clip(0.0, 1.0)
     t_touch_prob = (model_alpha * touch_model.fillna(rule_touch) + (1.0 - model_alpha) * rule_touch).clip(0.0, 1.0)
 
-    t1_close_ret_pred = _num_series(out, "t1_close_ret_pred", default=np.nan)
-    t1_high_ret_pred = _num_series(out, "t1_high_ret_pred", default=np.nan)
+    t1_close_ret_pred = _num_series(out, "t1_close_ret_pred", default=np.nan).where(model_can_rank, np.nan)
+    t1_high_ret_pred = _num_series(out, "t1_high_ret_pred", default=np.nan).where(model_can_rank, np.nan)
     t1_close_ret_pred_score = _ret_score_01(t1_close_ret_pred, neutral=0.50)
     t1_high_ret_pred_score = _ret_score_01(t1_high_ret_pred, neutral=0.50)
     fallback_t1_high_profit = (0.45 * rule_t1_up + 0.35 * t1_high_ret_pred_score + 0.20 * eret_plus_score).clip(0.0, 1.0)
@@ -947,6 +1166,8 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         + 0.05 * market_score
         - risk_penalty_score
     ).clip(0.0, 1.0)
+    adaptive_raw = _score_01_from_percent_or_rank(out, "premium_adaptive_score", default=0.5)
+    premium_rank_raw = (0.75 * premium_final_raw + 0.25 * adaptive_raw).clip(0.0, 1.0)
 
     out["t_up_prob_model_blend"] = t_up_prob.round(6)
     out["t_high_profit_prob_model_blend"] = t_high_profit_prob.round(6)
@@ -969,10 +1190,12 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     out["t1_accept_score"] = (100.0 * t1_accept_raw).round(4)
     out["premium_final_score"] = (100.0 * premium_final_raw).round(4)
     out["premium_final_score_raw"] = premium_final_raw.round(6)
+    out["premium_rank_score"] = (100.0 * premium_rank_raw).round(4)
+    out["premium_rank_score_raw"] = premium_rank_raw.round(6)
 
     dec_can_buy = pd.to_numeric(out.get("dec_can_buy", pd.Series([1.0] * len(out), index=idx)), errors="coerce").fillna(1.0)
     score_ev = pd.to_numeric(out.get("score_ev", pd.Series([0.0] * len(out), index=idx)), errors="coerce").fillna(0.0)
-    eret_gate = eret_plus.fillna(0.0)
+    eret_gate = eret_plus.where(ehx_validated, 0.0).fillna(0.0)
 
     intraday_block = (intraday_hard_risk >= 0.5) | (intraday_risk_penalty >= 0.85)
     force_excluded = (
@@ -1056,6 +1279,8 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         "premium_watch_count": int((out["premium_bucket"] == "WATCH").sum()),
         "premium_excluded_count": int(force_excluded.sum()),
         "premium_model_can_rank_count": int(model_can_rank.sum()),
+        "premium_ehx_validated_count": int(ehx_validated.sum()),
+        "premium_rank_blend": "professional_75_adaptive_25",
     }
     return out, trace
 
@@ -1068,6 +1293,7 @@ def _sort_professional_premium(df: pd.DataFrame) -> pd.DataFrame:
     out["_premium_bucket_order"] = bucket_order
     sort_cols = [
         "_premium_bucket_order",
+        "premium_rank_score",
         "premium_final_score",
         "t1_accept_score",
         "t_up_attack_score",
@@ -1080,7 +1306,7 @@ def _sort_professional_premium(df: pd.DataFrame) -> pd.DataFrame:
             out[c] = pd.NA
     out = out.sort_values(
         by=sort_cols,
-        ascending=[True, False, False, False, False, False, False],
+        ascending=[True, False, False, False, False, False, False, False],
         na_position="last",
     ).drop(columns=["_premium_bucket_order"], errors="ignore")
     return out.reset_index(drop=True)
@@ -1596,6 +1822,15 @@ def _load_ehx_bundle(cfg: PremiumConfig) -> Tuple[Optional[dict], str]:
     if not path.exists():
         return None, "ehx_model_missing"
     try:
+        meta = {}
+        mp = _ehx_meta_path(cfg)
+        if mp.exists():
+            try:
+                meta = json.loads(mp.read_text(encoding="utf-8"))
+            except Exception:
+                return None, "ehx_meta_invalid"
+        if not bool(meta.get("trained", False)) or not bool(meta.get("validation_pass", False)):
+            return None, f"ehx_validation_not_pass:{meta.get('reason', 'missing_gate')}"
         obj = joblib.load(path)
         if not isinstance(obj, dict):
             return None, "ehx_model_bad_bundle"
@@ -1603,13 +1838,10 @@ def _load_ehx_bundle(cfg: PremiumConfig) -> Tuple[Optional[dict], str]:
         feature_cols = obj.get("feature_cols")
         if model is None or not isinstance(feature_cols, (list, tuple)) or not feature_cols:
             return None, "ehx_model_missing_model_or_features"
-        meta = {}
-        mp = _ehx_meta_path(cfg)
-        if mp.exists():
-            try:
-                meta = json.loads(mp.read_text(encoding="utf-8"))
-            except Exception:
-                meta = {}
+        forbidden = {"rank_eret_plus", "eret_plus_conf_score", "r_p50", "in_p10", "in_p50"}
+        leaked = sorted(forbidden.intersection(str(c) for c in feature_cols))
+        if leaked:
+            return None, f"ehx_forbidden_features:{'|'.join(leaked)}"
         return {"model": model, "feature_cols": list(feature_cols), "path": str(path), "meta": meta}, "ok"
     except Exception as e:
         return None, f"ehx_model_load_error:{type(e).__name__}"
@@ -1977,6 +2209,71 @@ def _find_limitup_model_path(cfg: PremiumConfig) -> Tuple[Optional[Path], str]:
     return None, "limitup_model_missing"
 
 
+def _recent_limitup_model_health(
+    cfg: PremiumConfig,
+    lookback_days: int = 20,
+) -> Tuple[Optional[bool], str, Dict[str, float]]:
+    """Kill-switch based on recent realized model skill versus the rule baseline."""
+    rows: List[pd.DataFrame] = []
+    files = sorted(cfg.out_root().glob("premium_verify_*.csv"))[-max(1, int(lookback_days)):]
+    for path in files:
+        try:
+            df = _read_csv_smart(path)
+        except Exception:
+            continue
+        if df.empty:
+            continue
+        actual = _bool_like_series(df, ["t_limitup_actual", "t_limitup_hit"], default=np.nan)
+        ready = _bool_like_series(df, ["t_limitup_verify_ready"], default=np.nan)
+        model_prob = _prob_series(df, ["t_limitup_prob_model"], default=np.nan)
+        rule_prob = _prob_series(df, ["t_limitup_prob_rule"], default=np.nan)
+        active = _bool_like_series(df, ["model_can_rank"], default=0.0).fillna(0).ge(0.5)
+        valid = ready.fillna(0).eq(1) & active & actual.notna() & model_prob.notna() & rule_prob.notna()
+        if not valid.any():
+            continue
+        date_col = _first_existing_col(df, "trade_date", "d_analysis_trade_date", "base_date")
+        day = df[date_col].astype(str).map(_to_yyyymmdd) if date_col else pd.Series(path.stem[-8:], index=df.index)
+        rows.append(pd.DataFrame({
+            "date": day[valid],
+            "actual": actual[valid],
+            "model_prob": model_prob[valid],
+            "rule_prob": rule_prob[valid],
+        }))
+
+    if not rows:
+        return None, "recent_health_no_active_model_rows", {}
+    frame = pd.concat(rows, ignore_index=True).dropna()
+    n_days = int(frame["date"].nunique())
+    if n_days < 8 or len(frame) < 150:
+        return None, f"recent_health_not_enough:days={n_days};rows={len(frame)}", {}
+
+    actual = frame["actual"].to_numpy(dtype=float)
+    model_prob = frame["model_prob"].to_numpy(dtype=float)
+    rule_prob = frame["rule_prob"].to_numpy(dtype=float)
+    model_brier = float(np.mean((model_prob - actual) ** 2))
+    rule_brier = float(np.mean((rule_prob - actual) ** 2))
+    lifts: List[float] = []
+    for _, day in frame.groupby("date", sort=True):
+        top = day.nlargest(min(10, len(day)), "model_prob")
+        lifts.append(float(top["actual"].mean() - day["actual"].mean()))
+    top10_lift = float(np.mean(lifts)) if lifts else float("nan")
+    metrics = {
+        "days": float(n_days),
+        "samples": float(len(frame)),
+        "model_brier": model_brier,
+        "rule_brier": rule_brier,
+        "top10_lift": top10_lift,
+    }
+    ok = bool(
+        np.isfinite(model_brier)
+        and np.isfinite(rule_brier)
+        and model_brier <= rule_brier * 1.02
+        and np.isfinite(top10_lift)
+        and top10_lift > 0
+    )
+    return ok, "recent_health_pass" if ok else "recent_health_fail", metrics
+
+
 def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
     """
     接入 limitup_probability_engine.py。
@@ -2047,6 +2344,46 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             0.30 * m_t_limitup + 0.20 * m_touch + 0.20 * m_t1_up + 0.20 * m_t1_accept + 0.10 * m_high_profit
         ).clip(0.0, 1.0)
 
+        model_can_rank = bool(getattr(bundle, "model_can_rank", False))
+        health_ok: Optional[bool] = None
+        health_reason = "bundle_gate_disabled"
+        health_metrics: Dict[str, float] = {}
+        if model_can_rank:
+            health_ok, health_reason, health_metrics = _recent_limitup_model_health(cfg)
+            if health_ok is False:
+                model_can_rank = False
+                out["model_can_rank"] = False
+                out["model_rank_mode"] = "disabled_recent_health_fail"
+                out["model_quality_flag"] = "degraded"
+        if not model_can_rank:
+            # Keep every model field for shadow evaluation, but do not let an
+            # unvalidated challenger alter production probabilities or order.
+            out["t_limitup_prob"] = rule_t_limitup.round(6)
+            out["T日涨停概率"] = out["t_limitup_prob"]
+            out["t_limitup_strength"] = rule_t_strength.round(4)
+            out["T日涨停强度"] = out["t_limitup_strength"]
+            out["t1_continue_up_rate"] = rule_t1_continue.round(6)
+            out["T+1延续上涨率"] = out["t1_continue_up_rate"]
+            out["limitup_continuation_score"] = rule_score.round(4)
+            out["涨停接力评分"] = out["limitup_continuation_score"]
+            out["limitup_model_src"] = "limitup_probability_engine:shadow_gate_failed"
+            trace.update({
+                "limitup_model_mode": "shadow_only_validation_not_pass",
+                "limitup_model_reason": (
+                    health_reason if health_ok is False else str(getattr(bundle, "gate_reason", "validation_not_pass"))
+                ),
+                "limitup_model_feature_n": len(getattr(bundle, "feature_cols", []) or []),
+                "limitup_model_train_end_date": getattr(bundle, "train_end_date", ""),
+                "limitup_model_valid_start_date": getattr(bundle, "valid_start_date", ""),
+                "limitup_model_can_rank": False,
+                "limitup_model_rank_mode": getattr(bundle, "model_rank_mode", "disabled_validation_not_pass"),
+                "limitup_model_validation_days": int(getattr(bundle, "validation_days", 0) or 0),
+                "limitup_model_validation_samples": int(getattr(bundle, "validation_samples", 0) or 0),
+                "limitup_model_recent_health": health_reason,
+                **{f"limitup_model_recent_{k}": v for k, v in health_metrics.items()},
+            })
+            return out, trace
+
         # 最终生产字段：模型为主、规则为辅，避免模型早期样本不足时突然漂移。
         out["t_limitup_prob"] = (0.70 * m_t_limitup + 0.30 * rule_t_limitup).clip(0.01, 0.99).round(6)
         out["T日涨停概率"] = out["t_limitup_prob"]
@@ -2064,10 +2401,12 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             "limitup_model_feature_n": len(getattr(bundle, "feature_cols", []) or []),
             "limitup_model_train_end_date": getattr(bundle, "train_end_date", ""),
             "limitup_model_valid_start_date": getattr(bundle, "valid_start_date", ""),
-            "limitup_model_can_rank": bool(getattr(bundle, "model_can_rank", False)),
+            "limitup_model_can_rank": model_can_rank,
             "limitup_model_rank_mode": getattr(bundle, "model_rank_mode", "disabled_validation_not_pass"),
             "limitup_model_validation_days": int(getattr(bundle, "validation_days", 0) or 0),
             "limitup_model_validation_samples": int(getattr(bundle, "validation_samples", 0) or 0),
+            "limitup_model_recent_health": health_reason,
+            **{f"limitup_model_recent_{k}": v for k, v in health_metrics.items()},
         })
         return out, trace
     except Exception as e:
@@ -2316,6 +2655,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df = _build_limitup_continuation_fields(df)
     df, limitup_trace = _apply_limitup_probability_engine(cfg, df)
     df, calibration_trace = _apply_limitup_probability_calibration(cfg, df)
+    df, t1_calibration_trace = _apply_t1_probability_calibration(cfg, df)
     historical_limitup_stats = _collect_historical_limitup_stats(cfg)
     df, adaptive_trace = _apply_adaptive_rank_score(df, historical_limitup_stats)
     df, professional_trace = _apply_professional_premium_scores(df)
@@ -2328,13 +2668,15 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     df["rank_r_p50"] = pd.NA
     df["rank_limitup_continuation"] = pd.NA
     df["rank_premium_final"] = pd.NA
+    df["rank_premium_score"] = pd.NA
 
     if "eret_plus_value" in df.columns and pd.to_numeric(df["eret_plus_value"], errors="coerce").notna().any():
         df["rank_eret_plus"] = pd.to_numeric(df["eret_plus_value"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
     if mid_key in df.columns and pd.to_numeric(df[mid_key], errors="coerce").notna().any():
         df["rank_r_p50"] = pd.to_numeric(df[mid_key], errors="coerce").rank(method="first", ascending=False).astype("Int64")
-    if "premium_final_score" in df.columns and pd.to_numeric(df["premium_final_score"], errors="coerce").notna().any():
-        df["rank_premium_final"] = pd.to_numeric(df["premium_final_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+    if "premium_rank_score" in df.columns and pd.to_numeric(df["premium_rank_score"], errors="coerce").notna().any():
+        df["rank_premium_score"] = pd.to_numeric(df["premium_rank_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
+        df["rank_premium_final"] = df["rank_premium_score"]
         if "limitup_continuation_score" in df.columns and pd.to_numeric(df["limitup_continuation_score"], errors="coerce").notna().any():
             df["rank_limitup_continuation"] = pd.to_numeric(df["limitup_continuation_score"], errors="coerce").rank(method="first", ascending=False).astype("Int64")
         df = _sort_professional_premium(df)
@@ -2396,6 +2738,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t1_close_ret_pred", "t1_high_ret_pred", "limitup_model_score", "limitup_model_src",
         "model_can_rank", "model_rank_mode", "model_quality_flag",
         "t_limitup_prob_raw_before_calibration", "t_limitup_prob_calibrated", "limitup_calibration_src",
+        "t1_continue_up_rate_raw_before_calibration", "t1_continue_up_rate_calibrated", "t1_calibration_src",
         "limitup_alpha_score", "t1_alpha_score", "strength_alpha_score", "execution_alpha_score",
         "premium_adaptive_score", "自适应排序评分", "rank_adaptive_score",
         "adaptive_weight_limitup", "adaptive_weight_t1", "adaptive_weight_strength", "adaptive_weight_execution",
@@ -2407,13 +2750,31 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "intraday_risk_penalty", "intraday_hard_risk_flag", "execution_safety_score", "execution_score",
         "risk_penalty_score", "t1_close_ret_pred_score", "t1_high_ret_pred_score",
         "t_up_attack_score", "t1_accept_score", "premium_final_score", "premium_final_score_raw",
+        "premium_rank_score", "premium_rank_score_raw",
         "premium_eligible", "premium_force_excluded", "premium_bucket", "premium_exclude_reason",
-        "premium_rank_mode", "rank_premium_final",
+        "premium_rank_mode", "rank_premium_final", "rank_premium_score",
     ]
     market_cols = [
         "mkt_stock_count", "mkt_up_ratio", "mkt_avg_ret", "mkt_median_ret",
         "mkt_strong_count", "mkt_strong_ratio", "mkt_touch_strong_count",
         "mkt_touch_strong_ratio", "mkt_amount_sum", "mkt_emotion_score",
+    ]
+    factor_data_cols = [
+        "turnover_rate", "turnover_rate_f", "volume_ratio", "circ_mv", "float_mv", "total_mv",
+        "pe_ttm", "pb", "returns_1d", "volatility_5d", "volatility_10d", "volatility_20d",
+        "max_drawdown_20d", "tail_risk_score", "hot_boards_score", "board_crowding_rank",
+        "is_hot_board", "board_rank", "board_limit_up_count", "is_st_like",
+        "open_times", "fd_amount", "seal_amount", "first_limit_time", "last_limit_time",
+        "limit_touch_count", "open_board_count", "max_drawdown_after_limit", "reseal_count",
+        "reseal_minutes_avg", "late_volume_ratio", "late_price_weakness", "late_limit_hold_minutes",
+        "late_withdraw_score", "reseal_score", "intraday_quality_score", "intraday_confidence_score",
+        "intraday_risk_score", "intraday_soft_risk_score", "intraday_hard_risk_flag",
+        "auction_strength_score", "auction_amount", "up_limit", "down_limit", "is_limit_up",
+        "break_count_proxy", "limit_up_strength", "factor_intraday_available", "factor_auction_available",
+        "factor_intraday_quality", "factor_intraday_confidence", "factor_intraday_soft_risk",
+        "factor_intraday_risk", "factor_intraday_hard_risk", "factor_late_withdraw", "factor_reseal",
+        "factor_open_board_count", "factor_auction_strength", "factor_intraday_attack_edge",
+        "factor_intraday_execution_edge", "factor_intraday_risk_penalty",
     ]
 
     out_cols = [
@@ -2425,6 +2786,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         *limitup_model_cols,
         *professional_cols,
         *market_cols,
+        *factor_data_cols,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf", "eret_plus_conf_score", "eret_plus_src",
         *v_cols,
         "t1_up_rate", "T+1上涨率",
@@ -2469,6 +2831,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         *limitup_model_cols,
         *professional_cols,
         *market_cols,
+        *factor_data_cols,
         "t1_up_rate", "T+1上涨率",
         "r_actual", mid_key,
         "eret_pred_raw", "eret_plus_value", "eret_plus_delta", "eret_plus_direction", "eret_plus_conf",
@@ -2483,7 +2846,10 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t_limitup_verify_reason", "t_limitup_verify_trade_date", "d_analysis_trade_date",
     ]
 
-    df_verify = out_top[[c for c in verify_cols if c in out_top.columns]].copy()
+    # Persist the full candidate universe. Training only the published Top30
+    # creates selection bias and prevents the model from learning what it
+    # correctly rejected outside the list.
+    df_verify = out_full[[c for c in verify_cols if c in out_full.columns]].copy()
     for c in verify_cols:
         if c not in df_verify.columns:
             df_verify[c] = pd.NA
@@ -2492,7 +2858,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     r_t2 = ensure_daily_cached(cfg, target_date)
     if (not pending_truth_T) and r_t2.ok:
         d2 = load_daily(cfg, target_date)[["ts_code", "close"]].rename(columns={"close": "close_T2_actual"})
-        tmp = out_top.merge(d2, on="ts_code", how="left")
+        tmp = out_full.merge(d2, on="ts_code", how="left")
         tmp["close_T2_actual"] = pd.to_numeric(tmp["close_T2_actual"], errors="coerce")
         tmp["close_T"] = pd.to_numeric(tmp["close_T"], errors="coerce")
         tmp["r_actual"] = np.log(tmp["close_T2_actual"] / tmp["close_T"])
@@ -2631,6 +2997,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "limitup_model_src": limitup_model_src,
             **limitup_trace,
             **calibration_trace,
+            **t1_calibration_trace,
             **adaptive_trace,
             **professional_trace,
             "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划",
