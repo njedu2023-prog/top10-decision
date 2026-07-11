@@ -1,8 +1,8 @@
 trade_date: 20260710
-run_id: gh_29153085673
-commit_sha: ffa71ca770e3
+run_id: gh_29154049684
+commit_sha: 785ef9481542
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-07-11T12:43:27Z
+created_at_utc: 2026-07-11T13:26:26Z
 ok: True
 buy_date: 20260713
 target_date: 20260714
@@ -28,18 +28,14 @@ decision_merge_dec_p_fill_coverage: 0.769231
 decision_merge_dec_can_buy_coverage: 0.0
 decision_merge_dec_weight_coverage: 0.0
 decision_merge_reason: ok
-eret_plus_src: ehx:model_v1
-ehx_mode: model_v1
-ehx_reason: ok
+eret_plus_src: ehx:coldstart_v1
+ehx_mode: coldstart
+ehx_reason: ehx_validation_not_pass:validation_not_pass:days=7;samples=209;raw_mae=0.060337668530319515;plus_mae=0.06171926661324854;improve_rate=0.49760765550239233;raw_daily_ic=0.10393634650745728;plus_daily_ic=0.029061769312841945;bias=0.027243583003922253
 ehx_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta.joblib
-ehx_load_reason: ok
-ehx_feature_n: 16
-ehx_meta_n_samples: 1522
-ehx_meta_delta_mae: 0.05453136911811578
-ehx_meta_delta_rmse: 0.0744108108435069
-limitup_model_src: limitup_probability_engine:model_v1
-limitup_model_mode: model_v1_blend_rule
-limitup_model_reason: ok
+ehx_load_reason: ehx_validation_not_pass:validation_not_pass:days=7;samples=209;raw_mae=0.060337668530319515;plus_mae=0.06171926661324854;improve_rate=0.49760765550239233;raw_daily_ic=0.10393634650745728;plus_daily_ic=0.029061769312841945;bias=0.027243583003922253
+limitup_model_src: limitup_probability_engine:shadow_gate_failed
+limitup_model_mode: shadow_only_validation_not_pass
+limitup_model_reason: disabled_validation_not_pass:days=16;samples=480;t1_accept_auc=0.49488864549105516;t1_accept_brier=0.2700313117103626;t1_ret_spearman_ic=-0.05027410609663284
 limitup_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine.joblib
 limitup_model_feature_n: 23
 limitup_model_train_end_date: 20260529
@@ -48,32 +44,47 @@ limitup_model_can_rank: False
 limitup_model_rank_mode: disabled_validation_not_pass:days=16;samples=480;t1_accept_auc=0.49488864549105516;t1_accept_brier=0.2700313117103626;t1_ret_spearman_ic=-0.05027410609663284
 limitup_model_validation_days: 16
 limitup_model_validation_samples: 480
-limitup_calibration_mode: historical_bin_blend_v1
+limitup_model_recent_health: bundle_gate_disabled
+limitup_calibration_mode: validated_platt_v1
 limitup_calibration_reason: ok
-limitup_calibration_bins: 5
-limitup_calibration_avg_delta: -0.09197573379253596
+limitup_calibration_platt_raw_brier: 0.3478034223004354
+limitup_calibration_platt_brier: 0.12346405379226373
+limitup_calibration_platt_kind: platt_monotonic
+limitup_calibration_avg_delta: -0.20817796119187196
+limitup_calibration_platt_slope: 0.1539437930379413
+limitup_calibration_platt_intercept: -1.7101966807373115
+t1_calibration_mode: validated_base_rate_v1
+t1_calibration_reason: ok
+t1_calibration_raw_brier: 0.3945585476138469
+t1_calibration_brier: 0.2462270654161865
+t1_calibration_kind: constant_base_rate_nonpositive_slope
+t1_calibration_avg_delta: -0.02153780563296358
+t1_calibration_slope: 0.0
+t1_calibration_intercept: -0.05423976893699661
 adaptive_rank_mode: history_ic_weighted_v1
-adaptive_weight_limitup: 0.581002
-adaptive_weight_t1: 0.066158
-adaptive_weight_strength: 0.242578
-adaptive_weight_execution: 0.110263
-adaptive_limitup_ic: 0.092196
-adaptive_t1_ret_ic: -0.13127
-adaptive_reason: t1_downweighted_negative_ic
+adaptive_weight_limitup: 0.510638
+adaptive_weight_t1: 0.148936
+adaptive_weight_strength: 0.234043
+adaptive_weight_execution: 0.106383
+adaptive_limitup_ic: 
+adaptive_t1_ret_ic: 
+adaptive_reason: ok
 premium_score_mode: t_attack_t1_accept_final_v1
 premium_intraday_mode: intraday_weighted_v1
-premium_intraday_avg_attack_edge: 0.47180000000000005
-premium_intraday_avg_execution_edge: 0.48979999999999996
+premium_intraday_avg_attack_edge: 0.4797194255979601
+premium_intraday_avg_execution_edge: 0.49509976821376295
 premium_intraday_avg_risk_penalty: 0.0
 premium_stage_mode: tushare_limit_times_hump_v1
 premium_stage_rows: 90
-premium_stage_avg_quality_weight: 0.7962637362637365
-premium_stage_avg_risk_weight: 0.03263736263736265
+premium_stage_avg_quality_weight: 0.7938461538461541
+premium_stage_avg_risk_weight: 0.0331868131868132
 premium_intraday_hard_risk_count: 0
-premium_eligible_count: 18
-premium_watch_count: 52
-premium_excluded_count: 21
+premium_eligible_count: 0
+premium_watch_count: 91
+premium_excluded_count: 0
 premium_model_can_rank_count: 0
+premium_ehx_validated_count: 0
+premium_rank_blend: professional_75_adaptive_25
 exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划
 limitup_model_fields: t_up_prob_model|t_high_profit_prob_model|t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_accept_prob_model|t1_fail_prob_model|t1_big_drawdown_prob_model|t_close_ret_pred|t_intraday_ret_pred|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 premium_professional_fields: t_up_attack_score|t1_accept_score|premium_final_score|premium_bucket|premium_exclude_reason
@@ -87,52 +98,52 @@ top10_limitup_hit_rate:
 top20_limitup_total: 0
 top20_limitup_hits: 0
 top20_limitup_hit_rate: 
-history_limitup_source: limitup_probability_training_samples.csv
-history_limitup_reason: ok
-history_limitup_days: 62
-history_top1_limitup_total: 62
-history_top1_limitup_hits: 32
-history_top1_limitup_hit_rate: 0.516129
-history_top3_limitup_total: 186
-history_top3_limitup_hits: 74
-history_top3_limitup_hit_rate: 0.397849
-history_top5_limitup_total: 310
-history_top5_limitup_hits: 98
-history_top5_limitup_hit_rate: 0.316129
-history_top1_up_total: 62
-history_top1_up_hits: 47
-history_top1_up_rate: 0.758065
-history_top3_up_total: 186
-history_top3_up_hits: 133
-history_top3_up_rate: 0.715054
-history_top5_up_total: 310
-history_top5_up_hits: 209
-history_top5_up_rate: 0.674194
-history_top10_limitup_total: 617
-history_top10_limitup_hits: 172
-history_top10_limitup_hit_rate: 0.278768
-history_top20_limitup_total: 1236
-history_top20_limitup_hits: 277
-history_top20_limitup_hit_rate: 0.22411
-history_top10_hit_rate_5d: 0.22
-history_top10_hit_rate_20d: 0.23
-history_top10_hit_rate_60d: 0.2730318257956449
-limitup_calibration_rows: 330
-limitup_calibration_brier: 0.3438389229963243
-limitup_calibration_ece: 0.4007801606060606
-history_limitup_rank_ic_days: 11
-history_limitup_spearman_ic_mean: 0.09219619197782172
-history_limitup_spearman_ic_20d: 0.09219619197782172
-history_limitup_spearman_ic_positive_rate: 0.7272727272727273
-history_limitup_kendall_tau_mean: 0.076522222229385
-history_t1_ret_rank_ic_days: 11
-history_t1_ret_spearman_ic_mean: -0.1312699970709947
-history_t1_ret_spearman_ic_20d: -0.1312699970709947
-history_t1_ret_spearman_ic_positive_rate: 0.18181818181818182
-history_tier_top10_hit_rate: 0.2787682333873582
-history_tier_top20_tail_hit_rate: 0.16962843295638125
-history_tier_top10_vs_11_20_hit_spread: 0.10913980043097693
-history_tier_summary: TOP1-10:172/617/0.279/ret=0.0020 | TOP11-20:105/619/0.170/ret=0.0001 | TOP21-30:107/615/0.174/ret=0.0049
+history_limitup_source: limitup_probability_training_samples.csv+premium_verify_*.csv
+history_limitup_reason: no_ready_history_rows
+history_limitup_days: 0
+history_top1_limitup_total: 0
+history_top1_limitup_hits: 0
+history_top1_limitup_hit_rate: 
+history_top3_limitup_total: 0
+history_top3_limitup_hits: 0
+history_top3_limitup_hit_rate: 
+history_top5_limitup_total: 0
+history_top5_limitup_hits: 0
+history_top5_limitup_hit_rate: 
+history_top1_up_total: 0
+history_top1_up_hits: 0
+history_top1_up_rate: 
+history_top3_up_total: 0
+history_top3_up_hits: 0
+history_top3_up_rate: 
+history_top5_up_total: 0
+history_top5_up_hits: 0
+history_top5_up_rate: 
+history_top10_limitup_total: 0
+history_top10_limitup_hits: 0
+history_top10_limitup_hit_rate: 
+history_top20_limitup_total: 0
+history_top20_limitup_hits: 0
+history_top20_limitup_hit_rate: 
+history_top10_hit_rate_5d: 
+history_top10_hit_rate_20d: 
+history_top10_hit_rate_60d: 
+limitup_calibration_rows: 0
+limitup_calibration_brier: 
+limitup_calibration_ece: 
+history_limitup_rank_ic_days: 0
+history_limitup_spearman_ic_mean: 
+history_limitup_spearman_ic_20d: 
+history_limitup_spearman_ic_positive_rate: 
+history_limitup_kendall_tau_mean: 
+history_t1_ret_rank_ic_days: 0
+history_t1_ret_spearman_ic_mean: 
+history_t1_ret_spearman_ic_20d: 
+history_t1_ret_spearman_ic_positive_rate: 
+history_tier_top10_hit_rate: 
+history_tier_top20_tail_hit_rate: 
+history_tier_top10_vs_11_20_hit_spread: 
+history_tier_summary: 
 out_top10: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top10_20260710.csv
 out_top20: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top20_20260710.csv
 out_top30: /home/runner/work/top10-decision/top10-decision/outputs/premium/premium_top30_20260710.csv
@@ -145,5 +156,5 @@ packs_used: ['Pack0', 'Pack1', 'Pack2', 'Pack3']
 packs_missing: []
 missing_fields: []
 missing_files: []
-notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/daily_20260710.csv', 'Pack2 enabled (soft mode, fixed)', 'Pack3 enabled: intraday/auction soft factors']
+notes: ['Pack0 baseline always on', 'Pack1 enabled: market cache found -> /home/runner/work/top10-decision/top10-decision/data/market/features_base_20260710.csv', 'Pack2 enabled: /home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260710.csv', 'Pack3 enabled: /home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260710.csv']
 extra_prefix: factor
