@@ -551,6 +551,149 @@ def _append_intraday_risk_summary(lines: List[str], stats: dict[str, Any]) -> No
     lines.append(f"- intraday_execution_penalty_mean: **{fmt_num(stats.get('intraday_execution_penalty_mean', 0.0), 6)}**\n\n")
 
 
+def _series_stats(df: pd.DataFrame, col: str) -> dict[str, float]:
+    s = _safe_numeric_col(df, col, 0.0) if df is not None else pd.Series(dtype=float)
+    if s.empty:
+        return {"min": 0.0, "max": 0.0, "mean": 0.0}
+    return {
+        "min": float(s.min()),
+        "max": float(s.max()),
+        "mean": float(s.mean()),
+    }
+
+
+def _build_decision_diagnostics(
+    candidates_df: pd.DataFrame,
+    selected_rows: int,
+    risk_budget: float,
+    stop_reason: str = "",
+) -> dict[str, Any]:
+    """
+    Report/eval only diagnostics.
+
+    This does not alter the trading decision. It explains whether no-trade came
+    from model return, fill probability, cost/risk, extra penalties, or weight
+    gating.
+    """
+    df = pd.DataFrame() if candidates_df is None else candidates_df.copy()
+    rows = int(len(df))
+    diag: dict[str, Any] = {
+        "rows_scored": rows,
+        "selected_rows": int(selected_rows),
+        "risk_budget": float(risk_budget),
+        "stop_reason": str(stop_reason or ""),
+    }
+
+    for col in [
+        "p_fill_pred",
+        "e_ret_pred",
+        "cost_est",
+        "risk_penalty",
+        "ev_base",
+        "pfill_penalty_extra",
+        "risk_penalty_extra",
+        "intraday_penalty_extra",
+        "intraday_ev_bonus",
+        "ev_penalty_total_extra",
+        "ev_final",
+        "ev_pred",
+    ]:
+        stats = _series_stats(df, col)
+        diag[f"{col}_min"] = stats["min"]
+        diag[f"{col}_max"] = stats["max"]
+        diag[f"{col}_mean"] = stats["mean"]
+
+    ev = _safe_numeric_col(df, "ev_pred", 0.0) if rows else pd.Series(dtype=float)
+    ev_base = _safe_numeric_col(df, "ev_base", 0.0) if rows else pd.Series(dtype=float)
+    e_ret = _safe_numeric_col(df, "e_ret_pred", 0.0) if rows else pd.Series(dtype=float)
+    p_fill = _safe_numeric_col(df, "p_fill_pred", 0.0) if rows else pd.Series(dtype=float)
+    risk = _safe_numeric_col(df, "risk_penalty", 0.0) if rows else pd.Series(dtype=float)
+
+    diag["positive_ev_rows"] = int((ev > 0).sum()) if rows else 0
+    diag["positive_ev_base_rows"] = int((ev_base > 0).sum()) if rows else 0
+    diag["positive_e_ret_rows"] = int((e_ret > 0).sum()) if rows else 0
+    diag["high_pfill_rows"] = int((p_fill >= 0.90).sum()) if rows else 0
+    diag["low_risk_rows"] = int((risk < 0.01).sum()) if rows else 0
+
+    penalty_means = {
+        "cost_est": float(diag.get("cost_est_mean", 0.0)),
+        "risk_penalty": float(diag.get("risk_penalty_mean", 0.0)),
+        "pfill_penalty_extra": float(diag.get("pfill_penalty_extra_mean", 0.0)),
+        "risk_penalty_extra": float(diag.get("risk_penalty_extra_mean", 0.0)),
+        "intraday_penalty_extra": float(diag.get("intraday_penalty_extra_mean", 0.0)),
+    }
+    diag["top_mean_penalty_drivers"] = [
+        {"name": k, "mean": float(v)}
+        for k, v in sorted(penalty_means.items(), key=lambda kv: kv[1], reverse=True)
+        if float(v) > 0
+    ][:5]
+
+    if rows == 0:
+        reason = "input_empty"
+    elif stop_reason:
+        reason = f"guardrail_stop:{stop_reason}"
+    elif selected_rows > 0:
+        reason = "selected_positive_weight"
+    elif diag["positive_ev_rows"] <= 0:
+        if diag["positive_e_ret_rows"] <= 0:
+            reason = "no_positive_e_ret_after_model"
+        elif diag["positive_ev_base_rows"] <= 0:
+            reason = "positive_e_ret_cannot_cover_cost_and_risk"
+        else:
+            reason = "base_ev_positive_but_extra_penalties_filter"
+    elif risk_budget <= 0:
+        reason = "risk_budget_zero"
+    else:
+        reason = "weight_engine_filtered_positive_ev"
+    diag["primary_no_trade_reason"] = reason
+
+    if rows:
+        top = df.copy()
+        top["_diag_ev_sort"] = _safe_numeric_col(top, "ev_pred", 0.0)
+        top = top.sort_values(
+            by=["_diag_ev_sort", "ts_code"],
+            ascending=[False, True],
+            kind="mergesort",
+        ).head(5)
+        diag["top_ev_rows"] = [
+            {
+                "ts_code": str(r.get("ts_code", "")),
+                "name": str(r.get("name", "")),
+                "ev_pred": _json_float(r.get("ev_pred", 0.0)),
+                "ev_base": _json_float(r.get("ev_base", 0.0)),
+                "p_fill_pred": _json_float(r.get("p_fill_pred", 0.0)),
+                "e_ret_pred": _json_float(r.get("e_ret_pred", 0.0)),
+                "cost_est": _json_float(r.get("cost_est", 0.0)),
+                "risk_penalty": _json_float(r.get("risk_penalty", 0.0)),
+                "extra_penalty": _json_float(r.get("ev_penalty_total_extra", 0.0)),
+                "intraday_ev_bonus": _json_float(r.get("intraday_ev_bonus", 0.0)),
+            }
+            for _, r in top.iterrows()
+        ]
+    else:
+        diag["top_ev_rows"] = []
+
+    return diag
+
+
+def _append_decision_diagnostics(lines: List[str], diag: dict[str, Any]) -> None:
+    lines.append("## Decision Diagnostics\n\n")
+    lines.append(f"- primary_no_trade_reason: **{diag.get('primary_no_trade_reason', 'unknown')}**\n")
+    lines.append(f"- rows_scored: **{diag.get('rows_scored', 0)}**\n")
+    lines.append(f"- selected_rows: **{diag.get('selected_rows', 0)}**\n")
+    lines.append(f"- positive_ev_rows: **{diag.get('positive_ev_rows', 0)}**\n")
+    lines.append(f"- positive_ev_base_rows: **{diag.get('positive_ev_base_rows', 0)}**\n")
+    lines.append(f"- positive_e_ret_rows: **{diag.get('positive_e_ret_rows', 0)}**\n")
+    lines.append(f"- high_pfill_rows: **{diag.get('high_pfill_rows', 0)}**\n")
+    lines.append(f"- low_risk_rows: **{diag.get('low_risk_rows', 0)}**\n")
+    lines.append(f"- max_EV: **{fmt_num(diag.get('ev_pred_max', 0.0), 6)}**\n")
+    lines.append(f"- max_EV_base: **{fmt_num(diag.get('ev_base_max', 0.0), 6)}**\n")
+    lines.append(f"- max_E_ret: **{fmt_num(diag.get('e_ret_pred_max', 0.0), 6)}**\n")
+    lines.append(f"- mean_cost: **{fmt_num(diag.get('cost_est_mean', 0.0), 6)}**\n")
+    lines.append(f"- mean_risk_penalty: **{fmt_num(diag.get('risk_penalty_mean', 0.0), 6)}**\n")
+    lines.append(f"- mean_extra_penalty_total: **{fmt_num(diag.get('ev_penalty_total_extra_mean', 0.0), 6)}**\n\n")
+
+
 def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
     """
     EV 聚合升级 V1.1：
@@ -829,6 +972,12 @@ def main() -> int:
         cand_snapshot["ev_formula_version"] = "v1_2_intraday_weighted_stop_zero"
         cand_snapshot["ev_pred"] = 0.0
         intraday_risk_stats = _build_intraday_risk_summary(cand_snapshot)
+        decision_diagnostics = _build_decision_diagnostics(
+            cand_snapshot,
+            selected_rows=0,
+            risk_budget=risk_budget,
+            stop_reason=stop_note,
+        )
 
         cand_path = write_candidates_snapshot(cand_snapshot, signal_date=trade_date)
 
@@ -865,6 +1014,7 @@ def main() -> int:
         report_lines.append("- eret_pred_src: **stop_zero**\n\n")
 
         _append_intraday_risk_summary(report_lines, intraday_risk_stats)
+        _append_decision_diagnostics(report_lines, decision_diagnostics)
 
         report_lines.append("## Artifacts\n\n")
         report_lines.append(f"- candidates_snapshot: `{cand_path}`\n")
@@ -893,6 +1043,7 @@ def main() -> int:
                 "fs_degrade_reason": fs_degrade_reason,
                 "input_status": input_status,
                 "intraday_risk": intraday_risk_stats,
+                "decision_diagnostics": decision_diagnostics,
                 "engine_status": {
                     "p_fill_pred_src": "stop_zero",
                     "eret_pred_src": "stop_zero",
@@ -983,6 +1134,11 @@ def main() -> int:
         .copy()
         .sort_values("target_rank")
     )
+    decision_diagnostics = _build_decision_diagnostics(
+        routed_df,
+        selected_rows=int(len(top_targets)),
+        risk_budget=risk_budget,
+    )
 
     # 报告展示口径：先统一成精简表，再按 EV 降序拆成 TopN / 剩余候选
     report_pool_df = _build_report_candidate_view(routed_df, weights_out)
@@ -1033,6 +1189,7 @@ def main() -> int:
     lines.append(f"- eret_degrade_reason: **{eret_audit.get('eret_degrade_reason', '') or 'none'}**\n\n")
 
     _append_intraday_risk_summary(lines, intraday_risk_stats)
+    _append_decision_diagnostics(lines, decision_diagnostics)
 
     lines.append("## Artifacts\n\n")
     lines.append(f"- candidates_snapshot: `{cand_path}`\n")
@@ -1076,6 +1233,7 @@ def main() -> int:
         "fs_degrade_reason": fs_degrade_reason,
         "input_status": input_status,
         "intraday_risk": intraday_risk_stats,
+        "decision_diagnostics": decision_diagnostics,
         "engine_status": {
             "p_fill_pred_src": pfill_audit.get("p_fill_pred_src", ""),
             "p_fill_model_loaded": pfill_audit.get("p_fill_model_loaded", False),

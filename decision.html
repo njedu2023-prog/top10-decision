@@ -495,7 +495,25 @@
 
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
     const API_LIST_URL = `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
-    const CACHE_KEY = "top10_decision_last_report_v3";
+    const CACHE_KEY = "top10_decision_last_report_v4";
+
+    function pageContentBase() {
+      const dir = window.location.pathname.replace(/\/[^/]*$/, "");
+      return `${window.location.origin}${dir}`.replace(/\/$/, "");
+    }
+
+    function contentUrl(path) {
+      const clean = String(path || "").replace(/^\/+/, "");
+      if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+        return `${pageContentBase()}/${clean}`;
+      }
+      return `${RAW_BASE}/${clean}`;
+    }
+
+    function cacheBustUrl(url) {
+      const sep = String(url).includes("?") ? "&" : "?";
+      return `${url}${sep}_=${Date.now()}`;
+    }
 
     const statusPill = document.getElementById("statusPill");
     const statusText = document.getElementById("statusText");
@@ -567,6 +585,8 @@
         if (!raw) return null;
         const cached = JSON.parse(raw);
         if (!cached || !cached.info || typeof cached.mdRaw !== "string") return null;
+        const cachedYmd = reportDateFromName(cached.info.name || "");
+        if (cachedYmd && cachedYmd < todayYmd()) return null;
         return cached;
       } catch (err) {
         console.warn("Decision report cache read failed.", err);
@@ -673,26 +693,34 @@
 
     function getDateCandidates(daysBack = 60) {
       const out = [];
+      const seen = new Set();
       const d = new Date();
-      const offsets = [0];
-      for (let i = 1; i <= daysBack; i += 1) offsets.push(-i);
+      const pushYmd = ymd => {
+        if (ymd && !seen.has(ymd)) {
+          seen.add(ymd);
+          out.push(ymd);
+        }
+      };
 
-      for (const i of offsets) {
+      pushYmd(latestAllowedReportYmd());
+      pushYmd(todayYmd());
+
+      for (let i = 1; i <= daysBack; i += 1) {
         const x = new Date(d);
-        x.setDate(d.getDate() + i);
-        out.push(formatDateYmd(x));
+        x.setDate(d.getDate() - i);
+        pushYmd(formatDateYmd(x));
       }
       return out;
     }
 
     async function fetchText(url) {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(cacheBustUrl(url), { cache: "no-store" });
       if (!res.ok) throw new Error(`请求失败: ${res.status} ${res.statusText}`);
       return await res.text();
     }
 
     async function fetchJson(url) {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(cacheBustUrl(url), { cache: "no-store" });
       if (!res.ok) throw new Error(`请求失败: ${res.status} ${res.statusText}`);
       return await res.json();
     }
@@ -761,7 +789,7 @@
       if (!path || !/\.csv$/i.test(path)) return {};
 
       try {
-        const csv = await fetchText(`${RAW_BASE}/${path}`);
+        const csv = await fetchText(contentUrl(path));
         const rows = csvTextToRows(csv);
         const map = {};
         rows.forEach(row => {
@@ -1104,7 +1132,7 @@
         .map(x => ({
           name: x.name,
           path: x.path,
-          rawUrl: x.download_url || `${RAW_BASE}/${x.path}`
+          rawUrl: contentUrl(x.path)
         }));
     }
 
@@ -1112,7 +1140,7 @@
       return getDateCandidates(60).map(ymd => ({
         name: `decision_report_${ymd}.md`,
         path: `${REPO.reportDir}/decision_report_${ymd}.md`,
-        rawUrl: `${RAW_BASE}/${REPO.reportDir}/decision_report_${ymd}.md`
+        rawUrl: contentUrl(`${REPO.reportDir}/decision_report_${ymd}.md`)
       }));
     }
 
