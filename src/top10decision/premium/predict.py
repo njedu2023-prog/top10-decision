@@ -188,39 +188,45 @@ def _rate_from_hits(hits: int, total: int) -> float:
 
 
 def _prob_series(df: pd.DataFrame, names: List[str], default: float = np.nan) -> pd.Series:
-    c = _first_existing_col(df, *names)
-    if c is None:
-        return pd.Series([default] * len(df), index=df.index, dtype="float64")
-    x = pd.to_numeric(df[c], errors="coerce")
-    x = x.where(~(x > 1.0), x / 100.0)
-    return x.clip(lower=0.0, upper=1.0)
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    seen = set()
+    for name in names:
+        c = _first_existing_col(df, name)
+        if c is None or c in seen:
+            continue
+        seen.add(c)
+        x = pd.to_numeric(df[c], errors="coerce")
+        x = x.where(~(x > 1.0), x / 100.0).clip(lower=0.0, upper=1.0)
+        missing = out.isna() & x.notna()
+        out.loc[missing] = x.loc[missing]
+    return out.fillna(default)
 
 
 def _bool_like_series(df: pd.DataFrame, names: List[str], default: float = np.nan) -> pd.Series:
-    c = _first_existing_col(df, *names)
-    if c is None:
-        return pd.Series([default] * len(df), index=df.index, dtype="float64")
-    num = pd.to_numeric(df[c], errors="coerce")
-    if num.notna().any():
-        return num.clip(lower=0, upper=1)
-    raw = df[c].astype(str).str.strip().str.lower()
     out = pd.Series(np.nan, index=df.index, dtype="float64")
-    out.loc[raw.isin({"1", "true", "yes", "y", "是", "命中", "hit", "up"})] = 1.0
-    out.loc[raw.isin({"0", "false", "no", "n", "否", "未命中", "miss", "down"})] = 0.0
+    seen = set()
+    for name in names:
+        c = _first_existing_col(df, name)
+        if c is None or c in seen:
+            continue
+        seen.add(c)
+        num = pd.to_numeric(df[c], errors="coerce")
+        parsed = num.clip(lower=0, upper=1)
+        raw = df[c].astype(str).str.strip().str.lower()
+        parsed.loc[num.isna() & raw.isin({"1", "true", "yes", "y", "是", "命中", "hit", "up"})] = 1.0
+        parsed.loc[num.isna() & raw.isin({"0", "false", "no", "n", "否", "未命中", "miss", "down"})] = 0.0
+        missing = out.isna() & parsed.notna()
+        out.loc[missing] = parsed.loc[missing]
     return out.fillna(default)
 
 
 def _t_up_actual_series(df: pd.DataFrame) -> pd.Series:
     direct = _bool_like_series(df, ["t_up_hit", "t_up_actual", "t_close_up_actual", "T日上涨实际"], default=np.nan)
-    if direct.notna().any():
-        return direct
-
     t_close = _num_series(df, "t_close", "close_T_actual", "close_t_actual", "T日收盘价", default=np.nan)
     d_close = _num_series(df, "d_close", "close_T", "base_close", "D日收盘价", "收盘价", default=np.nan)
-    out = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
-    m = t_close.notna() & d_close.notna() & (d_close > 0)
-    out.loc[m] = (t_close.loc[m] > d_close.loc[m]).astype(float)
-    return out
+    missing = direct.isna() & t_close.notna() & d_close.notna() & (d_close > 0)
+    direct.loc[missing] = (t_close.loc[missing] > d_close.loc[missing]).astype(float)
+    return direct
 
 
 def _safe_corr(x: pd.Series, y: pd.Series, method: str = "spearman") -> float:
@@ -1474,10 +1480,17 @@ def _first_existing_col(df: pd.DataFrame, *names: str) -> Optional[str]:
 
 
 def _num_series(df: pd.DataFrame, *names: str, default: float = np.nan) -> pd.Series:
-    c = _first_existing_col(df, *names)
-    if c is None:
-        return pd.Series([default] * len(df), index=df.index, dtype="float64")
-    return pd.to_numeric(df[c], errors="coerce")
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    seen = set()
+    for name in names:
+        c = _first_existing_col(df, name)
+        if c is None or c in seen:
+            continue
+        seen.add(c)
+        x = pd.to_numeric(df[c], errors="coerce")
+        missing = out.isna() & x.notna()
+        out.loc[missing] = x.loc[missing]
+    return out.fillna(default)
 
 
 # ========= 交易日推进（必须用交易日历，不得用未来行情探测） =========

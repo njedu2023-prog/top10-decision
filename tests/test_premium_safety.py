@@ -38,6 +38,7 @@ from top10decision.premium.limitup_probability_engine import (
 from top10decision.premium.predict import (
     _apply_adaptive_rank_score,
     _apply_professional_premium_scores,
+    _historical_limitup_stats_from_df,
     _load_validated_platt_calibrator,
     _recent_limitup_model_health,
 )
@@ -336,6 +337,31 @@ class PremiumSafetyTests(unittest.TestCase):
             self.assertFalse(ok)
             self.assertEqual(reason, "recent_health_fail")
             self.assertLess(metrics["top10_lift"], 0)
+
+    def test_history_stats_coalesce_training_and_verify_aliases(self):
+        history = pd.DataFrame({
+            "_history_date": ["20260701", "20260702"],
+            "rank": [1, 2],
+            "label_matured": [1, np.nan],
+            "t_limitup_verify_ready": [np.nan, 1],
+            "t1_verify_ready": [np.nan, 1],
+            "t_limitup_hit": [1, np.nan],
+            "t_limitup_actual": [np.nan, 0],
+            "t_up_hit": [1, np.nan],
+            "t_up_actual": [np.nan, 1],
+            "t_limitup_prob_rule": [0.8, np.nan],
+            "t_limitup_prob": [np.nan, 0.2],
+            "t1_continue_up_rate_rule": [0.6, np.nan],
+            "t1_continue_up_rate": [np.nan, 0.4],
+            "t1_close_ret": [0.03, -0.01],
+        })
+        stats = _historical_limitup_stats_from_df(history, "mixed_test")
+        self.assertTrue(stats["ready"])
+        self.assertEqual(stats["n_days"], 2)
+        self.assertEqual(stats["top10_total"], 2)
+        self.assertEqual(stats["top10_hits"], 1)
+        self.assertEqual(stats["top1_up_total"], 1)
+        self.assertEqual(stats["calibration_rows"], 2)
 
 
 if __name__ == "__main__":
