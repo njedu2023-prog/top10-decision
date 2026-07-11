@@ -64,6 +64,15 @@ def _load_apple_style_module():
     return module
 
 
+def _load_rebuild_module():
+    path = ROOT / "scripts" / "rebuild_premium_reports.py"
+    spec = importlib.util.spec_from_file_location("premium_report_rebuild", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
 class PremiumSafetyTests(unittest.TestCase):
     def test_time_split_has_two_day_embargo(self):
         dates = [f"202601{x:02d}" for x in range(1, 21)]
@@ -362,6 +371,38 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertEqual(stats["top10_hits"], 1)
         self.assertEqual(stats["top1_up_total"], 1)
         self.assertEqual(stats["calibration_rows"], 2)
+
+    def test_report_rebuild_merges_newer_verify_truth(self):
+        module = _load_rebuild_module()
+
+        class Cfg:
+            def __init__(self, root: Path):
+                self.root = root
+
+            def out_root(self):
+                return self.root
+
+            def out_learning_dir(self):
+                return self.root / "learning"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "learning").mkdir(parents=True)
+            pd.DataFrame({
+                "d_trade_date": ["20260701"], "ts_code": ["600000.SH"], "rank": [1],
+                "label_matured": [1], "t_limitup_hit": [1], "t_up_hit": [1],
+                "t_limitup_prob_rule": [0.8], "t1_close_ret": [0.03],
+            }).to_csv(root / "learning" / "limitup_probability_training_samples.csv", index=False)
+            pd.DataFrame({
+                "trade_date": ["20260702"], "ts_code": ["000001.SZ"], "rank": [1],
+                "t_limitup_verify_ready": [1], "t_limitup_actual": [0], "t_up_actual": [1],
+                "t_limitup_prob": [0.2], "t1_close_ret": [-0.01],
+            }).to_csv(root / "premium_verify_20260702.csv", index=False)
+            stats = module._collect_historical_limitup_stats(Cfg(root))
+            self.assertTrue(stats["ready"])
+            self.assertEqual(stats["n_days"], 2)
+            self.assertEqual(stats["top10_total"], 2)
+            self.assertEqual(stats["top10_hits"], 1)
 
 
 if __name__ == "__main__":

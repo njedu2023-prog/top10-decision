@@ -279,46 +279,59 @@ def _refresh_verify_with_t_truth(
 
 
 def _num_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
-    col = _first_existing_col(df, names)
-    if not col:
-        return pd.Series([default] * len(df), index=df.index, dtype="float64")
-    return pd.to_numeric(df[col], errors="coerce")
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    seen = set()
+    for name in names:
+        col = _first_existing_col(df, [name])
+        if not col or col in seen:
+            continue
+        seen.add(col)
+        x = pd.to_numeric(df[col], errors="coerce")
+        missing = out.isna() & x.notna()
+        out.loc[missing] = x.loc[missing]
+    return out.fillna(default)
 
 
 def _bool_like_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
-    col = _first_existing_col(df, names)
-    if not col:
-        return pd.Series([default] * len(df), index=df.index, dtype="float64")
-    num = pd.to_numeric(df[col], errors="coerce")
-    if num.notna().any():
-        return num.clip(lower=0, upper=1)
-    raw = df[col].astype(str).str.strip().str.lower()
     out = pd.Series(np.nan, index=df.index, dtype="float64")
-    out.loc[raw.isin({"1", "true", "yes", "y", "是", "命中", "hit", "up"})] = 1.0
-    out.loc[raw.isin({"0", "false", "no", "n", "否", "未命中", "miss", "down"})] = 0.0
+    seen = set()
+    for name in names:
+        col = _first_existing_col(df, [name])
+        if not col or col in seen:
+            continue
+        seen.add(col)
+        num = pd.to_numeric(df[col], errors="coerce")
+        parsed = num.clip(lower=0, upper=1)
+        raw = df[col].astype(str).str.strip().str.lower()
+        parsed.loc[num.isna() & raw.isin({"1", "true", "yes", "y", "是", "命中", "hit", "up"})] = 1.0
+        parsed.loc[num.isna() & raw.isin({"0", "false", "no", "n", "否", "未命中", "miss", "down"})] = 0.0
+        missing = out.isna() & parsed.notna()
+        out.loc[missing] = parsed.loc[missing]
     return out.fillna(default)
 
 
 def _t_up_actual_series(df: pd.DataFrame) -> pd.Series:
     direct = _bool_like_series(df, ["t_up_hit", "t_up_actual", "t_close_up_actual", "T日上涨实际"], default=np.nan)
-    if direct.notna().any():
-        return direct
-
     t_close = _num_series(df, ["t_close", "close_T_actual", "close_t_actual", "T日收盘价"], default=np.nan)
     d_close = _num_series(df, ["d_close", "close_T", "base_close", "D日收盘价", "收盘价"], default=np.nan)
-    out = pd.Series([np.nan] * len(df), index=df.index, dtype="float64")
-    m = t_close.notna() & d_close.notna() & (d_close > 0)
-    out.loc[m] = (t_close.loc[m] > d_close.loc[m]).astype(float)
-    return out
+    missing = direct.isna() & t_close.notna() & d_close.notna() & (d_close > 0)
+    direct.loc[missing] = (t_close.loc[missing] > d_close.loc[missing]).astype(float)
+    return direct
 
 
 def _prob_series(df: pd.DataFrame, names: Sequence[str], default: float = np.nan) -> pd.Series:
-    col = _first_existing_col(df, names)
-    if not col:
-        return pd.Series([default] * len(df), index=df.index, dtype="float64")
-    x = pd.to_numeric(df[col], errors="coerce")
-    x = x.where(~(x > 1.0), x / 100.0)
-    return x.clip(lower=0.0, upper=1.0)
+    out = pd.Series(np.nan, index=df.index, dtype="float64")
+    seen = set()
+    for name in names:
+        col = _first_existing_col(df, [name])
+        if not col or col in seen:
+            continue
+        seen.add(col)
+        x = pd.to_numeric(df[col], errors="coerce")
+        x = x.where(~(x > 1.0), x / 100.0).clip(lower=0.0, upper=1.0)
+        missing = out.isna() & x.notna()
+        out.loc[missing] = x.loc[missing]
+    return out.fillna(default)
 
 
 def _safe_corr(x: pd.Series, y: pd.Series, method: str = "spearman") -> float:
@@ -501,7 +514,7 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
     top3_up_total, top3_up_hits, top3_up_rate = calc_up(3)
     top5_up_total, top5_up_hits, top5_up_rate = calc_up(5)
 
-    date_col = _first_existing_col(df, ["d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"])
+    date_col = _first_existing_col(df, ["_history_date", "d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"])
     if date_col:
         date_s = df[date_col].map(_to_yyyymmdd)
     else:
@@ -586,13 +599,12 @@ def _historical_limitup_stats_from_df(df: pd.DataFrame, source: str) -> Dict[str
 
 def _collect_historical_limitup_stats(cfg: PremiumConfig) -> Dict[str, object]:
     trainset_path = cfg.out_learning_dir() / "limitup_probability_training_samples.csv"
+    rows: List[pd.DataFrame] = []
     if trainset_path.exists():
         df = _read_optional_csv(trainset_path)
-        stats = _historical_limitup_stats_from_df(df, "limitup_probability_training_samples.csv")
-        if stats.get("ready"):
-            return stats
+        if not df.empty:
+            rows.append(df)
 
-    rows: List[pd.DataFrame] = []
     for path in sorted(cfg.out_root().glob("premium_verify_*.csv")):
         df = _read_optional_csv(path)
         if df.empty:
@@ -602,7 +614,22 @@ def _collect_historical_limitup_stats(cfg: PremiumConfig) -> Dict[str, object]:
         rows.append(df)
     if not rows:
         return {"ready": False, "reason": "no_history_verify_files", "source": "premium_verify_*.csv"}
-    return _historical_limitup_stats_from_df(pd.concat(rows, ignore_index=True, sort=False), "premium_verify_*.csv")
+    history = pd.concat(rows, ignore_index=True, sort=False)
+    code_col = _first_existing_col(history, ["ts_code", "code", "symbol"])
+    if code_col:
+        history["_history_date"] = ""
+        for date_col in ("d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"):
+            if date_col not in history.columns:
+                continue
+            candidate_dates = history[date_col].map(_to_yyyymmdd)
+            missing = ~history["_history_date"].astype(str).str.match(r"^20\d{6}$", na=False)
+            history.loc[missing, "_history_date"] = candidate_dates.loc[missing]
+        history["_history_code"] = history[code_col].map(_norm_ts_code)
+        history = history.drop_duplicates(["_history_date", "_history_code"], keep="last")
+    return _historical_limitup_stats_from_df(
+        history,
+        "limitup_probability_training_samples.csv+premium_verify_*.csv",
+    )
 
 
 def _top_frame_for_date(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
