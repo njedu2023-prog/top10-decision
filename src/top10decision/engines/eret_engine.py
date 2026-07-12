@@ -21,10 +21,10 @@ eret_engine.py
   5) 落盘输出
 
 当前版本：
-- v4：保留原主链与上下游字段不变，仅修正 E_ret 线上模型选择
-- 按 eret_meta.json 的 selected_model / metrics_valid 选择线上模型
-- 若 meta 缺少 selected_model，则按验证 RMSE 推断；指标缺失时优先 LGBM
-- 同时输出 raw / clipped / final，便于定位 E_ret 全负与 -0.30 下限命中问题
+- v5：学习模型只有在验收文件、模型元数据和独立交易日门槛全部一致时才可上线
+- LR 保留 NaN 给训练流水线的中位数填补；LGBM 使用与训练一致的 -999 缺失哨兵
+- 分钟证据不可用时，相关盘中特征统一视为缺失，避免把占位值当成真实信号
+- 同时输出 raw / clipped / final，便于定位 E_ret 分布与裁剪问题
 """
 
 from __future__ import annotations
@@ -48,6 +48,8 @@ except Exception:  # pragma: no cover
 PRED_MIN = -0.30
 PRED_MAX = 0.30
 ERRMSG_MAXLEN = 240
+MIN_MODEL_INDEPENDENT_DATES = 20
+LEARNING_ACCEPTANCE_RELATIVE_PATH = Path("outputs/learning/learning_acceptance_latest.json")
 CATEGORY_HINT_COLS = [
     "board",
     "area",
@@ -55,6 +57,27 @@ CATEGORY_HINT_COLS = [
     "limit_type",
     "prior_board",
 ]
+
+# 这些字段依赖分钟级路径。intraday_available=0 时，上游写入的 0/0.5
+# 只是占位符，不能进入学习模型成为真实观测。
+INTRADAY_DEPENDENT_FEATURE_COLS = {
+    "minute_rows",
+    "limit_touch_count",
+    "open_board_count",
+    "max_drawdown_after_limit",
+    "reseal_count",
+    "reseal_minutes_avg",
+    "late_volume_ratio",
+    "late_price_weakness",
+    "late_limit_hold_minutes",
+    "late_withdraw_score",
+    "reseal_score",
+    "intraday_quality_score",
+    "intraday_confidence_score",
+    "intraday_risk_score",
+    "intraday_soft_risk_score",
+    "intraday_hard_risk_flag",
+}
 
 
 def _detect_project_root() -> Path:
@@ -105,6 +128,85 @@ def _safe_errmsg(exc: Exception, maxlen: int = ERRMSG_MAXLEN) -> str:
     if len(msg) > maxlen:
         msg = msg[:maxlen] + "..."
     return msg
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _safe_json_dict(path: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _model_acceptance_status(root: Path, meta: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
+    """Fail closed unless the acceptance artifact exactly matches the model metadata."""
+    acceptance_path = root / LEARNING_ACCEPTANCE_RELATIVE_PATH
+    details: Dict[str, Any] = {
+        "eret_model_acceptance_path": str(acceptance_path),
+        "eret_model_acceptance_pass": False,
+        "eret_model_acceptance_anchor_trade_date": "",
+        "eret_model_independent_dates": 0,
+    }
+
+    if not acceptance_path.exists():
+        return False, "acceptance_file_missing", details
+
+    acceptance = _safe_json_dict(acceptance_path)
+    if not acceptance:
+        return False, "acceptance_file_invalid", details
+
+    eret = acceptance.get("eret", {})
+    if not isinstance(eret, dict):
+        return False, "acceptance_eret_section_invalid", details
+
+    meta_anchor = str(meta.get("anchor_trade_date", "") or "").strip()
+    acceptance_anchor = str(eret.get("anchor_trade_date", "") or "").strip()
+    selected_kind = _resolve_selected_model_kind(meta)
+    acceptance_kind = str(eret.get("selected_model", "") or "").strip().lower()
+    window = meta.get("window", {}) if isinstance(meta.get("window", {}), dict) else {}
+    independent_dates = _safe_int(window.get("n_loaded_dates", 0), 0)
+
+    details.update(
+        {
+            "eret_model_acceptance_anchor_trade_date": acceptance_anchor,
+            "eret_model_independent_dates": independent_dates,
+        }
+    )
+
+    checks = (
+        (str(meta.get("status", "") or "").strip().lower() == "trained", "model_meta_not_trained"),
+        (str(eret.get("status", "") or "").strip().lower() == "trained", "acceptance_status_not_trained"),
+        (eret.get("selected_model_pass") is True, "selected_model_pass_false"),
+        (eret.get("acceptance_pass") is True, "acceptance_pass_false"),
+        (bool(meta_anchor) and meta_anchor == acceptance_anchor, "acceptance_anchor_mismatch"),
+        (acceptance_kind == selected_kind, "acceptance_model_kind_mismatch"),
+        (independent_dates >= MIN_MODEL_INDEPENDENT_DATES, "insufficient_independent_dates"),
+        (_safe_int(eret.get("loaded_trade_dates", 0), 0) >= MIN_MODEL_INDEPENDENT_DATES, "acceptance_dates_too_few"),
+    )
+    for passed, reason in checks:
+        if not passed:
+            return False, reason, details
+
+    selected_metrics = eret.get("selected_model_metrics", {})
+    if not isinstance(selected_metrics, dict):
+        return False, "selected_model_metrics_invalid", details
+
+    daily_rank_ic = _metric_value(selected_metrics, "daily_spearman_corr_mean", float("nan"))
+    rmse_skill = _metric_value(selected_metrics, "rmse_skill_vs_train_mean", float("nan"))
+    if not np.isfinite(daily_rank_ic) or daily_rank_ic <= 0.0:
+        return False, "daily_rank_ic_not_positive", details
+    if not np.isfinite(rmse_skill) or rmse_skill <= 0.0:
+        return False, "rmse_skill_not_positive", details
+
+    details["eret_model_acceptance_pass"] = True
+    return True, "", details
 
 
 @dataclass
@@ -254,6 +356,10 @@ def _build_model_missing_audit(meta_path: Optional[Path]) -> Dict[str, Any]:
         "eret_model_expected_categorical_cols": "",
         "eret_model_expected_numeric_feature_count": 0,
         "eret_model_category_like_cols_detected": "",
+        "eret_model_acceptance_path": "",
+        "eret_model_acceptance_pass": False,
+        "eret_model_acceptance_anchor_trade_date": "",
+        "eret_model_independent_dates": 0,
         "eret_model_degrade_reason": "model_missing_use_rule",
     }
 
@@ -266,6 +372,7 @@ def _build_model_load_failed_audit(
     numeric_cols: list[str],
     category_like_cols_detected: list[str],
     err: Exception,
+    acceptance_details: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
         "eret_model_loaded": False,
@@ -277,7 +384,37 @@ def _build_model_load_failed_audit(
         "eret_model_expected_categorical_cols": "|".join(categorical_cols),
         "eret_model_expected_numeric_feature_count": len(numeric_cols),
         "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+        **(acceptance_details or {
+            "eret_model_acceptance_path": "",
+            "eret_model_acceptance_pass": False,
+            "eret_model_acceptance_anchor_trade_date": "",
+            "eret_model_independent_dates": 0,
+        }),
         "eret_model_degrade_reason": f"model_load_failed:{type(err).__name__}:{_safe_errmsg(err)}",
+    }
+
+
+def _build_model_rejected_audit(
+    meta_path: Optional[Path],
+    feature_cols: list[str],
+    categorical_cols: list[str],
+    numeric_cols: list[str],
+    category_like_cols_detected: list[str],
+    reason: str,
+    acceptance_details: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "eret_model_loaded": False,
+        "eret_model_kind": "",
+        "eret_model_path": "",
+        "eret_model_feature_mode": "",
+        "eret_model_meta_path": str(meta_path) if meta_path else "",
+        "eret_model_expected_n_features": len(feature_cols),
+        "eret_model_expected_categorical_cols": "|".join(categorical_cols),
+        "eret_model_expected_numeric_feature_count": len(numeric_cols),
+        "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+        **acceptance_details,
+        "eret_model_degrade_reason": f"model_rejected_by_learning_acceptance:{reason}",
     }
 
 
@@ -317,6 +454,18 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
     if not candidates:
         return None, _build_model_missing_audit(meta_path)
 
+    accepted, rejection_reason, acceptance_details = _model_acceptance_status(root, meta)
+    if not accepted:
+        return None, _build_model_rejected_audit(
+            meta_path=meta_path,
+            feature_cols=feature_cols,
+            categorical_cols=categorical_cols,
+            numeric_cols=numeric_cols,
+            category_like_cols_detected=category_like_cols_detected,
+            reason=rejection_reason,
+            acceptance_details=acceptance_details,
+        )
+
     last_err: Optional[Exception] = None
     last_path: Optional[Path] = None
 
@@ -345,6 +494,7 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
                 "eret_model_expected_categorical_cols": "|".join(categorical_cols),
                 "eret_model_expected_numeric_feature_count": len(numeric_cols),
                 "eret_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+                **acceptance_details,
                 "eret_model_degrade_reason": "",
             }
         except Exception as e:
@@ -363,6 +513,7 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
         numeric_cols=numeric_cols,
         category_like_cols_detected=category_like_cols_detected,
         err=last_err,
+        acceptance_details=acceptance_details,
     )
 
 
@@ -468,23 +619,39 @@ def _normalize_feature_frame(x: pd.DataFrame, categorical_cols: list[str], numer
     return out.astype(float)
 
 
+def _mask_unavailable_intraday_features(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "intraday_available" not in out.columns:
+        return out
+
+    raw = out["intraday_available"]
+    numeric_available = pd.to_numeric(raw, errors="coerce").fillna(0.0).gt(0.0)
+    text_available = raw.astype("string").str.strip().str.lower().isin({"true", "yes", "y", "ok"})
+    unavailable = ~(numeric_available | text_available)
+    for col in INTRADAY_DEPENDENT_FEATURE_COLS:
+        if col in out.columns:
+            out.loc[unavailable, col] = np.nan
+    return out
+
+
 def _build_feature_frame(df: pd.DataFrame, bundle: ERetModelBundle) -> pd.DataFrame:
+    source = _mask_unavailable_intraday_features(df)
     if bundle.feature_cols:
         # 严格按照训练 meta 的 feature_cols 构造线上输入：
         # 1) 列集合固定
         # 2) 列顺序固定
-        # 3) 缺失列先置 NaN，后续审计后再统一填 0
+        # 3) 缺失列先置 NaN，后续按模型训练契约处理
         x = pd.DataFrame(index=df.index)
         for col in bundle.feature_cols:
-            if col in df.columns:
-                x[col] = df[col]
+            if col in source.columns:
+                x[col] = source[col]
             else:
                 x[col] = np.nan
         x = x.loc[:, bundle.feature_cols]
         x.columns = [str(c) for c in x.columns]
         return _normalize_feature_frame(x, bundle.categorical_cols, bundle.numeric_cols)
 
-    x = _select_feature_frame(df)
+    x = _select_feature_frame(source)
     x.columns = [str(c) for c in x.columns]
     return _normalize_feature_frame(x, bundle.categorical_cols, bundle.numeric_cols)
 
@@ -525,26 +692,28 @@ def _summarize_alignment(df: pd.DataFrame, bundle: ERetModelBundle, x: pd.DataFr
     }
 
 
-def _prepare_model_input(x: pd.DataFrame) -> pd.DataFrame:
-    # LR / ElasticNet 不接受 NaN。这里在完成缺失审计之后再填 0，
-    # 既保证主链不因单日缺字段中断，又能通过审计字段定位缺失来源。
-    return x.replace([np.inf, -np.inf], np.nan).fillna(0.0).astype(float)
+def _prepare_model_input(x: pd.DataFrame, model_kind: str) -> pd.DataFrame:
+    clean = x.replace([np.inf, -np.inf], np.nan).astype(float)
+    if str(model_kind).strip().lower() == "lgbm":
+        # train_eret.encode_gbm_frame 使用同一个缺失哨兵。
+        return clean.fillna(-999.0)
+    # LR Pipeline 内含 SimpleImputer(strategy="median")，必须保留 NaN。
+    return clean
 
 
 def _predict_by_model(bundle: ERetModelBundle, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series, Dict[str, Any]]:
     x = _build_feature_frame(df, bundle)
     audit = _summarize_alignment(df=df, bundle=bundle, x=x)
-    x_model = _prepare_model_input(x)
+    x_model = _prepare_model_input(x, bundle.model_kind)
 
     pred = bundle.model.predict(x_model)
-    if isinstance(pred, pd.Series):
-        raw = pd.to_numeric(pred.copy(), errors="coerce").fillna(0.0)
-        raw.index = df.index
-        raw.name = "eret_pred_model_raw"
-    else:
-        raw = pd.Series(np.asarray(pred).reshape(-1), index=df.index, name="eret_pred_model_raw")
-
-    raw = pd.to_numeric(raw, errors="coerce").fillna(0.0)
+    pred_array = np.asarray(pred).reshape(-1)
+    if len(pred_array) != len(df):
+        raise ValueError(f"model_prediction_length_mismatch:{len(pred_array)}!={len(df)}")
+    raw = pd.Series(pred_array, index=df.index, name="eret_pred_model_raw")
+    raw = pd.to_numeric(raw, errors="coerce")
+    if raw.isna().any() or not np.isfinite(raw.to_numpy(dtype=float)).all():
+        raise ValueError("model_prediction_contains_non_finite_values")
     clipped = _clip_ret_series(raw)
     clipped.name = "eret_pred_model"
     return raw, clipped, audit
@@ -655,6 +824,12 @@ def apply_eret_engine(
     out["eret_expected_categorical_cols"] = str(audit.get("eret_model_expected_categorical_cols", ""))
     out["eret_expected_numeric_feature_count"] = int(audit.get("eret_model_expected_numeric_feature_count", 0) or 0)
     out["eret_model_category_like_cols_detected"] = str(audit.get("eret_model_category_like_cols_detected", ""))
+    out["eret_model_acceptance_path"] = str(audit.get("eret_model_acceptance_path", ""))
+    out["eret_model_acceptance_pass"] = bool(audit.get("eret_model_acceptance_pass", False))
+    out["eret_model_acceptance_anchor_trade_date"] = str(
+        audit.get("eret_model_acceptance_anchor_trade_date", "")
+    )
+    out["eret_model_independent_dates"] = int(audit.get("eret_model_independent_dates", 0) or 0)
 
     out["eret_model_actual_n_features"] = int(predict_audit.get("actual_n_features", 0) or 0)
     out["eret_missing_feature_count"] = int(predict_audit.get("missing_feature_count", 0) or 0)

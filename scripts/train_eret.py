@@ -18,18 +18,10 @@ train_eret.py
 本版关键修复：
 - E_ret 训练特征合同必须与线上 decision 推理可获得字段一致。
 - 严禁未来真值、标签字段、训练权重、审计字段、T+1/T+2 真值字段进入 feature_cols。
-- 重点剔除本次事故暴露出的危险字段：
-    close_t2.1
-    open_t1
-    sample_weight
-    is_cold_start
-    feature_coverage_score
-    prior_strength_score
-    prior_theme_boost
-    prior_seal_amount
-    prior_open_times
-    prior_turnover_rate
-- 目的：降低线上推理缺失率，避免 LR / ElasticNet 在大面积缺失特征上整体负向外推。
+- 剔除股票标识、全市场广播资金流、线上缺失 prior 与盘中审计字段。
+- 按交易日均衡训练权重，避免单日股票数被误当成独立市场样本。
+- 至少积累 20 个独立交易日，并使用多交易日时间留出验证后才训练。
+- 目的：让模型学习稳定的个股横截面差异，而不是放大少数交易日的市场偏移。
 """
 
 from __future__ import annotations
@@ -59,6 +51,27 @@ try:
 except Exception:
     HAS_LGBM = False
     LGBMRegressor = None  # type: ignore
+
+
+DEFAULT_MIN_INDEPENDENT_DATES = 20
+INTRADAY_DEPENDENT_FEATURE_COLS = {
+    "minute_rows",
+    "limit_touch_count",
+    "open_board_count",
+    "max_drawdown_after_limit",
+    "reseal_count",
+    "reseal_minutes_avg",
+    "late_volume_ratio",
+    "late_price_weakness",
+    "late_limit_hold_minutes",
+    "late_withdraw_score",
+    "reseal_score",
+    "intraday_quality_score",
+    "intraday_confidence_score",
+    "intraday_risk_score",
+    "intraday_soft_risk_score",
+    "intraday_hard_risk_flag",
+}
 
 
 # =========================================================
@@ -187,8 +200,23 @@ def load_window_trainsets(
     return out, loaded_dates, missing_dates, loaded_paths
 
 
-def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
+def mask_unavailable_intraday_features(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
+    if "intraday_available" not in out.columns:
+        return out
+
+    raw = out["intraday_available"]
+    numeric_available = pd.to_numeric(raw, errors="coerce").fillna(0.0).gt(0.0)
+    text_available = raw.astype("string").str.strip().str.lower().isin({"true", "yes", "y", "ok"})
+    unavailable = ~(numeric_available | text_available)
+    for col in INTRADAY_DEPENDENT_FEATURE_COLS:
+        if col in out.columns:
+            out.loc[unavailable, col] = np.nan
+    return out
+
+
+def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
+    out = mask_unavailable_intraday_features(df)
 
     if "label_ready_ret" in out.columns:
         out["label_ready_ret"] = pd.to_numeric(out["label_ready_ret"], errors="coerce").fillna(0).astype(int)
@@ -219,6 +247,28 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def build_date_balanced_sample_weight(df: pd.DataFrame) -> np.ndarray:
+    """Preserve row quality weights while giving each trade date equal total weight."""
+    if len(df) == 0:
+        return np.asarray([], dtype=float)
+
+    if "sample_weight" in df.columns:
+        base = pd.to_numeric(df["sample_weight"], errors="coerce").fillna(1.0).clip(lower=0.2)
+    else:
+        base = pd.Series(1.0, index=df.index, dtype=float)
+
+    if "trade_date" not in df.columns:
+        return base.to_numpy(dtype=float)
+
+    date_key = df["trade_date"].map(norm_ymd).replace("", "__MISSING_DATE__")
+    date_total = base.groupby(date_key).transform("sum").replace(0.0, np.nan)
+    balanced = (base / date_total).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    mean_weight = float(balanced.mean())
+    if not np.isfinite(mean_weight) or mean_weight <= 0.0:
+        return base.to_numpy(dtype=float)
+    return (balanced / mean_weight).to_numpy(dtype=float)
+
+
 # =========================================================
 # 切分
 # =========================================================
@@ -229,12 +279,22 @@ def split_train_valid(
 ) -> Tuple[pd.DataFrame, Optional[pd.DataFrame], str, bool]:
     if "trade_date" in df.columns:
         dates = sorted({norm_ymd(x) for x in df["trade_date"].dropna().tolist() if norm_ymd(x)})
-        if len(dates) >= 3:
-            valid_date = dates[-1]
-            train_df = df[df["trade_date"].map(norm_ymd) < valid_date].copy()
-            valid_df = df[df["trade_date"].map(norm_ymd) == valid_date].copy()
+        if len(dates) >= 6:
+            n_valid_dates = max(3, int(np.ceil(len(dates) * 0.20)))
+            n_valid_dates = min(n_valid_dates, len(dates) - 3)
+            valid_dates = dates[-n_valid_dates:]
+            train_dates = set(dates[:-n_valid_dates])
+            normalized_dates = df["trade_date"].map(norm_ymd)
+            train_df = df[normalized_dates.isin(train_dates)].copy()
+            valid_df = df[normalized_dates.isin(valid_dates)].copy()
             if len(train_df) >= min_train_rows and len(valid_df) >= min_valid_rows:
-                return train_df, valid_df, f"time_holdout:{valid_date}", False
+                return (
+                    train_df,
+                    valid_df,
+                    f"time_holdout:{valid_dates[0]}-{valid_dates[-1]}:{len(valid_dates)}d",
+                    False,
+                )
+            return df.copy(), None, "time_holdout_insufficient_rows", True
 
     n = len(df)
     cut = max(int(n * 0.8), 1)
@@ -315,6 +375,7 @@ ID_COLS = {
     "target_trade_date",
     "signal_date",
     "ts_code",
+    "symbol",
     "name",
     "name_fs",
     "name_limit",
@@ -340,6 +401,24 @@ ONLINE_UNAVAILABLE_COLS = {
     "prior_board_limit_up_count",
     "prior_prob",
     "prior_probability",
+    "prior_prob_prior",
+}
+
+# 这些值在同一交易日对所有股票完全相同。当前目标是个股横截面 E_ret，
+# 少量交易日下把它们按股票行重复训练会制造伪样本与整体预测漂移。
+DATE_LEVEL_BROADCAST_COLS = {
+    "north_money_market",
+    "south_money_market",
+    "hgt_market",
+    "sgt_market",
+    "market_regime",
+}
+
+NON_PREDICTIVE_AUDIT_COLS = {
+    "intraday_status",
+    "intraday_missing_reason",
+    "intraday_tag",
+    "minute_freq",
 }
 
 NON_FEATURE_PREFIXES = ("Unnamed:",)
@@ -368,7 +447,16 @@ def _is_forbidden_feature_col(col: object) -> bool:
     if s.endswith(MISSING_FLAG_SUFFIX):
         return True
 
-    forbidden_exact = {c.lower() for c in (LEAKAGE_COLS | ID_COLS | ONLINE_UNAVAILABLE_COLS)}
+    forbidden_exact = {
+        c.lower()
+        for c in (
+            LEAKAGE_COLS
+            | ID_COLS
+            | ONLINE_UNAVAILABLE_COLS
+            | DATE_LEVEL_BROADCAST_COLS
+            | NON_PREDICTIVE_AUDIT_COLS
+        )
+    }
     if low in forbidden_exact or base_low in forbidden_exact:
         return True
 
@@ -410,7 +498,7 @@ def select_feature_columns(df: pd.DataFrame) -> List[str]:
     if not cols:
         raise ValueError("未找到可训练特征列")
 
-    print(f"[train_eret] feature_contract=online_safe_v1")
+    print(f"[train_eret] feature_contract=online_safe_v2")
     print(f"[train_eret] selected_features={len(cols)} filtered_features={len(filtered)}")
     if filtered:
         print(f"[train_eret] filtered_feature_sample={'|'.join(filtered[:30])}")
@@ -520,11 +608,8 @@ def fit_gbm_train_only(
 ) -> object:
     x_train = encode_gbm_frame(train_df, feature_cols)
     model = build_gbm_model()
-    sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
-    if sample_weight is not None:
-        model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values, sample_weight=sample_weight)
-    else:
-        model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values)
+    sample_weight = build_date_balanced_sample_weight(train_df)
+    model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values, sample_weight=sample_weight)
     return model
 
 
@@ -549,11 +634,8 @@ def fit_gbm_with_valid(
     x_valid = encoded_all.iloc[len(train_df):].copy()
 
     model = build_gbm_model()
-    sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
-    if sample_weight is not None:
-        model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values, sample_weight=sample_weight)
-    else:
-        model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values)
+    sample_weight = build_date_balanced_sample_weight(train_df)
+    model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values, sample_weight=sample_weight)
 
     return model, x_valid
 
@@ -596,6 +678,41 @@ def safe_corr(y_true: np.ndarray, y_pred: np.ndarray) -> Optional[float]:
         return None
 
 
+def safe_spearman_corr(y_true: np.ndarray, y_pred: np.ndarray) -> Optional[float]:
+    try:
+        if len(y_true) < 3:
+            return None
+        corr = pd.Series(y_true).corr(pd.Series(y_pred), method="spearman")
+        return None if pd.isna(corr) else float(corr)
+    except Exception:
+        return None
+
+
+def safe_daily_spearman_corr_mean(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    trade_dates: Optional[pd.Series],
+) -> Tuple[Optional[float], int]:
+    if trade_dates is None or len(trade_dates) != len(y_true):
+        return None, 0
+
+    frame = pd.DataFrame(
+        {
+            "trade_date": trade_dates.map(norm_ymd).to_numpy(),
+            "y_true": np.asarray(y_true, dtype=float),
+            "y_pred": np.asarray(y_pred, dtype=float),
+        }
+    )
+    values: List[float] = []
+    for _, group in frame.groupby("trade_date", sort=True):
+        if len(group) < 3 or group["y_true"].nunique() < 2 or group["y_pred"].nunique() < 2:
+            continue
+        corr = group["y_true"].corr(group["y_pred"], method="spearman")
+        if pd.notna(corr) and np.isfinite(float(corr)):
+            values.append(float(corr))
+    return (float(np.mean(values)), len(values)) if values else (None, 0)
+
+
 def safe_directional_acc(y_true: np.ndarray, y_pred: np.ndarray) -> Optional[float]:
     try:
         if len(y_true) == 0:
@@ -607,14 +724,32 @@ def safe_directional_acc(y_true: np.ndarray, y_pred: np.ndarray) -> Optional[flo
         return None
 
 
-def evaluate_regression(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, Optional[float]]:
-    return {
+def evaluate_regression(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    trade_dates: Optional[pd.Series] = None,
+    baseline_pred: Optional[np.ndarray] = None,
+) -> Dict[str, object]:
+    daily_spearman, daily_spearman_dates = safe_daily_spearman_corr_mean(y_true, y_pred, trade_dates)
+    metrics: Dict[str, object] = {
         "mae": safe_mae(y_true, y_pred),
         "rmse": safe_rmse(y_true, y_pred),
         "r2": safe_r2(y_true, y_pred),
         "corr": safe_corr(y_true, y_pred),
+        "spearman_corr": safe_spearman_corr(y_true, y_pred),
+        "daily_spearman_corr_mean": daily_spearman,
+        "daily_spearman_valid_dates": int(daily_spearman_dates),
         "directional_acc": safe_directional_acc(y_true, y_pred),
     }
+    if baseline_pred is not None:
+        baseline_rmse = safe_rmse(y_true, baseline_pred)
+        model_rmse = metrics.get("rmse")
+        metrics["baseline_rmse_train_mean"] = baseline_rmse
+        if baseline_rmse is not None and baseline_rmse > 0.0 and model_rmse is not None:
+            metrics["rmse_skill_vs_train_mean"] = float(1.0 - float(model_rmse) / baseline_rmse)
+        else:
+            metrics["rmse_skill_vs_train_mean"] = None
+    return metrics
 
 
 def _metric_value(metrics: Dict[str, object], key: str, default: float) -> float:
@@ -634,24 +769,28 @@ def choose_selected_model(metrics_valid: Dict[str, Dict[str, object]]) -> Tuple[
     """
     选择线上 E_ret 模型。
 
-    E_ret 是小样本回归，LR 偶尔会被极端样本拖出荒唐量级。线上不能固定
-    LR > LGBM，而应按验证集质量选择。主排序用 RMSE，辅以 MAE / 方向准确率；
-    指标缺失时偏向 LGBM，因为树模型对非线性和缺失填充更稳。
+    Top10 的首要价值是横截面排序，同时 E_ret 还必须保持绝对收益校准。
+    因此先看多日平均 Spearman IC，再看相对训练均值基线的 RMSE skill，
+    最后才用 RMSE / MAE / 方向准确率打破平局。
     """
-    candidates: list[tuple[tuple[float, float, float, int], str, Dict[str, object]]] = []
+    candidates: list[tuple[tuple[float, float, float, float, float, int], str, Dict[str, object]]] = []
     for preference, kind in enumerate(("lgbm", "lr")):
         metrics = metrics_valid.get(kind, {}) or {}
+        daily_rank_ic = _metric_value(metrics, "daily_spearman_corr_mean", -1.0)
+        rmse_skill = _metric_value(metrics, "rmse_skill_vs_train_mean", -1.0)
         rmse = _metric_value(metrics, "rmse", float("inf"))
         mae = _metric_value(metrics, "mae", float("inf"))
         directional_acc = _metric_value(metrics, "directional_acc", -1.0)
-        candidates.append(((rmse, mae, -directional_acc, preference), kind, metrics))
+        candidates.append(
+            ((-daily_rank_ic, -rmse_skill, rmse, mae, -directional_acc, preference), kind, metrics)
+        )
 
     candidates.sort(key=lambda x: x[0])
     selected_kind = candidates[0][1] if candidates else "lgbm"
     selected_metrics = candidates[0][2] if candidates else {}
     return selected_kind, {
         "selected_model": selected_kind,
-        "selection_rule": "min_rmse_then_mae_then_directional_acc_prefer_lgbm",
+        "selection_rule": "max_daily_spearman_then_rmse_skill_then_rmse_mae_directional_prefer_lgbm",
         "selected_metrics": selected_metrics,
         "candidate_metrics": metrics_valid,
     }
@@ -663,6 +802,11 @@ def empty_metrics(reason: str) -> Dict[str, Optional[float] | str]:
         "rmse": None,
         "r2": None,
         "corr": None,
+        "spearman_corr": None,
+        "daily_spearman_corr_mean": None,
+        "daily_spearman_valid_dates": 0,
+        "baseline_rmse_train_mean": None,
+        "rmse_skill_vs_train_mean": None,
         "directional_acc": None,
         "reason": reason,
     }
@@ -681,6 +825,7 @@ def build_skip_meta(
     raw_df: pd.DataFrame,
     df: pd.DataFrame,
     skip_reason: str,
+    min_independent_dates: int = DEFAULT_MIN_INDEPENDENT_DATES,
 ) -> Dict[str, object]:
     sample_maturity_distribution: Dict[str, int] = {}
     if "sample_maturity" in df.columns:
@@ -725,6 +870,12 @@ def build_skip_meta(
             "valid": 0,
         },
         "eret_truth_ready_only": True,
+        "training_governance": {
+            "minimum_independent_dates": int(min_independent_dates),
+            "available_independent_dates": int(len(loaded_trade_dates)),
+            "date_balanced_sample_weight": True,
+            "multi_date_time_holdout": True,
+        },
         "sample_maturity_distribution": sample_maturity_distribution,
         "target_distribution": {
             "mean": float(df["realized_ret_t1_to_t2"].mean()) if "realized_ret_t1_to_t2" in df.columns and len(df) else None,
@@ -739,7 +890,7 @@ def build_skip_meta(
             "feature_cols": [],
             "numeric_cols": [],
             "categorical_cols": [],
-            "feature_contract_version": "online_safe_v1",
+            "feature_contract_version": "online_safe_v2",
             "filtered_feature_cols_due_to_contract": [],
         },
         "missing_ratio": {},
@@ -752,7 +903,8 @@ def build_skip_meta(
             "原因：成熟窗口可训练样本不足时，跳过训练但不断链。",
             "不会覆盖已有 latest 模型文件。",
             "本文件已升级为成熟窗口训练，不再限定单日训练。",
-            "E_ret feature contract 已升级为 online_safe_v1。",
+            "E_ret feature contract 已升级为 online_safe_v2。",
+            "模型至少需要足够的独立交易日；股票行数不能替代市场日期样本数。",
         ],
     }
 
@@ -778,6 +930,7 @@ def train_window_as_of(
     window_size: int = 0,
     min_train_rows: int = 24,
     min_valid_rows: int = 8,
+    min_independent_dates: int = DEFAULT_MIN_INDEPENDENT_DATES,
 ) -> Dict[str, object]:
     maturity_df, maturity_path = load_maturity_table(project_root, maturity_csv=maturity_csv)
     matured_trade_dates = resolve_matured_trade_dates_for_eret(
@@ -794,7 +947,18 @@ def train_window_as_of(
     )
     df = prepare_train_df(raw_df)
 
+    independent_dates = (
+        sorted({norm_ymd(x) for x in df["trade_date"].dropna().tolist() if norm_ymd(x)})
+        if "trade_date" in df.columns
+        else []
+    )
+    skip_reason = ""
     if len(df) < min_train_rows:
+        skip_reason = "insufficient_rows_skip_train"
+    elif len(independent_dates) < min_independent_dates:
+        skip_reason = "insufficient_independent_dates_skip_train"
+
+    if skip_reason:
         meta = build_skip_meta(
             anchor_trade_date=anchor_trade_date,
             maturity_path=maturity_path,
@@ -804,7 +968,8 @@ def train_window_as_of(
             missing_trade_dates=missing_trade_dates,
             raw_df=raw_df,
             df=df,
-            skip_reason="insufficient_rows_skip_train",
+            skip_reason=skip_reason,
+            min_independent_dates=min_independent_dates,
         )
         meta_path, meta_dated_path = write_meta_files(project_root, anchor_trade_date, meta)
 
@@ -813,7 +978,8 @@ def train_window_as_of(
         print(f"[train_eret] loaded_trade_dates={loaded_trade_dates}")
         print(f"[train_eret] missing_trade_dates={missing_trade_dates}")
         print(f"[train_eret] skipped=True")
-        print(f"[train_eret] skip_reason=insufficient_rows_skip_train")
+        print(f"[train_eret] independent_dates={len(independent_dates)} required={min_independent_dates}")
+        print(f"[train_eret] skip_reason={skip_reason}")
         print(f"[train_eret] out_meta={meta_path}")
         print(f"[train_eret] out_meta_dated={meta_dated_path}")
         return meta
@@ -832,13 +998,21 @@ def train_window_as_of(
         str(c) for c in df.columns if _is_forbidden_feature_col(c)
     ]
 
+    train_target = train_df["realized_ret_t1_to_t2"].astype(float).to_numpy()
+    train_sample_weight = build_date_balanced_sample_weight(train_df)
+    train_mean_baseline = float(np.average(train_target, weights=train_sample_weight))
+    valid_baseline = (
+        np.full(len(valid_df), train_mean_baseline, dtype=float)
+        if valid_df is not None
+        else None
+    )
+
     # LR / ElasticNet
     lr_pipe = build_lr_pipeline(num_cols, cat_cols)
-    lr_sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
     lr_pipe.fit(
         train_df[feature_cols],
-        train_df["realized_ret_t1_to_t2"].astype(float).values,
-        reg__sample_weight=lr_sample_weight,
+        train_target,
+        reg__sample_weight=train_sample_weight,
     )
 
     if valid_df is not None:
@@ -846,6 +1020,8 @@ def train_window_as_of(
         lr_metrics = evaluate_regression(
             valid_df["realized_ret_t1_to_t2"].astype(float).values,
             np.asarray(lr_valid_pred, dtype=float),
+            trade_dates=valid_df["trade_date"] if "trade_date" in valid_df.columns else None,
+            baseline_pred=valid_baseline,
         )
     else:
         lr_metrics = empty_metrics("small_sample_mode_skip_valid")
@@ -857,6 +1033,8 @@ def train_window_as_of(
         gbm_metrics = evaluate_regression(
             valid_df["realized_ret_t1_to_t2"].astype(float).values,
             np.asarray(gbm_valid_pred, dtype=float),
+            trade_dates=valid_df["trade_date"] if "trade_date" in valid_df.columns else None,
+            baseline_pred=valid_baseline,
         )
     else:
         gbm_model = fit_gbm_train_only(train_df, feature_cols)
@@ -939,6 +1117,13 @@ def train_window_as_of(
             "valid": int(len(valid_df)) if valid_df is not None else 0,
         },
         "eret_truth_ready_only": True,
+        "training_governance": {
+            "minimum_independent_dates": int(min_independent_dates),
+            "available_independent_dates": int(len(independent_dates)),
+            "date_balanced_sample_weight": True,
+            "multi_date_time_holdout": True,
+            "train_mean_baseline": train_mean_baseline,
+        },
         "sample_maturity_distribution": sample_maturity_distribution,
         "target_distribution": {
             "mean": float(target_s.mean()) if target_s.notna().any() else None,
@@ -948,7 +1133,7 @@ def train_window_as_of(
             "positive_rate": float((target_s > 0).mean()) if target_s.notna().any() else None,
         },
         "features": {
-            "feature_contract_version": "online_safe_v1",
+            "feature_contract_version": "online_safe_v2",
             "n_total": int(len(feature_cols)),
             "n_numeric": int(len(num_cols)),
             "n_categorical": int(len(cat_cols)),
@@ -967,10 +1152,11 @@ def train_window_as_of(
             "采用时间切分优先，样本不足时退化为行切分。",
             "若切分后样本太少，则进入 small_sample_mode：全量训练，跳过 valid 评估。",
             "若整个成熟窗口样本不足，则跳过训练并写出 skip meta，不覆盖旧模型。",
-            "E_ret feature contract 已升级为 online_safe_v1。",
-            "未来真值列、T+1/T+2 真值列、sample_weight、冷启动/覆盖度审计列、线上不稳定 prior_* 列已从特征中剔除。",
+            "E_ret feature contract 已升级为 online_safe_v2。",
+            "未来真值、股票标识、日期级广播资金流、审计字段与线上不稳定 prior_* 已从特征中剔除。",
+            "训练权重按 trade_date 均衡，验证集覆盖多个连续交易日。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
-            "线上 E_ret 模型按验证 RMSE/MAE/方向准确率选择，不再固定 LR 优先。",
+            "线上 E_ret 模型按多日 Spearman IC、RMSE skill 与校准误差联合选择。",
         ],
     }
 
@@ -986,7 +1172,8 @@ def train_window_as_of(
     print(f"[train_eret] split_mode={split_mode}")
     print(f"[train_eret] small_sample_mode={small_sample_mode}")
     print(f"[train_eret] rows_raw={len(raw_df)} ready={len(df)} train={len(train_df)} valid={len(valid_df) if valid_df is not None else 0}")
-    print(f"[train_eret] feature_contract=online_safe_v1")
+    print(f"[train_eret] feature_contract=online_safe_v2")
+    print(f"[train_eret] independent_dates={len(independent_dates)} required={min_independent_dates}")
     print(f"[train_eret] features_total={len(feature_cols)}")
     print(f"[train_eret] filtered_features_due_to_contract={len(filtered_feature_cols_due_to_contract)}")
     print(f"[train_eret] lr_rmse={lr_metrics.get('rmse')} gbm_rmse={gbm_metrics.get('rmse')}")
@@ -1005,6 +1192,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--window-size", type=int, default=0, help="训练窗口长度（按成熟 trade_date 个数截断）；0=使用 anchor 之前全部 ERET_READY 样本")
     ap.add_argument("--min-train-rows", type=int, default=24, help="最少训练样本数；不足则 skip，不覆盖旧模型")
     ap.add_argument("--min-valid-rows", type=int, default=8, help="最少验证样本数；不足则进入 small_sample_mode")
+    ap.add_argument(
+        "--min-independent-dates",
+        type=int,
+        default=DEFAULT_MIN_INDEPENDENT_DATES,
+        help="最少独立交易日数；不足则 skip，不用股票行数伪装时间样本",
+    )
     return ap.parse_args()
 
 
@@ -1022,6 +1215,7 @@ def main() -> int:
         window_size=args.window_size,
         min_train_rows=args.min_train_rows,
         min_valid_rows=args.min_valid_rows,
+        min_independent_dates=args.min_independent_dates,
     )
     return 0
 
