@@ -392,7 +392,7 @@ def _render_html(
       <div class="metric"><span>生成时间</span><strong>{_h(gen_ts)}</strong></div>
     </div>
     <section>
-      <div class="section-head"><h2>最终买入名单</h2><span class="badge">最多 0-3 只，可执行</span></div>
+      <div class="section-head"><h2>最终买入名单</h2><span class="badge">最多 {stats.max_trade_count} 只，可执行</span></div>
       {_table_html(buy, "今日无可执行买入名单，策略为空仓或只观察。")}
     </section>
     <section>
