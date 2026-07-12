@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
 import shutil
 import sys
@@ -29,6 +30,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from top10decision.premium.config import PremiumConfig  # noqa: E402
+from top10decision.premium.execution_profit_model import score_execution_candidates  # noqa: E402
 from top10decision.premium.final_decision import build_final_decisions, final_display_columns  # noqa: E402
 
 
@@ -58,6 +60,42 @@ def _write_text(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def _write_json(path: Path, payload: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        return {}
+
+
+def _inject_execution_link(path: Path, href: str) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    if 'data-execution-report="1"' in text:
+        text = re.sub(
+            r'(<a[^>]+data-execution-report="1"[^>]+href=")[^"]+("[^>]*>)',
+            rf"\1{href}\2",
+            text,
+            count=1,
+        )
+        path.write_text(text, encoding="utf-8")
+        return
+    marker = '<div class="tabs" role="tablist" aria-label="列表切换">'
+    link = (
+        f'<a class="tab-btn" data-execution-report="1" href="{_h(href)}" '
+        'title="打开净收益执行名单">净收益执行名单</a>'
+    )
+    if marker in text:
+        text = text.replace(marker, marker + link, 1)
+        path.write_text(text, encoding="utf-8")
 
 
 def _date_from_name(path: Path) -> Optional[str]:
@@ -155,6 +193,12 @@ def _cn_reason(value: object) -> str:
         "minute_risk_penalty": "分钟风险惩罚高",
         "t1_fail_risk": "T+1失败概率高",
         "t1_drawdown_risk": "T+1大回撤概率高",
+        "execution_model_guard": "净收益模型样本外验证未通过，仅观察",
+        "low_fill_probability": "竞价可成交概率不足",
+        "nonpositive_expected_net_return": "保守净收益不足",
+        "profit_edge_not_positive": "盈利优势不足",
+        "large_loss_risk": "大亏风险过高",
+        "execution_ev_gate": "净收益执行门槛未通过",
         "market_cap_overflow": "超过市场模式允许买入数量，降为观察",
         "pass": "执行条件通过",
     }
@@ -180,6 +224,13 @@ def _cn_columns(df: pd.DataFrame) -> pd.DataFrame:
             "Sector": "行业",
             "Action": "最终动作",
             "FinalScore": "最终分",
+            "PFill": "可成交率",
+            "PProfit": "盈利率",
+            "PLimit": "涨停率",
+            "PBigLoss": "大亏率",
+            "NetEV": "净收益EV",
+            "ProfitEdge": "盈利优势",
+            "ModelState": "模型状态",
             "Position": "建议仓位",
             "MaxBuyPrice": "最高买入价",
             "T-Up": "T日涨停概率",
@@ -208,6 +259,8 @@ def _cn_t1_mode(value: object) -> str:
         "FROZEN_NEGATIVE_IC": "负IC冻结",
         "LOW_IC": "低IC降权",
         "NORMAL": "正常",
+        "PROFIT_ACTIVE": "净收益模型启用",
+        "PROFIT_GUARDED": "净收益模型保护",
         "UNKNOWN": "未知",
     }.get(str(value), str(value))
 
@@ -223,7 +276,10 @@ def _table_html(df: pd.DataFrame, empty_text: str) -> str:
         show["原因"] = show["原因"].map(_cn_reason)
     if "建议仓位" in show.columns:
         show["建议仓位"] = show["建议仓位"].map(_fmt_pct)
-    for c in ("T日涨停概率", "T+1延续率"):
+    for c in (
+        "T日涨停概率", "T+1延续率", "可成交率", "盈利率",
+        "涨停率", "大亏率", "净收益EV", "盈利优势",
+    ):
         if c in show.columns:
             show[c] = pd.to_numeric(show[c], errors="coerce").map(_fmt_pct)
     for c in ("最终分", "T日强度"):
@@ -245,6 +301,7 @@ def _render_html(
     reject: pd.DataFrame,
     stats,
     gen_ts: str,
+    backtest: Optional[dict] = None,
 ) -> str:
     buy_count = len(buy)
     strategy = "空仓"
@@ -252,6 +309,17 @@ def _render_html(
         actions = "、".join(sorted(set(buy.get("final_action", pd.Series(dtype=str)).astype(str).map(_cn_action).tolist())))
         strategy = f"{actions} {buy_count}只"
     t1_ic_text = "-" if not np.isfinite(stats.t1_rank_ic) else f"{stats.t1_rank_ic:.4f}"
+    fill_auc_text = "-" if not np.isfinite(stats.execution_fill_auc) else f"{stats.execution_fill_auc:.4f}"
+    profit_ic_text = "-" if not np.isfinite(stats.execution_profit_rank_ic) else f"{stats.execution_profit_rank_ic:.4f}"
+    holdout_net_text = _fmt_pct(stats.execution_holdout_top_net)
+    cost_text = "-" if not np.isfinite(stats.execution_cost_bps) else f"{stats.execution_cost_bps:.0f} bp"
+    model_state = "启用" if stats.execution_model_mode == "PROFIT_ACTIVE" else "保护模式"
+    backtest = backtest or {}
+    backtest_fill = f"{int(backtest.get('filled_signals', 0))}/{int(backtest.get('signals', 0))}"
+    backtest_win = _fmt_pct(backtest.get("filled_win_rate"))
+    backtest_return = _fmt_pct(backtest.get("ten_percent_position_compound_return"))
+    backtest_drawdown = _fmt_pct(backtest.get("ten_percent_position_max_drawdown"))
+    recent_filled = int(backtest.get("recent_holdout_filled_signals", 0))
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -311,6 +379,16 @@ def _render_html(
       <div class="metric"><span>允许买入数量</span><strong>{stats.max_trade_count}</strong></div>
       <div class="metric"><span>T+1因子状态</span><strong>{_h(_cn_t1_mode(stats.t1_weight_mode))}</strong></div>
       <div class="metric"><span>T+1 Rank IC</span><strong>{_h(t1_ic_text)}</strong></div>
+      <div class="metric"><span>净收益模型</span><strong>{_h(model_state)}</strong></div>
+      <div class="metric"><span>可成交模型 AUC</span><strong>{_h(fill_auc_text)}</strong></div>
+      <div class="metric"><span>净收益 Rank IC</span><strong>{_h(profit_ic_text)}</strong></div>
+      <div class="metric"><span>样本外头部净收益</span><strong>{_h(holdout_net_text)}</strong></div>
+      <div class="metric"><span>成本假设</span><strong>{_h(cost_text)}</strong></div>
+      <div class="metric"><span>4个月 Walk-forward</span><strong>{_h(backtest_fill)} 成交</strong></div>
+      <div class="metric"><span>成交后胜率</span><strong>{_h(backtest_win)}</strong></div>
+      <div class="metric"><span>10%仓位累计</span><strong>{_h(backtest_return)}</strong></div>
+      <div class="metric"><span>10%仓位 Max Drawdown</span><strong>{_h(backtest_drawdown)}</strong></div>
+      <div class="metric"><span>近期独立成交样本</span><strong>{recent_filled} 笔</strong></div>
       <div class="metric"><span>生成时间</span><strong>{_h(gen_ts)}</strong></div>
     </div>
     <section>
@@ -325,7 +403,7 @@ def _render_html(
       <div class="section-head"><h2>剔除名单</h2><span class="badge">禁止买入</span></div>
       {_table_html(reject.head(50), "暂无剔除名单")}
     </section>
-    <p class="note">规则摘要：放弃/只观察不追不能进入最终买入名单；Decision 否决、分钟硬风险、市场禁止交易会直接剔除；T+1 Rank IC 为负时自动冻结 T+1 因子权重。</p>
+    <p class="note">规则摘要：最终排名以竞价可成交概率、净盈利概率、T日涨停概率和大亏风险共同计算；样本外门槛未通过、保守净收益不足或没有可执行候选时自动空仓。Decision 否决、分钟硬风险和市场禁止交易仍会直接剔除。模型状态：{_h(stats.execution_model_reason)}。历史回测不能保证未来收益，近期独立成交样本仍不足。</p>
   </main>
 </body>
 </html>
@@ -335,7 +413,13 @@ def _render_html(
 def build(cfg: PremiumConfig, trade_date: str, verbose: bool = False) -> int:
     frame = _load_premium_frame(cfg, trade_date)
     history = _load_history(cfg)
-    buy, watch, reject, stats = build_final_decisions(frame, trade_date=trade_date, history=history)
+    scored, execution_diagnostics = score_execution_candidates(
+        frame,
+        out_root=cfg.out_root(),
+        market_root=cfg.market_cache_root(),
+        trade_date=trade_date,
+    )
+    buy, watch, reject, stats = build_final_decisions(scored, trade_date=trade_date, history=history)
 
     out_root = cfg.out_root()
     report_root = cfg.reports_root()
@@ -345,16 +429,27 @@ def build(cfg: PremiumConfig, trade_date: str, verbose: bool = False) -> int:
     shutil.copyfile(p_buy, out_root / "premium_final_buy_latest.csv")
     shutil.copyfile(p_watch, out_root / "premium_final_watch_latest.csv")
     shutil.copyfile(p_reject, out_root / "premium_final_reject_latest.csv")
+    meta_payload = execution_diagnostics.as_dict()
+    _write_json(out_root / "models" / f"execution_profit_model_meta_{trade_date}.json", meta_payload)
+    _write_json(out_root / "models" / "execution_profit_model_meta.json", meta_payload)
 
-    html_text = _render_html(trade_date, buy, watch, reject, stats, _utc_now_iso())
+    backtest_meta = _read_json(out_root / "models" / "execution_profit_backtest_meta.json")
+    html_text = _render_html(trade_date, buy, watch, reject, stats, _utc_now_iso(), backtest_meta)
     p_html = _write_text(report_root / f"premium_final_{trade_date}.html", html_text)
     _write_text(report_root / "premium_final_latest.html", html_text)
+    _inject_execution_link(report_root / f"premium_{trade_date}.html", f"premium_final_{trade_date}.html")
+    _inject_execution_link(report_root / "premium_latest.html", "premium_final_latest.html")
 
     if verbose:
         print(f"[premium-final] trade_date={trade_date}")
         print(f"[premium-final] buy={len(buy)} watch={len(watch)} reject={len(reject)}")
         print(f"[premium-final] market_mode={stats.market_mode} max_trade_count={stats.max_trade_count}")
         print(f"[premium-final] t1_weight_mode={stats.t1_weight_mode} t1_rank_ic={stats.t1_rank_ic}")
+        print(
+            f"[premium-final] execution_model={execution_diagnostics.reason} "
+            f"fill_auc={execution_diagnostics.fill_auc} "
+            f"profit_rank_ic={execution_diagnostics.profit_rank_ic}"
+        )
         print(f"[premium-final] out_buy={p_buy}")
         print(f"[premium-final] out_watch={p_watch}")
         print(f"[premium-final] out_reject={p_reject}")
@@ -365,6 +460,7 @@ def build(cfg: PremiumConfig, trade_date: str, verbose: bool = False) -> int:
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build Premium final executable buy list.")
     p.add_argument("--trade-date", default="", help="YYYYMMDD; default reads outputs/premium/_last_run.txt")
+    p.add_argument("--link-only", action="store_true", help="Only restore links from the main report")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -375,6 +471,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     trade_date = args.trade_date.strip() or _latest_date(cfg)
     if not re.fullmatch(r"20\d{6}", trade_date):
         raise SystemExit(f"bad trade_date: {trade_date}")
+    if args.link_only:
+        _inject_execution_link(
+            cfg.reports_root() / f"premium_{trade_date}.html",
+            f"premium_final_{trade_date}.html",
+        )
+        _inject_execution_link(cfg.reports_root() / "premium_latest.html", "premium_final_latest.html")
+        return 0
     return build(cfg, trade_date, verbose=bool(args.verbose))
 
 

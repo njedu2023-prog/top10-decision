@@ -29,6 +29,8 @@ sys.modules.setdefault("top10decision.premium", premium_pkg)
 sys.modules.setdefault("top10decision.premium.report_md", report_stub)
 
 from top10decision.premium.factor_builders import build_pack1_tushare_basic, build_pack2_limit_micro
+from top10decision.premium.execution_profit_model import score_execution_candidates
+from top10decision.premium.final_decision import build_final_decisions
 from top10decision.premium.limitup_probability_engine import (
     _model_gate,
     fit_limitup_probability_engine,
@@ -404,6 +406,78 @@ class PremiumSafetyTests(unittest.TestCase):
             self.assertEqual(stats["n_days"], 2)
             self.assertEqual(stats["top10_total"], 2)
             self.assertEqual(stats["top10_hits"], 1)
+
+    def test_execution_profit_layer_promotes_only_one_guarded_buy(self):
+        frame = pd.DataFrame({
+            "rank": [1, 2, 3],
+            "ts_code": ["600001.SH", "600002.SH", "600003.SH"],
+            "name": ["A", "B", "C"],
+            "T日建议买入方式": ["只观察不追", "只观察不追", "只观察不追"],
+            "premium_bucket": ["WATCH", "WATCH", "WATCH"],
+            "premium_exclude_reason": ["t_attack<0.55", "t1_accept<0.52", "ok"],
+            "mkt_emotion_score": [0.60, 0.60, 0.60],
+            "execution_profit_score": [95.0, 85.0, 75.0],
+            "exec_model_ready": [1, 1, 1],
+            "exec_trade_eligible": [1, 1, 0],
+            "exec_p_fill_lcb": [0.80, 0.75, 0.70],
+            "exec_p_profit_lcb": [0.70, 0.66, 0.55],
+            "exec_p_big_loss_ucb": [0.15, 0.20, 0.20],
+            "exec_expected_net_return": [0.015, 0.010, 0.001],
+            "exec_profit_edge": [0.12, 0.08, -0.01],
+            "exec_model_reason": ["ok_active"] * 3,
+            "exec_fill_auc": [0.61] * 3,
+            "exec_profit_rank_ic": [0.09] * 3,
+            "exec_holdout_top_net": [0.012] * 3,
+            "exec_cost_bps": [35.0] * 3,
+        })
+        buy, watch, reject, stats = build_final_decisions(frame, trade_date="20260710")
+        self.assertEqual(len(buy), 1)
+        self.assertEqual(buy.loc[0, "ts_code"], "600001.SH")
+        self.assertEqual(buy.loc[0, "final_action"], "SMALL_BUY")
+        self.assertAlmostEqual(float(buy.loc[0, "suggested_position"]), 0.10)
+        self.assertEqual(len(reject), 0)
+        self.assertEqual(stats.execution_model_mode, "PROFIT_ACTIVE")
+        self.assertIn("market_cap_overflow", set(watch["final_reason"].astype(str)))
+
+    def test_execution_profit_layer_fails_closed(self):
+        frame = pd.DataFrame({
+            "rank": [1],
+            "ts_code": ["600001.SH"],
+            "T日建议买入方式": ["限价竞价"],
+            "premium_bucket": ["ELIGIBLE"],
+            "premium_exclude_reason": ["ok"],
+            "execution_profit_score": [100.0],
+            "exec_model_ready": [0],
+            "exec_trade_eligible": [0],
+            "exec_model_reason": ["guarded:profit_rank_ic"],
+        })
+        buy, watch, reject, stats = build_final_decisions(frame, trade_date="20260710")
+        self.assertEqual(len(buy), 0)
+        self.assertEqual(len(reject), 0)
+        self.assertEqual(len(watch), 1)
+        self.assertIn("execution_model_guard", watch.loc[0, "final_reason"])
+        self.assertEqual(stats.execution_model_mode, "PROFIT_GUARDED")
+
+    def test_execution_profit_model_requires_real_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            market = root / "market"
+            output = root / "premium"
+            market.mkdir()
+            output.mkdir()
+            pd.DataFrame({
+                "ts_code": ["600001.SH"], "open": [10.0], "high": [10.2],
+                "low": [9.9], "close": [10.1], "vol": [100.0], "amount": [1000.0],
+            }).to_csv(market / "daily_20260710.csv", index=False)
+            scored, diagnostics = score_execution_candidates(
+                pd.DataFrame({"rank": [1], "ts_code": ["600001.SH"]}),
+                out_root=output,
+                market_root=market,
+                trade_date="20260710",
+            )
+            self.assertFalse(diagnostics.ready)
+            self.assertEqual(diagnostics.reason, "market_history_insufficient")
+            self.assertEqual(int(scored.loc[0, "exec_trade_eligible"]), 0)
 
 
 if __name__ == "__main__":

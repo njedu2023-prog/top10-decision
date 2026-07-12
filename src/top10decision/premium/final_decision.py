@@ -29,6 +29,12 @@ class FinalDecisionStats:
     max_trade_count: int
     t1_weight_mode: str
     t1_rank_ic: float
+    execution_model_mode: str = "LEGACY"
+    execution_model_reason: str = ""
+    execution_fill_auc: float = float("nan")
+    execution_profit_rank_ic: float = float("nan")
+    execution_holdout_top_net: float = float("nan")
+    execution_cost_bps: float = float("nan")
 
     def as_dict(self) -> Dict[str, object]:
         return dict(
@@ -40,6 +46,12 @@ class FinalDecisionStats:
             max_trade_count=self.max_trade_count,
             t1_weight_mode=self.t1_weight_mode,
             t1_rank_ic=self.t1_rank_ic,
+            execution_model_mode=self.execution_model_mode,
+            execution_model_reason=self.execution_model_reason,
+            execution_fill_auc=self.execution_fill_auc,
+            execution_profit_rank_ic=self.execution_profit_rank_ic,
+            execution_holdout_top_net=self.execution_holdout_top_net,
+            execution_cost_bps=self.execution_cost_bps,
         )
 
 
@@ -161,7 +173,9 @@ def build_final_decisions(
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FinalDecisionStats]:
     if df is None or df.empty:
         empty = pd.DataFrame()
-        return empty, empty, empty, FinalDecisionStats(trade_date, 0, 0, 0, "NO_DATA", 0, "UNKNOWN", float("nan"))
+        return empty, empty, empty, FinalDecisionStats(
+            trade_date, 0, 0, 0, "NO_DATA", 0, "UNKNOWN", float("nan")
+        )
 
     out = df.copy().reset_index(drop=True)
     market_mode, market_cap, position_budget = _market(out)
@@ -202,15 +216,27 @@ def build_final_decisions(
     risk = (1.0 - (0.45 * hard + 0.30 * penalty.clip(0, 1) + 0.15 * fail + 0.10 * drawdown)).clip(0, 1)
 
     base_weight = 1.0 - t1_weight
-    out["final_trade_score"] = (
+    legacy_trade_score = (
         base_weight * (0.34 * t_up + 0.15 * strength + 0.12 * attack + 0.15 * exec_score + 0.12 * dec + 0.12 * risk)
         + t1_weight * (0.55 * t1_up + 0.45 * t1_accept)
     ) * 100.0
+    has_execution_model = "exec_model_ready" in out.columns
+    execution_score = _num(out, ["execution_profit_score"])
+    out["final_trade_score"] = execution_score.where(execution_score.notna(), legacy_trade_score)
     out["execution_score"] = exec_score * 100.0
     out["decision_support_score"] = dec * 100.0
     out["risk_quality_score"] = risk * 100.0
     out["t1_weight_mode"] = t1_mode
     out["market_mode"] = market_mode
+
+    execution_ready = _num(out, ["exec_model_ready"], 0.0).fillna(0.0) >= 1
+    execution_eligible = _num(out, ["exec_trade_eligible"], 0.0).fillna(0.0) >= 1
+    execution_fill_lcb = _prob(_num(out, ["exec_p_fill_lcb"]))
+    execution_big_loss = _prob(_num(out, ["exec_p_big_loss_ucb"]))
+    execution_ev = _num(out, ["exec_expected_net_return"])
+    execution_edge = _num(out, ["exec_profit_edge"])
+    if has_execution_model:
+        max_buys = min(int(max_buys), 1)
 
     bucket = _txt(out, ["premium_bucket"]).str.upper()
     exclude = _txt(out, ["premium_exclude_reason"]).str.strip()
@@ -225,12 +251,12 @@ def build_final_decisions(
             r.append("market_no_trade")
         if act == "REJECT":
             r.append("premium_reject")
-        if act == "WATCH_ONLY":
+        if act == "WATCH_ONLY" and not has_execution_model:
             r.append("premium_watch_only")
         if bucket.iloc[i] == "EXCLUDED" or forced.iloc[i] >= 1:
             r.append("premium_excluded")
         er = _clean(exclude.iloc[i])
-        if er and er.lower() not in {"ok", "normal", "none", "-"}:
+        if not has_execution_model and er and er.lower() not in {"ok", "normal", "none", "-"}:
             r.append(f"premium_gate:{er}")
         if dec_can_buy.iloc[i] in {"0", "false", "no", "n", "否", "不可买"}:
             r.append("decision_veto")
@@ -238,15 +264,36 @@ def build_final_decisions(
             r.append("minute_hard_risk")
         if penalty.iloc[i] >= 0.45:
             r.append("minute_risk_penalty")
-        if fail.iloc[i] >= 0.60:
+        if not has_execution_model and fail.iloc[i] >= 0.60:
             r.append("t1_fail_risk")
-        if drawdown.iloc[i] >= 0.45:
+        if not has_execution_model and drawdown.iloc[i] >= 0.45:
             r.append("t1_drawdown_risk")
+
+        if has_execution_model:
+            if not execution_ready.iloc[i]:
+                r.append("execution_model_guard")
+            else:
+                if not np.isfinite(execution_fill_lcb.iloc[i]) or execution_fill_lcb.iloc[i] < 0.55:
+                    r.append("low_fill_probability")
+                if not np.isfinite(execution_ev.iloc[i]) or execution_ev.iloc[i] <= 0.0:
+                    r.append("nonpositive_expected_net_return")
+                if not np.isfinite(execution_edge.iloc[i]) or execution_edge.iloc[i] < 0.0:
+                    r.append("profit_edge_not_positive")
+                if np.isfinite(execution_big_loss.iloc[i]) and execution_big_loss.iloc[i] > 0.25:
+                    r.append("large_loss_risk")
+                if not execution_eligible.iloc[i] and not {
+                    "low_fill_probability", "nonpositive_expected_net_return",
+                    "profit_edge_not_positive", "large_loss_risk"
+                }.intersection(r):
+                    r.append("execution_ev_gate")
 
         hard_reject = {"market_no_trade", "premium_reject", "premium_excluded", "decision_veto", "minute_hard_risk"}
         if hard_reject.intersection(r):
             final_actions.append("REJECT")
-        elif act in BUY_ACTIONS and not r:
+        elif has_execution_model and execution_eligible.iloc[i] and not r:
+            # The first production version is intentionally position-capped.
+            final_actions.append("SMALL_BUY")
+        elif not has_execution_model and act in BUY_ACTIONS and not r:
             final_actions.append(act)
         else:
             final_actions.append("WATCH_ONLY")
@@ -276,7 +323,32 @@ def build_final_decisions(
             frame["final_rank"] = np.arange(1, len(frame) + 1)
             frame["final_trade_score"] = pd.to_numeric(frame["final_trade_score"], errors="coerce").round(4)
 
-    stats = FinalDecisionStats(trade_date, len(buy), len(watch), len(reject), market_mode, int(max_buys), t1_mode, ic)
+    execution_mode = "LEGACY"
+    if has_execution_model:
+        execution_mode = "PROFIT_ACTIVE" if bool(execution_ready.any()) else "PROFIT_GUARDED"
+        t1_mode = execution_mode
+    reason_series = _txt(out, ["exec_model_reason"])
+    execution_reason = _clean(reason_series.iloc[0]) if len(reason_series) else ""
+    stats = FinalDecisionStats(
+        trade_date,
+        len(buy),
+        len(watch),
+        len(reject),
+        market_mode,
+        int(max_buys),
+        t1_mode,
+        ic,
+        execution_model_mode=execution_mode,
+        execution_model_reason=execution_reason,
+        execution_fill_auc=float(_num(out, ["exec_fill_auc"]).dropna().iloc[0])
+        if len(_num(out, ["exec_fill_auc"]).dropna()) else float("nan"),
+        execution_profit_rank_ic=float(_num(out, ["exec_profit_rank_ic"]).dropna().iloc[0])
+        if len(_num(out, ["exec_profit_rank_ic"]).dropna()) else float("nan"),
+        execution_holdout_top_net=float(_num(out, ["exec_holdout_top_net"]).dropna().iloc[0])
+        if len(_num(out, ["exec_holdout_top_net"]).dropna()) else float("nan"),
+        execution_cost_bps=float(_num(out, ["exec_cost_bps"]).dropna().iloc[0])
+        if len(_num(out, ["exec_cost_bps"]).dropna()) else float("nan"),
+    )
     return buy, watch, reject, stats
 
 
@@ -291,6 +363,13 @@ def final_display_columns(df: pd.DataFrame) -> pd.DataFrame:
         ("sector", "Sector"),
         ("final_action", "Action"),
         ("final_trade_score", "FinalScore"),
+        ("exec_p_fill_lcb", "PFill"),
+        ("exec_p_profit_lcb", "PProfit"),
+        ("exec_p_limitup_lcb", "PLimit"),
+        ("exec_p_big_loss_ucb", "PBigLoss"),
+        ("exec_expected_net_return", "NetEV"),
+        ("exec_profit_edge", "ProfitEdge"),
+        ("exec_model_reason", "ModelState"),
         ("suggested_position", "Position"),
         ("T日可接受买入价", "MaxBuyPrice"),
         ("t_max_buy_price", "MaxBuyPrice"),

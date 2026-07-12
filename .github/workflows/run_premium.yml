@@ -185,6 +185,7 @@ jobs:
           python scripts/localize_premium_reports.py --verbose
           python scripts/apple_style_premium_reports.py --verbose
           python scripts/clarify_premium_report_metrics.py --verbose
+          python scripts/build_premium_final.py --link-only --verbose
 
       - name: Sanity check outputs
         run: |
@@ -210,8 +211,27 @@ jobs:
           test -f outputs/premium/premium_final_buy_latest.csv
           test -f outputs/premium/premium_final_watch_latest.csv
           test -f outputs/premium/premium_final_reject_latest.csv
+          test -f outputs/premium/models/execution_profit_model_meta.json
+          test -f outputs/premium/models/execution_profit_backtest_meta.json
           test -f docs/reports/premium_final_latest.html
           test -f docs/reports/premium_latest.html
+          python -m json.tool outputs/premium/models/execution_profit_model_meta.json >/dev/null
+          python -m json.tool outputs/premium/models/execution_profit_backtest_meta.json >/dev/null
+          grep -q '净收益执行名单' docs/reports/premium_latest.html
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          paths = [
+              Path("outputs/premium/premium_final_buy_latest.csv"),
+              Path("outputs/premium/premium_final_watch_latest.csv"),
+              Path("outputs/premium/premium_final_reject_latest.csv"),
+          ]
+          frames = [pd.read_csv(path) for path in paths]
+          required = {"exec_model_ready", "exec_trade_eligible", "exec_expected_net_return"}
+          if not all(required.issubset(set(frame.columns)) for frame in frames):
+              raise SystemExit("Premium execution-profit output contract missing")
+          PY
           head -n 5 outputs/premium/premium_final_buy_latest.csv || true
 
           echo "=== Premium V3 last_run contract ==="
