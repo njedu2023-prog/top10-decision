@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-11T12:42:23+00:00",
+  "generated_at_utc": "2026-07-12T19:30:14+00:00",
   "current_run_date": "20260710",
   "pfill": {
     "anchor_trade_date": "20260709",
@@ -22,33 +22,51 @@
   },
   "eret": {
     "anchor_trade_date": "20260708",
-    "status": "trained",
+    "status": "skipped",
     "loaded_trade_dates": 8,
     "missing_trade_dates": 0,
     "metrics_valid": {
       "lr": {
-        "mae": 0.07596002160238377,
-        "rmse": 0.0894517681773675,
-        "r2": -0.45327302481627885,
-        "corr": 0.13728513445994697,
-        "directional_acc": 0.41304347826086957
+        "mae": null,
+        "rmse": null,
+        "r2": null,
+        "corr": null,
+        "spearman_corr": null,
+        "daily_spearman_corr_mean": null,
+        "daily_spearman_valid_dates": 0,
+        "baseline_rmse_train_mean": null,
+        "rmse_skill_vs_train_mean": null,
+        "directional_acc": null,
+        "reason": "insufficient_independent_dates_skip_train"
       },
       "lgbm": {
-        "mae": 0.07571817659012846,
-        "rmse": 0.08988563310812873,
-        "r2": -0.46740473665222604,
-        "corr": -0.049573474298387474,
-        "directional_acc": 0.41304347826086957
+        "mae": null,
+        "rmse": null,
+        "r2": null,
+        "corr": null,
+        "spearman_corr": null,
+        "daily_spearman_corr_mean": null,
+        "daily_spearman_valid_dates": 0,
+        "baseline_rmse_train_mean": null,
+        "rmse_skill_vs_train_mean": null,
+        "directional_acc": null,
+        "reason": "insufficient_independent_dates_skip_train"
       }
     },
     "fs_v2_still_all_missing": [],
-    "selected_model": "lr",
+    "selected_model": "lgbm",
     "selected_model_metrics": {
-      "mae": 0.07596002160238377,
-      "rmse": 0.0894517681773675,
-      "r2": -0.45327302481627885,
-      "corr": 0.13728513445994697,
-      "directional_acc": 0.41304347826086957
+      "mae": null,
+      "rmse": null,
+      "r2": null,
+      "corr": null,
+      "spearman_corr": null,
+      "daily_spearman_corr_mean": null,
+      "daily_spearman_valid_dates": 0,
+      "baseline_rmse_train_mean": null,
+      "rmse_skill_vs_train_mean": null,
+      "directional_acc": null,
+      "reason": "insufficient_independent_dates_skip_train"
     },
     "selected_model_pass": false,
     "acceptance_pass": false
