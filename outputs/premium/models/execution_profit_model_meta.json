@@ -1,0 +1,18 @@
+{
+  "trade_date": "20260710",
+  "model_version": "premium_exec_profit_v1_walkforward_guarded",
+  "ready": true,
+  "reason": "ok_active",
+  "cost_bps": 35.0,
+  "history_days": 86,
+  "fill_rows": 2564,
+  "return_rows": 2297,
+  "limit_rows": 2564,
+  "feature_count": 35,
+  "fill_auc": 0.5967575219648114,
+  "fill_brier": 0.2575093920627087,
+  "fill_baseline_brier": 0.26913178844454566,
+  "profit_rank_ic": 0.15898791295601813,
+  "top_quintile_mean_net_return": 0.013615835979457012,
+  "top_quintile_lift": 0.0209457200446805
+}
