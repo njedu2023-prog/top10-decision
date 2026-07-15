@@ -28,6 +28,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
   group: decision-auction-v3
@@ -96,8 +97,6 @@ jobs:
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          find . -type d -name __pycache__ -prune -exec rm -rf {} + || true
-          find . -type f -name '*.pyc' -delete || true
           git add -A outputs/auction_v3
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
