@@ -631,11 +631,15 @@ class AuctionV3Engine:
         p_fill = np.maximum.accumulate(_probability(bundle.fill_model, grid, bundle.fill_constant))
         lower = pred + bundle.residual_q10
         upper = pred + bundle.residual_q90
-        conservative_ev = p_fill * lower
+        risk_adjusted_return = pred - (
+            self.config.tail_risk_aversion * p_loss * abs(self.config.big_loss_threshold)
+        )
+        conservative_ev = p_fill * risk_adjusted_return
         supported = (
             (conservative_ev >= self.config.min_edge)
+            & (p_profit >= self.config.min_profit_probability)
             & (p_loss <= self.config.max_big_loss_probability)
-            & (p_fill >= 0.55)
+            & (p_fill >= self.config.min_fill_probability)
         )
         if not supported.any():
             return None
@@ -924,8 +928,14 @@ class AuctionV3Engine:
         if dated_path.exists() and not force:
             frozen = _read_csv(dated_path)
             if not frozen.empty:
-                _write_csv(frozen, self.config.prediction_root / "pred_latest.csv")
-                return frozen
+                frozen_version = str(frozen.get("model_version", pd.Series(["legacy"])).iloc[0])
+                if frozen_version == self.config.model_version:
+                    _write_csv(frozen, self.config.prediction_root / "pred_latest.csv")
+                    return frozen
+                safe_version = re.sub(r"[^A-Za-z0-9_.-]+", "_", frozen_version).strip("._")[:80] or "legacy"
+                archive_path = self.config.prediction_root / f"pred_{signal_date}_{safe_version}.csv"
+                if not archive_path.exists():
+                    _write_csv(frozen, archive_path)
         base = self._current_base(signal_date, candidates)
         scored = self.score_candidates(base, bundle)
         expected_buy, expected_exit = self._prediction_dates(signal_date, candidates)
@@ -945,12 +955,12 @@ class AuctionV3Engine:
         scored["model_promoted"] = int(promoted)
         scored["action"] = np.where(
             scored["selected"].eq(1),
-            "BUY" if promoted else "SHADOW_BUY",
+            "BUY" if promoted else "SHADOW_ONLY",
             np.where(scored["model_reason"].eq("no_safe_price"), "REJECT", "WATCH"),
         )
         scored["price_action"] = np.where(
             scored["recommended_max_price"].notna(),
-            "竞价不高于上限价；超过即放弃",
+            "竞价不高于上限价；超过即放弃" if promoted else "影子验证限价；当前不得实盘",
             "没有安全买入价格，放弃",
         )
         scored["generated_at_utc"] = _utc_now()

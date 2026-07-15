@@ -16,8 +16,11 @@ class AuctionV3Config:
     order_amount_cny: float = 100_000.0
     max_auction_participation: float = 0.01
     min_edge: float = 0.001
+    min_fill_probability: float = 0.55
+    min_profit_probability: float = 0.52
     max_big_loss_probability: float = 0.25
     big_loss_threshold: float = -0.03
+    tail_risk_aversion: float = 0.50
     min_train_dates: int = 20
     min_train_rows: int = 300
     promotion_min_dates: int = 250
@@ -29,7 +32,7 @@ class AuctionV3Config:
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v3_walkforward_2"
+    model_version: str = "auction_v3_walkforward_3"
 
     @property
     def output_root(self) -> Path:

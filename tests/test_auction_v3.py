@@ -141,6 +141,12 @@ class AuctionV3Test(unittest.TestCase):
         second = engine.build_prediction(signal_date, candidates.iloc[::-1], bundle, metrics)
         self.assertEqual(before, dated.read_bytes())
         self.assertEqual(len(first), len(second))
+        legacy = second.copy()
+        legacy["model_version"] = "legacy_test"
+        legacy.to_csv(dated, index=False)
+        migrated = engine.build_prediction(signal_date, candidates, bundle, metrics)
+        self.assertTrue((self.config.prediction_root / f"pred_{signal_date}_legacy_test.csv").exists())
+        self.assertEqual({self.config.model_version}, set(migrated["model_version"]))
 
     def test_true_price_verification_and_reports(self) -> None:
         engine = AuctionV3Engine(self.config)

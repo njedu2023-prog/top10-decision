@@ -113,7 +113,7 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     body += "</div>"
     failures = backtest.get("promotion_failures", []) or []
     fail_text = "、".join(str(x) for x in failures) if failures else "全部通过"
-    body += '<section><h2>当日竞价价格指导</h2><p class="note">最高竞价价是前夜可执行的买入限价。真实开盘价超过上限即放弃；模型未晋级时，所有 SHADOW_BUY 仅用于逐笔真价验证。晋级门槛：' + _esc(fail_text) + "。</p>"
+    body += '<section><h2>当日竞价价格指导</h2><p class="note">最高竞价价是冻结的研究限价。真实开盘价超过上限即视为不成交；模型未晋级时，所有 SHADOW_ONLY 只用于逐笔真价验证，严禁作为实盘买入指令。晋级门槛：' + _esc(fail_text) + "。</p>"
     body += _current_table(prediction.head(20)) + "</section>"
     return _page("Decision Auction V3 竞价隔夜决策", "D日收盘生成，T日竞价限价买入，T+1固定规则退出", body)
 
