@@ -1,6 +1,13 @@
 name: Run Decision Auction V3
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/run_auction_v3.yml"
+      - "src/top10decision/auction_v3/**"
+      - "scripts/run_auction_v3.py"
+      - "tests/test_auction_v3.py"
   workflow_run:
     workflows: ["Run Top10 Decision (Auto Daily)"]
     types: [completed]
@@ -28,7 +35,7 @@ concurrency:
 
 jobs:
   auction_v3:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -109,4 +116,3 @@ jobs:
             sleep 3
           done
           test "${pushed}" = "1"
-
