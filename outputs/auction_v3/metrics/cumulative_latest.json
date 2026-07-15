@@ -1,7 +1,7 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-15T18:14:03+00:00",
-  "frozen_predictions": 50,
+  "generated_at_utc": "2026-07-15T18:36:54+00:00",
+  "frozen_predictions": 100,
   "selected_predictions": 0,
   "verified_trades": 0,
   "pending_or_no_fill": 0,
