@@ -1,0 +1,112 @@
+name: Run Decision Auction V3
+
+on:
+  workflow_run:
+    workflows: ["Run Top10 Decision (Auto Daily)"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      signal_date:
+        description: "信号日 YYYYMMDD（留空=最新冻结候选）"
+        required: false
+        type: string
+      order_amount:
+        description: "单票计划金额（元），用于竞价容量校验"
+        required: false
+        default: "100000"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: decision-auction-v3
+  cancel-in-progress: false
+
+jobs:
+  auction_v3:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Auction V3 tests
+        run: |
+          set -e
+          python -m unittest discover -s tests -p 'test_auction_v3.py' -v
+
+      - name: Run Auction V3
+        env:
+          SIGNAL_DATE: ${{ inputs.signal_date }}
+          ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
+        run: |
+          set -e
+          args=(--order-amount "${ORDER_AMOUNT}")
+          if [ -n "${SIGNAL_DATE}" ]; then
+            if ! echo "${SIGNAL_DATE}" | grep -Eq '^[0-9]{8}$'; then
+              echo "invalid signal_date=${SIGNAL_DATE}"
+              exit 1
+            fi
+            args+=(--signal-date "${SIGNAL_DATE}")
+          fi
+          python scripts/run_auction_v3.py "${args[@]}"
+
+      - name: Validate generated contract
+        run: |
+          set -e
+          test -f outputs/auction_v3/predictions/pred_latest.csv
+          test -f outputs/auction_v3/metrics/backtest_latest.json
+          test -f outputs/auction_v3/metrics/cumulative_latest.json
+          test -f docs/reports/auction_v3_latest.html
+          test -f docs/reports/auction_v3_verify_latest.html
+          test -f docs/reports/auction_v3_validation_dashboard.html
+          python -m json.tool outputs/auction_v3/metrics/backtest_latest.json >/dev/null
+          python -m json.tool outputs/auction_v3/metrics/cumulative_latest.json >/dev/null
+
+      - name: Commit frozen predictions, truth and reports
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          find . -type d -name __pycache__ -prune -exec rm -rf {} + || true
+          find . -type f -name '*.pyc' -delete || true
+          git add -A outputs/auction_v3
+          git add docs/reports/auction_v3*.html
+          if git diff --cached --quiet; then
+            echo "Auction V3 has no changed artifacts"
+            exit 0
+          fi
+          git commit -m "auto: update Auction V3 predictions and true-price validation"
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            git rebase --abort || true
+            sleep 3
+          done
+          test "${pushed}" = "1"
+
