@@ -1126,6 +1126,8 @@ class AuctionV3Engine:
         broker = self._broker_fills()
         parts: list[pd.DataFrame] = []
         for path in sorted(self.config.prediction_root.glob("pred_20*.csv")):
+            if not re.fullmatch(r"pred_20\d{6}\.csv", path.name):
+                continue
             verified = self._verify_prediction_file(path, dates, broker)
             if verified.empty:
                 continue

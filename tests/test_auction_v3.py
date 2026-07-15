@@ -147,6 +147,8 @@ class AuctionV3Test(unittest.TestCase):
         migrated = engine.build_prediction(signal_date, candidates, bundle, metrics)
         self.assertTrue((self.config.prediction_root / f"pred_{signal_date}_legacy_test.csv").exists())
         self.assertEqual({self.config.model_version}, set(migrated["model_version"]))
+        ledger, _ = engine.settle_predictions()
+        self.assertEqual(len(migrated), len(ledger))
 
     def test_true_price_verification_and_reports(self) -> None:
         engine = AuctionV3Engine(self.config)
