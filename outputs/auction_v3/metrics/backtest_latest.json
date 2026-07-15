@@ -1,0 +1,9 @@
+{
+  "status": "insufficient_oos_history",
+  "history_dates": 7,
+  "oos_dates": 0,
+  "promoted": false,
+  "promotion_failures": [
+    "no_walkforward_predictions"
+  ]
+}

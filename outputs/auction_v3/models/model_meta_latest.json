@@ -1,0 +1,30 @@
+{
+  "generated_at_utc": "2026-07-15T18:06:09+00:00",
+  "model_version": "auction_v3_walkforward_2",
+  "ready": false,
+  "promoted": false,
+  "training_rows": 0,
+  "training_dates": 0,
+  "residual_q10": null,
+  "residual_q90": null,
+  "gap_support": {
+    "min": null,
+    "max": null
+  },
+  "backtest_gate": {
+    "status": "insufficient_oos_history",
+    "history_dates": 7,
+    "oos_dates": 0,
+    "promoted": false,
+    "promotion_failures": [
+      "no_walkforward_predictions"
+    ]
+  },
+  "contract": {
+    "signal": "D close",
+    "entry": "T opening auction with frozen maximum limit price",
+    "exit": "T+1 opening auction; delayed to first tradable open after one-price limit-down",
+    "cost_rate": 0.0045,
+    "future_features_forbidden": true
+  }
+}
