@@ -111,8 +111,12 @@ class AuctionV3Test(unittest.TestCase):
         latest_frame.to_csv(pred_root / "pred_source_latest.csv", index=False)
 
     def test_history_and_walkforward_are_dated(self) -> None:
+        legacy_path = self.root / "data" / "market" / "raw" / self.dates[0][:4] / self.dates[0] / "daily.csv"
+        legacy_daily = pd.read_csv(legacy_path).drop(columns=["pre_close"])
+        legacy_daily.to_csv(legacy_path, index=False)
         engine = AuctionV3Engine(self.config)
         history = engine.build_history()
+        self.assertIn(self.dates[0], set(history["signal_date"]))
         self.assertGreaterEqual(history["signal_date"].nunique(), 30)
         oos, metrics = engine.run_backtest(history)
         self.assertFalse(oos.empty)

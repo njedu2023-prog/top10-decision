@@ -168,6 +168,20 @@ def _numeric_from(row: pd.Series, aliases: Sequence[str], default: float = float
     return default
 
 
+def _pre_close(row: Optional[pd.Series]) -> float:
+    if row is None:
+        return float("nan")
+    direct = _numeric_from(row, ("pre_close", "pre_close_est"))
+    if direct > 0:
+        return direct
+    close_price = _numeric_from(row, ("close",))
+    pct_chg = _numeric_from(row, ("pct_chg",))
+    denominator = 1.0 + pct_chg / 100.0
+    if close_price > 0 and math.isfinite(pct_chg) and denominator > 0:
+        return close_price / denominator
+    return float("nan")
+
+
 def _is_close(left: Any, right: Any, tolerance: float = 0.0025) -> bool:
     a, b = _finite(left), _finite(right)
     if not (math.isfinite(a) and math.isfinite(b)):
@@ -305,7 +319,7 @@ class AuctionV3Engine:
 
     def _limit_ratio(self, daily_row: Optional[pd.Series], limit_row: Optional[pd.Series]) -> float:
         if daily_row is not None and limit_row is not None:
-            pre_close = _numeric_from(daily_row, ("pre_close", "pre_close_est"))
+            pre_close = _pre_close(daily_row)
             up_limit = _numeric_from(limit_row, ("up_limit",))
             if pre_close > 0 and up_limit > 0:
                 ratio = up_limit / pre_close - 1.0
@@ -375,7 +389,7 @@ class AuctionV3Engine:
             row = self._row(self.market_table(dates[idx], "daily"), code)
             if row is None:
                 return float("nan")
-            pre_close = _numeric_from(row, ("pre_close", "pre_close_est"))
+            pre_close = _pre_close(row)
             if pre_close <= 0:
                 return float("nan")
             if idx == end:
@@ -414,7 +428,7 @@ class AuctionV3Engine:
             close_price = _numeric_from(d_daily, ("close",))
             high = _numeric_from(d_daily, ("high",))
             low = _numeric_from(d_daily, ("low",))
-            pre_close = _numeric_from(d_daily, ("pre_close", "pre_close_est"))
+            pre_close = _pre_close(d_daily)
             amount = _numeric_from(d_daily, ("amount",))
             out["d_return"] = close_price / pre_close - 1.0 if pre_close > 0 and close_price > 0 else _numeric_from(d_daily, ("pct_chg",)) / 100.0
             out["d_range"] = (high - low) / pre_close if pre_close > 0 and high > 0 and low > 0 else np.nan
