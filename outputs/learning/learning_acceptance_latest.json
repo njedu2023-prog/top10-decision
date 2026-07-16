@@ -1,27 +1,27 @@
 {
-  "generated_at_utc": "2026-07-15T12:37:41+00:00",
-  "current_run_date": "20260715",
+  "generated_at_utc": "2026-07-16T13:01:44+00:00",
+  "current_run_date": "20260716",
   "pfill": {
-    "anchor_trade_date": "20260714",
+    "anchor_trade_date": "20260715",
     "status": "trained",
     "loaded_trade_dates": 8,
     "missing_trade_dates": 0,
     "metrics_valid": {
       "lr": {
-        "auc": 0.7426160337552743,
-        "logloss": 0.27127631849363276,
-        "brier": 0.051361570476117155
+        "auc": 1.0,
+        "logloss": 0.6767929738009822,
+        "brier": 0.1768375467995014
       },
       "lgbm": {
-        "auc": 0.9451476793248945,
-        "logloss": 0.10368429678285478,
-        "brier": 0.022363274571612548
+        "auc": 1.0,
+        "logloss": 0.013620469433690247,
+        "brier": 0.002019763315411744
       }
     },
     "acceptance_pass": true
   },
   "eret": {
-    "anchor_trade_date": "20260713",
+    "anchor_trade_date": "20260714",
     "status": "skipped",
     "loaded_trade_dates": 8,
     "missing_trade_dates": 0,
