@@ -1,73 +1,73 @@
 {
-  "generated_at_utc": "2026-07-16T12:57:38+00:00",
+  "generated_at_utc": "2026-07-16T13:03:52+00:00",
   "model_version": "auction_v3_walkforward_3",
   "ready": true,
   "promoted": false,
-  "training_rows": 3497,
-  "training_dates": 82,
-  "residual_q10": -0.0622899408,
-  "residual_q90": 0.0756525036,
+  "training_rows": 3532,
+  "training_dates": 83,
+  "residual_q10": -0.0624573672,
+  "residual_q90": 0.0760269096,
   "gap_support": {
-    "min": -0.0637350085,
-    "max": 0.1012692439
+    "min": -0.0636432272,
+    "max": 0.1013248375
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-16T12:57:28+00:00",
+    "generated_at_utc": "2026-07-16T13:03:46+00:00",
     "model_version": "auction_v3_walkforward_3",
-    "history_dates": 82,
-    "oos_dates": 60,
-    "signals": 128,
-    "filled_trades": 105,
-    "fill_rate": 0.8203125,
-    "mean_trade_net_return": -0.0126501876,
-    "median_trade_net_return": -0.0137228572,
-    "win_rate": 0.3523809524,
-    "profit_factor": 0.4944345373,
-    "mean_daily_return": -0.0073792761,
-    "stress_1_5x_cost_mean_daily_return": -0.0086917761,
-    "stress_2x_cost_mean_daily_return": -0.0100042761,
-    "benchmark_mean_daily_return": -0.0129006852,
-    "uncapped_model_mean_daily_return": -0.0079923847,
-    "cumulative_return": -0.3685369188,
-    "max_drawdown": -0.3383458172,
-    "sharpe": -5.1943840842,
+    "history_dates": 83,
+    "oos_dates": 61,
+    "signals": 129,
+    "filled_trades": 106,
+    "fill_rate": 0.8217054264,
+    "mean_trade_net_return": -0.013882955,
+    "median_trade_net_return": -0.0144963881,
+    "win_rate": 0.3490566038,
+    "profit_factor": 0.4688575415,
+    "mean_daily_return": -0.0080414931,
+    "stress_1_5x_cost_mean_daily_return": -0.0093447717,
+    "stress_2x_cost_mean_daily_return": -0.0106480504,
+    "benchmark_mean_daily_return": -0.0133291878,
+    "uncapped_model_mean_daily_return": -0.0086445507,
+    "cumulative_return": -0.398704758,
+    "max_drawdown": -0.3699560214,
+    "sharpe": -5.561494009,
     "positive_20d_window_ratio": 0.0,
     "positive_month_ratio": 0.0,
     "max_positive_month_profit_contribution": null,
     "bootstrap_probability_mean_positive": 0.003,
-    "forecast_mae": 0.0445181245,
-    "forecast_rmse": 0.0559446419,
-    "direction_accuracy": 0.3523809524,
-    "prediction_interval_coverage": 0.7428571429,
-    "return_rank_ic": 0.0595583662,
+    "forecast_mae": 0.0455779099,
+    "forecast_rmse": 0.0577268225,
+    "direction_accuracy": 0.3490566038,
+    "prediction_interval_coverage": 0.7358490566,
+    "return_rank_ic": 0.0697231529,
     "return_calibration": [
       {
-        "bucket": "(0.0044599999999999996, 0.0115]",
-        "trades": 21,
-        "predicted_mean": 0.0082815444,
-        "actual_mean": -0.0154906288
+        "bucket": "(0.0044599999999999996, 0.0116]",
+        "trades": 22,
+        "predicted_mean": 0.008433568,
+        "actual_mean": -0.0141408265
       },
       {
-        "bucket": "(0.0115, 0.015]",
+        "bucket": "(0.0116, 0.0149]",
         "trades": 21,
-        "predicted_mean": 0.0135433161,
-        "actual_mean": -0.0138051929
+        "predicted_mean": 0.0136340676,
+        "actual_mean": -0.0213065524
       },
       {
-        "bucket": "(0.015, 0.018]",
+        "bucket": "(0.0149, 0.018]",
         "trades": 21,
         "predicted_mean": 0.0168736046,
         "actual_mean": -0.0167420328
       },
       {
-        "bucket": "(0.018, 0.0222]",
+        "bucket": "(0.018, 0.0221]",
         "trades": 21,
         "predicted_mean": 0.0198264266,
         "actual_mean": -0.0099302195
       },
       {
-        "bucket": "(0.0222, 0.036]",
+        "bucket": "(0.0221, 0.036]",
         "trades": 21,
         "predicted_mean": 0.0271373603,
         "actual_mean": -0.007282864
@@ -397,6 +397,11 @@
         "signal_date": "20260713",
         "daily_return": 0.0,
         "nav": 0.6314630812
+      },
+      {
+        "signal_date": "20260714",
+        "daily_return": -0.0477745098,
+        "nav": 0.601295242
       }
     ]
   },
