@@ -18,9 +18,9 @@ CSS = """
 .topbar{position:sticky;top:0;z-index:5;background:#17202a;color:#fff;border-bottom:1px solid #000;padding:14px 24px}.topbar h1{margin:0;font-size:20px}.topbar p{margin:4px 0 0;color:#c9d1d9;font-size:13px}
 main{max-width:1500px;margin:0 auto;padding:22px}.status{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}.badge{display:inline-flex;align-items:center;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 10px;font-size:13px}.badge.good{color:var(--green);border-color:#9bd2b9}.badge.warn{color:var(--amber);border-color:#e3c276}.badge.bad{color:var(--red);border-color:#e7a29d}
 .metrics{display:grid;grid-template-columns:repeat(6,minmax(140px,1fr));gap:10px;margin:0 0 20px}.metric{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:13px;min-height:82px}.metric span{display:block;color:var(--muted);font-size:12px}.metric strong{display:block;margin-top:8px;font-size:21px;overflow-wrap:anywhere}
-section{background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 0 20px;padding:18px 0}section h2{font-size:18px;margin:0 18px 14px}.note{margin:0 18px 14px;color:var(--muted);line-height:1.65;font-size:13px}.table-wrap{overflow:auto;border-top:1px solid var(--line)}table{border-collapse:collapse;width:100%;min-width:1050px;font-size:13px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th{position:sticky;top:77px;background:#f7f8fa;color:#4b5563;font-weight:650;z-index:2}th:nth-child(1),td:nth-child(1),th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left}tr:hover td{background:#fafbfd}.buy{color:var(--green);font-weight:700}.reject{color:var(--red)}.pending{color:var(--amber)}
+section{background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 0 20px;padding:18px 0}section h2{font-size:18px;margin:0 18px 14px}.note{margin:0 18px 14px;color:var(--muted);line-height:1.65;font-size:13px}.empty-state{margin:0 18px;padding:18px;border:1px solid #e7a29d;background:#fff8f7;border-radius:6px}.empty-state strong{display:block;color:var(--red);font-size:17px}.empty-state p{margin:8px 0 0;color:var(--muted);line-height:1.65}.table-wrap{overflow:auto;border-top:1px solid var(--line)}table{border-collapse:collapse;width:100%;min-width:1050px;font-size:13px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th{position:sticky;top:0;background:#f7f8fa;color:#4b5563;font-weight:650;z-index:2}th:nth-child(1),td:nth-child(1),th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left}tr:hover td{background:#fafbfd}.buy{color:var(--green);font-weight:700}.reject{color:var(--red)}.pending{color:var(--amber)}
 .chart{margin:0 18px;border:1px solid var(--line);background:#fff;padding:8px;min-height:230px}.chart svg{width:100%;height:210px;display:block}.chart .axis{stroke:#dfe4e8;stroke-width:1}.chart .line{fill:none;stroke:var(--blue);stroke-width:2}.footer{color:var(--muted);font-size:12px;padding:2px 0 30px;line-height:1.7}
-@media(max-width:900px){main{padding:12px}.topbar{padding:12px}.metrics{grid-template-columns:repeat(2,minmax(120px,1fr))}th{top:70px}.metric strong{font-size:18px}}
+@media(max-width:900px){main{padding:12px}.topbar{padding:12px}.metrics{grid-template-columns:repeat(2,minmax(120px,1fr))}.metric strong{font-size:18px}}
 """
 
 
@@ -99,13 +99,14 @@ def _current_table(frame: pd.DataFrame) -> str:
 def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     signal_date = str(prediction.get("signal_date", pd.Series([""])).iloc[0]) if not prediction.empty else ""
     promoted = bool(int(_num(prediction.get("model_promoted", pd.Series([0])).iloc[0]) or 0)) if not prediction.empty else False
-    selected = prediction[pd.to_numeric(prediction.get("selected"), errors="coerce").fillna(0).eq(1)] if not prediction.empty else prediction
+    actions = prediction.get("action", pd.Series(index=prediction.index, dtype=str)).astype(str)
+    formal_buys = prediction[actions.eq("BUY")]
     status_class = "good" if promoted else "warn"
     status_text = "正式模型" if promoted else "影子验证"
     body = f'<div class="status"><span class="badge {status_class}">{status_text}</span><span class="badge">信号日 {signal_date}</span><span class="badge">模型 {_esc(prediction.get("model_version", pd.Series(["-"])).iloc[0] if not prediction.empty else "-")}</span></div>'
     body += '<div class="metrics">'
     body += _metric("候选数", str(len(prediction)))
-    body += _metric("入选数", str(len(selected)))
+    body += _metric("正式买入数", str(len(formal_buys)))
     body += _metric("回测交易日", str(backtest.get("oos_dates", 0)))
     body += _metric("回测平均净收益", _pct(backtest.get("mean_trade_net_return")))
     body += _metric("回测胜率", _pct(backtest.get("win_rate")))
@@ -113,7 +114,14 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     body += "</div>"
     failures = backtest.get("promotion_failures", []) or []
     fail_text = "、".join(str(x) for x in failures) if failures else "全部通过"
-    body += '<section><h2>当日竞价价格指导</h2><p class="note">最高竞价价是冻结的研究限价。真实开盘价超过上限即视为不成交；模型未晋级时，所有 SHADOW_ONLY 只用于逐笔真价验证，严禁作为实盘买入指令。晋级门槛：' + _esc(fail_text) + "。</p>"
+    body += '<section><h2>正式买入名单</h2>'
+    if formal_buys.empty:
+        body += '<div class="empty-state"><strong>今日无正式买入标的</strong><p>只有操作为 BUY 的股票才属于买入名单。REJECT 表示放弃，SHADOW_ONLY 仅用于研究验证。</p></div>'
+    else:
+        body += '<p class="note">以下仅列操作为 BUY 的正式标的。竞价价格不得超过冻结上限，超过即不成交。</p>'
+        body += _current_table(formal_buys)
+    body += "</section>"
+    body += '<section><h2>候选复核记录（非买入名单）</h2><p class="note">下表来自上游候选池，保留原排名用于审计，不代表 Auction V3 推荐。最高竞价价是冻结的研究限价；模型未晋级时，SHADOW_ONLY 只用于逐笔真价验证。当前晋级未通过项目：' + _esc(fail_text) + "。</p>"
     body += _current_table(prediction.head(20)) + "</section>"
     return _page("Decision Auction V3 竞价隔夜决策", "D日收盘生成，T日竞价限价买入，T+1固定规则退出", body)
 
