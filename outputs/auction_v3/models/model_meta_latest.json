@@ -1,22 +1,22 @@
 {
-  "generated_at_utc": "2026-07-16T15:18:12+00:00",
+  "generated_at_utc": "2026-07-17T12:36:19+00:00",
   "model_version": "auction_v3_walkforward_3",
   "ready": true,
   "promoted": false,
-  "training_rows": 3532,
-  "training_dates": 83,
-  "residual_q10": -0.0624573672,
-  "residual_q90": 0.0760269096,
+  "training_rows": 3561,
+  "training_dates": 84,
+  "residual_q10": -0.0633094922,
+  "residual_q90": 0.0759118186,
   "gap_support": {
-    "min": -0.0636432272,
-    "max": 0.1013248375
+    "min": -0.0635625127,
+    "max": 0.1013000342
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-16T15:18:02+00:00",
+    "generated_at_utc": "2026-07-17T12:36:08+00:00",
     "model_version": "auction_v3_walkforward_3",
-    "history_dates": 83,
-    "oos_dates": 61,
+    "history_dates": 84,
+    "oos_dates": 62,
     "signals": 129,
     "filled_trades": 106,
     "fill_rate": 0.8217054264,
@@ -24,14 +24,14 @@
     "median_trade_net_return": -0.0144963881,
     "win_rate": 0.3490566038,
     "profit_factor": 0.4688575415,
-    "mean_daily_return": -0.0080414931,
-    "stress_1_5x_cost_mean_daily_return": -0.0093447717,
-    "stress_2x_cost_mean_daily_return": -0.0106480504,
-    "benchmark_mean_daily_return": -0.0133291878,
-    "uncapped_model_mean_daily_return": -0.0086445507,
+    "mean_daily_return": -0.0079117916,
+    "stress_1_5x_cost_mean_daily_return": -0.0091940496,
+    "stress_2x_cost_mean_daily_return": -0.0104763077,
+    "benchmark_mean_daily_return": -0.0127618067,
+    "uncapped_model_mean_daily_return": -0.0085051224,
     "cumulative_return": -0.398704758,
     "max_drawdown": -0.3699560214,
-    "sharpe": -5.561494009,
+    "sharpe": -5.5116585925,
     "positive_20d_window_ratio": 0.0,
     "positive_month_ratio": 0.0,
     "max_positive_month_profit_contribution": null,
@@ -401,6 +401,11 @@
       {
         "signal_date": "20260714",
         "daily_return": -0.0477745098,
+        "nav": 0.601295242
+      },
+      {
+        "signal_date": "20260715",
+        "daily_return": 0.0,
         "nav": 0.601295242
       }
     ]
