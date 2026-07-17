@@ -1,11 +1,12 @@
 {
-  "checked_at_utc": "2026-07-17T12:34:24.038310+00:00",
+  "checked_at_utc": "2026-07-17T14:54:00.750322+00:00",
   "attempted_n_days": 26,
   "matured_n_days": 26,
-  "new_n_days": 5,
-  "decision": "trained",
+  "new_n_days": 0,
+  "decision": "skip_no_increment",
   "trained": false,
   "reason": "validation_not_pass:days=8;samples=392;raw_mae=0.07614725769621822;plus_mae=0.08246372901033669;improve_rate=0.4005102040816326;raw_daily_ic=-0.025955483484626285;plus_daily_ic=-0.09317204722237471;bias=0.042401434186883386",
   "n_samples": 929,
-  "n_days": 26
+  "n_days": 26,
+  "previous_n_days": 26
 }
