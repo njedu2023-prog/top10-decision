@@ -1,5 +1,5 @@
 {
-  "train_time_utc": "2026-07-20T13:28:30+00:00",
+  "train_time_utc": "2026-07-20T15:22:43+00:00",
   "anchor_trade_date": "20260716",
   "status": "skipped",
   "skip_reason": "insufficient_independent_dates_skip_train",
