@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-20T13:31:25+00:00",
+  "generated_at_utc": "2026-07-20T15:25:34+00:00",
   "model_version": "auction_v3_walkforward_3",
   "ready": true,
   "promoted": false,
@@ -13,7 +13,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-20T13:31:13+00:00",
+    "generated_at_utc": "2026-07-20T15:25:24+00:00",
     "model_version": "auction_v3_walkforward_3",
     "history_dates": 85,
     "oos_dates": 63,
