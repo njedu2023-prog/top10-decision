@@ -9,14 +9,14 @@
   "guardrail_reason": "CAUTION:tail_risk_mean=0.4187,volatility_mean=0.0613",
   "topk": 70,
   "picked": 0,
-  "cost_est_mean": 0.0014417517357142857,
+  "cost_est_mean": 0.0015402331642857144,
   "cost_est_min": 0.0010094835,
-  "cost_est_max": 0.00228278,
-  "risk_penalty_mean": 0.017287878067450895,
+  "cost_est_max": 0.00234974,
+  "risk_penalty_mean": 0.017954898625299365,
   "risk_penalty_min": 0.013013963095390524,
-  "risk_penalty_max": 0.024,
-  "ev_base_mean": -0.013896848149529491,
-  "ev_final_mean": -0.013896848149529491,
+  "risk_penalty_max": 0.026022052329110285,
+  "ev_base_mean": -0.050955696207043016,
+  "ev_final_mean": -0.050955696207043016,
   "pfill_penalty_extra_mean": 0.0,
   "risk_penalty_extra_mean": 0.0,
   "intraday_penalty_extra_mean": 0.0,
@@ -979,9 +979,9 @@
     "risk_intraday_soft_penalty_mean": 0.0,
     "risk_intraday_soft_penalty_max": 0.0,
     "risk_intraday_soft_penalty_sum": 0.0,
-    "risk_intraday_confidence_penalty_mean": 0.0009939653571428575,
+    "risk_intraday_confidence_penalty_mean": 0.0010013535714285715,
     "risk_intraday_confidence_penalty_max": 0.0013125000000000003,
-    "risk_intraday_confidence_penalty_sum": 0.06957757500000002,
+    "risk_intraday_confidence_penalty_sum": 0.07009475000000001,
     "risk_intraday_missing_penalty_mean": 0.002,
     "risk_intraday_missing_penalty_max": 0.002,
     "risk_intraday_missing_penalty_sum": 0.14,
@@ -991,12 +991,12 @@
     "risk_reseal_weakness_penalty_mean": 0.0020909090909090908,
     "risk_reseal_weakness_penalty_max": 0.002090909090909091,
     "risk_reseal_weakness_penalty_sum": 0.14636363636363636,
-    "risk_auction_weakness_penalty_mean": 0.0011183413700039627,
+    "risk_auction_weakness_penalty_mean": 0.0011658738167074868,
     "risk_auction_weakness_penalty_max": 0.003,
-    "risk_auction_weakness_penalty_sum": 0.07828389590027739,
-    "intraday_execution_penalty_mean": 0.006203215818055912,
+    "risk_auction_weakness_penalty_sum": 0.08161116716952407,
+    "intraday_execution_penalty_mean": 0.00625813647904515,
     "intraday_execution_penalty_max": 0.008403409090909092,
-    "intraday_execution_penalty_sum": 0.43422510726391383,
+    "intraday_execution_penalty_sum": 0.4380695535331605,
     "intraday_ev_bonus_mean": 0.0,
     "intraday_ev_bonus_max": 0.0,
     "intraday_ev_bonus_sum": 0.0,
@@ -1005,13 +1005,22 @@
     "intraday_penalty_extra_sum": 0.0,
     "top_penalty_rows": [
       {
+        "ts_code": "600664.SH",
+        "name": "哈药股份",
+        "intraday_status": "missing_stock",
+        "intraday_execution_penalty": 0.008403409090909092,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.06634429472397155
+      },
+      {
         "ts_code": "603391.SH",
         "name": "力聚热能",
         "intraday_status": "missing_stock",
         "intraday_execution_penalty": 0.008403409090909092,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.012255435650902227
+        "ev_pred": -0.03328454637134225
       },
       {
         "ts_code": "603118.SH",
@@ -1020,7 +1029,25 @@
         "intraday_execution_penalty": 0.007844986338179137,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.010508738488182304
+        "ev_pred": -0.026373576904070866
+      },
+      {
+        "ts_code": "001399.SZ",
+        "name": "惠科股份",
+        "intraday_status": "missing_stock",
+        "intraday_execution_penalty": 0.007679935265480379,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.04896272033314898
+      },
+      {
+        "ts_code": "600641.SH",
+        "name": "先导基电",
+        "intraday_status": "missing_stock",
+        "intraday_execution_penalty": 0.007517416457561097,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.05402886378854618
       },
       {
         "ts_code": "605133.SH",
@@ -1029,7 +1056,7 @@
         "intraday_execution_penalty": 0.007166451994659234,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.019327333225997383
+        "ev_pred": -0.06592189387154987
       },
       {
         "ts_code": "603435.SH",
@@ -1038,7 +1065,7 @@
         "intraday_execution_penalty": 0.00706305794039294,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.010763916717197442
+        "ev_pred": -0.04465340808148435
       },
       {
         "ts_code": "002197.SZ",
@@ -1047,7 +1074,16 @@
         "intraday_execution_penalty": 0.007035416666666666,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.014758156892151458
+        "ev_pred": -0.035017492980993936
+      },
+      {
+        "ts_code": "002987.SZ",
+        "name": "京北方",
+        "intraday_status": "missing_stock",
+        "intraday_execution_penalty": 0.007012118548842462,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.03878861852036129
       },
       {
         "ts_code": "000526.SZ",
@@ -1056,43 +1092,7 @@
         "intraday_execution_penalty": 0.006995301404958679,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.012785117477181359
-      },
-      {
-        "ts_code": "600846.SH",
-        "name": "同济科技",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.006992771115355236,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.01680494055660205
-      },
-      {
-        "ts_code": "603306.SH",
-        "name": "华懋科技",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.006982960270052229,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.012329137577590858
-      },
-      {
-        "ts_code": "600584.SH",
-        "name": "长电科技",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.00693445153502816,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.0158071343383129
-      },
-      {
-        "ts_code": "002319.SZ",
-        "name": "乐通股份",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.0068147727272727275,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.010440355471218656
+        "ev_pred": -0.024431911402363934
       }
     ]
   },
@@ -1101,21 +1101,21 @@
     "selected_rows": 0,
     "risk_budget": 0.7,
     "stop_reason": "",
-    "p_fill_pred_min": 0.5348344368234444,
-    "p_fill_pred_max": 0.8241954561057214,
-    "p_fill_pred_mean": 0.674314920165706,
-    "e_ret_pred_min": 0.0038812113546482924,
-    "e_ret_pred_max": 0.01281594831992972,
-    "e_ret_pred_mean": 0.0071808323172657534,
+    "p_fill_pred_min": 0.4527964052698311,
+    "p_fill_pred_max": 0.8939377186264627,
+    "p_fill_pred_mean": 0.8024317013260364,
+    "e_ret_pred_min": -0.07584906699987806,
+    "e_ret_pred_max": 0.010321816286149445,
+    "e_ret_pred_mean": -0.03923269311953483,
     "cost_est_min": 0.0010094835,
-    "cost_est_max": 0.00228278,
-    "cost_est_mean": 0.0014417517357142857,
+    "cost_est_max": 0.00234974,
+    "cost_est_mean": 0.0015402331642857144,
     "risk_penalty_min": 0.013013963095390524,
-    "risk_penalty_max": 0.024,
-    "risk_penalty_mean": 0.017287878067450895,
-    "ev_base_min": -0.019706192352306435,
-    "ev_base_max": -0.007672425258811742,
-    "ev_base_mean": -0.013896848149529491,
+    "risk_penalty_max": 0.026022052329110285,
+    "risk_penalty_mean": 0.017954898625299365,
+    "ev_base_min": -0.07431471206550402,
+    "ev_base_max": -0.011534450926594124,
+    "ev_base_mean": -0.050955696207043016,
     "pfill_penalty_extra_min": 0.0,
     "pfill_penalty_extra_max": 0.0,
     "pfill_penalty_extra_mean": 0.0,
@@ -1131,102 +1131,102 @@
     "ev_penalty_total_extra_min": 0.0,
     "ev_penalty_total_extra_max": 0.0,
     "ev_penalty_total_extra_mean": 0.0,
-    "ev_final_min": -0.019706192352306435,
-    "ev_final_max": -0.007672425258811742,
-    "ev_final_mean": -0.013896848149529491,
-    "ev_pred_min": -0.019706192352306435,
-    "ev_pred_max": -0.007672425258811742,
-    "ev_pred_mean": -0.013896848149529491,
+    "ev_final_min": -0.07431471206550402,
+    "ev_final_max": -0.011534450926594124,
+    "ev_final_mean": -0.050955696207043016,
+    "ev_pred_min": -0.07431471206550402,
+    "ev_pred_max": -0.011534450926594124,
+    "ev_pred_mean": -0.050955696207043016,
     "positive_ev_rows": 0,
     "positive_ev_base_rows": 0,
-    "positive_e_ret_rows": 70,
+    "positive_e_ret_rows": 2,
     "high_pfill_rows": 0,
     "low_risk_rows": 0,
     "top_mean_penalty_drivers": [
       {
         "name": "risk_penalty",
-        "mean": 0.017287878067450895
+        "mean": 0.017954898625299365
       },
       {
         "name": "cost_est",
-        "mean": 0.0014417517357142857
+        "mean": 0.0015402331642857144
       }
     ],
     "primary_no_trade_reason": "positive_e_ret_cannot_cover_cost_and_risk",
     "top_ev_rows": [
       {
-        "ts_code": "603986.SH",
-        "name": "兆易创新",
-        "ev_pred": -0.007672425258811742,
-        "ev_base": -0.007672425258811742,
-        "p_fill_pred": 0.5348344368234444,
-        "e_ret_pred": 0.011953149908977898,
-        "cost_est": 0.0010094835,
-        "risk_penalty": 0.013055897958646142,
+        "ts_code": "600846.SH",
+        "name": "同济科技",
+        "ev_pred": -0.011534450926594124,
+        "ev_base": -0.011534450926594124,
+        "p_fill_pred": 0.8119043221378278,
+        "e_ret_pred": 0.010321816286149445,
+        "cost_est": 0.0020832349999999997,
+        "risk_penalty": 0.017831543181631482,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
-        "ts_code": "002213.SZ",
-        "name": "大为股份",
-        "ev_pred": -0.008540172203991747,
-        "ev_base": -0.008540172203991747,
-        "p_fill_pred": 0.655233824563645,
-        "e_ret_pred": 0.00851237402939812,
-        "cost_est": 0.0011038045,
-        "risk_penalty": 0.013013963095390524,
+        "ts_code": "603192.SH",
+        "name": "汇得科技",
+        "ev_pred": -0.015378948079792926,
+        "ev_base": -0.015378948079792926,
+        "p_fill_pred": 0.8198946490934232,
+        "e_ret_pred": 0.009257310446484226,
+        "cost_est": 0.001966385,
+        "risk_penalty": 0.02100258237986199,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
-        "ts_code": "600460.SH",
-        "name": "士兰微",
-        "ev_pred": -0.008744496893467919,
-        "ev_base": -0.008744496893467919,
-        "p_fill_pred": 0.6476228993171887,
-        "e_ret_pred": 0.008787582732973314,
-        "cost_est": 0.001102961,
-        "risk_penalty": 0.013332575700985762,
+        "ts_code": "000526.SZ",
+        "name": "学大教育",
+        "ev_pred": -0.024431911402363934,
+        "ev_base": -0.024431911402363934,
+        "p_fill_pred": 0.8101760248512818,
+        "e_ret_pred": -0.008445713034599307,
+        "cost_est": 0.0012676035,
+        "risk_penalty": 0.016321793688957614,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
-        "ts_code": "603629.SH",
-        "name": "利通电子",
-        "ev_pred": -0.008846275748509092,
-        "ev_base": -0.008846275748509092,
-        "p_fill_pred": 0.6217072827175205,
-        "e_ret_pred": 0.009019194407775157,
-        "cost_est": 0.0011785365,
-        "risk_penalty": 0.013275038096068042,
+        "ts_code": "603118.SH",
+        "name": "共进股份",
+        "ev_pred": -0.026373576904070866,
+        "ev_base": -0.026373576904070866,
+        "p_fill_pred": 0.8035621385367783,
+        "e_ret_pred": -0.013379553973255348,
+        "cost_est": 0.001412683,
+        "risk_penalty": 0.01420959090065355,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
-        "ts_code": "002409.SZ",
-        "name": "雅克科技",
-        "ev_pred": -0.008935613113354886,
-        "ev_base": -0.008935613113354886,
-        "p_fill_pred": 0.645018632954325,
-        "e_ret_pred": 0.009183794330249665,
-        "cost_est": 0.0013221555,
-        "risk_penalty": 0.013537176077586206,
+        "ts_code": "603161.SH",
+        "name": "科华控股",
+        "ev_pred": -0.028555867464101575,
+        "ev_base": -0.028555867464101575,
+        "p_fill_pred": 0.8265689613167898,
+        "e_ret_pred": -0.013403368114048875,
+        "cost_est": 0.0012264585,
+        "risk_penalty": 0.01625060090392562,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       }
     ]
   },
   "engine_status": {
-    "p_fill_pred_src": "rule",
+    "p_fill_pred_src": "model:lgbm",
     "p_fill_model_loaded": true,
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
-    "p_fill_degrade_reason": "model_rejected_by_learning_acceptance:pfill_truth_version_mismatch",
-    "eret_pred_src": "rule",
+    "p_fill_degrade_reason": "",
+    "eret_pred_src": "model:lgbm",
     "eret_model_loaded": true,
-    "eret_model_kind": "",
-    "eret_model_path": "",
-    "eret_degrade_reason": "model_rejected_by_learning_acceptance:model_meta_not_trained"
+    "eret_model_kind": "lgbm",
+    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
+    "eret_degrade_reason": ""
   },
   "paths": {
     "candidates": "data/decision/decision_candidates_20260721.csv",
@@ -1243,5 +1243,5 @@
     "topn_rows": 0,
     "full_candidate_rows": 70
   },
-  "intraday_execution_penalty_mean": 0.006203215818055849
+  "intraday_execution_penalty_mean": 0.006258136479045087
 }
