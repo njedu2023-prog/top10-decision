@@ -41,17 +41,6 @@ def _read_csv(path: Path) -> pd.DataFrame:
 def _collect_codes(root: Path, trade_date: str, signal_date: str, max_codes: int) -> list[str]:
     codes: list[str] = []
 
-    pred_source = root / "data" / "pred" / "pred_source_latest.csv"
-    source = _read_csv(pred_source)
-    if not source.empty:
-        code_col = next((column for column in ("ts_code", "code", "代码") if column in source.columns), "")
-        if code_col:
-            source, _ = filter_standard_limit_universe(source, code_col=code_col, name_col="name")
-        source_date = _normal_date(source.get("trade_date", pd.Series([""])).iloc[0])
-        if not signal_date or source_date == signal_date:
-            if code_col:
-                codes.extend(normalize_code(value) for value in source[code_col].head(max_codes))
-
     prediction_root = root / "outputs" / "auction_v3" / "predictions"
     for path in sorted(prediction_root.glob("pred_20*.csv")):
         frame = _read_csv(path)
@@ -63,7 +52,26 @@ def _collect_codes(root: Path, trade_date: str, signal_date: str, max_codes: int
         buy_dates = frame.get("expected_buy_date", pd.Series("", index=frame.index)).map(_normal_date)
         exit_dates = frame.get("expected_exit_date", pd.Series("", index=frame.index)).map(_normal_date)
         needed = frame[buy_dates.eq(trade_date) | exit_dates.eq(trade_date)]
+        sort_columns = [
+            column
+            for column in ("selected", "stage_focus", "predicted_continuation_limit_up_probability", "conservative_ev")
+            if column in needed.columns
+        ]
+        if sort_columns:
+            needed = needed.sort_values(sort_columns, ascending=[False] * len(sort_columns), kind="stable")
         codes.extend(normalize_code(value) for value in needed["ts_code"])
+
+    # Existing model outputs are first so formal actions and 2->3/3->4 watch names
+    # cannot be displaced when an unusually large limit-up pool hits the cap.
+    pred_source = root / "data" / "pred" / "pred_source_latest.csv"
+    source = _read_csv(pred_source)
+    if not source.empty:
+        code_col = next((column for column in ("ts_code", "code", "代码") if column in source.columns), "")
+        if code_col:
+            source, _ = filter_standard_limit_universe(source, code_col=code_col, name_col="name")
+        source_date = _normal_date(source.get("trade_date", pd.Series([""])).iloc[0])
+        if (not signal_date or source_date == signal_date) and code_col:
+            codes.extend(normalize_code(value) for value in source[code_col])
 
     return list(dict.fromkeys(code for code in codes if code))[:max_codes]
 
@@ -73,7 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", default=str(ROOT))
     parser.add_argument("--trade-date", default="", help="Current China-market date; defaults to Asia/Shanghai today")
     parser.add_argument("--signal-date", default="", help="Optional D signal date used to select current candidates")
-    parser.add_argument("--max-codes", type=int, default=48)
+    parser.add_argument("--max-codes", type=int, default=80)
     parser.add_argument("--timeout-seconds", type=int, default=8)
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--calendar-only", action="store_true", help="Sync the strict SSE calendar without minute requests")

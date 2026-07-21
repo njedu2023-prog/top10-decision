@@ -76,7 +76,7 @@ jobs:
           SIGNAL_DATE: ${{ inputs.signal_date }}
         run: |
           set -e
-          args=(--optional --max-codes 48 --timeout-seconds 8 --workers 6)
+          args=(--optional --max-codes 80 --timeout-seconds 8 --workers 6)
           if [ -n "${SIGNAL_DATE}" ]; then
             args+=(--signal-date "${SIGNAL_DATE}")
           fi

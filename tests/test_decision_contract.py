@@ -22,6 +22,7 @@ from scripts.resolve_sample_maturity import (  # noqa: E402
     resolve_sample_maturity_rows,
     resolve_trade_calendar,
 )
+from scripts.sync_tushare_minute import _collect_codes  # noqa: E402
 from top10decision.data.tushare_minute import opening_auction_price_from_snapshot  # noqa: E402
 from top10decision.decision.action_plan import build_action_plan  # noqa: E402
 from top10decision.decision.eligibility import filter_standard_limit_universe  # noqa: E402
@@ -120,6 +121,47 @@ class DecisionCalendarContractTests(unittest.TestCase):
 
 
 class DecisionExecutionTruthTests(unittest.TestCase):
+    def test_minute_sync_cap_prioritizes_formal_and_stage_watch_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            prediction_root = root / "outputs" / "auction_v3" / "predictions"
+            prediction_root.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {
+                        "ts_code": "600002.SH",
+                        "name": "普通观察",
+                        "expected_buy_date": "20260721",
+                        "selected": 0,
+                        "stage_focus": 0,
+                        "predicted_continuation_limit_up_probability": 0.2,
+                        "conservative_ev": -0.01,
+                    },
+                    {
+                        "ts_code": "600003.SH",
+                        "name": "二进三",
+                        "expected_buy_date": "20260721",
+                        "selected": 0,
+                        "stage_focus": 1,
+                        "predicted_continuation_limit_up_probability": 0.5,
+                        "conservative_ev": 0.01,
+                    },
+                    {
+                        "ts_code": "600004.SH",
+                        "name": "正式信号",
+                        "expected_buy_date": "20260721",
+                        "selected": 1,
+                        "stage_focus": 1,
+                        "predicted_continuation_limit_up_probability": 0.4,
+                        "conservative_ev": 0.02,
+                    },
+                ]
+            ).to_csv(prediction_root / "pred_20260720.csv", index=False)
+
+            codes = _collect_codes(root, "20260721", "", max_codes=2)
+
+        self.assertEqual(codes, ["600004.SH", "600003.SH"])
+
     def test_later_intraday_break_does_not_count_as_auction_fill(self) -> None:
         label = infer_fill_label(
             pd.Series(
