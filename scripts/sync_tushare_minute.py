@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -73,7 +73,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", default=str(ROOT))
     parser.add_argument("--trade-date", default="", help="Current China-market date; defaults to Asia/Shanghai today")
     parser.add_argument("--signal-date", default="", help="Optional D signal date used to select current candidates")
-    parser.add_argument("--max-codes", type=int, default=80)
+    parser.add_argument("--max-codes", type=int, default=48)
+    parser.add_argument("--timeout-seconds", type=int, default=8)
+    parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--calendar-only", action="store_true", help="Sync the strict SSE calendar without minute requests")
     parser.add_argument("--optional", action="store_true", help="Exit successfully when the secret or minute data is unavailable")
     return parser.parse_args()
@@ -91,9 +93,21 @@ def main() -> int:
             return 0
         raise RuntimeError("TUSHARE_TOKEN is not configured")
 
-    client = TushareClient.from_env()
-    calendar = client.trade_calendar(f"{trade_date[:4]}0101", f"{trade_date[:4]}1231")
-    calendar_path = write_calendar(calendar, root)
+    client = TushareClient.from_env(timeout_seconds=args.timeout_seconds)
+    try:
+        calendar = client.trade_calendar(f"{trade_date[:4]}0101", f"{trade_date[:4]}1231")
+        calendar_path = write_calendar(calendar, root)
+    except Exception as exc:
+        calendar_path = root / "data" / "market" / "trade_cal_sse.csv"
+        if not args.optional or not calendar_path.exists():
+            raise
+        calendar = _read_csv(calendar_path)
+        if calendar.empty or not {"cal_date", "is_open"}.issubset(calendar.columns):
+            raise RuntimeError("committed A-share calendar is unavailable after Tushare failure") from exc
+        print(
+            f"[tushare-minute] calendar refresh failed ({type(exc).__name__}); "
+            "using committed strict SSE calendar"
+        )
     open_map = dict(zip(calendar["cal_date"].astype(str), calendar["is_open"].astype(int)))
 
     # rt_min_daily is a same-day feed. Refuse to label it as historical data.
@@ -101,18 +115,26 @@ def main() -> int:
     codes = [] if args.calendar_only else _collect_codes(root, trade_date, signal_date, max(1, int(args.max_codes)))
     written = 0
     failures: list[dict[str, str]] = []
-    if trade_date == today and open_map.get(trade_date, 0) == 1:
-        for code in codes:
+    if trade_date == today and open_map.get(trade_date, 0) == 1 and codes:
+        def fetch_one(code: str) -> tuple[str, bool, str]:
             try:
                 minute = client.current_minute(code)
                 if minute.empty:
-                    failures.append({"ts_code": code, "reason": "empty"})
-                    continue
+                    return code, False, "empty"
                 write_minute_snapshot(minute, root, trade_date, code)
-                written += 1
+                return code, True, ""
             except Exception as exc:
-                failures.append({"ts_code": code, "reason": type(exc).__name__})
-            time.sleep(0.08)
+                return code, False, type(exc).__name__
+
+        workers = min(max(1, int(args.workers)), len(codes))
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="tushare-minute") as pool:
+            futures = [pool.submit(fetch_one, code) for code in codes]
+            for future in as_completed(futures):
+                code, success, reason = future.result()
+                if success:
+                    written += 1
+                else:
+                    failures.append({"ts_code": code, "reason": reason})
 
     summary = {
         "source": "tushare",
@@ -121,6 +143,8 @@ def main() -> int:
         "calendar_path": str(calendar_path.relative_to(root)),
         "calendar_rows": int(len(calendar)),
         "candidate_codes": int(len(codes)),
+        "request_timeout_seconds": max(1, int(args.timeout_seconds)),
+        "workers": min(max(1, int(args.workers)), max(1, len(codes))),
         "minute_files_written": int(written),
         "minute_sync_skipped_non_current_date": trade_date != today,
         "failures": failures[:20],

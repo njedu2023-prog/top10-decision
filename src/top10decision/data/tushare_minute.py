@@ -83,11 +83,16 @@ class TushareClient:
     timeout_seconds: int = 30
 
     @classmethod
-    def from_env(cls, env_name: str = "TUSHARE_TOKEN") -> "TushareClient":
+    def from_env(
+        cls,
+        env_name: str = "TUSHARE_TOKEN",
+        *,
+        timeout_seconds: int = 8,
+    ) -> "TushareClient":
         token = str(os.environ.get(env_name, "") or "").strip()
         if not token:
             raise RuntimeError(f"{env_name} is not configured")
-        return cls(token=token)
+        return cls(token=token, timeout_seconds=max(1, int(timeout_seconds)))
 
     def call(self, api_name: str, params: dict[str, Any], fields: Iterable[str]) -> pd.DataFrame:
         response = requests.post(

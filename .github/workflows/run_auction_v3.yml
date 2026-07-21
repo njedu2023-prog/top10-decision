@@ -37,7 +37,7 @@ env:
 
 concurrency:
   group: decision-auction-guidance-v5
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   auction_guidance_v5:
@@ -76,7 +76,7 @@ jobs:
           SIGNAL_DATE: ${{ inputs.signal_date }}
         run: |
           set -e
-          args=(--optional)
+          args=(--optional --max-codes 48 --timeout-seconds 8 --workers 6)
           if [ -n "${SIGNAL_DATE}" ]; then
             args+=(--signal-date "${SIGNAL_DATE}")
           fi
