@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-21T11:12:14+00:00",
+  "generated_at_utc": "2026-07-21T11:49:21+00:00",
   "model_version": "auction_v5_manual_guidance_4",
   "history_dates": 94,
   "oos_dates": 72,
@@ -35,11 +35,11 @@
   "positive_month_ratio": 0.2,
   "max_positive_month_profit_contribution": 1.0,
   "bootstrap_probability_mean_positive": 0.667,
-  "forecast_mae": 0.0178043757,
-  "forecast_rmse": 0.0232235886,
+  "forecast_mae": 0.0178602212,
+  "forecast_rmse": 0.023169988,
   "direction_accuracy": 0.8,
   "prediction_interval_coverage": 1.0,
-  "return_rank_ic": -0.8,
+  "return_rank_ic": -0.9,
   "return_calibration": [],
   "promotion_checks": {
     "history_dates": true,
