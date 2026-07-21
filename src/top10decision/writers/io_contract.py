@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 import pandas as pd
 
@@ -68,6 +69,7 @@ A_SHARE_EXCHANGE_HOLIDAYS = {
 }
 
 A_SHARE_CALENDAR_YEARS = {2026}
+TRADE_CALENDAR_PATH = Path(__file__).resolve().parents[3] / "data" / "market" / "trade_cal_sse.csv"
 
 
 # =========================
@@ -134,16 +136,62 @@ def _parse_ymd(value: str) -> datetime | None:
         return None
 
 
+@lru_cache(maxsize=1)
+def _load_exchange_calendar() -> dict[str, bool]:
+    """Load the Tushare/SSE calendar snapshot when the workflow has synced it."""
+    path = TRADE_CALENDAR_PATH
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    try:
+        frame = pd.read_csv(path, dtype={"cal_date": str})
+    except Exception as exc:
+        raise RuntimeError(f"Cannot read strict A-share calendar: {path}: {exc}") from exc
+    if not {"cal_date", "is_open"}.issubset(frame.columns):
+        raise RuntimeError(
+            f"Strict A-share calendar must contain cal_date/is_open: {path}; "
+            f"columns={list(frame.columns)}"
+        )
+    result: dict[str, bool] = {}
+    for index, row in frame.iterrows():
+        ymd = norm_ymd(row.get("cal_date"))
+        if len(ymd) != 8:
+            raise RuntimeError(f"Invalid cal_date at row={index + 2}: {row.get('cal_date')!r}")
+        try:
+            flag = int(float(row.get("is_open")))
+        except Exception as exc:
+            raise RuntimeError(
+                f"Invalid is_open at row={index + 2}: {row.get('is_open')!r}"
+            ) from exc
+        if flag not in {0, 1}:
+            raise RuntimeError(f"is_open must be 0/1 at row={index + 2}: {flag}")
+        is_open = flag == 1
+        if ymd in result and result[ymd] != is_open:
+            raise RuntimeError(f"Conflicting calendar rows for {ymd}: {path}")
+        result[ymd] = is_open
+    if not result:
+        raise RuntimeError(f"Strict A-share calendar has no rows: {path}")
+    return result
+
+
 def _assert_a_share_calendar_covered(dt: datetime) -> None:
     """
     严格交易日历：只允许使用已显式维护过交易所休市日的年份。
     未覆盖年份继续用“周末+假日猜测”会直接产生错误执行日，所以这里硬失败。
     """
-    if dt.year not in A_SHARE_CALENDAR_YEARS:
+    synced = _load_exchange_calendar()
+    if dt.strftime("%Y%m%d") in synced:
+        return
+    synced_years = {int(key[:4]) for key in synced if len(key) == 8 and key[:4].isdigit()}
+    if dt.year not in A_SHARE_CALENDAR_YEARS and dt.year not in synced_years:
         covered = ",".join(str(y) for y in sorted(A_SHARE_CALENDAR_YEARS))
         raise RuntimeError(
             f"A-share trading calendar does not cover year={dt.year}; "
-            f"covered_years={covered}. Please update A_SHARE_EXCHANGE_HOLIDAYS first."
+            f"covered_years={covered}. Sync trade_cal_sse.csv or update the official fallback first."
+        )
+    if dt.year in synced_years and dt.strftime("%Y%m%d") not in synced:
+        raise RuntimeError(
+            f"Synced A-share trading calendar is incomplete for {dt.strftime('%Y%m%d')}; "
+            "refusing weekday inference."
         )
 
 
@@ -158,6 +206,9 @@ def is_a_share_trading_day(value: str) -> bool:
         return False
     _assert_a_share_calendar_covered(dt)
     ymd = dt.strftime("%Y%m%d")
+    synced = _load_exchange_calendar()
+    if ymd in synced:
+        return synced[ymd]
     if dt.weekday() >= 5:
         return False
     if ymd in A_SHARE_EXCHANGE_HOLIDAYS:
@@ -233,8 +284,7 @@ def choose_exec_date(trade_date: str, target_trade_date: str) -> str:
 
 def choose_exit_date(exec_date: str) -> str:
     """
-    T+2 卖出/验证日：执行日后的下一真实 A 股交易日。
-    当前 run_v2.py 暂未消费该函数，先提供稳定接口，避免未来再写自然日偏移。
+    T+1 卖出/验证日：执行日后的下一真实 A 股交易日。
     """
     return next_a_share_trading_day(exec_date, include_self=False)
 

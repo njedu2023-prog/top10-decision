@@ -9,16 +9,16 @@ build_eret_truth.py
 - 严格消费 sample_maturity_latest.csv，不自猜日期
 - 只处理 ERET_READY=1 的成熟样本
 - 优先复用 fill_truth_{trade_date}.csv 中的 entry_price_proxy_t1 作为买入价口径
-- 使用 T+2(target_date) 的真实收盘价构建 E_ret / PremiumRet 真值层
+- 使用执行日下一交易日(target_date)的预声明止盈/止损/时间退出策略构建 E_ret 真值层
 
 输出：
 - data/market/eret_truth_{trade_date}.csv
 - data/market/eret_truth_{trade_date}.meta.json
 
 当前阶段只做“真值层 / 标签层”：
-- realized_ret_t1_to_t2
-- premium_ret_t1_to_t2
-- exit_price_t2_close
+- realized_ret_open_to_tplus1_timed_exit（主目标）
+- realized_ret_t1_to_t2（Decision 兼容别名，数值与主目标一致）
+- exit_price_tplus1_timed
 - eret_label_quality
 - eret_sample_eligible
 
@@ -32,17 +32,34 @@ build_eret_truth.py
 2. E_ret 的买入价口径优先复用 fill_truth / entry_price_proxy_t1
 3. 训练日期机制必须复用 sample_maturity，不得另起一套时间逻辑
 4. E_ret 服务于 EV，不是独立漂浮展示值；因此保留 fill 状态与样本可训练性审计
+5. 择机退出必须先声明规则；仅有日线时同日止盈止损双触发按止损先发生处理
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from top10decision.data.tushare_minute import opening_auction_price, read_minute_snapshot
+from top10decision.decision.contracts import (
+    DECISION_EXECUTION_CONTRACT,
+    ERET_COMPAT_TARGET_COLUMN,
+    ERET_HOLDING_MODE,
+    ERET_TARGET_COLUMN,
+    ERET_TRUTH_VERSION,
+)
+from top10decision.decision.exit_policy import corporate_action_safe_return, simulate_tplus1_exit
 
 
 # =========================
@@ -241,7 +258,7 @@ def load_maturity_info(
 
 
 # =========================
-# 候选池 / fill_truth / T+2 truth
+# 候选池 / fill_truth / T+1 退出真值
 # =========================
 
 def load_candidate_pool(paths: Paths, trade_date: str) -> Tuple[pd.DataFrame, str]:
@@ -318,19 +335,21 @@ def load_fill_truth(path: Path, trade_date: str) -> pd.DataFrame:
 
 
 def load_target_daily(raw_root: Path, target_date: str) -> pd.DataFrame:
-    path = snapshot_dir(raw_root, target_date) / "daily.csv"
+    base = snapshot_dir(raw_root, target_date)
+    path = base / "daily.csv"
     df = safe_read_csv(path)
     if df.empty:
-        raise FileNotFoundError(f"找不到或读不到 T+2 daily 真值文件：{path}")
+        raise FileNotFoundError(f"找不到或读不到 T+1 退出日 daily 真值文件：{path}")
 
     df = ensure_ts_code(df, context="target_daily")
     rename_map: Dict[str, str] = {}
     for srcs, target in [
-        (["trade_date", "日期"], "target_date"),
+        (["trade_date", "日期"], "market_target_date"),
         (["open", "开盘价"], "open_t2"),
         (["high", "最高价"], "high_t2"),
         (["low", "最低价"], "low_t2"),
         (["close", "收盘价"], "close_t2"),
+        (["pre_close", "昨收价"], "pre_close_t2"),
         (["vol", "volume", "成交量"], "vol_t2"),
         (["amount", "成交额"], "amount_t2"),
         (["pct_chg", "涨跌幅"], "pct_chg_t2"),
@@ -342,10 +361,34 @@ def load_target_daily(raw_root: Path, target_date: str) -> pd.DataFrame:
     out = df.rename(columns=rename_map)
     keep = ["ts_code"] + [c for c in rename_map.values() if c in out.columns]
     out = out[keep].copy()
-    if "target_date" not in out.columns:
-        out["target_date"] = target_date
-    out["target_date"] = out["target_date"].map(norm_ymd).replace("", target_date)
+    if "market_target_date" not in out.columns:
+        out["market_target_date"] = target_date
+    out["market_target_date"] = out["market_target_date"].map(norm_ymd).replace("", target_date)
     out = out.drop_duplicates(subset=["ts_code"], keep="first").copy()
+
+    auction = safe_read_csv(base / "stk_auction.csv")
+    if not auction.empty:
+        auction = ensure_ts_code(auction, context="target_stk_auction")
+        price_col = first_existing(auction, ["price", "auction_price", "竞价成交价"])
+        amount_col = first_existing(auction, ["amount", "auction_amount", "竞价成交额"])
+        keep_auction = ["ts_code"] + [c for c in (price_col, amount_col) if c is not None]
+        auction = auction[keep_auction].copy()
+        rename_auction = {}
+        if price_col is not None:
+            rename_auction[price_col] = "auction_price_t2"
+        if amount_col is not None:
+            rename_auction[amount_col] = "auction_amount_t2"
+        auction = auction.rename(columns=rename_auction).drop_duplicates("ts_code", keep="last")
+        out = out.merge(auction, on="ts_code", how="left")
+
+    limits = safe_read_csv(base / "stk_limit.csv")
+    if not limits.empty:
+        limits = ensure_ts_code(limits, context="target_stk_limit")
+        down_col = first_existing(limits, ["down_limit", "跌停价"])
+        if down_col is not None:
+            limits = limits[["ts_code", down_col]].rename(columns={down_col: "down_limit_t2"})
+            limits = limits.drop_duplicates("ts_code", keep="last")
+            out = out.merge(limits, on="ts_code", how="left")
     return out
 
 
@@ -353,13 +396,49 @@ def load_target_daily(raw_root: Path, target_date: str) -> pd.DataFrame:
 # 标签逻辑
 # =========================
 
-def infer_eret_label(row: pd.Series) -> Tuple[Optional[float], str, int]:
+def infer_eret_label(
+    row: pd.Series,
+) -> Tuple[
+    Optional[float],
+    str,
+    int,
+    Optional[float],
+    str,
+    int,
+    str,
+    Optional[float],
+    Optional[float],
+    str,
+    str,
+]:
     y_fill = row.get("y_fill")
     entry = to_float(row.get("entry_price_proxy_t1"))
-    close_t2 = to_float(row.get("close_t2"))
+    result = simulate_tplus1_exit(
+        entry_price=entry,
+        buy_close=row.get("close_t1"),
+        target_pre_close=row.get("pre_close_t2"),
+        open_price=row.get("open_t2"),
+        high_price=row.get("high_t2"),
+        low_price=row.get("low_t2"),
+        close_price=row.get("close_t2"),
+        down_limit=row.get("down_limit_t2"),
+        minute_frame=row.get("_minute_frame_t2"),
+    )
 
     if pd.isna(y_fill):
-        return None, "missing_fill_label", 0
+        return (
+            None,
+            "missing_fill_label",
+            0,
+            result.exit_price,
+            result.source,
+            int(result.executable),
+            result.reason,
+            result.take_profit_price,
+            result.stop_loss_price,
+            result.latest_exit_time,
+            result.policy_version,
+        )
 
     try:
         y_fill_int = int(float(y_fill))
@@ -367,14 +446,48 @@ def infer_eret_label(row: pd.Series) -> Tuple[Optional[float], str, int]:
         y_fill_int = 0
 
     if y_fill_int != 1:
-        return None, "not_filled_no_trade", 0
+        return None, "not_filled_no_trade", 0, result.exit_price, result.source, int(result.executable), result.reason, result.take_profit_price, result.stop_loss_price, result.latest_exit_time, result.policy_version
     if pd.isna(entry) or entry <= 0:
-        return None, "missing_entry_price_proxy", 0
-    if pd.isna(close_t2) or close_t2 <= 0:
-        return None, "missing_target_close", 0
+        return None, "missing_entry_price_proxy", 0, result.exit_price, result.source, int(result.executable), result.reason, result.take_profit_price, result.stop_loss_price, result.latest_exit_time, result.policy_version
+    if not result.executable or result.exit_price is None or result.exit_price <= 0:
+        return None, result.reason or "missing_tplus1_exit", 0, result.exit_price, result.source, 0, result.reason, result.take_profit_price, result.stop_loss_price, result.latest_exit_time, result.policy_version
 
-    realized_ret = close_t2 / entry - 1.0
-    return float(realized_ret), "strong_close_t2_over_entry_proxy_t1", 1
+    realized_ret = corporate_action_safe_return(
+        entry,
+        result.exit_price,
+        row.get("close_t1"),
+        row.get("pre_close_t2"),
+    )
+    if not pd.notna(realized_ret):
+        return None, "invalid_timed_exit_return", 0, result.exit_price, result.source, 1, result.reason, result.take_profit_price, result.stop_loss_price, result.latest_exit_time, result.policy_version
+    return (
+        float(realized_ret),
+        f"strong_{result.source}_{result.reason}",
+        1,
+        float(result.exit_price),
+        result.source,
+        1,
+        result.reason,
+        result.take_profit_price,
+        result.stop_loss_price,
+        result.latest_exit_time,
+        result.policy_version,
+    )
+
+
+def _compat_close_return(row: pd.Series) -> Optional[float]:
+    try:
+        if int(float(row.get("y_fill"))) != 1:
+            return None
+    except Exception:
+        return None
+    value = corporate_action_safe_return(
+        row.get("entry_price_proxy_t1"),
+        row.get("close_t2"),
+        row.get("close_t1"),
+        row.get("pre_close_t2"),
+    )
+    return float(value) if pd.notna(value) else None
 
 
 # =========================
@@ -411,8 +524,20 @@ def build_eret_truth(
             pred_base_cols.append(c)
 
     out = pred[pred_base_cols].drop_duplicates(subset=["trade_date", "ts_code"]).copy()
-    out = out.merge(fill_truth, on=["trade_date", "ts_code"], how="left")
+    # fill_truth is already the audited <=10% mechanism universe. An inner
+    # join prevents excluded 20%/30%/no-limit securities re-entering E_ret.
+    out = out.merge(fill_truth, on=["trade_date", "ts_code"], how="inner")
     out = out.merge(t2, on="ts_code", how="left")
+    out["minute_open_t2"] = out["ts_code"].map(
+        lambda code: opening_auction_price(paths.project_root, target_date, code)
+    )
+    out["minute_open_available_t2"] = pd.to_numeric(
+        out["minute_open_t2"], errors="coerce"
+    ).gt(0).astype(int)
+    out["_minute_frame_t2"] = [
+        read_minute_snapshot(paths.project_root, target_date, code)
+        for code in out["ts_code"].astype(str)
+    ]
 
     out["exec_date"] = out.get("exec_date", exec_date)
     out["exec_date"] = out["exec_date"].map(norm_ymd).replace("", exec_date)
@@ -426,19 +551,35 @@ def build_eret_truth(
 
     labels = out.apply(infer_eret_label, axis=1, result_type="expand")
     labels.columns = [
-        "realized_ret_t1_to_t2",
+        ERET_TARGET_COLUMN,
         "eret_label_quality",
         "eret_sample_eligible",
+        "exit_price_tplus1_timed",
+        "exit_price_source",
+        "exit_on_time",
+        "exit_reason",
+        "take_profit_price_tplus1",
+        "stop_loss_price_tplus1",
+        "latest_exit_time",
+        "exit_policy_version",
     ]
     out = pd.concat([out, labels], axis=1)
 
-    out["premium_ret_t1_to_t2"] = out["realized_ret_t1_to_t2"]
+    out[ERET_COMPAT_TARGET_COLUMN] = out[ERET_TARGET_COLUMN]
+    out["premium_ret_t1_to_t2"] = out.apply(_compat_close_return, axis=1)
     out["entry_date"] = out["exec_date"]
     out["exit_date"] = out["target_date"]
     out["entry_price_t1"] = out["entry_price_proxy_t1"]
+    out["entry_price_t_opening_auction"] = out["entry_price_proxy_t1"]
+    missing = pd.Series(float("nan"), index=out.index, dtype=float)
+    auction_open = pd.to_numeric(out["auction_price_t2"], errors="coerce") if "auction_price_t2" in out.columns else missing
+    minute_open = pd.to_numeric(out["minute_open_t2"], errors="coerce") if "minute_open_t2" in out.columns else missing
+    daily_open = pd.to_numeric(out["open_t2"], errors="coerce") if "open_t2" in out.columns else missing
+    out["exit_price_tplus1_open"] = auction_open.fillna(minute_open).fillna(daily_open)
     out["exit_price_t2_close"] = out.get("close_t2")
-    out["eret_truth_version"] = "eret_truth_v1_from_fill_truth_and_t2_close"
-    out["return_holding_mode"] = "buy_t1_entry_proxy_to_sell_t2_close"
+    out["eret_truth_version"] = ERET_TRUTH_VERSION
+    out["return_holding_mode"] = ERET_HOLDING_MODE
+    out["execution_contract"] = DECISION_EXECUTION_CONTRACT
 
     front = [
         "trade_date",
@@ -461,15 +602,28 @@ def build_eret_truth(
         "eret_sample_eligible",
         "eret_label_quality",
         "entry_price_t1",
+        "entry_price_t_opening_auction",
         "entry_price_proxy_t1",
         "entry_price_proxy_mode",
+        "take_profit_price_tplus1",
+        "stop_loss_price_tplus1",
+        "latest_exit_time",
+        "exit_policy_version",
+        "exit_price_tplus1_timed",
+        "exit_price_tplus1_open",
+        "exit_price_source",
+        "exit_on_time",
+        "exit_reason",
         "exit_price_t2_close",
         "close_t2",
-        "realized_ret_t1_to_t2",
+        ERET_TARGET_COLUMN,
+        ERET_COMPAT_TARGET_COLUMN,
         "premium_ret_t1_to_t2",
         "eret_truth_version",
         "return_holding_mode",
+        "execution_contract",
     ]
+    out = out.drop(columns=["_minute_frame_t2"], errors="ignore")
     remain = [c for c in out.columns if c not in front]
     out = out[[c for c in front if c in out.columns] + remain].copy()
 
@@ -505,16 +659,29 @@ def write_meta(
             if "eret_label_quality" in df.columns else {}
         ),
         "ret_stats": {
-            "mean": float(eligible["realized_ret_t1_to_t2"].mean()) if not eligible.empty else None,
-            "median": float(eligible["realized_ret_t1_to_t2"].median()) if not eligible.empty else None,
-            "min": float(eligible["realized_ret_t1_to_t2"].min()) if not eligible.empty else None,
-            "max": float(eligible["realized_ret_t1_to_t2"].max()) if not eligible.empty else None,
-            "positive_rate": float((eligible["realized_ret_t1_to_t2"] > 0).mean()) if not eligible.empty else None,
+            "mean": float(eligible[ERET_TARGET_COLUMN].mean()) if not eligible.empty else None,
+            "median": float(eligible[ERET_TARGET_COLUMN].median()) if not eligible.empty else None,
+            "min": float(eligible[ERET_TARGET_COLUMN].min()) if not eligible.empty else None,
+            "max": float(eligible[ERET_TARGET_COLUMN].max()) if not eligible.empty else None,
+            "positive_rate": float((eligible[ERET_TARGET_COLUMN] > 0).mean()) if not eligible.empty else None,
+        },
+        "target_column": ERET_TARGET_COLUMN,
+        "eret_truth_version": ERET_TRUTH_VERSION,
+        "return_holding_mode": ERET_HOLDING_MODE,
+        "execution_contract": DECISION_EXECUTION_CONTRACT,
+        "exit_policy": {
+            "version": str(df.get("exit_policy_version", pd.Series([""])).iloc[0]) if len(df) else "",
+            "latest_exit_time": str(df.get("latest_exit_time", pd.Series([""])).iloc[0]) if len(df) else "",
+            "source_counts": df.get("exit_price_source", pd.Series(dtype=str)).astype(str).value_counts().to_dict(),
         },
         "source": {
             "pred_source": pred_source_path,
             "fill_truth": fill_truth_path,
             "target_daily": target_daily_path,
+            "target_auction": str(snapshot_dir(paths.raw_root, target_date) / "stk_auction.csv"),
+            "target_minute_root": str(
+                paths.project_root / "data" / "market" / "minute_1m" / target_date[:4] / target_date
+            ),
             "sample_maturity_csv": str(paths.maturity_csv),
         },
         "output": str(paths.out_csv),
@@ -527,16 +694,16 @@ def write_meta(
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="构建 E_ret 真值层 eret_truth_{trade_date}.csv")
-    ap.add_argument("--trade-date", required=True, help="T 日，格式 YYYYMMDD")
+    ap.add_argument("--trade-date", required=True, help="D 信号日，格式 YYYYMMDD")
     ap.add_argument(
         "--exec-date",
         default="",
-        help="T+1 执行日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
+        help="T 竞价买入日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
     )
     ap.add_argument(
         "--target-date",
         default="",
-        help="T+2 目标日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
+        help="T+1 退出日，格式 YYYYMMDD；默认从 sample_maturity_latest.csv 读取",
     )
     ap.add_argument(
         "--maturity-csv",

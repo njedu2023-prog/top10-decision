@@ -1,4 +1,4 @@
-"""Decision Auction V3: auditable overnight auction research and execution."""
+"""Decision manual auction-guidance V5 (keeps the v3 import path for compatibility)."""
 
 from .config import AuctionV3Config
 from .engine import AuctionV3Engine, RunResult

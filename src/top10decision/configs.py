@@ -11,8 +11,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class FillTruthConfig:
-    buy_window_start: str = "09:30:00"
-    buy_window_end: str = "10:30:00"
+    # Manual guidance is frozen before the opening call auction ends. The
+    # observed price is the official opening-auction price (or a public proxy).
+    buy_window_start: str = "09:20:00"
+    buy_window_end: str = "09:24:50"
 
     # expected output path (template). It must not change existing downstream paths.
     output_path_template: str = "data/market/fill_truth_{trade_date}.csv"
@@ -26,16 +28,16 @@ fill_truth_config = FillTruthConfig()
 
 @dataclass(frozen=True)
 class EntryPriceProxyConfig:
-    mode_default: str = "t1_open"
-    mode_fallback: str = "t1_open_degrade_missing"
+    mode_default: str = "t_opening_auction"
+    mode_fallback: str = "t_daily_open_proxy"
 
 entry_price_proxy_config = EntryPriceProxyConfig()
 
 
 @dataclass(frozen=True)
 class ERetTruthConfig:
-    entry_price_proxy_mode: str = "t1_open"
-    sell_price_col: str = "close_t2"
+    entry_price_proxy_mode: str = "t_opening_auction"
+    sell_price_col: str = "exit_price_tplus1_timed"
     output_path_template: str = "data/market/eret_truth_{trade_date}.csv"
 
     label_quality_default: str = "strong"

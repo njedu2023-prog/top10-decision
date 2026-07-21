@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -61,7 +62,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
+from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -72,6 +73,21 @@ try:
 except Exception:
     HAS_LGBM = False
     LGBMClassifier = None  # type: ignore
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from top10decision.decision.eligibility import filter_standard_limit_universe  # noqa: E402
+from top10decision.decision.contracts import (  # noqa: E402
+    PFILL_EXECUTION_CONTRACT,
+    PFILL_TRUTH_VERSION,
+)
+
+
+DEFAULT_MIN_INDEPENDENT_DATES = 20
 
 
 # =========================================================
@@ -202,6 +218,14 @@ def load_window_trainsets(
 
 def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
+    if "label_version" not in out.columns or "execution_contract" not in out.columns:
+        raise ValueError("训练样本缺少 P_fill 竞价版本合同，拒绝混用盘中开板标签")
+    out = out[
+        out["label_version"].astype(str).eq(PFILL_TRUTH_VERSION)
+        & out["execution_contract"].astype(str).eq(PFILL_EXECUTION_CONTRACT)
+    ].copy()
+    if out.empty:
+        raise ValueError(f"没有符合 {PFILL_TRUTH_VERSION} 的开盘竞价 P_fill 样本")
     out["y_fill"] = pd.to_numeric(out["y_fill"], errors="coerce").fillna(0).astype(int)
 
     if "label_ready_fill" in out.columns:
@@ -216,7 +240,33 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     if "trade_date" in out.columns:
         out["trade_date"] = out["trade_date"].map(norm_ymd)
 
+    out, eligibility_audit = filter_standard_limit_universe(out, code_col="ts_code", name_col="name")
+    if out.empty:
+        raise ValueError("过滤涨跌幅机制大于10%的股票后无可训练样本")
+    out.attrs["eligibility_audit"] = eligibility_audit
+
+    if "sample_weight" in out.columns:
+        out["sample_weight"] = pd.to_numeric(out["sample_weight"], errors="coerce").fillna(1.0).clip(lower=0.2)
+    else:
+        out["sample_weight"] = 1.0
+
     return out
+
+
+def build_date_balanced_sample_weight(df: pd.DataFrame) -> np.ndarray:
+    if len(df) == 0:
+        return np.asarray([], dtype=float)
+    base = pd.to_numeric(df.get("sample_weight", 1.0), errors="coerce")
+    if not isinstance(base, pd.Series):
+        base = pd.Series(float(base), index=df.index)
+    base = base.fillna(1.0).clip(lower=0.2)
+    if "trade_date" not in df.columns:
+        return base.to_numpy(dtype=float)
+    date_key = df["trade_date"].map(norm_ymd).replace("", "__MISSING_DATE__")
+    date_total = base.groupby(date_key).transform("sum").replace(0.0, np.nan)
+    balanced = (base / date_total).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    mean_weight = float(balanced.mean())
+    return (balanced / mean_weight).to_numpy(dtype=float) if mean_weight > 0 else base.to_numpy(dtype=float)
 
 
 def get_label_set(df: pd.DataFrame) -> List[int]:
@@ -253,13 +303,17 @@ def split_train_valid(
     """
     if "trade_date" in df.columns:
         dates = sorted({norm_ymd(x) for x in df["trade_date"].dropna().tolist() if norm_ymd(x)})
-        if len(dates) >= 3:
-            valid_date = dates[-1]
-            train_df = df[df["trade_date"].map(norm_ymd) < valid_date].copy()
-            valid_df = df[df["trade_date"].map(norm_ymd) == valid_date].copy()
+        if len(dates) >= 6:
+            n_valid_dates = max(4, int(np.ceil(len(dates) * 0.20)))
+            n_valid_dates = min(n_valid_dates, len(dates) - 2)
+            valid_dates = dates[-n_valid_dates:]
+            train_dates = set(dates[:-n_valid_dates])
+            normalized = df["trade_date"].map(norm_ymd)
+            train_df = df[normalized.isin(train_dates)].copy()
+            valid_df = df[normalized.isin(valid_dates)].copy()
             if len(train_df) > 0 and len(valid_df) > 0:
                 if train_df["y_fill"].nunique() >= 2 and valid_df["y_fill"].nunique() >= 2:
-                    return train_df, valid_df, f"time_holdout:{valid_date}", False
+                    return train_df, valid_df, f"time_holdout:{valid_dates[0]}-{valid_dates[-1]}:{len(valid_dates)}d", False
 
     n = len(df)
     cut = max(int(n * 0.8), 1)
@@ -285,6 +339,11 @@ LEAKAGE_COLS = {
     "fill_label_quality",
     "entry_price_proxy_t1",
     "entry_price_proxy_mode",
+    "auction_price_t1",
+    "auction_amount_t1",
+    "auction_vol_t1",
+    "minute_open_t1",
+    "minute_open_available_t1",
     "exec_date",
     "target_date",
     "sample_maturity",
@@ -305,6 +364,7 @@ LEAKAGE_COLS = {
     "is_suspended_t1",
     "dataset_split",
     "label_version",
+    "execution_contract",
     "sample_weight",
     "is_cold_start",
     "feature_coverage_score",
@@ -315,8 +375,18 @@ LEAKAGE_COLS = {
 ID_COLS = {
     "trade_date",
     "ts_code",
+    "symbol",
     "name",
+    "name_fs",
     "trainset_trade_date",
+    "run_id",
+    "commit_sha",
+    "generated_at_utc",
+    "decision_board",
+    "decision_limit_pct",
+    "decision_universe_eligible",
+    "decision_universe_reason",
+    "decision_universe_rule",
 }
 
 NON_FEATURE_PREFIXES = ("Unnamed:",)
@@ -471,11 +541,11 @@ def fit_gbm_train_only(
 ) -> object:
     x_train = encode_gbm_frame(train_df, feature_cols)
     model = build_gbm_model()
-    sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
-    if sample_weight is not None:
-        model.fit(x_train, train_df["y_fill"].astype(int).values, sample_weight=sample_weight)
-    else:
-        model.fit(x_train, train_df["y_fill"].astype(int).values)
+    model.fit(
+        x_train,
+        train_df["y_fill"].astype(int).values,
+        sample_weight=build_date_balanced_sample_weight(train_df),
+    )
     return model
 
 
@@ -500,11 +570,11 @@ def fit_gbm_with_valid(
     x_valid = encoded_all.iloc[len(train_df) :].copy()
 
     model = build_gbm_model()
-    sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
-    if sample_weight is not None:
-        model.fit(x_train, train_df["y_fill"].astype(int).values, sample_weight=sample_weight)
-    else:
-        model.fit(x_train, train_df["y_fill"].astype(int).values)
+    model.fit(
+        x_train,
+        train_df["y_fill"].astype(int).values,
+        sample_weight=build_date_balanced_sample_weight(train_df),
+    )
 
     return model, x_valid
 
@@ -517,6 +587,15 @@ def safe_auc(y_true: np.ndarray, y_prob: np.ndarray) -> Optional[float]:
         if len(np.unique(y_true)) < 2:
             return None
         return float(roc_auc_score(y_true, y_prob))
+    except Exception:
+        return None
+
+
+def safe_pr_auc(y_true: np.ndarray, y_prob: np.ndarray) -> Optional[float]:
+    try:
+        if len(np.unique(y_true)) < 2:
+            return None
+        return float(average_precision_score(y_true, y_prob))
     except Exception:
         return None
 
@@ -536,20 +615,69 @@ def safe_brier(y_true: np.ndarray, y_prob: np.ndarray) -> Optional[float]:
         return None
 
 
-def evaluate_probs(y_true: np.ndarray, y_prob: np.ndarray) -> Dict[str, Optional[float]]:
+def evaluate_probs(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    *,
+    baseline_rate: Optional[float] = None,
+    trade_dates: Optional[pd.Series] = None,
+) -> Dict[str, Optional[float] | int]:
+    brier = safe_brier(y_true, y_prob)
+    baseline_brier = None
+    brier_skill = None
+    if baseline_rate is not None:
+        baseline_brier = safe_brier(y_true, np.repeat(float(np.clip(baseline_rate, 1e-6, 1 - 1e-6)), len(y_true)))
+        if baseline_brier is not None and baseline_brier > 0 and brier is not None:
+            brier_skill = float(1.0 - brier / baseline_brier)
     return {
         "auc": safe_auc(y_true, y_prob),
+        "pr_auc": safe_pr_auc(y_true, y_prob),
         "logloss": safe_logloss(y_true, y_prob),
-        "brier": safe_brier(y_true, y_prob),
+        "brier": brier,
+        "baseline_brier_train_rate": baseline_brier,
+        "brier_skill_vs_train_rate": brier_skill,
+        "valid_dates": int(trade_dates.map(norm_ymd).nunique()) if trade_dates is not None else 0,
     }
 
 
 def empty_metrics(reason: str) -> Dict[str, Optional[float] | str]:
     return {
         "auc": None,
+        "pr_auc": None,
         "logloss": None,
         "brier": None,
+        "baseline_brier_train_rate": None,
+        "brier_skill_vs_train_rate": None,
+        "valid_dates": 0,
         "reason": reason,
+    }
+
+
+def _metric_value(metrics: Dict[str, object], key: str, default: float) -> float:
+    try:
+        value = float(metrics.get(key))
+    except Exception:
+        return default
+    return value if np.isfinite(value) else default
+
+
+def choose_selected_model(metrics_valid: Dict[str, Dict[str, object]]) -> Tuple[str, Dict[str, object]]:
+    candidates: list[tuple[tuple[float, float, float, float, int], str, Dict[str, object]]] = []
+    for preference, kind in enumerate(("lgbm", "lr")):
+        metrics = metrics_valid.get(kind, {}) or {}
+        skill = _metric_value(metrics, "brier_skill_vs_train_rate", -1.0)
+        auc = _metric_value(metrics, "auc", -1.0)
+        pr_auc = _metric_value(metrics, "pr_auc", -1.0)
+        logloss = _metric_value(metrics, "logloss", float("inf"))
+        candidates.append(((-skill, -auc, -pr_auc, logloss, preference), kind, metrics))
+    candidates.sort(key=lambda item: item[0])
+    selected = candidates[0][1] if candidates else "lgbm"
+    selected_metrics = candidates[0][2] if candidates else {}
+    return selected, {
+        "selected_model": selected,
+        "selection_rule": "max_brier_skill_then_auc_pr_auc_logloss_prefer_lgbm",
+        "selected_metrics": selected_metrics,
+        "candidate_metrics": metrics_valid,
     }
 
 
@@ -567,6 +695,8 @@ def build_skip_meta(
     df: pd.DataFrame,
     skip_reason: str,
     label_set: List[int],
+    min_independent_dates: int = DEFAULT_MIN_INDEPENDENT_DATES,
+    eligibility_audit: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     sample_maturity_distribution: Dict[str, int] = {}
     if "sample_maturity" in df.columns:
@@ -580,6 +710,7 @@ def build_skip_meta(
         "anchor_trade_date": anchor_trade_date,
         "status": "skipped",
         "skip_reason": skip_reason,
+        "selected_model": "",
         "label_set": label_set,
         "split_mode": "skipped",
         "small_sample_mode": False,
@@ -611,6 +742,15 @@ def build_skip_meta(
             "valid": 0,
         },
         "fill_truth_ready_only": True,
+        "label_version": PFILL_TRUTH_VERSION,
+        "execution_contract": PFILL_EXECUTION_CONTRACT,
+        "universe_eligibility": eligibility_audit or {},
+        "training_governance": {
+            "minimum_independent_dates": int(min_independent_dates),
+            "available_independent_dates": int(len(loaded_trade_dates)),
+            "date_balanced_sample_weight": True,
+            "multi_date_time_holdout": True,
+        },
         "sample_maturity_distribution": sample_maturity_distribution,
         "label_distribution": {
             "ready_all_pos": int((df["y_fill"] == 1).sum()) if "y_fill" in df.columns else 0,
@@ -663,6 +803,7 @@ def train_window_as_of(
     anchor_trade_date: str,
     maturity_csv: str = "",
     window_size: int = 0,
+    min_independent_dates: int = DEFAULT_MIN_INDEPENDENT_DATES,
 ) -> Dict[str, object]:
     maturity_df, maturity_path = load_maturity_table(project_root, maturity_csv=maturity_csv)
     matured_trade_dates = resolve_matured_trade_dates_for_pfill(
@@ -680,6 +821,29 @@ def train_window_as_of(
         matured_trade_dates=matured_trade_dates,
     )
     df = prepare_train_df(raw_df)
+    eligibility_audit = dict(df.attrs.get("eligibility_audit", {}) or {})
+    contract_trade_dates = sorted(
+        {norm_ymd(value) for value in df["trade_date"].dropna().tolist() if norm_ymd(value)}
+    ) if "trade_date" in df.columns else []
+
+    if len(contract_trade_dates) < min_independent_dates:
+        meta = build_skip_meta(
+            anchor_trade_date=anchor_trade_date,
+            maturity_path=maturity_path,
+            loaded_trainset_paths=loaded_trainset_paths,
+            matured_trade_dates=matured_trade_dates,
+            loaded_trade_dates=contract_trade_dates,
+            missing_trade_dates=missing_trade_dates,
+            raw_df=raw_df,
+            df=df,
+            skip_reason=f"insufficient_independent_dates:{len(contract_trade_dates)}<{min_independent_dates}",
+            label_set=get_label_set(df),
+            min_independent_dates=min_independent_dates,
+            eligibility_audit=eligibility_audit,
+        )
+        write_meta_files(project_root, anchor_trade_date, meta)
+        print(f"[train_pfill] skipped={meta['skip_reason']}")
+        return meta
 
     label_set = get_label_set(df)
     if len(label_set) < 2:
@@ -688,12 +852,14 @@ def train_window_as_of(
             maturity_path=maturity_path,
             loaded_trainset_paths=loaded_trainset_paths,
             matured_trade_dates=matured_trade_dates,
-            loaded_trade_dates=loaded_trade_dates,
+            loaded_trade_dates=contract_trade_dates,
             missing_trade_dates=missing_trade_dates,
             raw_df=raw_df,
             df=df,
             skip_reason="single_label_skip_train",
             label_set=label_set,
+            min_independent_dates=min_independent_dates,
+            eligibility_audit=eligibility_audit,
         )
         meta_path, meta_dated_path = write_meta_files(project_root, anchor_trade_date, meta)
 
@@ -716,16 +882,20 @@ def train_window_as_of(
 
     # LR
     lr_pipe = build_lr_pipeline(num_cols, cat_cols)
-    lr_sample_weight = train_df["sample_weight"].values if "sample_weight" in train_df.columns else None
     lr_pipe.fit(
         train_df[feature_cols],
         train_df["y_fill"].values,
-        clf__sample_weight=lr_sample_weight,
+        clf__sample_weight=build_date_balanced_sample_weight(train_df),
     )
 
     if valid_df is not None:
         lr_valid_prob = lr_pipe.predict_proba(valid_df[feature_cols])[:, 1]
-        lr_metrics = evaluate_probs(valid_df["y_fill"].values, lr_valid_prob)
+        lr_metrics = evaluate_probs(
+            valid_df["y_fill"].values,
+            lr_valid_prob,
+            baseline_rate=float(train_df["y_fill"].mean()),
+            trade_dates=valid_df.get("trade_date"),
+        )
     else:
         lr_metrics = empty_metrics("small_sample_mode_skip_valid")
 
@@ -737,10 +907,28 @@ def train_window_as_of(
         else:
             raw = gbm_model.predict(x_valid_gbm)
             gbm_valid_prob = np.asarray(raw, dtype=float)
-        gbm_metrics = evaluate_probs(valid_df["y_fill"].values, gbm_valid_prob)
+        gbm_metrics = evaluate_probs(
+            valid_df["y_fill"].values,
+            gbm_valid_prob,
+            baseline_rate=float(train_df["y_fill"].mean()),
+            trade_dates=valid_df.get("trade_date"),
+        )
     else:
         gbm_model = fit_gbm_train_only(train_df, feature_cols)
         gbm_metrics = empty_metrics("small_sample_mode_skip_valid")
+
+    metrics_valid: Dict[str, Dict[str, object]] = {"lr": lr_metrics, "lgbm": gbm_metrics}
+    selected_model, model_selection = choose_selected_model(metrics_valid)
+
+    # Validation remains untouched for metrics; final artifacts then learn from
+    # all matured dates because the next prediction is strictly later in time.
+    lr_final = build_lr_pipeline(num_cols, cat_cols)
+    lr_final.fit(
+        df[feature_cols],
+        df["y_fill"].values,
+        clf__sample_weight=build_date_balanced_sample_weight(df),
+    )
+    gbm_final = fit_gbm_train_only(df, feature_cols)
 
     # 输出
     models_dir = project_root / "models"
@@ -754,10 +942,10 @@ def train_window_as_of(
     gbm_dated_path = models_dir / f"pfill_lgbm_{anchor_trade_date}.joblib"
     meta_dated_path = models_dir / f"pfill_meta_{anchor_trade_date}.json"
 
-    joblib.dump(lr_pipe, lr_path)
-    joblib.dump(gbm_model, gbm_path)
-    joblib.dump(lr_pipe, lr_dated_path)
-    joblib.dump(gbm_model, gbm_dated_path)
+    joblib.dump(lr_final, lr_path)
+    joblib.dump(gbm_final, gbm_path)
+    joblib.dump(lr_final, lr_dated_path)
+    joblib.dump(gbm_final, gbm_dated_path)
 
     sample_maturity_distribution: Dict[str, int] = {}
     if "sample_maturity" in df.columns:
@@ -773,6 +961,10 @@ def train_window_as_of(
         "anchor_trade_date": anchor_trade_date,
         "status": "trained",
         "skip_reason": "",
+        "selected_model": selected_model,
+        "label_version": PFILL_TRUTH_VERSION,
+        "execution_contract": PFILL_EXECUTION_CONTRACT,
+        "model_selection": model_selection,
         "label_set": label_set,
         "split_mode": split_mode,
         "small_sample_mode": bool(small_sample_mode),
@@ -790,13 +982,14 @@ def train_window_as_of(
         "window": {
             "maturity_csv": str(maturity_path),
             "matured_trade_dates": matured_trade_dates,
-            "loaded_trade_dates": loaded_trade_dates,
+            "loaded_trade_dates": contract_trade_dates,
+            "source_loaded_trade_dates": loaded_trade_dates,
             "missing_trade_dates": missing_trade_dates,
             "loaded_trainset_paths": loaded_trainset_paths,
             "n_matured_dates": int(len(matured_trade_dates)),
-            "n_loaded_dates": int(len(loaded_trade_dates)),
-            "window_start": loaded_trade_dates[0] if loaded_trade_dates else "",
-            "window_end": loaded_trade_dates[-1] if loaded_trade_dates else "",
+            "n_loaded_dates": int(len(contract_trade_dates)),
+            "window_start": contract_trade_dates[0] if contract_trade_dates else "",
+            "window_end": contract_trade_dates[-1] if contract_trade_dates else "",
             "train_dates": train_dates,
             "valid_dates": valid_dates,
         },
@@ -807,6 +1000,14 @@ def train_window_as_of(
             "valid": int(len(valid_df)) if valid_df is not None else 0,
         },
         "fill_truth_ready_only": True,
+        "universe_eligibility": eligibility_audit,
+        "training_governance": {
+            "minimum_independent_dates": int(min_independent_dates),
+            "available_independent_dates": int(len(contract_trade_dates)),
+            "date_balanced_sample_weight": True,
+            "multi_date_time_holdout": True,
+            "final_refit_all_matured_dates": True,
+        },
         "sample_maturity_distribution": sample_maturity_distribution,
         "label_distribution": {
             "ready_all_pos": int((df["y_fill"] == 1).sum()),
@@ -826,10 +1027,7 @@ def train_window_as_of(
             "category_like_cols_detected": category_like_cols_detected,
         },
         "missing_ratio": {c: round(float(df[c].isna().mean()), 6) for c in feature_cols},
-        "metrics_valid": {
-            "lr": lr_metrics,
-            "lgbm": gbm_metrics,
-        },
+        "metrics_valid": metrics_valid,
         "notes": [
             "仅训练 label_ready_fill=1 的成熟样本。",
             "本文件已升级为成熟窗口训练，训练样本来自 sample_maturity 中 PFILL_READY=1 的全部历史样本日。",
@@ -839,6 +1037,8 @@ def train_window_as_of(
             "泄露列（T+1 真值列/标签列/成熟度列）已从特征中剔除。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
             "已显式写出 numeric_cols / categorical_cols / category_like_cols_detected，供线上推理层严格对齐训练态输入契约。",
+            "模型选择优先验证集 Brier skill，再比较 AUC / PR-AUC / logloss。",
+            "训练、验证和线上候选均剔除涨跌幅机制大于10%的股票。",
         ],
     }
 
@@ -883,6 +1083,12 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="训练窗口长度（按成熟 trade_date 个数截断）；0=使用 anchor 之前全部 PFILL_READY 样本",
     )
+    ap.add_argument(
+        "--min-independent-dates",
+        type=int,
+        default=DEFAULT_MIN_INDEPENDENT_DATES,
+        help="模型可训练所需的最少独立交易日，默认20",
+    )
     return ap.parse_args()
 
 
@@ -898,6 +1104,7 @@ def main() -> int:
         anchor_trade_date=anchor_trade_date,
         maturity_csv=args.maturity_csv,
         window_size=args.window_size,
+        min_independent_dates=max(1, args.min_independent_dates),
     )
     return 0
 

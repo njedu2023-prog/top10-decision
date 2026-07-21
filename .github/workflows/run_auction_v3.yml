@@ -1,4 +1,4 @@
-name: Run Decision Auction V3
+name: Run Decision Manual Auction Guidance V5
 
 on:
   push:
@@ -6,8 +6,13 @@ on:
     paths:
       - ".github/workflows/run_auction_v3.yml"
       - "src/top10decision/auction_v3/**"
+      - "src/top10decision/decision/**"
+      - "src/top10decision/data/**"
       - "scripts/run_auction_v3.py"
+      - "scripts/sync_tushare_minute.py"
+      - "scripts/publish_decision_action.py"
       - "tests/test_auction_v3.py"
+      - "tests/test_decision_contract.py"
   workflow_run:
     workflows: ["Run Top10 Decision (Auto Daily)"]
     types: [completed]
@@ -31,11 +36,11 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  group: decision-auction-v3
+  group: decision-auction-guidance-v5
   cancel-in-progress: false
 
 jobs:
-  auction_v3:
+  auction_guidance_v5:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -59,12 +64,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Auction V3 tests
+      - name: Run Decision execution tests
         run: |
           set -e
           python -m unittest discover -s tests -p 'test_auction_v3.py' -v
+          python -m unittest discover -s tests -p 'test_decision_contract.py' -v
 
-      - name: Run Auction V3
+      - name: Sync strict calendar and Tushare minute truth
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          SIGNAL_DATE: ${{ inputs.signal_date }}
+        run: |
+          set -e
+          args=(--optional)
+          if [ -n "${SIGNAL_DATE}" ]; then
+            args+=(--signal-date "${SIGNAL_DATE}")
+          fi
+          python scripts/sync_tushare_minute.py "${args[@]}"
+
+      - name: Run Decision manual auction guidance V5
         env:
           SIGNAL_DATE: ${{ inputs.signal_date }}
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
@@ -80,6 +98,11 @@ jobs:
           fi
           python scripts/run_auction_v3.py "${args[@]}"
 
+      - name: Publish unified Decision action plan
+        run: |
+          set -e
+          python scripts/publish_decision_action.py
+
       - name: Validate generated contract
         run: |
           set -e
@@ -89,8 +112,12 @@ jobs:
           test -f docs/reports/auction_v3_latest.html
           test -f docs/reports/auction_v3_verify_latest.html
           test -f docs/reports/auction_v3_validation_dashboard.html
+          test -f outputs/decision/action_plan_latest.json
+          test -f outputs/decision/report_index.json
           python -m json.tool outputs/auction_v3/metrics/backtest_latest.json >/dev/null
           python -m json.tool outputs/auction_v3/metrics/cumulative_latest.json >/dev/null
+          python -m json.tool outputs/decision/action_plan_latest.json >/dev/null
+          python -m json.tool outputs/decision/report_index.json >/dev/null
 
       - name: Commit frozen predictions, truth and reports
         run: |
@@ -98,12 +125,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A outputs/auction_v3
+          git add outputs/decision/action_plan_*.json outputs/decision/report_index.json
+          git add data/market/trade_cal_sse.csv || true
+          git add -A data/market/minute_1m || true
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Auction V3 has no changed artifacts"
+            echo "Decision guidance V5 has no changed artifacts"
             exit 0
           fi
-          git commit -m "auto: update Auction V3 predictions and true-price validation"
+          git commit -m "auto: update Decision V5 guidance and validation"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main

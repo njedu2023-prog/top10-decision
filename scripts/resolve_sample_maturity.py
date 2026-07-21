@@ -35,10 +35,10 @@ resolve_sample_maturity.py
   20260430 -> 20260506 -> 20260507，但 PFILL_READY=0, ERET_READY=0。
 
 交易日历来源：
-- 若提供 --trade-calendar-file：外部交易日历 + 内置 fallback 扩展日历 + raw 已有日期三者合并。
-  这样即使外部日历只到 20260430，也能继续推演 20260506 / 20260507。
-- 若未提供：使用内置 A 股 2026 休市 fallback + 周末规则生成日历。
-- raw 中已存在的日期会并入交易日历，避免历史数据被漏掉。
+- 只接受显式包含 cal_date/is_open 的交易所日历快照。
+- 默认读取 data/market/trade_cal_sse.csv；也可用 --trade-calendar-file 覆盖。
+- raw 目录只决定标签是否成熟，永远不能补充或推断交易日。
+- 任一候选日期到 T+1 退出日期之间存在日历缺口时直接失败，禁止工作日猜测。
 """
 
 from __future__ import annotations
@@ -51,6 +51,10 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Set
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_TRADE_CALENDAR_FILE = PROJECT_ROOT / "data" / "market" / "trade_cal_sse.csv"
 
 
 # =========================
@@ -314,6 +318,77 @@ def load_trade_calendar_file(path: Path) -> List[str]:
     return sort_trade_dates(out)
 
 
+def load_strict_trade_calendar(path: Path) -> dict[str, bool]:
+    """Load a complete exchange calendar with an explicit open/closed flag."""
+    if not path.exists():
+        raise FileNotFoundError(f"严格 A 股交易日历不存在：{path}")
+    if path.suffix.lower() != ".csv":
+        raise RuntimeError("严格 A 股交易日历必须是包含 cal_date/is_open 的 CSV")
+
+    records: dict[str, bool] = {}
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        fields = set(reader.fieldnames or [])
+        date_col = next((c for c in ("cal_date", "trade_date", "date") if c in fields), None)
+        if date_col is None or "is_open" not in fields:
+            raise RuntimeError(
+                f"严格 A 股交易日历必须包含 cal_date/is_open，实际列={sorted(fields)}"
+            )
+        for line_no, row in enumerate(reader, start=2):
+            cal_date = norm_date_str(row.get(date_col))
+            if not cal_date:
+                raise RuntimeError(f"交易日历第 {line_no} 行日期非法：{row.get(date_col)!r}")
+            raw_flag = str(row.get("is_open", "")).strip().lower()
+            if raw_flag in {"1", "true", "yes", "y", "open", "交易"}:
+                is_open = True
+            elif raw_flag in {"0", "false", "no", "n", "closed", "休市"}:
+                is_open = False
+            else:
+                raise RuntimeError(f"交易日历第 {line_no} 行 is_open 非法：{raw_flag!r}")
+            if cal_date in records and records[cal_date] != is_open:
+                raise RuntimeError(f"交易日历日期重复且状态冲突：{cal_date}")
+            records[cal_date] = is_open
+
+    if not records:
+        raise RuntimeError(f"严格 A 股交易日历为空：{path}")
+    return records
+
+
+def validate_strict_calendar_coverage(
+    records: dict[str, bool],
+    candidate_trade_dates: Sequence[str],
+    current_run_date: str,
+    max_scan_days: int = 40,
+) -> None:
+    """Fail closed unless every natural day through each D/T/T+1 chain is explicit."""
+    if current_run_date not in records:
+        raise RuntimeError(f"交易日历未覆盖 current_run_date={current_run_date}")
+
+    for trade_date in sort_trade_dates(candidate_trade_dates):
+        if trade_date not in records:
+            raise RuntimeError(f"交易日历未覆盖候选 signal_date={trade_date}")
+        if not records[trade_date]:
+            raise RuntimeError(f"候选 signal_date={trade_date} 不是 A 股交易日")
+
+        cursor = parse_yyyymmdd(trade_date) + timedelta(days=1)
+        open_days = 0
+        for _ in range(max_scan_days):
+            ymd = fmt_yyyymmdd(cursor)
+            if ymd not in records:
+                raise RuntimeError(
+                    f"交易日历在 {ymd} 存在缺口，无法严格解析 signal_date={trade_date} 的 T/T+1"
+                )
+            if records[ymd]:
+                open_days += 1
+                if open_days == 2:
+                    break
+            cursor += timedelta(days=1)
+        else:
+            raise RuntimeError(
+                f"signal_date={trade_date} 后 {max_scan_days} 天内无法解析两个 A 股交易日"
+            )
+
+
 def build_builtin_trade_calendar(
     anchor_dates: Sequence[str],
     forward_days: int = 120,
@@ -349,36 +424,13 @@ def resolve_trade_calendar(
     calendar_forward_days: int = 120,
 ) -> List[str]:
     """
-    生成用于解析 exec_date / target_date 的交易日历。
+    读取严格交易所日历。raw 日期和工作日规则都不能扩展该日历。
     """
-    raw_dates = sort_trade_dates(raw_trade_dates)
-    cand_dates = sort_trade_dates(candidate_trade_dates)
-    anchors = sort_trade_dates([*raw_dates, *cand_dates, current_run_date])
-
-    # 无论是否提供外部交易日历，都构造一份 fallback 扩展日历。
-    # 原因：仓库内 trade_calendar_file 可能只覆盖到当前已有 raw 日期，
-    # 在节假日前后会导致 20260430 之后无法解析出 20260506/20260507。
-    # 正确做法是：外部日历提供权威历史/已知交易日，fallback 负责向未来补足。
-    builtin_calendar_dates = build_builtin_trade_calendar(
-        anchors,
-        forward_days=calendar_forward_days,
-        backward_days=30,
-    )
-
-    if trade_calendar_file:
-        external_calendar_dates = load_trade_calendar_file(trade_calendar_file)
-        calendar_dates = sort_trade_dates([
-            *external_calendar_dates,
-            *builtin_calendar_dates,
-            *raw_dates,
-        ])
-    else:
-        calendar_dates = sort_trade_dates([*builtin_calendar_dates, *raw_dates])
-
-    if not calendar_dates:
-        raise RuntimeError("交易日历为空")
-
-    return calendar_dates
+    del raw_trade_dates, calendar_forward_days
+    calendar_path = trade_calendar_file or DEFAULT_TRADE_CALENDAR_FILE
+    records = load_strict_trade_calendar(calendar_path)
+    validate_strict_calendar_coverage(records, candidate_trade_dates, current_run_date)
+    return sorted(day for day, is_open in records.items() if is_open)
 
 
 def next_n_trade_date(trade_dates: Sequence[str], base_date: str, n_after: int) -> str:
@@ -665,15 +717,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--trade-calendar-file",
         default="",
         help=(
-            "可选：A股交易日历文件。支持 csv/json/txt。"
-            "若未提供，则使用内置2026休市fallback + 周末规则生成。"
+            "严格 A 股交易日历 CSV（必须含 cal_date/is_open）；"
+            "默认 data/market/trade_cal_sse.csv。"
         ),
     )
     parser.add_argument(
         "--calendar-forward-days",
         type=int,
         default=120,
-        help="未提供交易日历文件时，向未来生成多少自然日的 fallback 日历，默认120",
+        help="保留参数，仅用于旧命令兼容；严格日历模式不会推断未来日期",
     )
 
     parser.add_argument(
@@ -716,7 +768,9 @@ def main() -> int:
 
     raw_root = Path(args.raw_root)
     trade_dates_file = Path(args.trade_dates_file) if args.trade_dates_file else None
-    trade_calendar_file = Path(args.trade_calendar_file) if args.trade_calendar_file else None
+    trade_calendar_file = (
+        Path(args.trade_calendar_file) if args.trade_calendar_file else DEFAULT_TRADE_CALENDAR_FILE
+    )
 
     raw_trade_dates = discover_raw_trade_dates(raw_root)
 
@@ -762,7 +816,7 @@ def main() -> int:
         output_json=output_json,
         current_run_date=current_run_date,
         raw_root=str(raw_root),
-        trade_calendar_file=str(trade_calendar_file) if trade_calendar_file else "",
+        trade_calendar_file=str(trade_calendar_file),
         trade_calendar_count=len(trade_calendar_dates),
     )
     print_summary(rows)

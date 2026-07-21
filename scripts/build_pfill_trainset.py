@@ -31,11 +31,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from top10decision.decision.contracts import PFILL_EXECUTION_CONTRACT, PFILL_TRUTH_VERSION
 
 
 # =========================================================
@@ -238,7 +246,7 @@ def load_fill_truth(path: Path, trade_date: str) -> pd.DataFrame:
     df = ensure_trade_date(df, trade_date)
     df = dedupe_by_key(df, ["trade_date", "ts_code"])
 
-    required = ["y_fill", "fill_label_quality"]
+    required = ["y_fill", "fill_label_quality", "label_version", "execution_contract"]
     missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(f"fill_truth 缺少关键列：{missing}")
@@ -312,7 +320,9 @@ def choose_truth_columns(df: pd.DataFrame) -> pd.DataFrame:
         "trade_date", "ts_code", "exec_date", "target_date", "name",
         "sample_maturity", "label_ready_fill", "label_ready_ret",
         "y_fill", "fill_label_quality", "entry_price_proxy_t1", "entry_price_proxy_mode",
-        "label_version", "buy_window_start", "buy_window_end",
+        "label_version", "execution_contract", "buy_window_start", "buy_window_end",
+        "auction_price_t1", "auction_amount_t1", "auction_vol_t1",
+        "minute_open_t1", "minute_open_available_t1",
         "open_t1", "high_t1", "low_t1", "close_t1",
         "up_limit_t1", "down_limit_t1", "limit_type_t1", "open_times_t1",
         "break_open_times_t1", "first_seal_time_t1", "last_seal_time_t1",
@@ -349,6 +359,14 @@ def build_trainset(
     base_df = load_features_base(paths.features_base, trade_date)
     limit_df = load_features_limit(paths.features_limit, trade_date)
     truth_df_raw = load_fill_truth(paths.fill_truth, trade_date)
+    truth_df_raw = truth_df_raw[
+        truth_df_raw["label_version"].astype(str).eq(PFILL_TRUTH_VERSION)
+        & truth_df_raw["execution_contract"].astype(str).eq(PFILL_EXECUTION_CONTRACT)
+    ].copy()
+    if truth_df_raw.empty:
+        raise ValueError(
+            f"trade_date={trade_date} 没有符合 {PFILL_TRUTH_VERSION} 的开盘竞价 P_fill 真值"
+        )
     truth_df = choose_truth_columns(truth_df_raw)
 
     if "label_ready_fill" in truth_df.columns:
@@ -438,7 +456,7 @@ def build_trainset(
         "sample_maturity", "label_ready_fill", "label_ready_ret",
         "y_fill", "fill_label_quality", "entry_price_proxy_t1", "entry_price_proxy_mode",
         "dataset_split", "sample_weight", "is_cold_start", "feature_coverage_score",
-        "label_version", "buy_window_start", "buy_window_end",
+        "label_version", "execution_contract", "buy_window_start", "buy_window_end",
     ]
     front = [c for c in front if c in train.columns]
     remain = [c for c in train.columns if c not in front]
@@ -494,6 +512,8 @@ def build_meta(
         "trade_date": trade_date,
         "rows": int(len(train_df)),
         "fill_truth_ready_only": True,
+        "label_version": PFILL_TRUTH_VERSION,
+        "execution_contract": PFILL_EXECUTION_CONTRACT,
         "source": {
             "features_base": str(paths.features_base),
             "features_limit": str(paths.features_limit),
@@ -524,6 +544,7 @@ def build_meta(
         "notes": [
             "本文件是 P_fill 训练前宽表，不是训练结果文件。",
             "训练集只保留 label_ready_fill=1 的成熟样本。",
+            "P_fill 只学习开盘集合竞价是否可成交；盘中后来开板不算竞价成交。",
             "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_pfill.py 再做。",
             "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。",
         ],

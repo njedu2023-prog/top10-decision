@@ -17,11 +17,11 @@ from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run Decision Auction V3")
+    parser = argparse.ArgumentParser(description="Run Decision manual auction-guidance V5")
     parser.add_argument("--signal-date", default="", help="D-day signal date, YYYYMMDD; default latest frozen pred source")
     parser.add_argument("--root", default=str(ROOT), help="Repository root")
     parser.add_argument("--force-prediction", action="store_true", help="Replace a dated prediction snapshot; disabled by default")
-    parser.add_argument("--order-amount", type=float, default=100_000.0, help="Per-stock order amount used by auction capacity checks")
+    parser.add_argument("--order-amount", type=float, default=100_000.0, help="Reference amount used only by auction-capacity simulation; no order is sent")
     parser.add_argument("--round-trip-cost-bps", type=float, default=35.0, help="Commission, taxes and fees excluding modeled slippage")
     parser.add_argument("--slippage-bps-each-side", type=float, default=5.0)
     return parser.parse_args()
@@ -42,4 +42,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

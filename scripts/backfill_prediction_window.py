@@ -93,17 +93,37 @@ def parse_yyyymmdd(s: str) -> datetime:
         raise argparse.ArgumentTypeError(f"无效日期格式：{s}，要求 YYYYMMDD") from e
 
 
-def iter_dates(start_date: str, end_date: str, weekdays_only: bool) -> List[str]:
+def iter_dates(start_date: str, end_date: str, trade_calendar_file: Path) -> List[str]:
     start_dt = parse_yyyymmdd(start_date)
     end_dt = parse_yyyymmdd(end_date)
     if end_dt < start_dt:
         raise ValueError(f"end_date({end_date}) 不能早于 start_date({start_date})")
 
+    if not trade_calendar_file.exists():
+        raise FileNotFoundError(f"严格 A 股交易日历不存在：{trade_calendar_file}")
+    with trade_calendar_file.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        fields = set(reader.fieldnames or [])
+        if not {"cal_date", "is_open"}.issubset(fields):
+            raise RuntimeError(
+                f"严格 A 股交易日历必须包含 cal_date/is_open：{trade_calendar_file}"
+            )
+        calendar: dict[str, bool] = {}
+        for row in reader:
+            day = "".join(ch for ch in str(row.get("cal_date") or "") if ch.isdigit())[:8]
+            flag = str(row.get("is_open") or "").strip()
+            if len(day) != 8 or flag not in {"0", "1"}:
+                raise RuntimeError(f"交易日历存在非法行：{row}")
+            calendar[day] = flag == "1"
+
     out: List[str] = []
     cur = start_dt
     while cur <= end_dt:
-        if (not weekdays_only) or (cur.weekday() < 5):
-            out.append(cur.strftime("%Y%m%d"))
+        day = cur.strftime("%Y%m%d")
+        if day not in calendar:
+            raise RuntimeError(f"交易日历未覆盖回放日期：{day}")
+        if calendar[day]:
+            out.append(day)
         cur += timedelta(days=1)
     return out
 
@@ -340,7 +360,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--weekdays-only",
         action="store_true",
-        help="仅处理周一到周五",
+        help="保留参数，仅用于旧命令兼容；当前始终严格按 A 股交易日历处理",
+    )
+    p.add_argument(
+        "--trade-calendar-file",
+        default="",
+        help="严格 A 股交易日历 CSV；默认 data/market/trade_cal_sse.csv",
     )
     p.add_argument(
         "--continue-on-error",
@@ -389,10 +414,15 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = detect_repo_root(args.repo_root)
+    trade_calendar_file = (
+        Path(args.trade_calendar_file).resolve()
+        if args.trade_calendar_file
+        else repo_root / "data" / "market" / "trade_cal_sse.csv"
+    )
     dates = iter_dates(
         start_date=args.start_date,
         end_date=args.end_date,
-        weekdays_only=args.weekdays_only,
+        trade_calendar_file=trade_calendar_file,
     )
     if not dates:
         print("[ERROR] 没有可处理的日期")
@@ -405,6 +435,7 @@ def main() -> int:
     print(f"repo_root      : {repo_root}")
     print(f"date_range     : {args.start_date} -> {args.end_date}")
     print(f"dates          : {dates}")
+    print(f"trade_calendar : {trade_calendar_file}")
     print(f"archive_subdir : {args.archive_subdir}")
     print(f"url_templates  :")
     for i, tpl in enumerate(url_templates, start=1):
@@ -482,6 +513,8 @@ def main() -> int:
         "start_date": args.start_date,
         "end_date": args.end_date,
         "dates": dates,
+        "trade_calendar_file": str(trade_calendar_file),
+        "calendar_contract": "strict_a_share_exchange_calendar_only",
         "success_count": success_count,
         "fail_count": fail_count,
         "skip_market_sync": args.skip_market_sync,

@@ -42,6 +42,7 @@ from top10decision.ingest import (
     get_input_status,
     load_pred_snapshot,
 )
+from top10decision.decision.eligibility import filter_standard_limit_universe
 from top10decision.regime.simple_regime import simple_regime
 from top10decision.risk.guardrails import guardrails
 from top10decision.strategies.score_router import score_router
@@ -82,6 +83,7 @@ from top10decision.writers.io_contract import (
     norm_ymd,
     get_first_value,
     choose_exec_date,
+    choose_exit_date,
     fmt_num,
 )
 
@@ -696,11 +698,12 @@ def _append_decision_diagnostics(lines: List[str], diag: dict[str, Any]) -> None
 
 def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
     """
-    EV 聚合升级 V1.1：
-    - 保留 EV 主干：P_fill * E_ret - Cost - RiskPenalty
-    - 相比 V1，调轻 P_fill extra，避免头部 EV 被压得过薄
-    - 相比 V1，略增强 Risk extra，让执行脆弱性 / 拥挤度 / 流动性更多承担约束
-    - 保留审计列，并继续使用 ev_pred 作为最终排序字段
+    Net trade EV contract.
+
+    Cost and risk_penalty already contain execution, liquidity, crowding and
+    intraday components. Re-applying those components here double-counted risk
+    and forced almost every candidate negative. Legacy audit columns remain at
+    zero so downstream schemas do not break.
     """
     out = df.copy()
 
@@ -709,69 +712,19 @@ def _apply_ev_upgrade_v1(df: pd.DataFrame) -> pd.DataFrame:
     cost_est = _safe_numeric_col(out, "cost_est", 0.0).clip(lower=0.0)
     risk_penalty = _safe_numeric_col(out, "risk_penalty", 0.0).clip(lower=0.0)
 
-    exec_fragility_penalty = _safe_numeric_col(out, "execution_fragility_penalty", 0.0).clip(lower=0.0)
-    crowding_penalty = _safe_numeric_col(out, "crowding_penalty", 0.0).clip(lower=0.0)
-    liquidity_penalty = (
-        _safe_numeric_col(out, "risk_liquidity_penalty", 0.0).clip(lower=0.0)
-        + _safe_numeric_col(out, "risk_liquidity_amount_penalty", 0.0).clip(lower=0.0)
-    )
-    intraday_execution_penalty = _safe_numeric_col(out, "intraday_execution_penalty", 0.0).clip(lower=0.0)
-    intraday_hard_penalty = _safe_numeric_col(out, "risk_intraday_hard_penalty", 0.0).clip(lower=0.0)
-    intraday_missing_penalty = _safe_numeric_col(out, "risk_intraday_missing_penalty", 0.0).clip(lower=0.0)
-    intraday_available = (
-        _truthy_series(out["intraday_available"]).astype(float)
-        if "intraday_available" in out.columns
-        else pd.Series(0.0, index=out.index, dtype=float)
-    )
-    intraday_quality = _score_series_0_1(out, "intraday_quality_score", 0.0)
-    intraday_confidence = _score_series_0_1(out, "intraday_confidence_score", 0.0)
-    intraday_soft_risk = _score_series_0_1(out, "intraday_soft_risk_score", 0.0)
-    reseal_score = _score_series_0_1(out, "reseal_score", 0.0)
-    auction_strength = _score_series_0_1(out, "auction_strength_score", 0.0)
-
     out["ev_base"] = (p_fill * e_ret - cost_est - risk_penalty).astype(float)
-
-    # ---- P_fill extra penalty (V1.1: smoother than V1) ----
-    # 软惩罚：低于 0.94 开始；硬惩罚：低于 0.82 再加速，但斜率明显低于 V1
-    pfill_gap_soft = (0.94 - p_fill).clip(lower=0.0)
-    pfill_gap_hard = (0.82 - p_fill).clip(lower=0.0)
-    out["pfill_penalty_soft"] = (pfill_gap_soft * 0.028).astype(float)
-    out["pfill_penalty_hard"] = (pfill_gap_hard * 0.070).astype(float)
-    out["pfill_penalty_extra"] = (out["pfill_penalty_soft"] + out["pfill_penalty_hard"]).astype(float)
-
-    # ---- Risk extra penalty (V1.1: slightly stronger than V1) ----
-    # 对高基础风险做轻微阶梯放大，并提升 execution_fragility / crowding / liquidity 的参与度
-    risk_base_extra = (
-        (risk_penalty - 0.0075).clip(lower=0.0) * 0.45
-        + (risk_penalty - 0.0150).clip(lower=0.0) * 0.25
-    )
-    fragility_extra = exec_fragility_penalty * 0.85
-    crowding_extra = crowding_penalty * 0.45
-    liquidity_extra = liquidity_penalty * 0.35
-    intraday_extra = (
-        intraday_execution_penalty * 1.10
-        + intraday_hard_penalty * 0.60
-        + intraday_missing_penalty * 0.35
-    ).clip(lower=0.0, upper=0.025)
-    intraday_bonus = (
-        intraday_available
-        * intraday_quality
-        * intraday_confidence
-        * (1.0 - intraday_soft_risk).clip(lower=0.0, upper=1.0)
-        * (0.50 + 0.25 * reseal_score + 0.25 * auction_strength)
-        * 0.006
-    ).clip(lower=0.0, upper=0.006)
-    out["intraday_penalty_extra"] = intraday_extra.astype(float)
-    out["intraday_ev_bonus"] = intraday_bonus.astype(float)
-    out["risk_penalty_extra"] = (
-        risk_base_extra + fragility_extra + crowding_extra + liquidity_extra + intraday_extra
-    ).astype(float)
-
-    out["ev_penalty_total_extra"] = (
-        out["pfill_penalty_extra"] + out["risk_penalty_extra"]
-    ).astype(float)
-    out["ev_final"] = (out["ev_base"] + out["intraday_ev_bonus"] - out["ev_penalty_total_extra"]).astype(float)
-    out["ev_formula_version"] = "v1_2_intraday_weighted"
+    for column in (
+        "pfill_penalty_soft",
+        "pfill_penalty_hard",
+        "pfill_penalty_extra",
+        "risk_penalty_extra",
+        "intraday_penalty_extra",
+        "intraday_ev_bonus",
+        "ev_penalty_total_extra",
+    ):
+        out[column] = 0.0
+    out["ev_final"] = out["ev_base"].astype(float)
+    out["ev_formula_version"] = "v2_net_trade_contract_no_double_count"
     out["ev_pred"] = out["ev_final"].astype(float)
 
     return out
@@ -904,6 +857,14 @@ def main() -> int:
     # ✅ 唯一入口：统一通过 ingest 层取数
     input_df, input_status, input_mode, fs_degrade_reason = _build_input_bundle()
     input_df = _prepare_runtime_input(input_df, requested_trade_date=requested_trade_date)
+    input_df, universe_audit = filter_standard_limit_universe(
+        input_df,
+        code_col="ts_code",
+        name_col="name",
+    )
+    input_status["universe_eligibility"] = universe_audit
+    if input_df.empty:
+        raise RuntimeError("Decision candidate pool is empty after excluding price-limit mechanisms above 10%")
 
     # 日志：用于验收“是否仍在吃 Top10(10行)”
     n_rows = int(len(input_df))
@@ -918,6 +879,7 @@ def main() -> int:
         print(f"[run_v2] requested_trade_date={requested_trade_date}")
     if fs_degrade_reason:
         print(f"[run_v2] fs_degrade_reason={fs_degrade_reason}")
+    print(f"[run_v2] universe_eligibility={universe_audit}")
 
     reg = simple_regime(input_df)
     gr = guardrails(input_df)
@@ -939,7 +901,7 @@ def main() -> int:
     trade_date = requested_trade_date or trade_date
     target_trade_date = get_first_value(routed_df, "target_trade_date")
     exec_date = choose_exec_date(trade_date, target_trade_date)
-    exit_date = ""
+    exit_date = choose_exit_date(exec_date)
 
     # STOP 分支：保持原逻辑行为（只输出空 weights + 基础表 + 报告）
     if getattr(gr, "stop_trading", False):
@@ -969,7 +931,7 @@ def main() -> int:
         cand_snapshot["intraday_ev_bonus"] = 0.0
         cand_snapshot["ev_penalty_total_extra"] = 0.0
         cand_snapshot["ev_final"] = 0.0
-        cand_snapshot["ev_formula_version"] = "v1_2_intraday_weighted_stop_zero"
+        cand_snapshot["ev_formula_version"] = "v2_net_trade_contract_no_double_count_stop_zero"
         cand_snapshot["ev_pred"] = 0.0
         intraday_risk_stats = _build_intraday_risk_summary(cand_snapshot)
         decision_diagnostics = _build_decision_diagnostics(
@@ -1001,6 +963,9 @@ def main() -> int:
         report_lines: List[str] = []
         report_lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
         report_lines.append(f"**停手：{stop_note}**\n\n")
+        report_lines.append(f"- signal_date: **{trade_date or 'unknown'}**\n")
+        report_lines.append(f"- exec_date: **{exec_date or 'unknown'}**\n")
+        report_lines.append(f"- exit_date: **{exit_date or 'unknown'}**\n")
         report_lines.append("## Input Status\n\n")
         report_lines.append(f"- input_mode: **{input_mode}**\n")
         report_lines.append(f"- requested_trade_date: **{requested_trade_date or 'auto'}**\n")
@@ -1031,6 +996,7 @@ def main() -> int:
             exec_date,
             {
                 "exec_date": exec_date,
+                "exit_date": exit_date,
                 "signal_date": trade_date,
                 "requested_trade_date": requested_trade_date,
                 "stop_trading": True,
@@ -1042,6 +1008,7 @@ def main() -> int:
                 "input_mode": input_mode,
                 "fs_degrade_reason": fs_degrade_reason,
                 "input_status": input_status,
+                "universe_eligibility": universe_audit,
                 "intraday_risk": intraday_risk_stats,
                 "decision_diagnostics": decision_diagnostics,
                 "engine_status": {
@@ -1159,6 +1126,7 @@ def main() -> int:
     lines.append(f"# Decision Report ({exec_date or 'unknown'})\n\n")
     lines.append(f"- signal_date: **{trade_date or 'unknown'}**\n")
     lines.append(f"- exec_date: **{exec_date or 'unknown'}**\n")
+    lines.append(f"- exit_date: **{exit_date or 'unknown'}**\n")
     lines.append(f"- requested_trade_date: **{requested_trade_date or 'auto'}**\n")
     lines.append(f"- regime: **{regime_name}**\n")
     lines.append(f"- risk_budget: **{fmt_num(risk_budget, 4)}**\n")
@@ -1209,6 +1177,7 @@ def main() -> int:
     eval_payload = {
         "signal_date": trade_date,
         "exec_date": exec_date,
+        "exit_date": exit_date,
         "requested_trade_date": requested_trade_date,
         "regime": regime_name,
         "risk_budget": risk_budget,
@@ -1228,10 +1197,11 @@ def main() -> int:
         "risk_penalty_extra_mean": float(pd.to_numeric(routed_df["risk_penalty_extra"], errors="coerce").fillna(0.0).mean()),
         "intraday_penalty_extra_mean": float(pd.to_numeric(routed_df["intraday_penalty_extra"], errors="coerce").fillna(0.0).mean()),
         "intraday_ev_bonus_mean": float(pd.to_numeric(routed_df["intraday_ev_bonus"], errors="coerce").fillna(0.0).mean()),
-        "ev_formula_version": str(_safe_first_value(routed_df, "ev_formula_version", "v1_2_intraday_weighted")),
+        "ev_formula_version": str(_safe_first_value(routed_df, "ev_formula_version", "v2_net_trade_contract_no_double_count")),
         "input_mode": input_mode,
         "fs_degrade_reason": fs_degrade_reason,
         "input_status": input_status,
+        "universe_eligibility": universe_audit,
         "intraday_risk": intraday_risk_stats,
         "decision_diagnostics": decision_diagnostics,
         "engine_status": {

@@ -118,7 +118,7 @@ def _build_ret_patch(rets: pd.DataFrame) -> pd.DataFrame:
 
     r = rets.copy()
     if "exit_date" not in r.columns:
-        r["exit_date"] = ""  # 可空，后续你也可以补齐 T+2
+        r["exit_date"] = ""  # 可空，后续可补齐 T+1 实际退出日
 
     # 允许 ret_exec 是百分比或小数，先原样存入（你系统自己统一口径）
     r["sell_price"] = r["sell_price"].astype(str).fillna("")

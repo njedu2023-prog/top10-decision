@@ -47,11 +47,9 @@ class AuctionV3Test(unittest.TestCase):
             auctions = []
             for code_index, code in enumerate(self.codes):
                 pre_close = previous[code]
-                score_edge = (5 - code_index) * 0.003
-                market_wave = 0.002 * np.sin(day_index / 3.0)
                 open_price = round(pre_close * (1.0 + 0.005 * code_index), 2)
-                close_price = round(open_price * (1.0 + score_edge + market_wave), 2)
-                high = round(max(open_price, close_price) * 1.01, 2)
+                close_price = round(pre_close * 1.10, 2)
+                high = close_price
                 low = round(min(open_price, close_price) * 0.99, 2)
                 rows.append(
                     {
@@ -64,7 +62,7 @@ class AuctionV3Test(unittest.TestCase):
                         "pre_close": pre_close,
                         "vol": 1_000_000,
                         "amount": 50_000_000,
-                        "pct_chg": (close_price / pre_close - 1.0) * 100.0,
+                        "pct_chg": 10.0,
                     }
                 )
                 limits.append({"ts_code": code, "trade_date": trade_date, "up_limit": round(pre_close * 1.10, 2), "down_limit": round(pre_close * 0.90, 2)})
@@ -117,6 +115,8 @@ class AuctionV3Test(unittest.TestCase):
         engine = AuctionV3Engine(self.config)
         history = engine.build_history()
         self.assertIn(self.dates[0], set(history["signal_date"]))
+        self.assertTrue((history["exit_reason"] == "take_profit_gap_conservative").all())
+        self.assertTrue(np.allclose(history["gross_return"], self.config.take_profit_pct, atol=0.0015))
         self.assertGreaterEqual(history["signal_date"].nunique(), 30)
         oos, metrics = engine.run_backtest(history)
         self.assertFalse(oos.empty)
@@ -134,8 +134,13 @@ class AuctionV3Test(unittest.TestCase):
         candidates = engine.load_candidates(signal_date)
         first = engine.build_prediction(signal_date, candidates, bundle, metrics)
         self.assertIn("recommended_max_price", first.columns)
+        self.assertIn("predicted_continuation_limit_up_probability", first.columns)
+        self.assertIn("market_order_allowed", first.columns)
         self.assertIn("feature_contract", first.columns)
         self.assertTrue(first["recommended_max_price"].notna().any())
+        priced = first[first["recommended_max_price"].notna()]
+        self.assertTrue((priced["recommended_max_price"] < priced["estimated_up_limit"]).all())
+        self.assertTrue((first["market_order_allowed"] == 0).all())
         dated = self.config.prediction_root / f"pred_{signal_date}.csv"
         before = dated.read_bytes()
         second = engine.build_prediction(signal_date, candidates.iloc[::-1], bundle, metrics)
@@ -149,6 +154,81 @@ class AuctionV3Test(unittest.TestCase):
         self.assertEqual({self.config.model_version}, set(migrated["model_version"]))
         ledger, _ = engine.settle_predictions()
         self.assertEqual(len(migrated), len(ledger))
+
+    def test_opening_limit_up_that_breaks_later_is_not_a_confirmed_fill(self) -> None:
+        trade_date = self.dates[5]
+        code = self.codes[0]
+        market_root = self.root / "data" / "market" / "raw" / trade_date[:4] / trade_date
+        daily = pd.read_csv(market_root / "daily.csv")
+        limits = pd.read_csv(market_root / "stk_limit.csv")
+        auctions = pd.read_csv(market_root / "stk_auction.csv")
+        up_limit = float(limits.loc[limits["ts_code"].eq(code), "up_limit"].iloc[0])
+        daily.loc[daily["ts_code"].eq(code), ["open", "high", "low", "close"]] = [
+            up_limit,
+            up_limit,
+            round(up_limit * 0.98, 2),
+            round(up_limit * 0.99, 2),
+        ]
+        auctions.loc[auctions["ts_code"].eq(code), "price"] = up_limit
+        daily.to_csv(market_root / "daily.csv", index=False)
+        auctions.to_csv(market_root / "stk_auction.csv", index=False)
+
+        fill, reason = AuctionV3Engine(self.config)._market_buyable(trade_date, code)
+        self.assertEqual(fill, 0)
+        self.assertEqual(reason, "opening_auction_limit_up_unconfirmed")
+
+    def test_big_loss_probability_is_a_hard_veto(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        history = engine.build_history()
+        bundle = engine.fit_models(history)
+        self.assertIsNotNone(bundle)
+        bundle.loss_model = None
+        bundle.loss_constant = self.config.max_big_loss_probability + 0.01
+        score = engine._score_candidate_at_gaps(history.iloc[-1], bundle)
+        self.assertIsNotNone(score)
+        self.assertEqual(score["risk_gate_pass"], 0)
+        self.assertEqual(score["model_reason"], "big_loss_probability_exceeds_cap")
+        self.assertTrue(np.isnan(score["recommended_max_gap"]))
+
+    def test_stage_is_derived_from_consecutive_limit_up_closes(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        signal_date = self.dates[1]
+        self.assertEqual(
+            engine._consecutive_limit_up_count(signal_date, self.codes[0]),
+            2,
+        )
+        current = engine._current_base(signal_date, engine.load_candidates(signal_date))
+        row = current.loc[current["ts_code"].eq(self.codes[0])].iloc[0]
+        self.assertEqual(row["stage"], "2→3")
+        self.assertEqual(int(row["limit_times"]), 2)
+
+    def test_authoritative_limit_list_restores_candidates_missing_from_old_ranking(self) -> None:
+        signal_date = self.dates[10]
+        market_root = self.root / "data" / "market" / "raw" / signal_date[:4] / signal_date
+        daily = pd.read_csv(market_root / "daily.csv")
+        limits = pd.read_csv(market_root / "stk_limit.csv")
+        detail = daily[["ts_code", "trade_date", "close"]].merge(
+            limits[["ts_code", "up_limit"]],
+            on="ts_code",
+            how="inner",
+        )
+        detail["name"] = [f"权威{i}" for i in range(len(detail))]
+        detail["limit_type"] = "U"
+        detail["open_times"] = 0
+        detail["fd_amount"] = 1_000_000
+        detail["first_time"] = 100000
+        detail["last_time"] = 100000
+        detail["seal_amount"] = 1_000_000
+        detail.to_csv(market_root / "limit_list_d.csv", index=False)
+
+        source_path = self.root / "data" / "pred" / "archive" / f"pred_source_{signal_date}.csv"
+        source = pd.read_csv(source_path)
+        missing_code = source.iloc[-1]["ts_code"]
+        source.iloc[:-1].to_csv(source_path, index=False)
+
+        candidates = AuctionV3Engine(self.config).load_candidates(signal_date)
+        self.assertEqual(set(candidates["ts_code"]), set(self.codes))
+        self.assertIn(missing_code, set(candidates["ts_code"]))
 
     def test_true_price_verification_and_reports(self) -> None:
         engine = AuctionV3Engine(self.config)
@@ -174,7 +254,8 @@ class AuctionV3Test(unittest.TestCase):
         )
         for path in paths.values():
             self.assertTrue(Path(path).exists())
-            self.assertIn("竞价", Path(path).read_text(encoding="utf-8"))
+            self.assertIn("Decision", Path(path).read_text(encoding="utf-8"))
+        self.assertIn("竞价", Path(paths["current"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -3,13 +3,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from top10decision.decision.contracts import (
+    EXIT_LATEST_TIME,
+    EXIT_POLICY_VERSION,
+    EXIT_STOP_LOSS_PCT,
+    EXIT_TAKE_PROFIT_PCT,
+)
+
 
 @dataclass(frozen=True)
 class AuctionV3Config:
-    """Runtime and governance settings for the auction-overnight strategy."""
+    """Runtime and governance settings for manual auction guidance."""
 
     root: Path = Path(".")
-    max_candidates: int = 50
+    max_candidates: int = 0
     max_positions: int = 3
     round_trip_cost_bps: float = 35.0
     slippage_bps_each_side: float = 5.0
@@ -17,22 +24,41 @@ class AuctionV3Config:
     max_auction_participation: float = 0.01
     min_edge: float = 0.001
     min_fill_probability: float = 0.55
+    min_exit_probability: float = 0.90
     min_profit_probability: float = 0.52
-    max_big_loss_probability: float = 0.25
+    continuation_score_weight: float = 0.005
+    max_big_loss_probability: float = 0.15
     big_loss_threshold: float = -0.03
-    tail_risk_aversion: float = 0.50
+    min_return_lcb: float = 0.0
+    expected_return_confidence_z: float = 1.645
+    min_expected_return_margin: float = 0.002
+    tail_risk_aversion: float = 1.00
+    blocked_exit_loss: float = 0.05
+    min_tail_mean_return: float = -0.05
+    take_profit_pct: float = EXIT_TAKE_PROFIT_PCT
+    stop_loss_pct: float = EXIT_STOP_LOSS_PCT
+    latest_exit_time: str = EXIT_LATEST_TIME
+    exit_policy_version: str = EXIT_POLICY_VERSION
+    max_mechanism_limit_pct: float = 10.0
     min_train_dates: int = 20
     min_train_rows: int = 300
-    promotion_min_dates: int = 250
-    promotion_min_oos_dates: int = 80
+    calibration_fraction: float = 0.20
+    calibration_min_dates: int = 4
+    calibration_embargo_dates: int = 1
+    promotion_min_dates: int = 60
+    promotion_min_oos_dates: int = 40
+    promotion_min_filled_trades: int = 30
+    promotion_min_stage_focus_filled_trades: int = 5
+    min_oos_signal_date_ratio: float = 0.05
+    max_oos_no_signal_streak: int = 30
     embargo_dates: int = 2
     backtest_block_dates: int = 10
     gap_grid_min: float = -0.05
-    gap_grid_max: float = 0.10
+    gap_grid_max: float = 0.08
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v3_walkforward_3"
+    model_version: str = "auction_v5_manual_guidance_4"
 
     @property
     def output_root(self) -> Path:
@@ -63,8 +89,8 @@ class AuctionV3Config:
         return self.root / "docs" / "reports"
 
     @property
-    def broker_fills_path(self) -> Path:
-        return self.root / "data" / "auction_v3" / "broker_fills.csv"
+    def manual_feedback_path(self) -> Path:
+        return self.root / "data" / "auction_v3" / "manual_trade_feedback.csv"
 
     @property
     def cost_rate(self) -> float:
@@ -78,6 +104,6 @@ class AuctionV3Config:
             self.metrics_root,
             self.model_root,
             self.report_root,
-            self.broker_fills_path.parent,
+            self.manual_feedback_path.parent,
         ):
             path.mkdir(parents=True, exist_ok=True)

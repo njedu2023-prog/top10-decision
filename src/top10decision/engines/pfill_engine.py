@@ -39,6 +39,7 @@ import numpy as np
 import pandas as pd
 
 from top10decision.models.fill_model import fill_model_rule
+from top10decision.decision.contracts import PFILL_EXECUTION_CONTRACT, PFILL_TRUTH_VERSION
 
 PRED_MIN = 0.02
 PRED_MAX = 0.98
@@ -49,6 +50,8 @@ MODEL_LOGIT_SHRINK = 0.34
 RULE_LOGIT_SHRINK = 0.55
 ERRMSG_MAXLEN = 240
 MISSING_CATEGORY_TOKEN = "__MISSING__"
+LEARNING_ACCEPTANCE_RELATIVE_PATH = Path("outputs/learning/learning_acceptance_latest.json")
+MIN_MODEL_INDEPENDENT_DATES = 20
 
 # 仅在 meta 未显式给出 categorical_cols 时的兜底集合
 CATEGORY_HINT_COLS = [
@@ -113,6 +116,86 @@ def _load_pfill_meta(meta_path: Path) -> Dict[str, Any]:
         return json.loads(meta_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def _resolve_selected_model_kind(meta: Dict[str, Any]) -> str:
+    direct = str(meta.get("selected_model", "") or "").strip().lower()
+    if direct in {"lgbm", "lr"}:
+        return direct
+    nested = meta.get("model_selection", {}) if isinstance(meta, dict) else {}
+    if isinstance(nested, dict):
+        selected = str(nested.get("selected_model", "") or "").strip().lower()
+        if selected in {"lgbm", "lr"}:
+            return selected
+    return "lgbm"
+
+
+def _metric_value(metrics: Dict[str, Any], key: str, default: float) -> float:
+    try:
+        value = float(metrics.get(key))
+    except Exception:
+        return default
+    return value if np.isfinite(value) else default
+
+
+def _model_acceptance_status(root: Path, meta: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
+    path = root / LEARNING_ACCEPTANCE_RELATIVE_PATH
+    details: Dict[str, Any] = {
+        "pfill_model_acceptance_path": str(path),
+        "pfill_model_acceptance_pass": False,
+        "pfill_model_acceptance_anchor_trade_date": "",
+        "pfill_model_independent_dates": 0,
+    }
+    if not path.exists():
+        return False, "acceptance_file_missing", details
+    try:
+        acceptance = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False, "acceptance_file_invalid", details
+    section = acceptance.get("pfill", {}) if isinstance(acceptance, dict) else {}
+    if not isinstance(section, dict):
+        return False, "acceptance_pfill_section_invalid", details
+
+    window = meta.get("window", {}) if isinstance(meta.get("window", {}), dict) else {}
+    independent_dates = int(window.get("n_loaded_dates", 0) or 0)
+    meta_anchor = str(meta.get("anchor_trade_date", "") or "").strip()
+    acceptance_anchor = str(section.get("anchor_trade_date", "") or "").strip()
+    selected_kind = _resolve_selected_model_kind(meta)
+    acceptance_kind = str(section.get("selected_model", "") or "").strip().lower()
+    details.update(
+        {
+            "pfill_model_acceptance_anchor_trade_date": acceptance_anchor,
+            "pfill_model_independent_dates": independent_dates,
+        }
+    )
+    checks = (
+        (str(meta.get("status", "") or "").lower() == "trained", "model_meta_not_trained"),
+        (str(meta.get("label_version", "") or "") == PFILL_TRUTH_VERSION, "pfill_truth_version_mismatch"),
+        (str(meta.get("execution_contract", "") or "") == PFILL_EXECUTION_CONTRACT, "pfill_execution_contract_mismatch"),
+        (str(section.get("label_version", "") or "") == PFILL_TRUTH_VERSION, "acceptance_truth_version_mismatch"),
+        (str(section.get("execution_contract", "") or "") == PFILL_EXECUTION_CONTRACT, "acceptance_execution_contract_mismatch"),
+        (section.get("acceptance_pass") is True, "acceptance_pass_false"),
+        (section.get("selected_model_pass") is True, "selected_model_pass_false"),
+        (bool(meta_anchor) and meta_anchor == acceptance_anchor, "acceptance_anchor_mismatch"),
+        (selected_kind == acceptance_kind, "acceptance_model_kind_mismatch"),
+        (independent_dates >= MIN_MODEL_INDEPENDENT_DATES, "insufficient_independent_dates"),
+        (int(section.get("loaded_trade_dates", 0) or 0) >= MIN_MODEL_INDEPENDENT_DATES, "acceptance_dates_too_few"),
+    )
+    for passed, reason in checks:
+        if not passed:
+            return False, reason, details
+
+    metrics = section.get("selected_model_metrics", {})
+    if not isinstance(metrics, dict):
+        return False, "selected_model_metrics_invalid", details
+    if _metric_value(metrics, "valid_dates", 0.0) < 4:
+        return False, "valid_dates_too_few", details
+    if _metric_value(metrics, "auc", float("nan")) < 0.55:
+        return False, "auc_below_0_55", details
+    if _metric_value(metrics, "brier_skill_vs_train_rate", float("nan")) <= 0.0:
+        return False, "brier_skill_not_positive", details
+    details["pfill_model_acceptance_pass"] = True
+    return True, "", details
 
 
 def _resolve_fill_base_rate(meta: Dict[str, Any]) -> Optional[float]:
@@ -200,41 +283,43 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
     lgbm_path = _existing_model_path(root, ["pfill_lgbm.joblib"])
     lr_path = _existing_model_path(root, ["pfill_lr.joblib"])
     meta_path = _existing_meta_path(root, ["pfill_meta.json"])
-
-    chosen = lgbm_path or lr_path
-    if chosen is None:
-        return None, {
-            "pfill_model_loaded": False,
-            "pfill_model_kind": "",
-            "pfill_model_path": "",
-            "pfill_model_feature_mode": "",
-            "pfill_model_meta_path": str(meta_path) if meta_path else "",
-            "pfill_model_expected_n_features": 0,
-            "pfill_model_expected_categorical_cols": "",
-            "pfill_model_expected_numeric_feature_count": 0,
-            "pfill_model_category_like_cols_detected": "",
-            "pfill_model_degrade_reason": "model_missing_use_rule",
-        }
-
-    meta: Dict[str, Any] = {}
+    meta: Dict[str, Any] = _load_pfill_meta(meta_path) if meta_path is not None else {}
     feature_cols: list[str] = []
     categorical_cols: list[str] = []
     numeric_cols: list[str] = []
     category_like_cols_detected: list[str] = []
+    fill_base_rate = _resolve_fill_base_rate(meta)
+    feature_cols = _resolve_feature_cols(meta)
+    categorical_cols = _resolve_category_cols(meta, feature_cols)
+    numeric_cols = _resolve_numeric_cols(meta, feature_cols, categorical_cols)
+    category_like_cols_detected = _resolve_category_like_cols(meta, feature_cols)
+    selected_kind = _resolve_selected_model_kind(meta)
+    chosen = lgbm_path if selected_kind == "lgbm" else lr_path
+    accepted, rejection_reason, acceptance_details = _model_acceptance_status(root, meta)
 
-    if meta_path is not None:
-        meta = _load_pfill_meta(meta_path)
-        fill_base_rate = _resolve_fill_base_rate(meta)
-        feature_cols = _resolve_feature_cols(meta)
-        categorical_cols = _resolve_category_cols(meta, feature_cols)
-        numeric_cols = _resolve_numeric_cols(meta, feature_cols, categorical_cols)
-        category_like_cols_detected = _resolve_category_like_cols(meta, feature_cols)
-    else:
-        fill_base_rate = None
+    base_audit: Dict[str, Any] = {
+        "pfill_model_loaded": False,
+        "pfill_model_kind": selected_kind if chosen else "",
+        "pfill_model_path": str(chosen) if chosen else "",
+        "pfill_model_feature_mode": "",
+        "pfill_model_meta_path": str(meta_path) if meta_path else "",
+        "pfill_model_expected_n_features": len(feature_cols),
+        "pfill_model_expected_categorical_cols": "|".join(categorical_cols),
+        "pfill_model_expected_numeric_feature_count": len(numeric_cols),
+        "pfill_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+        **acceptance_details,
+    }
+    if chosen is None:
+        return None, {**base_audit, "pfill_model_degrade_reason": f"selected_model_missing:{selected_kind}"}
+    if not accepted:
+        return None, {
+            **base_audit,
+            "pfill_model_degrade_reason": f"model_rejected_by_learning_acceptance:{rejection_reason}",
+        }
 
     try:
         model = joblib.load(chosen)
-        model_kind = "lgbm" if "lgbm" in chosen.name.lower() else "lr"
+        model_kind = selected_kind
         feature_mode = "meta_feature_contract" if feature_cols else "pipeline_auto"
         return PFillModelBundle(
             model=model,
@@ -257,29 +342,33 @@ def _resolve_pfill_model(project_root: Optional[Path] = None) -> Tuple[Optional[
             "pfill_model_expected_categorical_cols": "|".join(categorical_cols),
             "pfill_model_expected_numeric_feature_count": len(numeric_cols),
             "pfill_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+            **acceptance_details,
             "pfill_model_degrade_reason": "",
         }
     except Exception as e:
         return None, {
-            "pfill_model_loaded": False,
-            "pfill_model_kind": "",
-            "pfill_model_path": str(chosen),
-            "pfill_model_feature_mode": "",
-            "pfill_model_meta_path": str(meta_path) if meta_path else "",
-            "pfill_model_expected_n_features": len(feature_cols),
-            "pfill_model_expected_categorical_cols": "|".join(categorical_cols),
-            "pfill_model_expected_numeric_feature_count": len(numeric_cols),
-            "pfill_model_category_like_cols_detected": "|".join(category_like_cols_detected),
+            **base_audit,
             "pfill_model_degrade_reason": f"model_load_failed:{type(e).__name__}:{_safe_errmsg(e)}",
         }
 
 
 LEAKAGE_COLS = {
+    "realized_ret_open_to_tplus1_timed_exit",
+    "realized_ret_open_to_next_open",
     "realized_ret_t1_to_t2",
     "premium_ret_t1_to_t2",
     "target_date",
     "exit_date",
     "exit_price_t2_close",
+    "exit_price_tplus1_open",
+    "exit_price_tplus1_timed",
+    "exit_price_source",
+    "exit_on_time",
+    "exit_reason",
+    "take_profit_price_tplus1",
+    "stop_loss_price_tplus1",
+    "latest_exit_time",
+    "exit_policy_version",
     "close_t2",
     "open_t2",
     "high_t2",
@@ -290,6 +379,7 @@ LEAKAGE_COLS = {
     "exec_date",
     "entry_date",
     "entry_price_t1",
+    "entry_price_t_opening_auction",
     "entry_price_proxy_t1",
     "entry_price_proxy_mode",
     "sample_maturity",
@@ -658,6 +748,12 @@ def apply_pfill_engine(
     out["p_fill_expected_categorical_cols"] = str(audit.get("pfill_model_expected_categorical_cols", ""))
     out["p_fill_expected_numeric_feature_count"] = int(audit.get("pfill_model_expected_numeric_feature_count", 0) or 0)
     out["p_fill_model_category_like_cols_detected"] = str(audit.get("pfill_model_category_like_cols_detected", ""))
+    out["p_fill_model_acceptance_path"] = str(audit.get("pfill_model_acceptance_path", ""))
+    out["p_fill_model_acceptance_pass"] = bool(audit.get("pfill_model_acceptance_pass", False))
+    out["p_fill_model_acceptance_anchor_trade_date"] = str(
+        audit.get("pfill_model_acceptance_anchor_trade_date", "")
+    )
+    out["p_fill_model_independent_dates"] = int(audit.get("pfill_model_independent_dates", 0) or 0)
 
     out["p_fill_model_actual_n_features"] = int(predict_audit.get("actual_n_features", 0) or 0)
     out["p_fill_missing_feature_count"] = int(predict_audit.get("missing_feature_count", 0) or 0)

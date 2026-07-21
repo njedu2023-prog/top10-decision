@@ -26,11 +26,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from top10decision.decision.contracts import (
+    ERET_COMPAT_TARGET_COLUMN,
+    ERET_HOLDING_MODE,
+    ERET_TARGET_COLUMN,
+    ERET_TRUTH_VERSION,
+)
 
 
 # =========================================================
@@ -254,10 +267,14 @@ def load_eret_truth(path: Path, trade_date: str) -> pd.DataFrame:
         "label_ready_ret",
         "eret_sample_eligible",
         "eret_label_quality",
-        "realized_ret_t1_to_t2",
+        ERET_TARGET_COLUMN,
+        ERET_COMPAT_TARGET_COLUMN,
         "premium_ret_t1_to_t2",
         "entry_price_t1",
-        "exit_price_t2_close",
+        "exit_price_tplus1_timed",
+        "exit_price_tplus1_open",
+        "eret_truth_version",
+        "return_holding_mode",
     ]
     missing = [c for c in required if c not in df.columns]
     if missing:
@@ -285,7 +302,7 @@ def choose_prior_columns(df: pd.DataFrame) -> pd.DataFrame:
         "y_fill", "fill_label_quality", "entry_price_proxy_t1", "entry_price_proxy_mode",
         "premiumret", "premium_ret", "premium_ret_t1_to_t2",
         "e_ret", "e_ret_pred", "ev", "ev_score",
-        "realized_ret_t1_to_t2", "target_weight", "target_date", "verify_status",
+        ERET_TARGET_COLUMN, ERET_COMPAT_TARGET_COLUMN, "target_weight", "target_date", "verify_status",
         "eret_sample_eligible", "eret_label_quality", "label_ready_ret",
     }
 
@@ -335,9 +352,14 @@ def choose_truth_columns(df: pd.DataFrame) -> pd.DataFrame:
         "sample_maturity", "label_ready_fill", "label_ready_ret",
         "y_fill", "fill_label_quality", "eret_sample_eligible", "eret_label_quality",
         "entry_price_t1", "entry_price_proxy_t1", "entry_price_proxy_mode",
+        "entry_price_t_opening_auction",
+        "exit_price_tplus1_timed", "exit_price_tplus1_open", "exit_price_source", "exit_on_time",
+        "exit_reason", "take_profit_price_tplus1", "stop_loss_price_tplus1",
+        "latest_exit_time", "exit_policy_version",
         "exit_price_t2_close", "close_t2",
-        "realized_ret_t1_to_t2", "premium_ret_t1_to_t2",
+        ERET_TARGET_COLUMN, ERET_COMPAT_TARGET_COLUMN, "premium_ret_t1_to_t2",
         "eret_truth_version", "return_holding_mode",
+        "execution_contract",
         "buy_window_start", "buy_window_end",
         "open_t1", "high_t1", "low_t1", "close_t1",
         "up_limit_t1", "down_limit_t1", "limit_type_t1", "open_times_t1",
@@ -449,6 +471,14 @@ def build_trainset(
     base_df = load_features_base(paths.features_base, trade_date)
     limit_df = load_features_limit(paths.features_limit, trade_date)
     truth_df_raw = load_eret_truth(paths.eret_truth, trade_date)
+    truth_df_raw = truth_df_raw[
+        truth_df_raw["eret_truth_version"].astype(str).eq(ERET_TRUTH_VERSION)
+        & truth_df_raw["return_holding_mode"].astype(str).eq(ERET_HOLDING_MODE)
+    ].copy()
+    if truth_df_raw.empty:
+        raise ValueError(
+            f"trade_date={trade_date} 没有符合 {ERET_TRUTH_VERSION} 的T日竞价到T+1择机退出 E_ret 真值"
+        )
     truth_df = choose_truth_columns(truth_df_raw)
 
     if "label_ready_ret" in truth_df.columns:
@@ -524,9 +554,12 @@ def build_trainset(
     train["dataset_split"] = "raw_train_pool"
 
     coverage_cols = [
-        "realized_ret_t1_to_t2",
+        ERET_TARGET_COLUMN,
+        ERET_COMPAT_TARGET_COLUMN,
         "premium_ret_t1_to_t2",
         "entry_price_t1",
+        "entry_price_t_opening_auction",
+        "exit_price_tplus1_open",
         "exit_price_t2_close",
         "y_fill",
         "fill_label_quality",
@@ -579,8 +612,11 @@ def build_trainset(
         "sample_maturity", "label_ready_fill", "label_ready_ret",
         "y_fill", "fill_label_quality",
         "eret_sample_eligible", "eret_label_quality",
-        "realized_ret_t1_to_t2", "premium_ret_t1_to_t2",
-        "entry_price_t1", "entry_price_proxy_t1", "entry_price_proxy_mode",
+        ERET_TARGET_COLUMN, ERET_COMPAT_TARGET_COLUMN, "premium_ret_t1_to_t2",
+        "entry_price_t1", "entry_price_t_opening_auction", "entry_price_proxy_t1", "entry_price_proxy_mode",
+        "exit_price_tplus1_timed", "exit_price_tplus1_open", "exit_price_source", "exit_on_time",
+        "exit_reason", "take_profit_price_tplus1", "stop_loss_price_tplus1",
+        "latest_exit_time", "exit_policy_version",
         "exit_price_t2_close", "close_t2",
         "dataset_split", "sample_weight", "is_cold_start", "feature_coverage_score",
         "eret_truth_version", "return_holding_mode",
@@ -621,8 +657,8 @@ def build_meta(
     fs_v2_audit: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
     coverage_cols = [
-        "realized_ret_t1_to_t2", "premium_ret_t1_to_t2",
-        "entry_price_t1", "exit_price_t2_close",
+        ERET_TARGET_COLUMN, ERET_COMPAT_TARGET_COLUMN, "premium_ret_t1_to_t2",
+        "entry_price_t1", "entry_price_t_opening_auction", "exit_price_tplus1_timed", "exit_price_tplus1_open", "exit_price_t2_close",
         "y_fill", "fill_label_quality",
         "open_t1", "open_times_t1", "seal_amount_t1",
         "prior_prob_prior", "prior_strength_score", "prior_theme_boost", "rank",
@@ -635,7 +671,7 @@ def build_meta(
     maturity_dist = {str(k): int(v) for k, v in train_df["sample_maturity"].astype(str).value_counts(dropna=False).to_dict().items()} if "sample_maturity" in train_df.columns else {}
 
     target_stats: Dict[str, Optional[float]] = {}
-    target_col = "realized_ret_t1_to_t2"
+    target_col = ERET_TARGET_COLUMN
     if target_col in train_df.columns and len(train_df):
         s = pd.to_numeric(train_df[target_col], errors="coerce")
         target_stats = {
@@ -654,7 +690,9 @@ def build_meta(
         "rows": int(len(train_df)),
         "eret_truth_ready_only": True,
         "eret_sample_eligible_only": True,
-        "target_column": "realized_ret_t1_to_t2",
+        "target_column": ERET_TARGET_COLUMN,
+        "eret_truth_version": ERET_TRUTH_VERSION,
+        "return_holding_mode": ERET_HOLDING_MODE,
         "source": {
             "features_base": str(paths.features_base),
             "features_limit": str(paths.features_limit),
@@ -695,7 +733,8 @@ def build_meta(
         "notes": [
             "本文件是 E_ret 训练前宽表，不是训练结果文件。",
             "训练集只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本。",
-            "当前 realized_ret_t1_to_t2 / premium_ret_t1_to_t2 口径来自 build_eret_truth.py。",
+            "主目标为T日开盘竞价买入到T+1预声明止盈、止损或14:50时间退出的可执行收益。",
+            "realized_ret_t1_to_t2 仅为Decision兼容别名；premium_ret_t1_to_t2继续保留原收盘口径，premium不受影响。",
             "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_eret.py 再做。",
             "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。",
             "FS V2 历史滚动字段已做强制保护与专项审计，防止 E_ret 训练窗口继续吃空特征。",
@@ -710,7 +749,7 @@ def build_meta(
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="构建 E_ret 训练宽表 eret_trainset_{trade_date}.csv")
-    ap.add_argument("--trade-date", required=True, help="T 日，格式 YYYYMMDD")
+    ap.add_argument("--trade-date", required=True, help="D 信号日，格式 YYYYMMDD")
     ap.add_argument("--no-missing-flags", action="store_true", help="关闭缺失指示器列生成")
     return ap.parse_args()
 

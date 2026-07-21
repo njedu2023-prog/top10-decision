@@ -11,9 +11,26 @@ from typing import Any, Optional, Sequence
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    ExtraTreesRegressor,
+    HistGradientBoostingClassifier,
+    HistGradientBoostingRegressor,
+)
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+from top10decision.data.tushare_minute import opening_auction_price_from_snapshot
+from top10decision.decision.eligibility import filter_standard_limit_universe
+from top10decision.decision.exit_policy import simulate_tplus1_exit
+from top10decision.writers.io_contract import (
+    choose_exec_date,
+    choose_exit_date,
+    is_a_share_trading_day,
+    next_a_share_trading_day,
+)
 
 from .config import AuctionV3Config
 
@@ -57,15 +74,43 @@ MODEL_FEATURES = [
     "stage_prior",
     "limit_times",
     "open_board_count",
+    "limit_open_times",
+    "limit_first_time_minutes",
+    "limit_last_time_minutes",
+    "limit_fd_amount_log",
+    "limit_seal_to_amount",
+    "limit_seal_to_float_mv",
     "reseal_score",
     "late_withdraw",
     "d_return",
     "d_range",
     "d_turnover_proxy",
     "d_amount_log",
+    "d_amount_percentile",
+    "d_turnover_rate",
+    "d_volume_ratio",
+    "d_float_mv_log",
+    "is_hot_board",
+    "board_rank",
+    "board_limit_up_count",
     "limit_ratio",
+    "market_median_return",
+    "market_up_ratio",
+    "market_return_dispersion",
+    "relative_d_return",
+    "minute_available",
+    "minute_realized_vol",
+    "minute_first_30m_return",
+    "minute_last_30m_return",
+    "minute_vwap_deviation",
+    "minute_opening_volume_share",
+    "minute_closing_volume_share",
+    "minute_close_location",
     "proposed_gap",
 ]
+CONTINUATION_FEATURES = [name for name in MODEL_FEATURES if name != "proposed_gap"]
+
+INDUSTRY_ALIASES = ("industry", "industry_tag", "行业", "行业板块", "board")
 
 
 @dataclass
@@ -88,16 +133,26 @@ class ModelBundle:
     return_model: Pipeline
     profit_model: Optional[Pipeline]
     loss_model: Optional[Pipeline]
+    continuation_model: Optional[Pipeline]
     fill_model: Optional[Pipeline]
+    exit_model: Optional[Pipeline]
     profit_constant: float
     loss_constant: float
+    continuation_constant: float
     fill_constant: float
+    exit_constant: float
+    calibration_bias: float
+    expected_return_margin: float
     residual_q10: float
     residual_q90: float
     gap_min: float
     gap_max: float
     train_rows: int
     train_dates: int
+    calibration_rows: int
+    calibration_dates: int
+    return_selection: dict[str, Any]
+    classifier_selection: dict[str, dict[str, Any]]
 
 
 def _utc_now() -> str:
@@ -168,6 +223,22 @@ def _numeric_from(row: pd.Series, aliases: Sequence[str], default: float = float
     return default
 
 
+def _text_from(row: pd.Series, aliases: Sequence[str], default: str = "") -> str:
+    for name in aliases:
+        if name not in row.index:
+            continue
+        value = row.get(name)
+        try:
+            if pd.isna(value):
+                continue
+        except Exception:
+            pass
+        text = str(value or "").strip()
+        if text and text.lower() not in {"nan", "none", "null"}:
+            return text
+    return default
+
+
 def _pre_close(row: Optional[pd.Series]) -> float:
     if row is None:
         return float("nan")
@@ -193,20 +264,40 @@ def _round_price(value: float) -> float:
     return round(max(0.01, value) + 1e-9, 2)
 
 
+def _time_to_minutes(value: Any) -> float:
+    text = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if not text:
+        return float("nan")
+    text = text[-6:].zfill(6)
+    hour, minute, second = int(text[:2]), int(text[2:4]), int(text[4:6])
+    if hour > 23 or minute > 59 or second > 59:
+        return float("nan")
+    return hour * 60.0 + minute + second / 60.0
+
+
 def _hash_frame(frame: pd.DataFrame) -> str:
     payload = frame.to_csv(index=False, lineterminator="\n").encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
-def _business_day_after(date_text: str) -> str:
-    date = pd.Timestamp(datetime.strptime(date_text, "%Y%m%d"))
-    return (date + pd.offsets.BDay(1)).strftime("%Y%m%d")
-
-
-def _probability(model: Optional[Pipeline], frame: pd.DataFrame, constant: float) -> np.ndarray:
+def _probability(
+    model: Optional[Pipeline],
+    frame: pd.DataFrame,
+    constant: float,
+    features: Sequence[str] = MODEL_FEATURES,
+) -> np.ndarray:
     if model is None:
         return np.repeat(float(np.clip(constant, 0.0, 1.0)), len(frame))
-    return np.clip(model.predict_proba(frame[MODEL_FEATURES])[:, 1], 0.0, 1.0)
+    return np.clip(model.predict_proba(frame[list(features)])[:, 1], 0.0, 1.0)
+
+
+def _date_balanced_weights(frame: pd.DataFrame) -> np.ndarray:
+    if frame.empty or "signal_date" not in frame.columns:
+        return np.ones(len(frame), dtype=float)
+    date_key = frame["signal_date"].astype(str)
+    counts = date_key.groupby(date_key).transform("count").clip(lower=1)
+    weights = 1.0 / counts.astype(float)
+    return (weights / weights.mean()).to_numpy(dtype=float)
 
 
 class AuctionV3Engine:
@@ -216,6 +307,9 @@ class AuctionV3Engine:
         self.config = config
         self.config.ensure_directories()
         self._market_cache: dict[tuple[str, str], pd.DataFrame] = {}
+        self._minute_cache: dict[tuple[str, str], pd.DataFrame] = {}
+        self._context_cache: dict[str, dict[str, Any]] = {}
+        self._eligibility_audit: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Source discovery and point-in-time inputs
@@ -231,7 +325,9 @@ class AuctionV3Engine:
                 match = DATE_RE.search(path.name)
                 if match:
                     dates.add(match.group(1))
-        return sorted(dates)
+        # Raw folders can exist for a holiday because upstream sync jobs run on
+        # weekdays. They are not evidence of an exchange session.
+        return sorted(date for date in dates if is_a_share_trading_day(date))
 
     def _market_path(self, trade_date: str, name: str) -> Optional[Path]:
         root = self.config.root / "data" / "market" / "raw"
@@ -257,6 +353,120 @@ class AuctionV3Engine:
             frame = frame.drop_duplicates("ts_code", keep="last").set_index("ts_code", drop=False)
         self._market_cache[key] = frame
         return frame
+
+    def _minute_path(self, trade_date: str, code: str) -> Path:
+        safe_code = _normal_code(code).replace(".", "_")
+        return self.config.root / "data" / "market" / "minute_1m" / trade_date[:4] / trade_date / f"{safe_code}.csv"
+
+    def minute_table(self, trade_date: str, code: str) -> pd.DataFrame:
+        key = (trade_date, _normal_code(code))
+        if key in self._minute_cache:
+            return self._minute_cache[key]
+        frame = _read_csv(self._minute_path(trade_date, code))
+        if not frame.empty:
+            frame = frame.copy()
+            for column in ("open", "close", "high", "low", "vol", "amount"):
+                if column in frame.columns:
+                    frame[column] = pd.to_numeric(frame[column], errors="coerce")
+            if "time" in frame.columns:
+                frame["time"] = frame["time"].astype(str).str.strip()
+                frame = frame.sort_values("time").drop_duplicates("time", keep="last")
+        self._minute_cache[key] = frame
+        return frame
+
+    def _market_context(self, trade_date: str) -> dict[str, Any]:
+        if trade_date in self._context_cache:
+            return self._context_cache[trade_date]
+        daily = self.market_table(trade_date, "daily")
+        if daily.empty:
+            context = {
+                "market_median_return": np.nan,
+                "market_up_ratio": np.nan,
+                "market_return_dispersion": np.nan,
+                "amount_percentile": {},
+            }
+            self._context_cache[trade_date] = context
+            return context
+
+        pct = pd.to_numeric(daily["pct_chg"], errors="coerce") / 100.0 if "pct_chg" in daily.columns else pd.Series(np.nan, index=daily.index)
+        if pct.notna().sum() < max(20, len(daily) // 2):
+            close = pd.to_numeric(daily["close"], errors="coerce") if "close" in daily.columns else pd.Series(np.nan, index=daily.index)
+            if "pre_close" in daily.columns:
+                pre_close = pd.to_numeric(daily["pre_close"], errors="coerce")
+            elif "pre_close_est" in daily.columns:
+                pre_close = pd.to_numeric(daily["pre_close_est"], errors="coerce")
+            else:
+                pre_close = pd.Series(np.nan, index=daily.index)
+            derived = close / pre_close.replace(0.0, np.nan) - 1.0
+            pct = pct.where(pct.notna(), derived)
+        valid = pct.replace([np.inf, -np.inf], np.nan).dropna()
+        amount = pd.to_numeric(daily.get("amount"), errors="coerce") if "amount" in daily.columns else pd.Series(np.nan, index=daily.index)
+        context = {
+            "market_median_return": float(valid.median()) if len(valid) else np.nan,
+            "market_up_ratio": float((valid > 0).mean()) if len(valid) else np.nan,
+            "market_return_dispersion": float(valid.std(ddof=0)) if len(valid) else np.nan,
+            "amount_percentile": amount.rank(pct=True).to_dict(),
+        }
+        self._context_cache[trade_date] = context
+        return context
+
+    def _minute_features(self, trade_date: str, code: str) -> dict[str, float]:
+        defaults = {
+            "minute_available": 0.0,
+            "minute_realized_vol": np.nan,
+            "minute_first_30m_return": np.nan,
+            "minute_last_30m_return": np.nan,
+            "minute_vwap_deviation": np.nan,
+            "minute_opening_volume_share": np.nan,
+            "minute_closing_volume_share": np.nan,
+            "minute_close_location": np.nan,
+        }
+        frame = self.minute_table(trade_date, code)
+        needed = {"time", "open", "close", "high", "low", "vol"}
+        if frame.empty or not needed.issubset(frame.columns):
+            return defaults
+        clean = frame.dropna(subset=["open", "close", "high", "low"]).copy()
+        if len(clean) < 5:
+            return defaults
+
+        time_text = clean["time"].astype(str)
+        hhmm = pd.to_numeric(time_text.str.extract(r"(\d{2}):(\d{2})", expand=True).fillna("0").agg("".join, axis=1), errors="coerce")
+        close = pd.to_numeric(clean["close"], errors="coerce")
+        open_price = pd.to_numeric(clean["open"], errors="coerce")
+        high = pd.to_numeric(clean["high"], errors="coerce")
+        low = pd.to_numeric(clean["low"], errors="coerce")
+        vol = pd.to_numeric(clean["vol"], errors="coerce").fillna(0.0).clip(lower=0.0)
+        returns = np.log(close.replace(0.0, np.nan)).diff().replace([np.inf, -np.inf], np.nan).dropna()
+        first = clean[hhmm.le(1000)]
+        last = clean[hhmm.ge(1430)]
+        total_vol = float(vol.sum())
+        vwap = float((close * vol).sum() / total_vol) if total_vol > 0 else np.nan
+        price_range = float(high.max() - low.min())
+
+        defaults.update(
+            {
+                "minute_available": 1.0,
+                "minute_realized_vol": float(returns.std(ddof=0)) if len(returns) else np.nan,
+                "minute_first_30m_return": float(first["close"].iloc[-1] / first["open"].iloc[0] - 1.0) if len(first) else np.nan,
+                "minute_last_30m_return": float(last["close"].iloc[-1] / last["open"].iloc[0] - 1.0) if len(last) else np.nan,
+                "minute_vwap_deviation": float(close.iloc[-1] / vwap - 1.0) if vwap > 0 else np.nan,
+                "minute_opening_volume_share": float(vol.loc[first.index].sum() / total_vol) if total_vol > 0 and len(first) else np.nan,
+                "minute_closing_volume_share": float(vol.loc[last.index].sum() / total_vol) if total_vol > 0 and len(last) else np.nan,
+                "minute_close_location": float((close.iloc[-1] - low.min()) / price_range) if price_range > 0 else 0.5,
+            }
+        )
+        return defaults
+
+    def _execution_open_price(self, trade_date: str, code: str, daily_row: Optional[pd.Series] = None) -> float:
+        auction = self._auction_price(trade_date, code)
+        if auction > 0:
+            return auction
+        minute = self.minute_table(trade_date, code)
+        minute_open = opening_auction_price_from_snapshot(minute)
+        if minute_open is not None and minute_open > 0:
+            return float(minute_open)
+        row = daily_row if daily_row is not None else self._row(self.market_table(trade_date, "daily"), code)
+        return _numeric_from(row, ("open",)) if row is not None else float("nan")
 
     def candidate_snapshots(self) -> dict[str, Path]:
         pred_root = self.config.root / "data" / "pred"
@@ -294,18 +504,68 @@ class AuctionV3Engine:
 
     def load_candidates(self, signal_date: str, path: Optional[Path] = None) -> pd.DataFrame:
         path = path or self.candidate_snapshots().get(signal_date)
-        frame = _read_csv(path) if path else pd.DataFrame()
+        source = _read_csv(path) if path else pd.DataFrame()
+        if not source.empty:
+            source = source.copy()
+            source_code_col = next(
+                (c for c in ("ts_code", "code", "代码") if c in source.columns),
+                "",
+            )
+            if source_code_col:
+                source["ts_code"] = source[source_code_col].map(_normal_code)
+                source = source[source["ts_code"] != ""].drop_duplicates("ts_code", keep="first")
+
+        authoritative = self.market_table(signal_date, "limit_list_d")
+        if not authoritative.empty:
+            frame = authoritative.reset_index(drop=True).copy()
+            if "limit_type" in frame.columns:
+                limit_type = frame["limit_type"].astype(str).str.upper().str.strip()
+                frame = frame[limit_type.isin({"U", "UP", "涨停"}) | limit_type.eq("")]
+            frame["ts_code"] = frame["ts_code"].map(_normal_code)
+            frame = frame[frame["ts_code"] != ""].drop_duplicates("ts_code", keep="first")
+            stock_basic = self.market_table(signal_date, "stock_basic")
+            if not stock_basic.empty:
+                enrich_columns = [name for name in ("name", "industry", "list_date") if name in stock_basic.columns]
+                if enrich_columns:
+                    frame = frame.set_index("ts_code", drop=False)
+                    for name in enrich_columns:
+                        values = stock_basic[name]
+                        frame[name] = frame[name].where(frame[name].notna(), values) if name in frame.columns else values
+                    frame = frame.reset_index(drop=True)
+            if not source.empty and "ts_code" in source.columns:
+                frame = frame.set_index("ts_code", drop=False)
+                source = source.set_index("ts_code", drop=False)
+                for name in source.columns:
+                    if name == "ts_code":
+                        continue
+                    values = source[name]
+                    if name in frame.columns:
+                        frame[name] = values.combine_first(frame[name])
+                    else:
+                        frame[name] = values
+                frame = frame.reset_index(drop=True)
+        else:
+            frame = source.copy()
+
         if frame.empty:
             return frame
-        frame = frame.copy()
         code_col = next((c for c in ("ts_code", "code", "代码") if c in frame.columns), "")
         if not code_col:
             return pd.DataFrame()
         frame["ts_code"] = frame[code_col].map(_normal_code)
         frame = frame[frame["ts_code"] != ""].drop_duplicates("ts_code", keep="first")
+        frame, self._eligibility_audit = filter_standard_limit_universe(frame, code_col="ts_code", name_col="name")
         rank_col = next((c for c in ("rank", "rank_v2", "排名") if c in frame.columns), "")
-        frame["_source_rank"] = pd.to_numeric(frame[rank_col], errors="coerce") if rank_col else np.arange(1, len(frame) + 1)
-        frame = frame.sort_values("_source_rank", na_position="last").head(self.config.max_candidates)
+        frame["_source_rank"] = pd.to_numeric(frame[rank_col], errors="coerce") if rank_col else np.nan
+        missing_rank = frame["_source_rank"].isna()
+        rank_start = int(frame["_source_rank"].max()) if frame["_source_rank"].notna().any() else 0
+        frame.loc[missing_rank, "_source_rank"] = np.arange(
+            rank_start + 1,
+            rank_start + 1 + int(missing_rank.sum()),
+        )
+        frame = frame.sort_values("_source_rank", na_position="last")
+        if self.config.max_candidates > 0:
+            frame = frame.head(self.config.max_candidates)
         return frame.reset_index(drop=True)
 
     # ------------------------------------------------------------------
@@ -326,6 +586,33 @@ class AuctionV3Engine:
                 if 0.03 <= ratio <= 0.35:
                     return ratio
         return 0.10
+
+    def _consecutive_limit_up_count(
+        self,
+        signal_date: str,
+        code: str,
+        dates: Optional[Sequence[str]] = None,
+    ) -> int:
+        """Count consecutive close-at-limit sessions ending on D without using future data."""
+        trading_dates = list(dates or self.market_dates())
+        try:
+            index = trading_dates.index(signal_date)
+        except ValueError:
+            return 0
+        count = 0
+        newer_date = ""
+        for position in range(index, -1, -1):
+            trade_date = trading_dates[position]
+            if newer_date and next_a_share_trading_day(trade_date) != newer_date:
+                break
+            daily = self._row(self.market_table(trade_date, "daily"), code)
+            limit = self._row(self.market_table(trade_date, "stk_limit"), code)
+            up_limit = _numeric_from(limit, ("up_limit",)) if limit is not None else float("nan")
+            if daily is None or not math.isfinite(up_limit) or not _is_close(daily.get("close"), up_limit):
+                break
+            count += 1
+            newer_date = trade_date
+        return count
 
     def _one_price_limit(self, daily_row: Optional[pd.Series], limit_row: Optional[pd.Series], side: str) -> bool:
         if daily_row is None or limit_row is None:
@@ -354,9 +641,12 @@ class AuctionV3Engine:
         if daily is None:
             return 0, "suspended_or_daily_missing"
         open_price = _numeric_from(daily, ("open",))
-        auction_price = self._auction_price(trade_date, code)
-        if math.isfinite(auction_price) and open_price > 0 and abs(auction_price - open_price) > 0.011:
+        execution_price = self._execution_open_price(trade_date, code, daily)
+        if math.isfinite(execution_price) and open_price > 0 and abs(execution_price - open_price) > 0.011:
             return 0, "auction_daily_open_conflict"
+        up_limit = _numeric_from(limit, ("up_limit",)) if limit is not None else float("nan")
+        if math.isfinite(execution_price) and math.isfinite(up_limit) and abs(execution_price - up_limit) <= 0.011:
+            return 0, "opening_auction_limit_up_unconfirmed"
         if self._one_price_limit(daily, limit, "up"):
             return 0, "one_price_limit_up"
         auction_amount = self._auction_amount(trade_date, code)
@@ -373,6 +663,8 @@ class AuctionV3Engine:
         buy_price: float,
         exit_date: str,
         dates: Sequence[str],
+        *,
+        exit_price: float = float("nan"),
     ) -> float:
         """Chain close/pre-close returns so corporate actions do not create fake PnL."""
         if buy_price <= 0 or buy_date not in dates or exit_date not in dates:
@@ -393,10 +685,10 @@ class AuctionV3Engine:
             if pre_close <= 0:
                 return float("nan")
             if idx == end:
-                exit_open = _numeric_from(row, ("open",))
-                if exit_open <= 0:
+                realized_exit = exit_price if math.isfinite(exit_price) and exit_price > 0 else self._execution_open_price(dates[idx], code, row)
+                if realized_exit <= 0:
                     return float("nan")
-                wealth *= exit_open / pre_close
+                wealth *= realized_exit / pre_close
             else:
                 close_price = _numeric_from(row, ("close",))
                 if close_price <= 0:
@@ -404,7 +696,17 @@ class AuctionV3Engine:
                 wealth *= close_price / pre_close
         return wealth - 1.0
 
-    def _resolve_exit(self, code: str, start_index: int, dates: Sequence[str]) -> tuple[str, float, int, str]:
+    def _resolve_exit(
+        self,
+        code: str,
+        start_index: int,
+        dates: Sequence[str],
+        *,
+        entry_price: float = float("nan"),
+        buy_date: str = "",
+    ) -> tuple[str, float, int, str]:
+        buy_daily = self._row(self.market_table(buy_date, "daily"), code) if buy_date else None
+        buy_close = _numeric_from(buy_daily, ("close",)) if buy_daily is not None else float("nan")
         for offset, trade_date in enumerate(dates[start_index:], start=0):
             daily = self._row(self.market_table(trade_date, "daily"), code)
             if daily is None:
@@ -412,17 +714,50 @@ class AuctionV3Engine:
             limit = self._row(self.market_table(trade_date, "stk_limit"), code)
             if self._one_price_limit(daily, limit, "down"):
                 continue
-            exit_price = _numeric_from(daily, ("open",))
+            if offset == 0 and entry_price > 0:
+                timed = simulate_tplus1_exit(
+                    entry_price=entry_price,
+                    buy_close=buy_close,
+                    target_pre_close=_pre_close(daily),
+                    open_price=daily.get("open"),
+                    high_price=daily.get("high"),
+                    low_price=daily.get("low"),
+                    close_price=daily.get("close"),
+                    down_limit=limit.get("down_limit") if limit is not None else None,
+                    minute_frame=self.minute_table(trade_date, code),
+                    take_profit_pct=self.config.take_profit_pct,
+                    stop_loss_pct=self.config.stop_loss_pct,
+                    latest_exit_time=self.config.latest_exit_time,
+                )
+                if timed.executable and timed.exit_price is not None and timed.exit_price > 0:
+                    return trade_date, float(timed.exit_price), 0, timed.reason
+                continue
+            exit_price = self._execution_open_price(trade_date, code, daily)
             if exit_price > 0:
-                return trade_date, exit_price, offset, "t1_open" if offset == 0 else "delayed_first_tradable_open"
+                return trade_date, exit_price, offset, "delayed_first_tradable_open"
         return "", float("nan"), -1, "exit_truth_pending"
 
-    def _feature_dict(self, candidate: pd.Series, d_daily: Optional[pd.Series], limit_ratio: float) -> dict[str, float]:
+    def _feature_dict(
+        self,
+        candidate: pd.Series,
+        d_daily: Optional[pd.Series],
+        limit_ratio: float,
+        market_context: Optional[dict[str, Any]] = None,
+        signal_date: str = "",
+    ) -> dict[str, float]:
         out: dict[str, float] = {}
         for canonical, aliases in FEATURE_ALIASES.items():
             out[canonical] = _numeric_from(candidate, aliases)
+        d_return = np.nan
         if d_daily is None:
-            out.update({"d_return": np.nan, "d_range": np.nan, "d_turnover_proxy": np.nan, "d_amount_log": np.nan})
+            out.update(
+                {
+                    "d_return": np.nan,
+                    "d_range": np.nan,
+                    "d_turnover_proxy": np.nan,
+                    "d_amount_log": np.nan,
+                }
+            )
         else:
             open_price = _numeric_from(d_daily, ("open",))
             close_price = _numeric_from(d_daily, ("close",))
@@ -430,10 +765,46 @@ class AuctionV3Engine:
             low = _numeric_from(d_daily, ("low",))
             pre_close = _pre_close(d_daily)
             amount = _numeric_from(d_daily, ("amount",))
-            out["d_return"] = close_price / pre_close - 1.0 if pre_close > 0 and close_price > 0 else _numeric_from(d_daily, ("pct_chg",)) / 100.0
+            d_return = close_price / pre_close - 1.0 if pre_close > 0 and close_price > 0 else _numeric_from(d_daily, ("pct_chg",)) / 100.0
+            out["d_return"] = d_return
             out["d_range"] = (high - low) / pre_close if pre_close > 0 and high > 0 and low > 0 else np.nan
             out["d_turnover_proxy"] = abs(close_price - open_price) / pre_close if pre_close > 0 and open_price > 0 else np.nan
             out["d_amount_log"] = math.log1p(amount) if amount > 0 else np.nan
+        context = market_context or {}
+        market_median = _finite(context.get("market_median_return"))
+        code = _normal_code(candidate.get("ts_code"))
+        limit_detail = self._row(self.market_table(signal_date, "limit_list_d"), code) if signal_date and code else None
+        daily_basic = self._row(self.market_table(signal_date, "daily_basic"), code) if signal_date and code else None
+        limit_tag = self._row(self.market_table(signal_date, "limit_up_tags"), code) if signal_date and code else None
+        daily_amount_yuan = (
+            _numeric_from(d_daily, ("amount",)) * 1_000.0 if d_daily is not None else float("nan")
+        )
+        detail_amount = _numeric_from(limit_detail, ("amount",)) if limit_detail is not None else float("nan")
+        amount_yuan = detail_amount if detail_amount > 0 else daily_amount_yuan
+        fd_amount = _numeric_from(limit_detail, ("fd_amount",)) if limit_detail is not None else float("nan")
+        seal_amount = _numeric_from(limit_detail, ("seal_amount", "fd_amount")) if limit_detail is not None else float("nan")
+        detail_float_mv = _numeric_from(limit_detail, ("float_mv",)) if limit_detail is not None else float("nan")
+        basic_float_mv = _numeric_from(daily_basic, ("float_mv",)) if daily_basic is not None else float("nan")
+        float_mv_yuan = detail_float_mv if detail_float_mv > 0 else basic_float_mv * 10_000.0
+        out["limit_open_times"] = _numeric_from(limit_detail, ("open_times",)) if limit_detail is not None else np.nan
+        out["limit_first_time_minutes"] = _time_to_minutes(limit_detail.get("first_time")) if limit_detail is not None else np.nan
+        out["limit_last_time_minutes"] = _time_to_minutes(limit_detail.get("last_time")) if limit_detail is not None else np.nan
+        out["limit_fd_amount_log"] = math.log1p(fd_amount) if fd_amount > 0 else np.nan
+        out["limit_seal_to_amount"] = seal_amount / amount_yuan if seal_amount > 0 and amount_yuan > 0 else np.nan
+        out["limit_seal_to_float_mv"] = seal_amount / float_mv_yuan if seal_amount > 0 and float_mv_yuan > 0 else np.nan
+        turnover_rate = _numeric_from(daily_basic, ("turnover_rate",)) if daily_basic is not None else float("nan")
+        out["d_turnover_rate"] = turnover_rate / 100.0 if math.isfinite(turnover_rate) else np.nan
+        out["d_volume_ratio"] = _numeric_from(daily_basic, ("volume_ratio",)) if daily_basic is not None else np.nan
+        out["d_float_mv_log"] = math.log1p(float_mv_yuan) if float_mv_yuan > 0 else np.nan
+        out["is_hot_board"] = _numeric_from(limit_tag, ("is_hot_board",)) if limit_tag is not None else np.nan
+        out["board_rank"] = _numeric_from(limit_tag, ("board_rank",)) if limit_tag is not None else np.nan
+        out["board_limit_up_count"] = _numeric_from(limit_tag, ("board_limit_up_count",)) if limit_tag is not None else np.nan
+        out["d_amount_percentile"] = _finite((context.get("amount_percentile") or {}).get(code))
+        out["market_median_return"] = market_median
+        out["market_up_ratio"] = _finite(context.get("market_up_ratio"))
+        out["market_return_dispersion"] = _finite(context.get("market_return_dispersion"))
+        out["relative_d_return"] = d_return - market_median if math.isfinite(d_return) and math.isfinite(market_median) else np.nan
+        out.update(self._minute_features(signal_date, code) if signal_date and code else self._minute_features("", ""))
         out["limit_ratio"] = limit_ratio
         out["proposed_gap"] = np.nan
         return out
@@ -443,17 +814,19 @@ class AuctionV3Engine:
         date_index = {date: idx for idx, date in enumerate(dates)}
         snapshots = self.candidate_snapshots()
         records: list[dict[str, Any]] = []
-        for signal_date, path in snapshots.items():
+        for signal_date in dates:
             idx = date_index.get(signal_date)
             if idx is None or idx + 2 >= len(dates):
                 continue
             buy_date, target_exit_date = dates[idx + 1], dates[idx + 2]
-            candidates = self.load_candidates(signal_date, path)
+            candidates = self.load_candidates(signal_date, snapshots.get(signal_date))
             if candidates.empty:
                 continue
             d_daily_table = self.market_table(signal_date, "daily")
             d_limit_table = self.market_table(signal_date, "stk_limit")
             buy_daily_table = self.market_table(buy_date, "daily")
+            buy_limit_table = self.market_table(buy_date, "stk_limit")
+            market_context = self._market_context(signal_date)
             for _, candidate in candidates.iterrows():
                 code = candidate["ts_code"]
                 d_daily = self._row(d_daily_table, code)
@@ -461,21 +834,59 @@ class AuctionV3Engine:
                 if d_daily is None or buy_daily is None:
                     continue
                 d_close = _numeric_from(d_daily, ("close",))
-                buy_open = _numeric_from(buy_daily, ("open",))
+                buy_open = self._execution_open_price(buy_date, code, buy_daily)
                 if d_close <= 0 or buy_open <= 0:
                     continue
                 d_limit = self._row(d_limit_table, code)
                 limit_ratio = self._limit_ratio(d_daily, d_limit)
+                mechanism_limit_pct = _finite(
+                    candidate.get("decision_limit_pct"),
+                    limit_ratio * 100.0,
+                )
+                if mechanism_limit_pct > self.config.max_mechanism_limit_pct + EPS:
+                    continue
+                d_up_limit = _numeric_from(d_limit, ("up_limit",)) if d_limit is not None else float("nan")
+                if not math.isfinite(d_up_limit) or not _is_close(d_daily.get("close"), d_up_limit):
+                    continue
+                buy_limit = self._row(buy_limit_table, code)
+                buy_up_limit = _numeric_from(buy_limit, ("up_limit",)) if buy_limit is not None else float("nan")
+                continuation_hit = int(math.isfinite(buy_up_limit) and _is_close(buy_daily.get("close"), buy_up_limit))
                 market_fill, fill_reason = self._market_buyable(buy_date, code)
-                exit_date, exit_price, delay_days, exit_reason = self._resolve_exit(code, idx + 2, dates)
+                exit_date, exit_price, delay_days, exit_reason = self._resolve_exit(
+                    code,
+                    idx + 2,
+                    dates,
+                    entry_price=buy_open,
+                    buy_date=buy_date,
+                )
                 if not exit_date or exit_price <= 0:
                     continue
-                gross_return = self._realized_gross_return(code, buy_date, buy_open, exit_date, dates)
+                gross_return = self._realized_gross_return(
+                    code,
+                    buy_date,
+                    buy_open,
+                    exit_date,
+                    dates,
+                    exit_price=exit_price,
+                )
                 if not math.isfinite(gross_return):
                     continue
                 net_return = gross_return - self.config.cost_rate
-                features = self._feature_dict(candidate, d_daily, limit_ratio)
+                features = self._feature_dict(
+                    candidate,
+                    d_daily,
+                    limit_ratio,
+                    market_context=market_context,
+                    signal_date=signal_date,
+                )
+                consecutive_limit_ups = self._consecutive_limit_up_count(
+                    signal_date,
+                    code,
+                    dates,
+                )
+                features["limit_times"] = float(consecutive_limit_ups)
                 features["proposed_gap"] = buy_open / d_close - 1.0
+                industry = _text_from(candidate, INDUSTRY_ALIASES)
                 records.append(
                     {
                         "signal_date": signal_date,
@@ -485,7 +896,8 @@ class AuctionV3Engine:
                         "exit_delay_days": delay_days,
                         "ts_code": code,
                         "name": str(candidate.get("name", candidate.get("股票", ""))),
-                        "stage": str(candidate.get("晋阶", candidate.get("advance_stage", ""))),
+                        "industry": industry,
+                        "stage": f"{consecutive_limit_ups}→{consecutive_limit_ups + 1}",
                         "source_rank": features["source_rank"],
                         "d_close": d_close,
                         "buy_open": buy_open,
@@ -495,7 +907,10 @@ class AuctionV3Engine:
                         "net_return": net_return,
                         "profit_hit": int(net_return > 0.0),
                         "big_loss_hit": int(net_return <= self.config.big_loss_threshold),
+                        "continuation_limit_up_hit": continuation_hit,
+                        "exit_on_time": int(delay_days == 0),
                         "market_fill": market_fill,
+                        "mechanism_limit_pct": mechanism_limit_pct,
                         "fill_reason": fill_reason,
                         "exit_reason": exit_reason,
                         **features,
@@ -510,7 +925,23 @@ class AuctionV3Engine:
     # ------------------------------------------------------------------
     # Model fitting, cap optimization, and walk-forward evidence
     # ------------------------------------------------------------------
-    def _regression_pipeline(self) -> Pipeline:
+    def _regression_pipeline(self, kind: str = "hgb") -> Pipeline:
+        if kind == "extra_trees":
+            return Pipeline(
+                [
+                    ("imputer", SimpleImputer(strategy="median", add_indicator=True, keep_empty_features=True)),
+                    (
+                        "model",
+                        ExtraTreesRegressor(
+                            n_estimators=200,
+                            min_samples_leaf=20,
+                            max_features=0.70,
+                            n_jobs=1,
+                            random_state=20260716,
+                        ),
+                    ),
+                ]
+            )
         return Pipeline(
             [
                 ("imputer", SimpleImputer(strategy="median", add_indicator=True, keep_empty_features=True)),
@@ -529,7 +960,38 @@ class AuctionV3Engine:
             ]
         )
 
-    def _classifier_pipeline(self) -> Pipeline:
+    def _classifier_pipeline(self, kind: str = "hgb") -> Pipeline:
+        if kind == "extra_trees":
+            return Pipeline(
+                [
+                    ("imputer", SimpleImputer(strategy="median", add_indicator=True, keep_empty_features=True)),
+                    (
+                        "model",
+                        ExtraTreesClassifier(
+                            n_estimators=200,
+                            min_samples_leaf=20,
+                            max_features=0.70,
+                            n_jobs=1,
+                            random_state=20260716,
+                        ),
+                    ),
+                ]
+            )
+        if kind == "lr":
+            return Pipeline(
+                [
+                    ("imputer", SimpleImputer(strategy="median", add_indicator=True, keep_empty_features=True)),
+                    ("scaler", StandardScaler()),
+                    (
+                        "model",
+                        LogisticRegression(
+                            C=0.20,
+                            max_iter=2_000,
+                            random_state=20260716,
+                        ),
+                    ),
+                ]
+            )
         return Pipeline(
             [
                 ("imputer", SimpleImputer(strategy="median", add_indicator=True, keep_empty_features=True)),
@@ -552,27 +1014,148 @@ class AuctionV3Engine:
             return None
         all_clean = history.dropna(subset=["net_return", "proposed_gap", "market_fill"]).copy()
         clean = all_clean[all_clean["market_fill"].eq(1)].copy()
-        date_count = clean["signal_date"].nunique()
+        dates = sorted(clean["signal_date"].astype(str).unique())
+        date_count = len(dates)
         if len(clean) < self.config.min_train_rows or date_count < self.config.min_train_dates:
             return None
-        X = clean[MODEL_FEATURES]
-        return_model = self._regression_pipeline()
-        return_model.fit(X, clean["net_return"])
-        fitted = return_model.predict(X)
-        residual = clean["net_return"].to_numpy() - fitted
 
-        def fit_classifier(target: str) -> tuple[Optional[Pipeline], float]:
+        n_calibration_dates = max(
+            self.config.calibration_min_dates,
+            int(math.ceil(date_count * self.config.calibration_fraction)),
+        )
+        n_calibration_dates = min(n_calibration_dates, max(1, date_count // 3))
+        split_at = date_count - n_calibration_dates - self.config.calibration_embargo_dates
+        if split_at < max(8, self.config.min_train_dates // 2):
+            return None
+        fit_dates = set(dates[:split_at])
+        calibration_dates = set(dates[-n_calibration_dates:])
+        fit = clean[clean["signal_date"].astype(str).isin(fit_dates)].copy()
+        calibration = clean[clean["signal_date"].astype(str).isin(calibration_dates)].copy()
+        if len(fit) < max(100, self.config.min_train_rows // 2) or calibration.empty:
+            return None
+
+        regression_candidates: list[tuple[float, float, str, Pipeline, float]] = []
+        regression_audit: dict[str, Any] = {}
+        for kind in ("hgb", "extra_trees"):
+            provisional = self._regression_pipeline(kind)
+            provisional.fit(
+                fit[MODEL_FEATURES],
+                fit["net_return"],
+                model__sample_weight=_date_balanced_weights(fit),
+            )
+            prediction = provisional.predict(calibration[MODEL_FEATURES])
+            error = calibration["net_return"].to_numpy(dtype=float) - prediction
+            calibration_weights = _date_balanced_weights(calibration)
+            rmse = float(math.sqrt(np.average(error**2, weights=calibration_weights)))
+            rank_frame = calibration[["signal_date", "net_return"]].copy()
+            rank_frame["prediction"] = prediction
+            daily_rank_ic = []
+            for _, group in rank_frame.groupby("signal_date"):
+                if len(group) < 3 or group["prediction"].nunique() < 2 or group["net_return"].nunique() < 2:
+                    continue
+                daily_rank_ic.append(
+                    float(group[["prediction", "net_return"]].corr(method="spearman").iloc[0, 1])
+                )
+            mean_rank_ic = float(np.nanmean(daily_rank_ic)) if daily_rank_ic else 0.0
+            objective = rmse - 0.01 * float(np.clip(mean_rank_ic, -0.5, 0.5))
+            regression_candidates.append((objective, rmse, kind, provisional, mean_rank_ic))
+            regression_audit[kind] = {
+                "calibration_rmse": _safe_metric(rmse),
+                "daily_spearman": _safe_metric(mean_rank_ic),
+                "selection_objective": _safe_metric(objective),
+            }
+        _, best_return_rmse, best_return_kind, provisional, best_return_rank_ic = min(
+            regression_candidates,
+            key=lambda item: (item[0], item[1], item[2]),
+        )
+        calibration_prediction = provisional.predict(calibration[MODEL_FEATURES])
+        raw_residual = calibration["net_return"].to_numpy(dtype=float) - calibration_prediction
+        calibration_bias = float(np.clip(np.median(raw_residual), -0.05, 0.05))
+        residual = raw_residual - calibration_bias
+        residual_by_date = (
+            pd.DataFrame(
+                {
+                    "signal_date": calibration["signal_date"].astype(str).to_numpy(),
+                    "residual": residual,
+                }
+            )
+            .groupby("signal_date")["residual"]
+            .mean()
+        )
+        if len(residual_by_date) > 1:
+            standard_error = float(
+                residual_by_date.std(ddof=1) / math.sqrt(len(residual_by_date))
+            )
+        elif len(residual) > 1:
+            standard_error = float(np.std(residual, ddof=1) / math.sqrt(len(residual)))
+        else:
+            standard_error = 0.0
+        expected_return_margin = float(
+            np.clip(
+                self.config.expected_return_confidence_z * standard_error,
+                self.config.min_expected_return_margin,
+                0.05,
+            )
+        )
+
+        X = clean[MODEL_FEATURES]
+        return_model = self._regression_pipeline(best_return_kind)
+        return_model.fit(
+            X,
+            clean["net_return"],
+            model__sample_weight=_date_balanced_weights(clean),
+        )
+
+        def fit_classifier(
+            target: str,
+            features: Sequence[str] = MODEL_FEATURES,
+        ) -> tuple[Optional[Pipeline], float, dict[str, Any]]:
             values = clean[target].astype(int)
             constant = float(values.mean())
             counts = values.value_counts()
             if len(counts) < 2 or int(counts.min()) < 10:
-                return None, constant
-            model = self._classifier_pipeline()
-            model.fit(X, values)
-            return model, constant
+                return None, constant, {
+                    "selected": "constant",
+                    "calibration_brier": None,
+                    "base_rate": _safe_metric(constant),
+                }
+            fit_values = fit[target].astype(int)
+            calibration_values = calibration[target].astype(int)
+            candidates: list[tuple[float, str]] = []
+            for kind in ("hgb", "lr", "extra_trees"):
+                provisional_classifier = self._classifier_pipeline(kind)
+                provisional_classifier.fit(
+                    fit[list(features)],
+                    fit_values,
+                    model__sample_weight=_date_balanced_weights(fit),
+                )
+                probability = provisional_classifier.predict_proba(
+                    calibration[list(features)]
+                )[:, 1]
+                weights = _date_balanced_weights(calibration)
+                brier = float(np.average((probability - calibration_values.to_numpy()) ** 2, weights=weights))
+                candidates.append((brier, kind))
+            best_brier, best_kind = min(candidates, key=lambda item: (item[0], item[1]))
+            model = self._classifier_pipeline(best_kind)
+            model.fit(
+                clean[list(features)],
+                values,
+                model__sample_weight=_date_balanced_weights(clean),
+            )
+            return model, constant, {
+                "selected": best_kind,
+                "calibration_brier": _safe_metric(best_brier),
+                "base_rate": _safe_metric(constant),
+                "features": list(features),
+            }
 
-        profit_model, profit_constant = fit_classifier("profit_hit")
-        loss_model, loss_constant = fit_classifier("big_loss_hit")
+        profit_model, profit_constant, profit_selection = fit_classifier("profit_hit")
+        loss_model, loss_constant, loss_selection = fit_classifier("big_loss_hit")
+        continuation_model, continuation_constant, continuation_selection = fit_classifier(
+            "continuation_limit_up_hit",
+            CONTINUATION_FEATURES,
+        )
+        exit_model, exit_constant, exit_selection = fit_classifier("exit_on_time")
         fill_parts: list[pd.DataFrame] = []
         proposal_grid = np.arange(
             self.config.gap_grid_min,
@@ -598,24 +1181,48 @@ class AuctionV3Engine:
         fill_counts = fill_values.value_counts()
         if len(fill_counts) >= 2 and int(fill_counts.min()) >= 10:
             fill_model = self._classifier_pipeline()
-            fill_model.fit(fill_train[MODEL_FEATURES], fill_values)
+            fill_model.fit(
+                fill_train[MODEL_FEATURES],
+                fill_values,
+                model__sample_weight=_date_balanced_weights(fill_train),
+            )
         return ModelBundle(
             return_model=return_model,
             profit_model=profit_model,
             loss_model=loss_model,
+            continuation_model=continuation_model,
             fill_model=fill_model,
+            exit_model=exit_model,
             profit_constant=profit_constant,
             loss_constant=loss_constant,
+            continuation_constant=continuation_constant,
             fill_constant=fill_constant,
+            exit_constant=exit_constant,
+            calibration_bias=calibration_bias,
+            expected_return_margin=expected_return_margin,
             residual_q10=float(np.quantile(residual, self.config.lower_confidence_quantile)),
             residual_q90=float(np.quantile(residual, self.config.prediction_interval_upper_quantile)),
             gap_min=float(clean["proposed_gap"].quantile(0.01)),
             gap_max=float(clean["proposed_gap"].quantile(0.99)),
             train_rows=len(clean),
             train_dates=date_count,
+            calibration_rows=len(calibration),
+            calibration_dates=len(calibration_dates),
+            return_selection={
+                "selected": best_return_kind,
+                "calibration_rmse": _safe_metric(best_return_rmse),
+                "daily_spearman": _safe_metric(best_return_rank_ic),
+                "candidates": regression_audit,
+            },
+            classifier_selection={
+                "profit": profit_selection,
+                "big_loss": loss_selection,
+                "continuation_limit_up": continuation_selection,
+                "exit_on_time": exit_selection,
+            },
         )
 
-    def _score_candidate_at_gaps(self, row: pd.Series, bundle: ModelBundle) -> Optional[dict[str, float]]:
+    def _score_candidate_at_gaps(self, row: pd.Series, bundle: ModelBundle) -> Optional[dict[str, Any]]:
         limit_ratio = _finite(row.get("limit_ratio"), 0.10)
         low = max(self.config.gap_grid_min, bundle.gap_min)
         high = min(self.config.gap_grid_max, bundle.gap_max, limit_ratio)
@@ -624,76 +1231,138 @@ class AuctionV3Engine:
         gaps = np.arange(low, high + self.config.gap_grid_step / 2.0, self.config.gap_grid_step)
         grid = pd.DataFrame([row.to_dict()] * len(gaps))
         grid["proposed_gap"] = gaps
-        pred = bundle.return_model.predict(grid[MODEL_FEATURES])
+        pred = bundle.return_model.predict(grid[MODEL_FEATURES]) + bundle.calibration_bias
         p_profit = _probability(bundle.profit_model, grid, bundle.profit_constant)
         p_loss = _probability(bundle.loss_model, grid, bundle.loss_constant)
+        p_continuation = _probability(
+            bundle.continuation_model,
+            grid,
+            bundle.continuation_constant,
+            CONTINUATION_FEATURES,
+        )
+        p_exit = _probability(bundle.exit_model, grid, bundle.exit_constant)
         # A less aggressive limit price cannot have a higher execution chance.
         p_fill = np.maximum.accumulate(_probability(bundle.fill_model, grid, bundle.fill_constant))
-        lower = pred + bundle.residual_q10
-        upper = pred + bundle.residual_q90
+        lower = pred - bundle.expected_return_margin
+        upper = pred + bundle.expected_return_margin
+        outcome_q10 = pred + bundle.residual_q10
+        outcome_q90 = pred + bundle.residual_q90
         risk_adjusted_return = pred - (
             self.config.tail_risk_aversion * p_loss * abs(self.config.big_loss_threshold)
-        )
+        ) - ((1.0 - p_exit) * self.config.blocked_exit_loss)
         conservative_ev = p_fill * risk_adjusted_return
-        supported = (
-            (conservative_ev >= self.config.min_edge)
-            & (p_profit >= self.config.min_profit_probability)
-            & (p_loss <= self.config.max_big_loss_probability)
-            & (p_fill >= self.config.min_fill_probability)
+        limit_times = _finite(row.get("limit_times"), 0.0)
+        stage_focus = 1.0 if int(round(limit_times)) in (2, 3) else 0.0
+        selection_score = conservative_ev + (
+            self.config.continuation_score_weight * stage_focus * p_continuation
         )
-        if not supported.any():
-            return None
-        supported_indices = np.where(supported)[0]
-        chosen = int(supported_indices[np.argmax(conservative_ev[supported_indices])])
+        big_loss_ok = p_loss <= self.config.max_big_loss_probability
+        lower_bound_ok = lower >= self.config.min_return_lcb
+        profit_ok = p_profit >= self.config.min_profit_probability
+        fill_ok = p_fill >= self.config.min_fill_probability
+        exit_ok = p_exit >= self.config.min_exit_probability
+        edge_ok = conservative_ev >= self.config.min_edge
+        supported = (
+            big_loss_ok
+            & lower_bound_ok
+            & profit_ok
+            & fill_ok
+            & exit_ok
+            & edge_ok
+        )
+        if supported.any():
+            supported_indices = np.where(supported)[0]
+            chosen = int(supported_indices[np.argmax(selection_score[supported_indices])])
+            model_reason = "ok"
+        else:
+            finite = np.where(np.isfinite(conservative_ev))[0]
+            if not len(finite):
+                return None
+            chosen = int(finite[np.argmax(conservative_ev[finite])])
+            progressive = big_loss_ok
+            if not progressive.any():
+                model_reason = "big_loss_probability_exceeds_cap"
+            elif not (progressive & lower_bound_ok).any():
+                model_reason = "return_lcb_not_positive"
+            elif not (progressive & lower_bound_ok & exit_ok).any():
+                model_reason = "exit_probability_below_floor"
+            elif not (progressive & lower_bound_ok & exit_ok & fill_ok).any():
+                model_reason = "fill_probability_below_floor"
+            elif not (progressive & lower_bound_ok & exit_ok & fill_ok & profit_ok).any():
+                model_reason = "profit_probability_below_floor"
+            else:
+                model_reason = "conservative_edge_below_floor"
         return {
-            "recommended_max_gap": float(gaps[chosen]),
+            "recommended_max_gap": float(gaps[chosen]) if supported[chosen] else np.nan,
+            "diagnostic_gap": float(gaps[chosen]),
             "predicted_net_return": float(pred[chosen]),
             "predicted_return_lcb": float(lower[chosen]),
             "predicted_return_ucb": float(upper[chosen]),
+            "predicted_outcome_q10": float(outcome_q10[chosen]),
+            "predicted_outcome_q90": float(outcome_q90[chosen]),
             "predicted_profit_probability": float(p_profit[chosen]),
             "predicted_big_loss_probability": float(p_loss[chosen]),
+            "predicted_continuation_limit_up_probability": float(p_continuation[chosen]),
             "predicted_fill_probability": float(p_fill[chosen]),
+            "predicted_exit_probability": float(p_exit[chosen]),
             "conservative_ev": float(conservative_ev[chosen]),
+            "selection_score": float(selection_score[chosen]),
+            "stage_focus": int(stage_focus),
+            "risk_gate_pass": int(supported[chosen]),
+            "model_reason": model_reason,
         }
 
     def score_candidates(self, base: pd.DataFrame, bundle: Optional[ModelBundle]) -> pd.DataFrame:
         out = base.copy().reset_index(drop=True)
         score_columns = [
             "recommended_max_gap",
+            "diagnostic_gap",
             "predicted_net_return",
             "predicted_return_lcb",
             "predicted_return_ucb",
+            "predicted_outcome_q10",
+            "predicted_outcome_q90",
             "predicted_profit_probability",
             "predicted_big_loss_probability",
+            "predicted_continuation_limit_up_probability",
             "predicted_fill_probability",
+            "predicted_exit_probability",
             "conservative_ev",
+            "selection_score",
+            "stage_focus",
+            "risk_gate_pass",
         ]
         for name in score_columns:
             out[name] = np.nan
         if bundle is None:
             out["model_reason"] = "insufficient_independent_history"
+            out["risk_gate_pass"] = 0
             out["selected"] = 0
             return out
+        out["model_reason"] = "no_safe_price"
         for index, row in out.iterrows():
             score = self._score_candidate_at_gaps(row, bundle)
             if score is None:
                 continue
             for name, value in score.items():
                 out.loc[index, name] = value
-        out["model_reason"] = np.where(out["conservative_ev"].notna(), "ok", "no_safe_price")
         out = out.sort_values(
-            ["conservative_ev", "predicted_return_lcb", "source_rank"],
+            ["selection_score", "predicted_return_lcb", "source_rank"],
             ascending=[False, False, True],
             na_position="last",
         ).reset_index(drop=True)
         out["selected"] = 0
-        eligible = out.index[out["conservative_ev"].notna()][: self.config.max_positions]
+        eligible = out.index[pd.to_numeric(out["risk_gate_pass"], errors="coerce").fillna(0).eq(1)][
+            : self.config.max_positions
+        ]
         out.loc[eligible, "selected"] = 1
         return out
 
     def _current_base(self, signal_date: str, candidates: pd.DataFrame) -> pd.DataFrame:
+        dates = self.market_dates()
         d_daily_table = self.market_table(signal_date, "daily")
         d_limit_table = self.market_table(signal_date, "stk_limit")
+        market_context = self._market_context(signal_date)
         rows: list[dict[str, Any]] = []
         for _, candidate in candidates.iterrows():
             code = candidate["ts_code"]
@@ -705,16 +1374,37 @@ class AuctionV3Engine:
                 continue
             d_limit = self._row(d_limit_table, code)
             limit_ratio = self._limit_ratio(d_daily, d_limit)
-            features = self._feature_dict(candidate, d_daily, limit_ratio)
+            mechanism_limit_pct = _finite(
+                candidate.get("decision_limit_pct"),
+                limit_ratio * 100.0,
+            )
+            if mechanism_limit_pct > self.config.max_mechanism_limit_pct + EPS:
+                continue
+            d_up_limit = _numeric_from(d_limit, ("up_limit",)) if d_limit is not None else float("nan")
+            if not math.isfinite(d_up_limit) or not _is_close(d_daily.get("close"), d_up_limit):
+                continue
+            features = self._feature_dict(
+                candidate,
+                d_daily,
+                limit_ratio,
+                market_context=market_context,
+                signal_date=signal_date,
+            )
+            consecutive_limit_ups = self._consecutive_limit_up_count(signal_date, code, dates)
+            features["limit_times"] = float(consecutive_limit_ups)
             rows.append(
                 {
                     "signal_date": signal_date,
                     "ts_code": code,
                     "name": str(candidate.get("name", candidate.get("股票", ""))),
-                    "stage": str(candidate.get("晋阶", candidate.get("advance_stage", ""))),
+                    "industry": _text_from(candidate, INDUSTRY_ALIASES),
+                    "stage": f"{consecutive_limit_ups}→{consecutive_limit_ups + 1}",
                     "source_rank": features["source_rank"],
                     "d_close": d_close,
                     "estimated_up_limit": _round_price(d_close * (1.0 + limit_ratio)),
+                    "mechanism_limit_pct": mechanism_limit_pct,
+                    "decision_universe_rule": str(candidate.get("decision_universe_rule", "a_share_price_limit_le_10_v2")),
+                    "decision_universe_reason": str(candidate.get("decision_universe_reason", "eligible")),
                     **features,
                 }
             )
@@ -763,7 +1453,10 @@ class AuctionV3Engine:
         )
         out["within_prediction_interval"] = np.where(
             out["strategy_filled"].eq(1),
-            ((out["net_return"] >= out["predicted_return_lcb"]) & (out["net_return"] <= out["predicted_return_ucb"])).astype(int),
+            (
+                (out["net_return"] >= out["predicted_outcome_q10"])
+                & (out["net_return"] <= out["predicted_outcome_q90"])
+            ).astype(int),
             np.nan,
         )
         return out
@@ -792,7 +1485,19 @@ class AuctionV3Engine:
             }
         selected = oos[oos["selected"].eq(1)].copy()
         filled = selected[selected["strategy_filled"].eq(1)].copy()
+        stage_focus_filled = filled[pd.to_numeric(filled.get("stage_focus"), errors="coerce").fillna(0).eq(1)]
         dates = sorted(oos["signal_date"].unique())
+        signal_date_set = set(selected["signal_date"].astype(str))
+        signal_dates = len(signal_date_set)
+        signal_date_ratio = signal_dates / len(dates) if dates else float("nan")
+        max_no_signal_streak = 0
+        current_no_signal_streak = 0
+        for date in dates:
+            if str(date) in signal_date_set:
+                current_no_signal_streak = 0
+            else:
+                current_no_signal_streak += 1
+                max_no_signal_streak = max(max_no_signal_streak, current_no_signal_streak)
         daily = filled.groupby("signal_date")["strategy_net_return"].sum().reindex(dates, fill_value=0.0)
         daily = daily / float(self.config.max_positions)
         benchmark_rows = oos[pd.to_numeric(oos["source_rank"], errors="coerce") <= self.config.max_positions].copy()
@@ -810,6 +1515,9 @@ class AuctionV3Engine:
         stress_daily = stress_trade.groupby(filled["signal_date"]).sum().reindex(dates, fill_value=0.0) / float(self.config.max_positions)
         positives = filled.loc[filled["strategy_net_return"] > 0, "strategy_net_return"].sum()
         negatives = -filled.loc[filled["strategy_net_return"] < 0, "strategy_net_return"].sum()
+        big_loss_rate = float((filled["strategy_net_return"] <= self.config.big_loss_threshold).mean()) if len(filled) else float("nan")
+        tail_count = max(1, int(math.ceil(len(filled) * 0.10))) if len(filled) else 0
+        tail_mean = float(filled["strategy_net_return"].nsmallest(tail_count).mean()) if tail_count else float("nan")
         rolling = daily.rolling(20).sum().dropna()
         month_keys = pd.Index(dates).str.slice(0, 6)
         monthly = daily.groupby(month_keys).sum()
@@ -822,6 +1530,7 @@ class AuctionV3Engine:
         bootstrap = self._block_bootstrap_positive_probability(daily)
         rank_pair = filled[["predicted_net_return", "strategy_net_return"]].dropna()
         rank_ic = float(rank_pair.corr(method="spearman").iloc[0, 1]) if len(rank_pair) >= 5 else float("nan")
+        exit_on_time_rate = float(pd.to_numeric(filled.get("exit_on_time"), errors="coerce").mean()) if len(filled) else float("nan")
         calibration: list[dict[str, Any]] = []
         if len(rank_pair) >= 20:
             try:
@@ -845,11 +1554,27 @@ class AuctionV3Engine:
             "history_dates": history_dates,
             "oos_dates": len(dates),
             "signals": int(len(selected)),
+            "signal_dates": int(signal_dates),
+            "signal_date_ratio": _safe_metric(signal_date_ratio),
+            "max_no_signal_streak": int(max_no_signal_streak),
+            "average_signals_per_signal_date": _safe_metric(
+                len(selected) / signal_dates if signal_dates else np.nan
+            ),
             "filled_trades": int(len(filled)),
             "fill_rate": _safe_metric(len(filled) / len(selected) if len(selected) else np.nan),
+            "exit_on_time_rate": _safe_metric(exit_on_time_rate),
             "mean_trade_net_return": _safe_metric(filled["strategy_net_return"].mean()),
             "median_trade_net_return": _safe_metric(filled["strategy_net_return"].median()),
             "win_rate": _safe_metric((filled["strategy_net_return"] > 0).mean()),
+            "stage_focus_signals": int(pd.to_numeric(selected.get("stage_focus"), errors="coerce").fillna(0).eq(1).sum()),
+            "stage_focus_filled_trades": int(len(stage_focus_filled)),
+            "stage_focus_continuation_hit_rate": _safe_metric(
+                pd.to_numeric(stage_focus_filled.get("continuation_limit_up_hit"), errors="coerce").mean()
+            ),
+            "realized_big_loss_rate": _safe_metric(big_loss_rate),
+            "big_loss_threshold": self.config.big_loss_threshold,
+            "tail_10pct_mean_return": _safe_metric(tail_mean),
+            "worst_trade_net_return": _safe_metric(filled["strategy_net_return"].min()),
             "profit_factor": _safe_metric(positives / negatives if negatives > 0 else np.nan),
             "mean_daily_return": _safe_metric(mean_daily),
             "stress_1_5x_cost_mean_daily_return": _safe_metric(stress_15_daily.mean()),
@@ -874,7 +1599,15 @@ class AuctionV3Engine:
         checks = {
             "history_dates": history_dates >= self.config.promotion_min_dates,
             "oos_dates": len(dates) >= self.config.promotion_min_oos_dates,
-            "filled_trades": len(filled) >= 80,
+            "filled_trades": len(filled) >= self.config.promotion_min_filled_trades,
+            "stage_focus_filled_trades": (
+                len(stage_focus_filled) >= self.config.promotion_min_stage_focus_filled_trades
+            ),
+            "signal_date_ratio": (
+                math.isfinite(signal_date_ratio)
+                and signal_date_ratio >= self.config.min_oos_signal_date_ratio
+            ),
+            "no_signal_streak": max_no_signal_streak <= self.config.max_oos_no_signal_streak,
             "mean_daily_return": math.isfinite(mean_daily) and mean_daily > 0.0,
             "stress_2x_cost": len(stress_daily) > 0 and float(stress_daily.mean()) > 0.0,
             "bootstrap_95": math.isfinite(bootstrap) and bootstrap >= 0.95,
@@ -883,6 +1616,9 @@ class AuctionV3Engine:
             "month_concentration": math.isfinite(max_month_contribution) and max_month_contribution <= 0.50,
             "beats_source_topn": len(benchmark) > 0 and mean_daily > float(benchmark.mean()),
             "price_cap_not_worse": len(uncapped) > 0 and mean_daily >= float(uncapped.mean()),
+            "exit_on_time_90pct": math.isfinite(exit_on_time_rate) and exit_on_time_rate >= self.config.min_exit_probability,
+            "big_loss_rate_cap": math.isfinite(big_loss_rate) and big_loss_rate <= self.config.max_big_loss_probability,
+            "tail_loss_floor": math.isfinite(tail_mean) and tail_mean >= self.config.min_tail_mean_return,
         }
         failures.extend(name for name, passed in checks.items() if not passed)
         metrics["promotion_checks"] = checks
@@ -912,8 +1648,8 @@ class AuctionV3Engine:
             values = values[values.str.len() == 8]
             if not values.empty:
                 expected_buy = values.iloc[0]
-        expected_buy = expected_buy or _business_day_after(signal_date)
-        return expected_buy, _business_day_after(expected_buy)
+        expected_buy = choose_exec_date(signal_date, expected_buy)
+        return expected_buy, choose_exit_date(expected_buy)
 
     def build_prediction(
         self,
@@ -944,28 +1680,50 @@ class AuctionV3Engine:
         scored["expected_buy_date"] = expected_buy
         scored["expected_exit_date"] = expected_exit
         scored["recommended_max_price"] = [
-            _round_price(min(row["estimated_up_limit"], row["d_close"] * (1.0 + row["recommended_max_gap"])))
+            _round_price(min(row["estimated_up_limit"] - 0.01, row["d_close"] * (1.0 + row["recommended_max_gap"])))
             if math.isfinite(_finite(row["recommended_max_gap"]))
             else np.nan
             for _, row in scored.iterrows()
         ]
         scored["max_auction_change_pct"] = (100.0 * scored["recommended_max_gap"]).round(2)
+        scored["stage_transition"] = scored["stage"].where(scored["stage"].astype(str).str.strip().ne(""), "-")
+        scored["take_profit_pct"] = float(self.config.take_profit_pct)
+        scored["stop_loss_pct"] = float(self.config.stop_loss_pct)
+        scored["take_profit_price"] = scored["recommended_max_price"].map(
+            lambda value: _round_price(float(value) * (1.0 + self.config.take_profit_pct))
+            if math.isfinite(_finite(value)) else np.nan
+        )
+        scored["stop_loss_price"] = scored["recommended_max_price"].map(
+            lambda value: _round_price(float(value) * (1.0 + self.config.stop_loss_pct))
+            if math.isfinite(_finite(value)) else np.nan
+        )
+        scored["latest_exit_time"] = self.config.latest_exit_time
+        scored["exit_policy_version"] = self.config.exit_policy_version
+        scored["entry_rule"] = "系统仅供人工参考：T日9:25前仅用限价单参与集合竞价；不得使用无上限市价单，高于上限或未成交均放弃"
+        scored["exit_rule"] = "T+1按实际成交价计算止盈/止损，首次触发即人工退出；均未触发则14:50退出；一字跌停顺延"
+        scored["guidance_only"] = 1
+        scored["broker_connected"] = 0
+        scored["order_type"] = "LIMIT_ONLY_MANUAL"
+        scored["market_order_allowed"] = 0
+        scored["max_big_loss_probability"] = float(self.config.max_big_loss_probability)
+        scored["big_loss_threshold"] = float(self.config.big_loss_threshold)
+        scored["min_return_lcb"] = float(self.config.min_return_lcb)
         scored["model_version"] = self.config.model_version
         scored["model_ready"] = int(bundle is not None)
         scored["model_promoted"] = int(promoted)
         scored["action"] = np.where(
             scored["selected"].eq(1),
             "BUY" if promoted else "SHADOW_ONLY",
-            np.where(scored["model_reason"].eq("no_safe_price"), "REJECT", "WATCH"),
+            np.where(scored["model_reason"].eq("insufficient_independent_history"), "WATCH", "REJECT"),
         )
         scored["price_action"] = np.where(
             scored["recommended_max_price"].notna(),
-            "竞价不高于上限价；超过即放弃" if promoted else "影子验证限价；当前不得实盘",
+            "仅限人工限价单；竞价不高于上限价，超过即放弃" if promoted else "影子验证限价；当前不得买入",
             "没有安全买入价格，放弃",
         )
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
-        scored["feature_contract"] = "D_CLOSE_ONLY_NO_T_AUCTION_LEAKAGE_V1"
+        scored["feature_contract"] = "D_CLOSE_PLUS_D_MINUTE_NO_T_LEAKAGE_V4_DERIVED_LIMIT_STREAK"
         ordered = [
             "prediction_id",
             "signal_date",
@@ -973,21 +1731,50 @@ class AuctionV3Engine:
             "expected_exit_date",
             "ts_code",
             "name",
+            "industry",
             "stage",
+            "stage_transition",
+            "stage_focus",
             "source_rank",
             "d_close",
+            "estimated_up_limit",
             "recommended_max_price",
             "max_auction_change_pct",
+            "take_profit_pct",
+            "stop_loss_pct",
+            "take_profit_price",
+            "stop_loss_price",
+            "latest_exit_time",
+            "exit_policy_version",
             "predicted_net_return",
             "predicted_return_lcb",
             "predicted_return_ucb",
+            "predicted_outcome_q10",
+            "predicted_outcome_q90",
             "predicted_fill_probability",
+            "predicted_exit_probability",
             "predicted_profit_probability",
             "predicted_big_loss_probability",
+            "predicted_continuation_limit_up_probability",
+            "max_big_loss_probability",
+            "big_loss_threshold",
+            "min_return_lcb",
             "conservative_ev",
+            "selection_score",
+            "risk_gate_pass",
             "selected",
             "action",
             "price_action",
+            "entry_rule",
+            "exit_rule",
+            "guidance_only",
+            "broker_connected",
+            "order_type",
+            "market_order_allowed",
+            "mechanism_limit_pct",
+            "decision_universe_rule",
+            "decision_universe_reason",
+            "minute_available",
             "model_ready",
             "model_promoted",
             "model_reason",
@@ -1001,8 +1788,8 @@ class AuctionV3Engine:
         _write_csv(scored, self.config.prediction_root / "pred_latest.csv")
         return scored
 
-    def _broker_fills(self) -> pd.DataFrame:
-        frame = _read_csv(self.config.broker_fills_path)
+    def _manual_feedback(self) -> pd.DataFrame:
+        frame = _read_csv(self.config.manual_feedback_path)
         if frame.empty:
             return frame
         frame = frame.copy()
@@ -1012,13 +1799,13 @@ class AuctionV3Engine:
             frame["signal_date"] = frame["signal_date"].map(_normal_date)
         return frame
 
-    def _broker_row(self, broker: pd.DataFrame, signal_date: str, code: str) -> Optional[pd.Series]:
-        if broker.empty or not {"signal_date", "ts_code"}.issubset(broker.columns):
+    def _manual_feedback_row(self, feedback: pd.DataFrame, signal_date: str, code: str) -> Optional[pd.Series]:
+        if feedback.empty or not {"signal_date", "ts_code"}.issubset(feedback.columns):
             return None
-        hit = broker[(broker["signal_date"] == signal_date) & (broker["ts_code"] == code)]
+        hit = feedback[(feedback["signal_date"] == signal_date) & (feedback["ts_code"] == code)]
         return hit.iloc[-1] if not hit.empty else None
 
-    def _verify_prediction_file(self, path: Path, dates: Sequence[str], broker: pd.DataFrame) -> pd.DataFrame:
+    def _verify_prediction_file(self, path: Path, dates: Sequence[str], feedback: pd.DataFrame) -> pd.DataFrame:
         pred = _read_csv(path)
         if pred.empty:
             return pd.DataFrame()
@@ -1053,13 +1840,17 @@ class AuctionV3Engine:
             if not later:
                 records.append(base)
                 continue
-            buy_date = later[0]
+            expected_buy = _normal_date(row.get("expected_buy_date"))
+            buy_date = expected_buy or later[0]
+            if buy_date not in dates:
+                records.append(base)
+                continue
             buy_daily = self._row(self.market_table(buy_date, "daily"), code)
             if buy_daily is None:
                 base.update({"actual_buy_date": buy_date, "verification_status": "NO_FILL", "actual_fill": 0, "actual_fill_reason": "suspended_or_daily_missing"})
                 records.append(base)
                 continue
-            buy_price = _numeric_from(buy_daily, ("open",))
+            buy_price = self._execution_open_price(buy_date, code, buy_daily)
             max_price = _finite(row.get("recommended_max_price"))
             market_fill, fill_reason = self._market_buyable(buy_date, code)
             cap_accept = math.isfinite(max_price) and buy_price <= max_price + 0.005
@@ -1071,34 +1862,48 @@ class AuctionV3Engine:
                     "actual_fill": actual_fill,
                     "actual_fill_reason": "filled_market_proxy" if actual_fill else ("price_above_cap" if not cap_accept else fill_reason),
                     "price_guidance_success": int((actual_fill == 1 and cap_accept) or (actual_fill == 0 and not cap_accept)),
-                    "truth_source": "market_proxy",
+                    "truth_source": "tushare_minute_proxy" if not self.minute_table(buy_date, code).empty else "market_proxy",
                     "verification_status": "PENDING_EXIT" if actual_fill else "NO_FILL",
                 }
             )
-            if len(later) < 2:
+            expected_exit = _normal_date(row.get("expected_exit_date"))
+            if not expected_exit or expected_exit not in dates:
                 records.append(base)
                 continue
-            date_index = dates.index(later[1])
-            exit_date, exit_price, _, exit_reason = self._resolve_exit(code, date_index, dates)
+            date_index = dates.index(expected_exit)
+            exit_date, exit_price, _, exit_reason = self._resolve_exit(
+                code,
+                date_index,
+                dates,
+                entry_price=buy_price,
+                buy_date=buy_date,
+            )
             if not exit_date:
                 records.append(base)
                 continue
-            gross = self._realized_gross_return(code, buy_date, buy_price, exit_date, dates)
+            gross = self._realized_gross_return(
+                code,
+                buy_date,
+                buy_price,
+                exit_date,
+                dates,
+                exit_price=exit_price,
+            )
             net = gross - self.config.cost_rate if math.isfinite(gross) else np.nan
-            broker_row = self._broker_row(broker, signal_date, code)
-            if broker_row is not None:
-                broker_buy = _numeric_from(broker_row, ("buy_price", "actual_buy_price"))
-                broker_sell = _numeric_from(broker_row, ("sell_price", "actual_exit_price"))
-                broker_fees = _numeric_from(broker_row, ("fees", "total_fees"), 0.0)
-                quantity = _numeric_from(broker_row, ("quantity", "qty"), 0.0)
-                if broker_buy > 0 and broker_sell > 0:
-                    gross = broker_sell / broker_buy - 1.0
-                    fee_rate = broker_fees / (broker_buy * quantity) if quantity > 0 else self.config.cost_rate
+            feedback_row = self._manual_feedback_row(feedback, signal_date, code)
+            if feedback_row is not None:
+                feedback_buy = _numeric_from(feedback_row, ("buy_price", "actual_buy_price"))
+                feedback_sell = _numeric_from(feedback_row, ("sell_price", "actual_exit_price"))
+                feedback_fees = _numeric_from(feedback_row, ("fees", "total_fees"), 0.0)
+                quantity = _numeric_from(feedback_row, ("quantity", "qty"), 0.0)
+                if feedback_buy > 0 and feedback_sell > 0:
+                    gross = feedback_sell / feedback_buy - 1.0
+                    fee_rate = feedback_fees / (feedback_buy * quantity) if quantity > 0 else self.config.cost_rate
                     net = gross - fee_rate
-                    buy_price, exit_price = broker_buy, broker_sell
-                    base["truth_source"] = "broker_actual"
+                    buy_price, exit_price = feedback_buy, feedback_sell
+                    base["truth_source"] = "manual_actual"
                     base["actual_fill"] = 1
-                    base["actual_fill_reason"] = "broker_fill"
+                    base["actual_fill_reason"] = "manual_fill_feedback"
             predicted = _finite(row.get("predicted_net_return"))
             predicted_loss = _finite(row.get("predicted_big_loss_probability"))
             base.update(
@@ -1112,7 +1917,7 @@ class AuctionV3Engine:
                     "verification_status": "VERIFIED" if int(base["actual_fill"]) == 1 else "COUNTERFACTUAL_READY",
                     "direction_success": int((predicted > 0) == (net > 0)) if math.isfinite(predicted) else np.nan,
                     "trade_success": int(net > 0) if int(base["actual_fill"]) == 1 else np.nan,
-                    "risk_prediction_success": int((predicted_loss >= self.config.max_big_loss_probability) == (net <= self.config.big_loss_threshold)) if math.isfinite(predicted_loss) else np.nan,
+                    "risk_prediction_success": int(net > self.config.big_loss_threshold) if math.isfinite(predicted_loss) else np.nan,
                     "forecast_error": net - predicted if math.isfinite(predicted) else np.nan,
                     "correct_rejection": int(net <= 0) if selected is False else np.nan,
                     "missed_opportunity": int(net > 0) if selected is False else np.nan,
@@ -1123,12 +1928,12 @@ class AuctionV3Engine:
 
     def settle_predictions(self) -> tuple[pd.DataFrame, dict[str, Any]]:
         dates = self.market_dates()
-        broker = self._broker_fills()
+        feedback = self._manual_feedback()
         parts: list[pd.DataFrame] = []
         for path in sorted(self.config.prediction_root.glob("pred_20*.csv")):
             if not re.fullmatch(r"pred_20\d{6}\.csv", path.name):
                 continue
-            verified = self._verify_prediction_file(path, dates, broker)
+            verified = self._verify_prediction_file(path, dates, feedback)
             if verified.empty:
                 continue
             signal_date = _normal_date(verified["signal_date"].iloc[0])
@@ -1155,11 +1960,14 @@ class AuctionV3Engine:
             "selected_predictions": int(len(selected)),
             "verified_trades": int(len(verified)),
             "pending_or_no_fill": int(len(selected) - len(verified)),
-            "broker_actual_trades": int((verified.get("truth_source", pd.Series(dtype=str)) == "broker_actual").sum()),
+            "manual_actual_trades": int((verified.get("truth_source", pd.Series(dtype=str)) == "manual_actual").sum()),
+            "tushare_minute_proxy_trades": int((verified.get("truth_source", pd.Series(dtype=str)) == "tushare_minute_proxy").sum()),
             "market_proxy_trades": int((verified.get("truth_source", pd.Series(dtype=str)) == "market_proxy").sum()),
             "fill_rate": _safe_metric(pd.to_numeric(selected.get("actual_fill"), errors="coerce").mean()),
             "price_guidance_accuracy": _safe_metric(pd.to_numeric(selected.get("price_guidance_success"), errors="coerce").mean()),
             "win_rate": _safe_metric((returns > 0).mean()),
+            "realized_big_loss_rate": _safe_metric((returns <= self.config.big_loss_threshold).mean()),
+            "big_loss_avoidance_rate": _safe_metric((returns > self.config.big_loss_threshold).mean()),
             "mean_actual_net_return": _safe_metric(returns.mean()),
             "cumulative_trade_return": _safe_metric((1.0 + returns).prod() - 1.0 if len(returns) else np.nan),
             "profit_factor": _safe_metric(positive / negative if negative > 0 else np.nan),
@@ -1193,8 +2001,9 @@ class AuctionV3Engine:
         if not signal_date or signal_date not in snapshots:
             raise RuntimeError("cannot resolve a dated pred_source candidate snapshot")
         candidates = self.load_candidates(signal_date, snapshots[signal_date])
+        current_eligibility_audit = dict(self._eligibility_audit)
         if candidates.empty:
-            raise RuntimeError(f"candidate snapshot is empty for {signal_date}")
+            raise RuntimeError(f"candidate snapshot has no <=10% price-limit stocks for {signal_date}")
 
         history = self.build_history()
         oos, backtest_metrics = self.run_backtest(history)
@@ -1222,18 +2031,44 @@ class AuctionV3Engine:
             "promoted": backtest_metrics.get("promoted") is True,
             "training_rows": bundle.train_rows if bundle else 0,
             "training_dates": bundle.train_dates if bundle else 0,
+            "calibration_rows": bundle.calibration_rows if bundle else 0,
+            "calibration_dates": bundle.calibration_dates if bundle else 0,
+            "calibration_bias": _safe_metric(bundle.calibration_bias if bundle else np.nan),
+            "expected_return_margin": _safe_metric(
+                bundle.expected_return_margin if bundle else np.nan
+            ),
+            "return_selection": bundle.return_selection if bundle else {},
+            "classifier_selection": bundle.classifier_selection if bundle else {},
             "residual_q10": _safe_metric(bundle.residual_q10 if bundle else np.nan),
             "residual_q90": _safe_metric(bundle.residual_q90 if bundle else np.nan),
+            "exit_on_time_base_rate": _safe_metric(bundle.exit_constant if bundle else np.nan),
+            "continuation_limit_up_base_rate": _safe_metric(
+                bundle.continuation_constant if bundle else np.nan
+            ),
             "gap_support": {
                 "min": _safe_metric(bundle.gap_min if bundle else np.nan),
                 "max": _safe_metric(bundle.gap_max if bundle else np.nan),
             },
             "backtest_gate": backtest_metrics,
+            "universe_eligibility": current_eligibility_audit,
             "contract": {
                 "signal": "D close",
-                "entry": "T opening auction with frozen maximum limit price",
-                "exit": "T+1 opening auction; delayed to first tradable open after one-price limit-down",
+                "candidate_pool": "D-day confirmed limit-up candidates only",
+                "stage_focus": "prefer 2-to-3 and 3-to-4 by out-of-sample continuation probability after every risk veto passes",
+                "guidance_only": True,
+                "broker_connected": False,
+                "entry": "manual limit order only before T 09:25 opening-auction cutoff with a frozen maximum price; market order forbidden",
+                "exit": "manual T+1 first-touch take-profit/stop-loss, then 14:50 time exit; one-price limit-down delays exit",
+                "exit_policy_version": self.config.exit_policy_version,
+                "take_profit_pct": self.config.take_profit_pct,
+                "stop_loss_pct": self.config.stop_loss_pct,
+                "latest_exit_time": self.config.latest_exit_time,
                 "cost_rate": self.config.cost_rate,
+                "maximum_price_limit_mechanism_pct": self.config.max_mechanism_limit_pct,
+                "maximum_big_loss_probability": self.config.max_big_loss_probability,
+                "big_loss_threshold": self.config.big_loss_threshold,
+                "minimum_return_lcb": self.config.min_return_lcb,
+                "minute_data": "Tushare 1-minute data supports D-day features and public-market simulation; actual fills require manual feedback",
                 "future_features_forbidden": True,
             },
         }

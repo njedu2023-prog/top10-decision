@@ -31,7 +31,7 @@ LEARNING_COLUMNS: List[str] = [
     # 日期链路（核心）
     "signal_date",          # 信号日 T
     "exec_date",            # 买入执行日 T+1
-    "exit_date",            # 卖出日 T+2（或空，晚一天再补）
+    "exit_date",            # 卖出日 T+1（或一字跌停顺延，可后补）
 
     # 标的标识
     "ts_code",

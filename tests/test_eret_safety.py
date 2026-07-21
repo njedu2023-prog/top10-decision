@@ -36,6 +36,8 @@ def _accepted_payload(anchor: str = "20260710") -> dict:
         "eret": {
             "anchor_trade_date": anchor,
             "status": "trained",
+            "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
+            "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
             "loaded_trade_dates": 20,
             "selected_model": "lr",
             "selected_model_pass": True,
@@ -53,6 +55,8 @@ def _model_meta(anchor: str = "20260710") -> dict:
         "anchor_trade_date": anchor,
         "status": "trained",
         "selected_model": "lr",
+        "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
+        "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
         "window": {"n_loaded_dates": 20},
         "features": {
             "feature_cols": ["stable_feature"],
@@ -145,6 +149,9 @@ class ERetTrainingSafetyTests(unittest.TestCase):
                 "prior_prob_prior": [np.nan, np.nan],
                 "intraday_missing_reason": [np.nan, np.nan],
                 "realized_ret_t1_to_t2": [0.01, -0.01],
+                "realized_ret_open_to_tplus1_timed_exit": [0.01, -0.01],
+                "exit_price_tplus1_timed": [10.1, 9.9],
+                "exit_reason": ["take_profit_first_touch", "stop_loss_first_touch"],
             }
         )
         self.assertEqual(train_eret.select_feature_columns(frame), ["stable_feature"])
@@ -197,6 +204,30 @@ class ERetTrainingSafetyTests(unittest.TestCase):
             }
         )
         self.assertEqual(selected, "lgbm")
+
+    def test_model_selection_rejects_rank_model_that_loses_to_mean_baseline(self):
+        selected, audit = train_eret.choose_selected_model(
+            {
+                "lr": {
+                    "daily_spearman_corr_mean": 0.10,
+                    "daily_spearman_valid_dates": 5,
+                    "rmse_skill_vs_train_mean": 0.02,
+                    "rmse": 0.07,
+                    "mae": 0.05,
+                    "directional_acc": 0.60,
+                },
+                "lgbm": {
+                    "daily_spearman_corr_mean": 0.20,
+                    "daily_spearman_valid_dates": 5,
+                    "rmse_skill_vs_train_mean": -0.01,
+                    "rmse": 0.08,
+                    "mae": 0.06,
+                    "directional_acc": 0.58,
+                },
+            }
+        )
+        self.assertEqual(selected, "lr")
+        self.assertTrue(audit["selected_model_acceptance_eligible"])
 
 
 if __name__ == "__main__":

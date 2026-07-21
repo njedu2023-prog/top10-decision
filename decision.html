@@ -1,1252 +1,736 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Top10 Decision Dashboard</title>
-  <meta name="description" content="Top10 Decision 每日自动更新页面" />
-
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Decision 开盘竞价决策</title>
   <style>
-    :root{
-      --bg:#0b1020;
-      --line:rgba(255,255,255,0.08);
-      --text:#e8edf7;
-      --muted:#9fb0d0;
-      --good:#18c37e;
-      --bad:#ff6b6b;
-      --warn:#ffd166;
-      --shadow:0 10px 30px rgba(0,0,0,0.28);
-      --radius:18px;
+    :root {
+      --bg: #f4f6f7;
+      --surface: #ffffff;
+      --surface-soft: #f8faf9;
+      --ink: #18211f;
+      --muted: #65716e;
+      --line: #dce3e0;
+      --line-strong: #c8d1ce;
+      --brand: #116b5a;
+      --brand-soft: #e8f4f0;
+      --good: #167248;
+      --good-soft: #e8f5ee;
+      --warn: #986300;
+      --warn-soft: #fff5d9;
+      --bad: #b42318;
+      --bad-soft: #fff0ee;
+      --blue: #245f9a;
+      --shadow: 0 1px 2px rgba(24, 33, 31, 0.06);
     }
 
-    *{ box-sizing:border-box; }
-    html, body{ margin:0; padding:0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+    button, input, select { font: inherit; letter-spacing: 0; }
+    button:focus-visible, summary:focus-visible { outline: 3px solid rgba(36, 95, 154, 0.28); outline-offset: 2px; }
 
-    body{
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(110,168,254,0.15), transparent 28%),
-        radial-gradient(circle at top right, rgba(24,195,126,0.10), transparent 22%),
-        linear-gradient(180deg, var(--bg), #09101d 100%);
-      color:var(--text);
-      min-height:100vh;
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #172421;
+      color: #fff;
+      border-bottom: 1px solid #0e1816;
+    }
+    .topbar-inner {
+      max-width: 1580px;
+      margin: 0 auto;
+      min-height: 74px;
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+    .brand { min-width: 0; }
+    .brand h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 720; }
+    .brand p { margin: 5px 0 0; color: #b9c8c4; font-size: 12px; line-height: 1.4; }
+    .controls { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+    .icon-btn {
+      width: 42px;
+      height: 42px;
+      border: 1px solid #3d504b;
+      border-radius: 6px;
+      background: #22332f;
+      color: #fff;
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .icon-btn:hover { background: #2c403b; }
+    .icon-btn:disabled { opacity: 0.35; cursor: default; }
+
+    main { max-width: 1580px; margin: 0 auto; padding: 18px 22px 34px; }
+    .loadline {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .loadline strong { color: var(--ink); font-weight: 650; }
+    .source-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      white-space: nowrap;
     }
 
-    .wrap{
-      width:min(1500px, calc(100vw - 32px));
-      margin:24px auto 48px;
+    .status-band {
+      border: 1px solid var(--line-strong);
+      border-left: 5px solid var(--brand);
+      border-radius: 6px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto;
+      gap: 18px;
+      align-items: center;
     }
+    .status-band.good { border-left-color: var(--good); background: var(--good-soft); }
+    .status-band.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+    .status-band.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+    .status-kicker { margin: 0 0 4px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    .status-title { margin: 0; font-size: 21px; line-height: 1.3; overflow-wrap: anywhere; }
+    .status-sub { margin: 7px 0 0; color: var(--muted); line-height: 1.6; }
+    .date-contract { display: grid; grid-template-columns: repeat(3, 112px); gap: 8px; }
+    .date-box { background: rgba(255,255,255,0.76); border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; }
+    .date-box span { display: block; color: var(--muted); font-size: 11px; }
+    .date-box strong { display: block; margin-top: 4px; font-size: 15px; font-variant-numeric: tabular-nums; }
 
-    .hero,
-    .card{
-      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
-      border:1px solid var(--line);
-      box-shadow:var(--shadow);
-      backdrop-filter:blur(8px);
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
     }
-
-    .hero{
-      border-radius:24px;
-      padding:24px;
+    .metric {
+      min-height: 82px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      padding: 12px;
+      overflow: hidden;
     }
+    .metric span { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .metric strong { display: block; margin-top: 8px; font-size: 19px; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .metric strong.good { color: var(--good); }
+    .metric strong.bad { color: var(--bad); }
+    .metric strong.warn { color: var(--warn); }
 
-    .hero-top{
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:16px;
-      flex-wrap:wrap;
+    .panel {
+      margin-bottom: 14px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
     }
-
-    .title{
-      font-size:30px;
-      line-height:1.2;
-      font-weight:800;
-      letter-spacing:0.2px;
-      margin:0 0 8px 0;
+    .panel-head {
+      min-height: 52px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
-
-    .subtitle{
-      color:var(--muted);
-      font-size:14px;
-      line-height:1.7;
-      margin:0;
+    .panel-head h2 { margin: 0; font-size: 16px; line-height: 1.3; }
+    .panel-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .empty {
+      margin: 0 16px 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+      padding: 14px;
+      color: var(--muted);
+      line-height: 1.65;
     }
+    .empty strong { display: block; margin-bottom: 4px; color: var(--ink); }
 
-    .toolbar{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
+    .table-wrap { width: 100%; overflow: auto; border-top: 1px solid var(--line); }
+    table { border-collapse: collapse; width: 100%; min-width: 1380px; font-size: 12px; }
+    table.stage-table { min-width: 1120px; }
+    th, td { height: 42px; padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th { position: sticky; top: 0; z-index: 4; background: #f2f5f4; color: #52605c; font-weight: 680; }
+    th.left, td.left { text-align: left; }
+    td.name { font-weight: 650; }
+    tr:hover td { background: #f8fbfa; }
+    .action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 68px;
+      min-height: 25px;
+      padding: 3px 7px;
+      border-radius: 4px;
+      border: 1px solid var(--line);
+      font-weight: 700;
     }
+    .action.buy { color: var(--good); border-color: #8cc6a8; background: var(--good-soft); }
+    .action.reject { color: var(--bad); border-color: #e4aaa4; background: var(--bad-soft); }
+    .action.shadow, .action.pending { color: var(--warn); border-color: #ddc47f; background: var(--warn-soft); }
+    .positive { color: var(--good); font-weight: 650; }
+    .negative { color: var(--bad); font-weight: 650; }
+    .reason { max-width: 300px; white-space: normal; line-height: 1.45; color: var(--muted); text-align: left; }
 
-    .btn{
-      appearance:none;
-      border:1px solid rgba(255,255,255,0.1);
-      background:linear-gradient(180deg, #1a2445, #141d39);
-      color:var(--text);
-      padding:10px 14px;
-      border-radius:12px;
-      cursor:pointer;
-      font-size:14px;
-      font-weight:600;
-      text-decoration:none;
-      transition:0.2s ease;
-      min-width:44px;
+    .audit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 16px; }
+    .audit-block { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--surface-soft); min-width: 0; }
+    .audit-block h3 { margin: 0 0 9px; font-size: 13px; }
+    .audit-list { display: grid; gap: 7px; }
+    .audit-row { display: grid; grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.2fr); gap: 10px; font-size: 12px; }
+    .audit-row span { color: var(--muted); }
+    .audit-row strong { text-align: right; overflow-wrap: anywhere; }
+    .fail-list { margin: 0; padding-left: 18px; color: var(--bad); line-height: 1.7; }
+
+    details.panel { padding: 0; }
+    details.panel summary { list-style: none; cursor: pointer; padding: 15px 16px; font-size: 15px; font-weight: 680; }
+    details.panel summary::-webkit-details-marker { display: none; }
+    details.panel summary::before { content: "＋"; display: inline-block; width: 20px; color: var(--brand); }
+    details.panel[open] summary::before { content: "−"; }
+    .report-body { border-top: 1px solid var(--line); padding: 16px; }
+    .report-meta { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .report-meta div { border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: var(--surface-soft); }
+    .report-meta span { display: block; color: var(--muted); font-size: 11px; }
+    .report-meta strong { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+    .md-section { margin-top: 16px; }
+    .md-section h3 { font-size: 14px; margin: 0 0 8px; }
+    .md-section table { min-width: 900px; }
+    pre {
+      margin: 0;
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f7f9f8;
+      padding: 12px;
+      color: #34413e;
+      font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
+    footer { padding: 4px 0 18px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
-    .btn:hover{
-      transform:translateY(-1px);
-      border-color:rgba(255,255,255,0.18);
-      background:linear-gradient(180deg, #21305c, #182346);
+    @media (max-width: 1100px) {
+      .metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+      .status-band { grid-template-columns: 1fr; }
+      .date-contract { grid-template-columns: repeat(3, minmax(96px, 1fr)); }
+      .audit-grid { grid-template-columns: 1fr; }
+      .report-meta { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
     }
-
-    .btn:disabled{
-      opacity:0.45;
-      cursor:not-allowed;
-      transform:none;
-    }
-
-    .grid{
-      display:grid;
-      grid-template-columns:repeat(12, 1fr);
-      gap:16px;
-      margin-top:18px;
-    }
-
-    .card{
-      grid-column:span 12;
-      border-radius:var(--radius);
-      overflow:hidden;
-    }
-
-    .card-body{ padding:18px 20px; }
-
-    .report-card-head{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      margin:0 0 14px;
-    }
-
-    .report-card-head .section-title{
-      margin:0;
-    }
-
-    .circle-toggle{
-      appearance:none;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      width:30px;
-      height:30px;
-      flex:0 0 30px;
-      border:1px solid rgba(207,224,255,0.35);
-      border-radius:999px;
-      background:rgba(110,168,254,0.14);
-      color:#dce8ff;
-      font-size:21px;
-      font-weight:800;
-      line-height:1;
-      cursor:pointer;
-      transition:background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-    }
-
-    .circle-toggle:hover,
-    .circle-toggle:focus-visible{
-      border-color:rgba(207,224,255,0.68);
-      background:rgba(110,168,254,0.24);
-      outline:none;
-      transform:translateY(-1px);
-    }
-
-    .report-section.is-collapsible{
-      border:1px solid rgba(255,255,255,0.08);
-      border-radius:14px;
-      background:rgba(10,18,40,0.28);
-      overflow:hidden;
-    }
-
-    .report-section-toggle{
-      appearance:none;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      width:100%;
-      border:0;
-      background:transparent;
-      color:var(--text);
-      padding:14px 16px;
-      text-align:left;
-      cursor:pointer;
-    }
-
-    .report-section-toggle:hover,
-    .report-section-toggle:focus-visible{
-      background:rgba(110,168,254,0.08);
-      outline:none;
-    }
-
-    .report-section-toggle h2{
-      margin:0;
-    }
-
-    .report-section-toggle .circle-toggle{
-      pointer-events:none;
-    }
-
-    .report-section-body{
-      padding:0 16px 16px;
-    }
-
-    .report-section.is-collapsed .report-section-body{
-      display:none;
-    }
-
-    .meta{
-      display:grid;
-      grid-template-columns:repeat(6, minmax(0,1fr));
-      gap:12px;
-    }
-
-    .meta-item{
-      background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
-      border:1px solid rgba(255,255,255,0.06);
-      border-radius:14px;
-      padding:14px;
-      min-height:84px;
-    }
-
-    .meta-label{
-      color:var(--muted);
-      font-size:12px;
-      margin-bottom:8px;
-    }
-
-    .meta-value{
-      font-size:19px;
-      font-weight:800;
-      word-break:break-word;
-    }
-
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:7px 10px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:700;
-      background:rgba(110,168,254,0.12);
-      border:1px solid rgba(110,168,254,0.2);
-      color:#cfe0ff;
-    }
-
-    .pill.ok{
-      background:rgba(24,195,126,0.12);
-      border-color:rgba(24,195,126,0.2);
-      color:#b9f1d9;
-    }
-
-    .pill.bad{
-      background:rgba(255,107,107,0.12);
-      border-color:rgba(255,107,107,0.2);
-      color:#ffd0d0;
-    }
-
-    .pill.warn{
-      background:rgba(255,209,102,0.12);
-      border-color:rgba(255,209,102,0.22);
-      color:#ffe6a3;
-    }
-
-    .section-title{
-      font-size:19px;
-      font-weight:800;
-      margin:0 0 14px 0;
-    }
-
-    .status-line{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex-wrap:wrap;
-      color:var(--muted);
-      font-size:13px;
-      margin-top:10px;
-    }
-
-    .notice{
-      color:#ffe6a3;
-      background:rgba(255,209,102,0.06);
-      border:1px solid rgba(255,209,102,0.18);
-      border-radius:14px;
-      padding:12px 14px;
-      margin:10px 0 16px;
-      font-size:13px;
-      line-height:1.7;
-    }
-
-    .empty,
-    .error{
-      padding:24px;
-      border:1px dashed rgba(255,255,255,0.15);
-      border-radius:16px;
-      color:var(--muted);
-      text-align:center;
-    }
-
-    .error{
-      color:#ffd4d4;
-      background:rgba(255,107,107,0.06);
-      border-color:rgba(255,107,107,0.2);
-      text-align:left;
-      line-height:1.8;
-    }
-
-    .report-section{
-      margin:20px 0 28px;
-    }
-
-    .report-section h2{
-      font-size:20px;
-      line-height:1.35;
-      margin:0 0 12px;
-    }
-
-    .report-section h3{
-      font-size:16px;
-      color:#dce8ff;
-      margin:16px 0 10px;
-    }
-
-    .kv-list{
-      display:grid;
-      grid-template-columns:repeat(3, minmax(0,1fr));
-      gap:10px;
-      margin:10px 0 18px;
-    }
-
-    .kv{
-      border:1px solid rgba(255,255,255,0.07);
-      background:rgba(10,18,40,0.45);
-      border-radius:12px;
-      padding:10px 12px;
-      min-height:62px;
-    }
-
-    .kv-key{
-      color:var(--muted);
-      font-size:12px;
-      margin-bottom:5px;
-    }
-
-    .kv-val{
-      font-weight:700;
-      word-break:break-word;
-    }
-
-    .table-wrap{
-      width:100%;
-      overflow:auto;
-      border:1px solid rgba(255,255,255,0.08);
-      border-radius:14px;
-      background:rgba(10,18,40,0.55);
-      margin:12px 0 18px;
-    }
-
-    table{
-      width:100%;
-      border-collapse:collapse;
-      min-width:1100px;
-    }
-
-    thead th{
-      position:sticky;
-      top:0;
-      z-index:1;
-      background:#162347;
-      color:#dce8ff;
-      text-align:left;
-      font-size:13px;
-      padding:12px 12px;
-      border-bottom:1px solid rgba(255,255,255,0.08);
-      white-space:nowrap;
-    }
-
-    tbody td{
-      padding:10px 12px;
-      border-bottom:1px solid rgba(255,255,255,0.06);
-      font-size:14px;
-      white-space:nowrap;
-    }
-
-    tbody tr:hover{
-      background:rgba(255,255,255,0.03);
-    }
-
-    td.num, th.num{
-      text-align:right;
-      font-variant-numeric:tabular-nums;
-    }
-
-    .pos{ color:var(--good); font-weight:700; }
-    .neg{ color:var(--bad); font-weight:700; }
-    .muted{ color:var(--muted); }
-
-    pre.raw{
-      white-space:pre-wrap;
-      word-break:break-word;
-      background:#0a1228;
-      border:1px solid rgba(255,255,255,0.08);
-      border-radius:14px;
-      padding:14px;
-      overflow:auto;
-      color:#dce8ff;
-      max-height:480px;
-    }
-
-    .footer{
-      margin-top:16px;
-      color:var(--muted);
-      font-size:12px;
-      text-align:center;
-    }
-
-    @media (max-width:1200px){
-      .meta{ grid-template-columns:repeat(3, minmax(0,1fr)); }
-      .kv-list{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-    }
-
-    @media (max-width:720px){
-      .wrap{
-        width:min(100vw - 20px, 100%);
-        margin:10px auto 28px;
-      }
-
-      .hero{
-        padding:16px;
-        border-radius:18px;
-      }
-
-      .title{ font-size:24px; }
-      .meta{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-      .kv-list{ grid-template-columns:1fr; }
-      .meta-value{ font-size:17px; }
+    @media (max-width: 640px) {
+      .topbar-inner { padding: 10px 12px; min-height: 68px; }
+      .brand h1 { font-size: 18px; }
+      .brand p { display: none; }
+      .icon-btn { width: 38px; height: 38px; }
+      main { padding: 12px 0 26px; }
+      .loadline { padding: 0 12px; }
+      .status-band { margin: 0 12px 10px; padding: 13px; }
+      .status-title { font-size: 18px; }
+      .date-contract { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, minmax(120px, 1fr)); padding: 0 12px; }
+      .metric { min-height: 76px; }
+      .metric strong { font-size: 17px; }
+      .panel-head { padding: 11px 12px; }
+      .empty { margin: 0 12px 12px; }
+      .audit-grid, .report-body { padding: 0 12px 12px; }
+      .report-meta { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
-
 <body>
-  <div class="wrap">
-    <section class="hero">
-      <div class="hero-top">
-        <div>
-          <h1 class="title">Top10 Decision Dashboard</h1>
-          <p class="subtitle">
-            自动读取并渲染最新的 Decision 报告。<br />
-            本版专门兼容报告被压成一整行的情况，直接解析三张核心表。
-          </p>
-        </div>
-
-        <div class="toolbar">
-          <button class="btn" id="prevBtn" title="上一份">←</button>
-          <button class="btn" id="refreshBtn">刷新</button>
-          <button class="btn" id="nextBtn" title="下一份">→</button>
-        </div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <h1>Decision 开盘竞价决策</h1>
+        <p>D日涨停候选 · 重点识别2进3/3进4 · T日人工限价竞价 · T+1择机退出</p>
       </div>
+      <nav class="controls" aria-label="报告导航">
+        <button id="prevBtn" class="icon-btn" type="button" title="上一份历史报告" aria-label="上一份历史报告">←</button>
+        <button id="refreshBtn" class="icon-btn" type="button" title="手动刷新" aria-label="手动刷新">↻</button>
+        <button id="nextBtn" class="icon-btn" type="button" title="下一份报告" aria-label="下一份报告">→</button>
+      </nav>
+    </div>
+  </header>
 
-      <div class="status-line">
-        <span class="pill" id="statusPill">初始化中</span>
-        <span id="statusText">正在定位报告...</span>
+  <main>
+    <div class="loadline">
+      <div id="loadStatus"><strong>正在读取统一报告索引</strong></div>
+      <span id="sourcePill" class="source-pill">report_index</span>
+    </div>
+
+    <section id="statusBand" class="status-band warn">
+      <div>
+        <p class="status-kicker">执行结论</p>
+        <h2 id="statusTitle" class="status-title">正在加载</h2>
+        <p id="statusSub" class="status-sub">等待行动计划与报告完成一致性校验。</p>
+      </div>
+      <div class="date-contract">
+        <div class="date-box"><span>D 信号日</span><strong id="signalDate">-</strong></div>
+        <div class="date-box"><span>T 竞价买入日</span><strong id="execDate">-</strong></div>
+        <div class="date-box"><span>T+1 退出日</span><strong id="exitDate">-</strong></div>
       </div>
     </section>
 
-    <div class="grid">
-      <section class="card">
-        <div class="card-body">
-          <div class="meta" id="metaGrid"></div>
-        </div>
-      </section>
+    <section id="metrics" class="metrics" aria-label="核心指标"></section>
 
-      <section class="card" id="reportCard">
-        <div class="card-body">
-          <div id="reportBox" class="empty">等待加载...</div>
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>2进3 / 3进4 机会观察</h2>
+          <p>按继续涨停概率排序，同时公开大跌风险与收益下界；仅标记“买入”的行属于正式人工参考。</p>
         </div>
-      </section>
-    </div>
+        <span id="stageCount" class="count">0 条</span>
+      </div>
+      <div id="stageContent"></div>
+    </section>
 
-    <div class="footer">
-      <span id="footerText">Top10 Decision · 动态页面</span>
-    </div>
-  </div>
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>人工操作参考</h2>
+          <p>系统不连接券商、不代替下单；只支持人工限价参考，禁止无上限市价单。</p>
+        </div>
+        <span id="candidateCount" class="count">0 条</span>
+      </div>
+      <div id="actionContent"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>模型与资格审计</h2>
+          <p>正式状态由严格滚动样本外结果、成本压力测试、退出可执行性和证券资格共同决定。</p>
+        </div>
+      </div>
+      <div id="auditContent" class="audit-grid"></div>
+    </section>
+
+    <details class="panel">
+      <summary>Decision 报告正文</summary>
+      <div id="reportContent" class="report-body"><div class="empty">正在读取报告正文。</div></div>
+    </details>
+
+    <footer id="footer">本页面不自动刷新，不连接券商，不执行订单。研究结果不构成收益保证；没有通过晋级门槛时，系统会明确输出不交易。</footer>
+  </main>
 
   <script>
     "use strict";
 
-    const REPO = {
-      owner: "njedu2023-prog",
-      name: "top10-decision",
-      branch: "main",
-      reportDir: "outputs/decision"
-    };
+    const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
+    const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
+    const CACHE_KEY = "decision-dashboard-v4-cache";
+    const els = Object.fromEntries([
+      "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub",
+      "signalDate", "execDate", "exitDate", "metrics", "stageCount", "stageContent", "candidateCount", "actionContent", "auditContent",
+      "reportContent", "footer"
+    ].map(id => [id, document.getElementById(id)]));
 
-    const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}`;
-    const API_LIST_URL = `https://api.github.com/repos/${REPO.owner}/${REPO.name}/contents/${REPO.reportDir}?ref=${REPO.branch}`;
-    const CACHE_KEY = "top10_decision_last_report_v4";
+    const state = { reports: [], index: 0, mode: "report_index", current: null };
 
-    function pageContentBase() {
-      const dir = window.location.pathname.replace(/\/[^/]*$/, "");
-      return `${window.location.origin}${dir}`.replace(/\/$/, "");
-    }
-
-    function contentUrl(path) {
-      const clean = String(path || "").replace(/^\/+/, "");
-      if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-        return `${pageContentBase()}/${clean}`;
-      }
-      return `${RAW_BASE}/${clean}`;
-    }
-
-    function cacheBustUrl(url) {
-      const sep = String(url).includes("?") ? "&" : "?";
-      return `${url}${sep}_=${Date.now()}`;
-    }
-
-    const statusPill = document.getElementById("statusPill");
-    const statusText = document.getElementById("statusText");
-    const reportBox = document.getElementById("reportBox");
-    const metaGrid = document.getElementById("metaGrid");
-    const footerText = document.getElementById("footerText");
-    const refreshBtn = document.getElementById("refreshBtn");
-    const prevBtn = document.getElementById("prevBtn");
-    const nextBtn = document.getElementById("nextBtn");
-
-    let reportFiles = [];
-    let currentIndex = 0;
-    let currentFileName = "";
-    let lastLoadMode = "";
-
-    function setReportSectionCollapsed(section, collapsed) {
-      const toggle = section.querySelector(".report-section-toggle");
-      const icon = section.querySelector(".report-section-toggle .circle-toggle");
-      const title = section.getAttribute("data-section-title") || "本节";
-      section.classList.toggle("is-collapsed", collapsed);
-      if (toggle) {
-        toggle.setAttribute("aria-expanded", String(!collapsed));
-        toggle.title = `${collapsed ? "展开" : "折叠"}${title}`;
-      }
-      if (icon) icon.textContent = collapsed ? "+" : "-";
-    }
-
-    function bindReportSectionToggles(root) {
-      root.querySelectorAll(".report-section.is-collapsible").forEach(section => {
-        const toggle = section.querySelector(".report-section-toggle");
-        if (!toggle) return;
-        setReportSectionCollapsed(section, section.classList.contains("is-collapsed"));
-        toggle.addEventListener("click", () => {
-          setReportSectionCollapsed(section, !section.classList.contains("is-collapsed"));
-        });
-      });
-    }
-
-    function collapsibleSectionHtml(title, bodyHtml, collapsed = true) {
-      const safeTitle = escapeHtml(title);
-      return `
-        <div class="report-section is-collapsible${collapsed ? " is-collapsed" : ""}" data-section-title="${safeTitle}">
-          <button class="report-section-toggle" type="button" aria-expanded="${collapsed ? "false" : "true"}" title="${collapsed ? "展开" : "折叠"}${safeTitle}">
-            <h2>${safeTitle}</h2>
-            <span class="circle-toggle" aria-hidden="true">${collapsed ? "+" : "-"}</span>
-          </button>
-          <div class="report-section-body">
-            ${bodyHtml}
-          </div>
-        </div>
-      `;
-    }
-
-    function saveCachedReport(info, mdRaw) {
-      try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          savedAt: Date.now(),
-          info,
-          mdRaw
-        }));
-      } catch (err) {
-        console.warn("Decision report cache write failed.", err);
-      }
-    }
-
-    function loadCachedReport() {
-      try {
-        const raw = localStorage.getItem(CACHE_KEY);
-        if (!raw) return null;
-        const cached = JSON.parse(raw);
-        if (!cached || !cached.info || typeof cached.mdRaw !== "string") return null;
-        const cachedYmd = reportDateFromName(cached.info.name || "");
-        if (cachedYmd && cachedYmd < todayYmd()) return null;
-        return cached;
-      } catch (err) {
-        console.warn("Decision report cache read failed.", err);
-        return null;
-      }
-    }
-
-    function setStatus(type, text) {
-      statusPill.className = `pill ${type || ""}`.trim();
-      statusPill.textContent = type === "ok" ? "加载成功" : type === "bad" ? "加载失败" : type === "warn" ? "回退模式" : "加载中";
-      statusText.textContent = text || "";
-    }
-
-    function escapeHtml(s) {
-      return String(s ?? "")
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;");
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
-    function stripMd(s) {
-      return String(s ?? "")
-        .replace(/\*\*/g, "")
-        .replace(/`/g, "")
-        .trim();
+    function localUrl(path) {
+      if (location.protocol === "file:") return RAW_BASE + path;
+      return new URL(path, location.href).href;
     }
 
-    function formatDateYmd(d) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}${m}${day}`;
-    }
-
-    function todayYmd() {
-      return formatDateYmd(new Date());
-    }
-
-    const A_SHARE_EXCHANGE_HOLIDAYS = new Set([
-      "20260101",
-      "20260102",
-      "20260216",
-      "20260217",
-      "20260218",
-      "20260219",
-      "20260220",
-      "20260223",
-      "20260406",
-      "20260501",
-      "20260504",
-      "20260505",
-      "20260619",
-      "20260925",
-      "20261001",
-      "20261002",
-      "20261005",
-      "20261006",
-      "20261007"
-    ]);
-
-    function parseYmd(ymd) {
-      const s = String(ymd || "");
-      if (!/^\d{8}$/.test(s)) return null;
-      const y = Number(s.slice(0, 4));
-      const m = Number(s.slice(4, 6));
-      const d = Number(s.slice(6, 8));
-      return new Date(y, m - 1, d);
-    }
-
-    function isAShareTradingDay(ymd) {
-      const d = parseYmd(ymd);
-      if (!d) return false;
-      const day = d.getDay();
-      if (day === 0 || day === 6) return false;
-      return !A_SHARE_EXCHANGE_HOLIDAYS.has(String(ymd));
-    }
-
-    function nextAShareTradingDay(ymd) {
-      const d = parseYmd(ymd);
-      if (!d) return ymd;
-      for (let i = 1; i <= 30; i += 1) {
-        const x = new Date(d);
-        x.setDate(d.getDate() + i);
-        const candidate = formatDateYmd(x);
-        if (isAShareTradingDay(candidate)) return candidate;
-      }
-      return ymd;
-    }
-
-    function latestAllowedReportYmd() {
-      return nextAShareTradingDay(todayYmd());
-    }
-
-    function reportDateFromName(name) {
-      const m = String(name || "").match(/^decision_report_(\d{8})\.md$/);
-      return m ? m[1] : "";
-    }
-
-    function isAllowedReport(name) {
-      const ymd = reportDateFromName(name);
-      return Boolean(ymd && ymd <= latestAllowedReportYmd());
-    }
-
-    function getDateCandidates(daysBack = 60) {
-      const out = [];
-      const seen = new Set();
-      const d = new Date();
-      const pushYmd = ymd => {
-        if (ymd && !seen.has(ymd)) {
-          seen.add(ymd);
-          out.push(ymd);
-        }
-      };
-
-      pushYmd(latestAllowedReportYmd());
-      pushYmd(todayYmd());
-
-      for (let i = 1; i <= daysBack; i += 1) {
-        const x = new Date(d);
-        x.setDate(d.getDate() - i);
-        pushYmd(formatDateYmd(x));
-      }
-      return out;
-    }
-
-    async function fetchText(url) {
-      const res = await fetch(cacheBustUrl(url), { cache: "no-store" });
-      if (!res.ok) throw new Error(`请求失败: ${res.status} ${res.statusText}`);
-      return await res.text();
-    }
-
-    async function fetchJson(url) {
-      const res = await fetch(cacheBustUrl(url), { cache: "no-store" });
-      if (!res.ok) throw new Error(`请求失败: ${res.status} ${res.statusText}`);
-      return await res.json();
-    }
-
-    function parseCsvLine(line) {
-      const out = [];
-      let cur = "";
-      let quoted = false;
-      const s = String(line || "");
-
-      for (let i = 0; i < s.length; i += 1) {
-        const ch = s[i];
-        const next = s[i + 1];
-        if (ch === '"' && quoted && next === '"') {
-          cur += '"';
-          i += 1;
-        } else if (ch === '"') {
-          quoted = !quoted;
-        } else if (ch === "," && !quoted) {
-          out.push(cur);
-          cur = "";
-        } else {
-          cur += ch;
+    async function fetchPath(path, kind = "json") {
+      const primary = localUrl(path);
+      const urls = primary === RAW_BASE + path ? [primary] : [primary, RAW_BASE + path];
+      let lastError = null;
+      for (const url of urls) {
+        try {
+          const response = await fetch(`${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}`, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          state.mode = url.startsWith(RAW_BASE) ? "raw-fallback" : "same-origin";
+          return kind === "text" ? await response.text() : await response.json();
+        } catch (error) {
+          lastError = error;
         }
       }
-      out.push(cur);
-      return out.map(x => x.trim());
+      throw lastError || new Error(`无法读取 ${path}`);
     }
 
-    function csvTextToRows(csvText) {
-      const lines = String(csvText || "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .split("\n")
-        .filter(line => line.trim() !== "");
-      if (lines.length < 2) return [];
-
-      const header = parseCsvLine(lines[0]).map(x => x.replace(/^\ufeff/, ""));
-      return lines.slice(1).map(line => {
-        const cells = parseCsvLine(line);
-        const row = {};
-        header.forEach((key, idx) => {
-          row[key] = cells[idx] ?? "";
-        });
-        return row;
-      });
+    function finiteNumber(value) {
+      if (value == null || value === "") return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
     }
 
-    function normalizeArtifactPath(path) {
-      return String(path || "")
-        .replace(/^`|`$/g, "")
-        .replace(/^\.?\//, "")
-        .trim();
+    function pct(value, digits = 2) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "-" : `${(parsed * 100).toFixed(digits)}%`;
     }
 
-    function firstNonEmpty(row, keys) {
-      for (const key of keys) {
-        const v = row && row[key] != null ? String(row[key]).trim() : "";
-        if (v) return v;
+    function price(value) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "-" : parsed.toFixed(2);
+    }
+
+    function number(value, digits = 2) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "-" : parsed.toFixed(digits);
+    }
+
+    function dateText(value) {
+      const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+      return digits.length === 8 ? `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}` : "-";
+    }
+
+    function metric(label, value, tone = "") {
+      return `<div class="metric"><span>${escapeHtml(label)}</span><strong class="${tone}">${escapeHtml(value)}</strong></div>`;
+    }
+
+    function actionLabel(action) {
+      return ({ BUY: "买入", REJECT: "放弃", WATCH: "观察", SHADOW_ONLY: "影子验证", PENDING: "等待" })[action] || action || "-";
+    }
+
+    function actionClass(action) {
+      if (action === "BUY") return "buy";
+      if (action === "REJECT") return "reject";
+      if (action === "SHADOW_ONLY") return "shadow";
+      return "pending";
+    }
+
+    function valueTone(value) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "" : parsed > 0 ? "positive" : parsed < 0 ? "negative" : "";
+    }
+
+    function renderStatus(plan) {
+      const status = String(plan?.status_code || "PENDING_AUCTION_MODEL");
+      const tone = status === "ACTIONABLE_BUY" ? "good" : status.startsWith("NO_TRADE") ? "bad" : "warn";
+      els.statusBand.className = `status-band ${tone}`;
+      els.statusTitle.textContent = plan?.status_label || "行动计划尚未生成";
+      const modelVersion = plan?.model?.version || "模型待定";
+      const consistency = plan?.model?.prediction_matches_report === false ? "；竞价预测与当前报告日期尚未对齐" : "";
+      els.statusSub.textContent = `${modelVersion}；正式人工建议 ${plan?.formal_buy_count || 0} 只，影子验证 ${plan?.shadow_count || 0} 只；系统不下单${consistency}`;
+      els.signalDate.textContent = dateText(plan?.signal_date);
+      els.execDate.textContent = dateText(plan?.exec_date);
+      els.exitDate.textContent = dateText(plan?.exit_date);
+    }
+
+    function renderMetrics(plan) {
+      const bt = plan?.backtest || {};
+      const promoted = plan?.model?.promoted === true;
+      const rows = [
+        metric("正式模型状态", promoted ? "已晋级" : "未晋级", promoted ? "good" : "bad"),
+        metric("正式人工建议数", String(plan?.formal_buy_count || 0), plan?.formal_buy_count ? "good" : "warn"),
+        metric("风险预算", number(plan?.risk_budget, 2)),
+        metric("样本外交易日", String(bt.oos_dates ?? "-")),
+        metric("样本外出手日占比", pct(bt.signal_date_ratio), Number(bt.signal_date_ratio) < 0.05 ? "warn" : ""),
+        metric("最长连续空仓", bt.max_no_signal_streak == null ? "-" : `${bt.max_no_signal_streak} 日`, Number(bt.max_no_signal_streak) > 30 ? "warn" : ""),
+        metric("样本外成交笔数", String(bt.filled_trades ?? "-")),
+        metric("样本外平均单笔净收益", pct(bt.mean_trade_net_return), valueTone(bt.mean_trade_net_return)),
+        metric("样本外胜率", pct(bt.win_rate)),
+        metric("样本外大跌率", pct(bt.realized_big_loss_rate), Number(bt.realized_big_loss_rate) > 0.15 ? "bad" : "good"),
+        metric("2进3/3进4晋级命中率", pct(bt.stage_focus_continuation_hit_rate)),
+        metric("样本外累计收益", pct(bt.cumulative_return), valueTone(bt.cumulative_return)),
+        metric("最大回撤", pct(bt.max_drawdown), Number(bt.max_drawdown) < 0 ? "bad" : ""),
+        metric("双倍成本日收益", pct(bt.stress_2x_cost_mean_daily_return, 3), valueTone(bt.stress_2x_cost_mean_daily_return)),
+        metric("次日按时退出率", pct(bt.exit_on_time_rate)),
+        metric("Bootstrap 正收益概率", pct(bt.bootstrap_probability_mean_positive)),
+        metric("模型版本", plan?.model?.version || "-")
+      ];
+      els.metrics.innerHTML = rows.join("");
+    }
+
+    function renderStageWatchlist(plan) {
+      const rows = Array.isArray(plan?.stage_watchlist) ? plan.stage_watchlist : [];
+      els.stageCount.textContent = `${rows.length} 条`;
+      if (!rows.length) {
+        els.stageContent.innerHTML = '<div class="empty"><strong>当前没有2进3或3进4候选</strong>D日确认涨停池中没有对应连板阶段。</div>';
+        return;
       }
-      return "";
+      const headers = ["观察排名", "状态", "代码", "股票", "行业板块", "晋级", "继续涨停概率", "大跌概率", "预计净收益", "保守下界", "盈利概率", "结论"];
+      const body = rows.map(row => `<tr>
+        <td>${escapeHtml(row.stage_watch_rank ?? "-")}</td>
+        <td class="left"><span class="action ${row.action === "BUY" ? "buy" : "pending"}">${escapeHtml(row.watch_label || "仅观察")}</span></td>
+        <td class="left">${escapeHtml(row.ts_code || "-")}</td>
+        <td class="left name">${escapeHtml(row.name || "-")}</td>
+        <td class="left">${escapeHtml(row.industry || "未分类")}</td>
+        <td>${escapeHtml(row.stage_transition || "-")}</td>
+        <td>${pct(row.predicted_continuation_limit_up_probability)}</td>
+        <td>${pct(row.predicted_big_loss_probability)}</td>
+        <td class="${valueTone(row.predicted_net_return)}">${pct(row.predicted_net_return)}</td>
+        <td class="${valueTone(row.predicted_return_lcb)}">${pct(row.predicted_return_lcb)}</td>
+        <td>${pct(row.predicted_profit_probability)}</td>
+        <td class="reason">${escapeHtml(row.action === "BUY" ? (row.exit_rule || "通过全部风控") : (row.rejection_reason || "仅观察"))}</td>
+      </tr>`).join("");
+      els.stageContent.innerHTML = `<div class="empty"><strong>观察不等于买入</strong>系统始终展示阶段机会，但只有通过全部样本外晋级与风险门槛的行才会标记为“买入”。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,2,3,4,11].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
-    async function loadIndustryMap(fields) {
-      const path = normalizeArtifactPath(fields && fields.candidates_snapshot);
-      if (!path || !/\.csv$/i.test(path)) return {};
-
-      try {
-        const csv = await fetchText(contentUrl(path));
-        const rows = csvTextToRows(csv);
-        const map = {};
-        rows.forEach(row => {
-          const code = firstNonEmpty(row, ["ts_code", "code", "symbol"]);
-          const industry = firstNonEmpty(row, ["industry", "board", "industry_tag", "sector", "concept"]);
-          if (code && industry && !map[code]) map[code] = industry;
-        });
-        return map;
-      } catch (err) {
-        console.warn("Decision industry map load failed.", err);
-        return {};
+    function renderActions(plan) {
+      const rows = Array.isArray(plan?.candidates) ? plan.candidates : [];
+      els.candidateCount.textContent = `${rows.length} 条`;
+      if (!rows.length) {
+        els.actionContent.innerHTML = '<div class="empty"><strong>当前没有可展示候选</strong>行动计划尚未生成，或资格过滤后候选池为空。</div>';
+        return;
       }
+      const formal = rows.filter(row => row.action === "BUY");
+      const notice = formal.length
+        ? `<div class="empty"><strong>本次正式人工建议 ${formal.length} 只</strong>请在 9:25 前仅用限价单按冻结上限自行挂单；禁止无上限市价单，超过上限或未成交均放弃。</div>`
+        : '<div class="empty"><strong>本次没有正式买入建议</strong>影子验证只用于累计样本外证据；未晋级模型不得作为人工交易依据。</div>';
+      const headers = ["操作", "排名", "代码", "股票", "行业板块", "晋级", "竞价上限", "最高涨幅", "止盈价", "止损价", "最迟退出", "P_fill", "P_exit", "晋级涨停概率", "盈利概率", "预计净收益", "保守下界", "大跌概率", "目标仓位", "原因 / 退出规则"];
+      const body = rows.map(row => {
+        const reason = row.action === "BUY" ? (row.exit_rule || "T+1按止盈、止损、14:50规则退出") : (row.rejection_reason || "-");
+        return `<tr>
+          <td class="left"><span class="action ${actionClass(row.action)}">${escapeHtml(actionLabel(row.action))}</span></td>
+          <td>${escapeHtml(row.rank ?? "-")}</td>
+          <td class="left">${escapeHtml(row.ts_code || "-")}</td>
+          <td class="left name">${escapeHtml(row.name || "-")}</td>
+          <td class="left">${escapeHtml(row.industry || "未分类")}</td>
+          <td>${escapeHtml(row.stage_transition || "-")}</td>
+          <td>${price(row.recommended_max_price)}</td>
+          <td>${finiteNumber(row.max_auction_change_pct) == null ? "-" : `${finiteNumber(row.max_auction_change_pct).toFixed(2)}%`}</td>
+          <td>${price(row.take_profit_price)}</td>
+          <td>${price(row.stop_loss_price)}</td>
+          <td>${escapeHtml(row.latest_exit_time || "14:50")}</td>
+          <td>${pct(row.predicted_fill_probability)}</td>
+          <td>${pct(row.predicted_exit_probability)}</td>
+          <td>${pct(row.predicted_continuation_limit_up_probability)}</td>
+          <td>${pct(row.predicted_profit_probability)}</td>
+          <td class="${valueTone(row.predicted_net_return)}">${pct(row.predicted_net_return)}</td>
+          <td class="${valueTone(row.predicted_return_lcb)}">${pct(row.predicted_return_lcb)}</td>
+          <td>${pct(row.predicted_big_loss_probability)}</td>
+          <td>${pct(row.target_weight)}</td>
+          <td class="reason">${escapeHtml(reason)}</td>
+        </tr>`;
+      }).join("");
+      els.actionContent.innerHTML = `${notice}<div class="table-wrap"><table><thead><tr>${headers.map((h, i) => `<th class="${[0,2,3,4,19].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
-    function normalizeReport(md) {
-      let s = String(md || "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .trim();
-
-      /*
-       * 核心修复：
-       * 当前报告文件可能整份被压缩成 1 行。
-       * 必须先把标题、二级标题、元数据、表格行重新拆开，否则页面会一直像“没有数据”。
-       *
-       * 注意：不能把所有 "| 数字 |" 都当成新行。
-       * 因为 weight=0 也会出现 "| 0 |"，粗暴拆分会导致 rank/ts_code/name 和 EV/P_fill 等字段错位。
-       * 所以股票数据行只在 "| rank | 000000.SZ/SH/BJ |" 这种结构前拆行。
-       */
-      s = s
-        .replace(/\s+(##\s+)/g, "\n\n$1")
-        .replace(/\s+(-\s+[A-Za-z_][A-Za-z0-9_]*:\s+)/g, "\n$1")
-        .replace(/\s+(\|\s*rank\s*\|)/gi, "\n$1")
-        .replace(/\s+(\|\s*:?-{3,}:?\s*\|)/g, "\n$1")
-        .replace(/\s+(\|\s*\d+\s*\|\s*\d{6}\.(?:SZ|SH|BJ)\s*\|)/g, "\n$1");
-
-      return s.trim();
+    function auditRow(label, value) {
+      return `<div class="audit-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value == null || value === "" ? "-" : value)}</strong></div>`;
     }
 
-    function extractTitleDate(md) {
-      const m = md.match(/#\s*Decision Report\s*\((\d{8})\)/i);
-      return m ? m[1] : "";
+    function renderAudit(plan) {
+      const model = plan?.model || {};
+      const universe = plan?.universe_eligibility || {};
+      const failures = Array.isArray(model.promotion_failures) ? model.promotion_failures : [];
+      const contract = plan?.execution_contract || {};
+      els.auditContent.innerHTML = `
+        <div class="audit-block">
+          <h3>执行合同</h3>
+          <div class="audit-list">
+            ${auditRow("候选池", contract.candidate_pool || "仅D日已涨停股票")}
+            ${auditRow("候选范围", contract.eligible_universe || "D日已涨停且涨跌幅机制不超过10%的A股")}
+            ${auditRow("交易日历", contract.calendar || "严格A股交易日历")}
+            ${auditRow("买入规则", contract.entry || "-")}
+            ${auditRow("退出规则", contract.exit || "-")}
+            ${auditRow("收益目标", contract.return_target || "T日开盘到T+1开盘")}
+            ${auditRow("订单执行", contract.broker_connected === false ? "仅人工限价操作，系统不连接券商、不允许市价单" : "-")}
+            ${auditRow("大跌硬否决", contract.risk_veto || "大跌概率、保守下界、成交和退出任一不合格即放弃")}
+            ${auditRow("验证口径", contract.validation || "公开行情模拟与人工回填分开累计")}
+            ${auditRow("允许不交易", contract.no_trade_is_valid === true ? "是" : "-")}
+          </div>
+        </div>
+        <div class="audit-block">
+          <h3>证券资格过滤</h3>
+          <div class="audit-list">
+            ${auditRow("规则版本", universe.rule || "a_share_price_limit_le_10_v2")}
+            ${auditRow("输入数量", universe.input_rows ?? "-")}
+            ${auditRow("保留数量", universe.eligible_rows ?? "-")}
+            ${auditRow("剔除数量", universe.rejected_rows ?? "-")}
+          </div>
+        </div>
+        <div class="audit-block">
+          <h3>模型状态</h3>
+          <div class="audit-list">
+            ${auditRow("模型版本", model.version || "-")}
+            ${auditRow("收益模型", model.return_model || "-")}
+            ${auditRow("盈利模型", model.profit_model || "-")}
+            ${auditRow("大跌模型", model.big_loss_model || "-")}
+            ${auditRow("连板模型", model.continuation_model || "-")}
+            ${auditRow("训练就绪", model.ready === true ? "是" : "否")}
+            ${auditRow("样本外晋级", model.promoted === true ? "通过" : "未通过")}
+            ${auditRow("日期一致", model.prediction_matches_report === true ? "一致" : "未对齐")}
+            ${auditRow("模型版本一致", model.artifact_versions_match === true ? "一致" : "不一致或待生成")}
+          </div>
+        </div>
+        <div class="audit-block">
+          <h3>未通过的硬门槛</h3>
+          ${failures.length ? `<ul class="fail-list">${failures.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : '<div class="audit-list">' + auditRow("结果", "全部通过") + '</div>'}
+        </div>`;
     }
 
     function extractField(md, key) {
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const patterns = [
-        new RegExp(`(?:^|\\n)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i"),
-        new RegExp(`(?:^|\\s)-\\s*${key}:\\s*\\*\\*(.*?)\\*\\*`, "i"),
-        new RegExp(`(?:^|\\n)-\\s*${key}:\\s*` + "`([^`]+)`", "i"),
-        new RegExp(`(?:^|\\s)-\\s*${key}:\\s*` + "`([^`]+)`", "i"),
-        new RegExp(`(?:^|\\n)-\\s*${key}:\\s*([^\\n]+)`, "i"),
-        new RegExp(`${key}:\\s*\\*\\*(.*?)\\*\\*`, "i")
+        new RegExp(`^\\s*-\\s*${escaped}:\\s*\\*\\*(.*?)\\*\\*`, "im"),
+        new RegExp(`^\\s*-\\s*${escaped}:\\s*([^\\n]+)`, "im")
       ];
-
-      for (const re of patterns) {
-        const m = md.match(re);
-        if (m) return stripMd(m[1]);
+      for (const pattern of patterns) {
+        const match = md.match(pattern);
+        if (match) return match[1].replace(/[`*]/g, "").trim();
       }
       return "";
     }
 
-    function extractFields(md) {
-      const keys = [
-        "signal_date",
-        "exec_date",
-        "requested_trade_date",
-        "regime",
-        "risk_budget",
-        "input_mode",
-        "fs_degrade_reason",
-        "pred_loaded",
-        "pred_rows",
-        "features_base_loaded",
-        "features_base_rows",
-        "features_limit_loaded",
-        "features_limit_rows",
-        "truth_close_loaded",
-        "truth_close_rows",
-        "meta_loaded",
-        "p_fill_pred_src",
-        "p_fill_model_loaded",
-        "p_fill_model_kind",
-        "p_fill_degrade_reason",
-        "eret_pred_src",
-        "eret_model_loaded",
-        "eret_model_kind",
-        "eret_degrade_reason",
-        "candidates_snapshot",
-        "execution_table",
-        "learning_table",
-        "weights_latest",
-        "weights_dated",
-        "top_evr_latest",
-        "top_evr_dated"
+    function splitMarkdownRow(line) {
+      return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim().replace(/[`*]/g, ""));
+    }
+
+    function parseMarkdownTable(md, section) {
+      const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = md.match(new RegExp(`##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i"));
+      if (!match) return null;
+      const lines = match[1].split(/\r?\n/).map(line => line.trim()).filter(line => line.startsWith("|"));
+      if (lines.length < 2) return null;
+      const header = splitMarkdownRow(lines[0]);
+      const rows = lines.slice(2).filter(line => line.includes("|")).map(splitMarkdownRow);
+      return { header, rows };
+    }
+
+    function markdownTableHtml(table) {
+      if (!table || !table.rows.length) return '<div class="empty">该表当前为空。</div>';
+      return `<div class="table-wrap"><table><thead><tr>${table.header.map((h, i) => `<th class="${i < 3 ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${table.rows.map(row => `<tr>${table.header.map((_, i) => `<td class="${i < 3 ? "left" : ""}">${escapeHtml(row[i] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    }
+
+    function renderReport(md, reportName) {
+      if (!md) {
+        els.reportContent.innerHTML = '<div class="empty">报告正文暂不可用，行动计划仍按结构化 JSON 展示。</div>';
+        return;
+      }
+      const fields = [
+        ["signal_date", "D 信号日"], ["exec_date", "T 执行日"], ["exit_date", "T+1 退出日"],
+        ["regime", "市场状态"], ["risk_budget", "风险预算"], ["input_mode", "输入模式"],
+        ["p_fill_pred_src", "P_fill 来源"], ["eret_pred_src", "E_ret 来源"]
       ];
-
-      const out = { report_date: extractTitleDate(md) };
-      keys.forEach(key => out[key] = extractField(md, key));
-      return out;
+      const topn = parseMarkdownTable(md, "TopN Targets");
+      const full = parseMarkdownTable(md, "Full Candidate Pool");
+      els.reportContent.innerHTML = `
+        <div class="report-meta">${fields.map(([key, label]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(extractField(md, key) || "-")}</strong></div>`).join("")}</div>
+        <div class="md-section"><h3>TopN Targets</h3>${markdownTableHtml(topn)}</div>
+        <div class="md-section"><h3>Full Candidate Pool</h3>${markdownTableHtml(full)}</div>
+        <div class="md-section"><h3>原始报告预览 · ${escapeHtml(reportName)}</h3><pre>${escapeHtml(md.slice(0, 12000))}</pre></div>`;
     }
 
-    function splitRow(line) {
-      return String(line)
-        .trim()
-        .replace(/^\|/, "")
-        .replace(/\|$/, "")
-        .split("|")
-        .map(x => stripMd(x));
+    function setNavigation() {
+      els.prevBtn.disabled = state.index >= state.reports.length - 1;
+      els.nextBtn.disabled = state.index <= 0;
     }
 
-    function isSeparatorRow(line) {
-      return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(String(line).trim());
+    function cacheCurrent(info, plan, md) {
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ info, plan, md, savedAt: Date.now() })); } catch (_) {}
     }
 
-    function parseSectionTable(md, sectionName) {
-      const safe = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(`##\\s+${safe}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, "i");
-      const m = md.match(re);
-      if (!m) return { header: [], rows: [] };
-
-      const lines = m[1]
-        .split("\n")
-        .map(x => x.trim())
-        .filter(Boolean)
-        .filter(x => x.startsWith("|"));
-
-      if (lines.length < 2) return { header: [], rows: [] };
-
-      const headerLine = lines.find(x => /\|\s*rank\s*\|/i.test(x)) || lines[0];
-      const header = splitRow(headerLine);
-
-      const rows = lines
-        .filter(x => x !== headerLine)
-        .filter(x => !isSeparatorRow(x))
-        .map(splitRow)
-        .filter(row => row.length >= 3 && /^\d+$/.test(row[0]));
-
-      return { header, rows };
+    function loadCache() {
+      try { return JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch (_) { return null; }
     }
 
-    function tableWithIndustry(table, industryMap) {
-      if (!table || !Array.isArray(table.header) || !Array.isArray(table.rows)) return table;
+    async function loadReport(index) {
+      state.index = Math.max(0, Math.min(index, state.reports.length - 1));
+      setNavigation();
+      const info = state.reports[state.index];
+      if (!info) throw new Error("报告索引为空");
+      els.loadStatus.innerHTML = `<strong>正在加载 ${escapeHtml(info.report_file)}</strong>`;
 
-      const keys = table.header.map(h => String(h).toLowerCase());
-      const nameIdx = keys.indexOf("name");
-      const codeIdx = keys.indexOf("ts_code");
-      if (nameIdx < 0 || codeIdx < 0 || keys.includes("industry") || keys.includes("行业板块")) return table;
-
-      const header = table.header.slice();
-      header.splice(nameIdx + 1, 0, "行业板块");
-
-      const rows = table.rows.map(row => {
-        const next = row.slice();
-        const code = String(row[codeIdx] || "").trim();
-        next.splice(nameIdx + 1, 0, industryMap && industryMap[code] ? industryMap[code] : "");
-        return next;
-      });
-
-      return { header, rows };
-    }
-
-    function tableHtml(table, emptyText) {
-      if (!table || !table.header || table.header.length === 0) {
-        return `<div class="empty">${escapeHtml(emptyText || "未解析到表格")}</div>`;
+      const actionPath = info.action_url || `outputs/decision/action_plan_${info.report_date}.json`;
+      const [planResult, reportResult] = await Promise.allSettled([
+        fetchPath(actionPath),
+        fetchPath(info.report_url || `outputs/decision/${info.report_file}`, "text")
+      ]);
+      let plan = planResult.status === "fulfilled" ? planResult.value : null;
+      if (!plan && state.index === 0) {
+        try { plan = await fetchPath("outputs/decision/action_plan_latest.json"); } catch (_) {}
       }
-
-      if (!table.rows || table.rows.length === 0) {
-        return `<div class="empty">${escapeHtml(emptyText || "该表当前为空")}</div>`;
+      const md = reportResult.status === "fulfilled" ? reportResult.value : "";
+      if (!plan) {
+        plan = {
+          report_date: info.report_date,
+          status_code: "PENDING_AUCTION_MODEL",
+          status_label: "行动计划尚未生成",
+          model: { promoted: false, prediction_matches_report: false, promotion_failures: [] },
+          candidates: []
+        };
       }
-
-      const numericKeys = new Set(["rank", "weight", "ev", "p_fill", "e_ret", "cost", "riskpenalty"]);
-      const keys = table.header.map(h => String(h).toLowerCase());
-
-      const th = table.header.map((h, idx) => {
-        const cls = numericKeys.has(keys[idx]) ? ' class="num"' : "";
-        return `<th${cls}>${escapeHtml(h)}</th>`;
-      }).join("");
-
-      const tr = table.rows.map(row => {
-        return `<tr>${table.header.map((_, idx) => {
-          const key = keys[idx];
-          const val = row[idx] ?? "";
-          const n = Number(String(val).replace("%", ""));
-          const classes = [];
-          if (numericKeys.has(key)) classes.push("num");
-          if ((key === "ev" || key === "e_ret") && Number.isFinite(n)) {
-            if (n > 0) classes.push("pos");
-            if (n < 0) classes.push("neg");
-          }
-          return `<td${classes.length ? ` class="${classes.join(" ")}"` : ""}>${escapeHtml(val)}</td>`;
-        }).join("")}</tr>`;
-      }).join("");
-
-      return `<div class="table-wrap"><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`;
+      state.current = { info, plan, md };
+      renderStatus(plan);
+      renderMetrics(plan);
+      renderStageWatchlist(plan);
+      renderActions(plan);
+      renderAudit(plan);
+      renderReport(md, info.report_file);
+      cacheCurrent(info, plan, md);
+      els.sourcePill.textContent = state.mode === "same-origin" ? "同源结构化数据" : "raw 结构化回退";
+      els.loadStatus.innerHTML = `<strong>${escapeHtml(info.report_file)}</strong> · ${state.index + 1}/${state.reports.length}`;
+      els.footer.textContent = `Decision · ${info.report_file} · 本页面不自动刷新 · 本次读取 ${new Date().toLocaleString("zh-CN")}`;
     }
 
-    function kvHtml(fields, keys) {
-      return `<div class="kv-list">${keys.map(([key, label]) => `
-        <div class="kv">
-          <div class="kv-key">${escapeHtml(label)}</div>
-          <div class="kv-val">${escapeHtml(fields[key] || "-")}</div>
-        </div>
-      `).join("")}</div>`;
-    }
-
-    function buildMetaCard(label, value) {
-      return `
-        <div class="meta-item">
-          <div class="meta-label">${escapeHtml(label)}</div>
-          <div class="meta-value">${escapeHtml(value == null || value === "" ? "-" : value)}</div>
-        </div>
-      `;
-    }
-
-    function renderMeta(fields, evRows, topRows, fullRows) {
-      metaGrid.innerHTML = [
-        buildMetaCard("报告日期", fields.report_date || "-"),
-        buildMetaCard("信号日", fields.signal_date || "-"),
-        buildMetaCard("执行日", fields.exec_date || "-"),
-        buildMetaCard("市场状态", fields.regime || "-"),
-        buildMetaCard("风险预算", fields.risk_budget || "-"),
-        buildMetaCard("输入模式", fields.input_mode || "-"),
-        buildMetaCard("EV筛选数量", String(evRows)),
-        buildMetaCard("TopN数量", String(topRows)),
-        buildMetaCard("候选池数量", String(fullRows)),
-        buildMetaCard("P_fill来源", fields.p_fill_pred_src || "-"),
-        buildMetaCard("E_ret来源", fields.eret_pred_src || "-"),
-        buildMetaCard("当前文件", currentFileName || "-")
-      ].join("");
-    }
-
-    function renderReport(mdRaw, industryMap = {}) {
-      const md = normalizeReport(mdRaw);
-      const fields = extractFields(md);
-      const evTable = tableWithIndustry(parseSectionTable(md, "EV > 3% & RiskPenalty < 1%"), industryMap);
-      const topnTable = tableWithIndustry(parseSectionTable(md, "TopN Targets"), industryMap);
-      const fullTable = tableWithIndustry(parseSectionTable(md, "Full Candidate Pool"), industryMap);
-
-      renderMeta(
-        fields,
-        evTable.rows.length,
-        topnTable.rows.length,
-        fullTable.rows.length
-      );
-
-      const rawNotice = mdRaw.split(/\r?\n/).length <= 2
-        ? `<div class="notice">检测到报告文件被压成一整行；本页面已启用强制拆分解析，所以 Full Candidate Pool 等表格仍可显示。</div>`
-        : "";
-
-      reportBox.className = "";
-      reportBox.innerHTML = `
-        ${rawNotice}
-
-        ${collapsibleSectionHtml("报告正文", `
-          <div class="report-section">
-            <h2>报告状态</h2>
-            ${kvHtml(fields, [
-              ["signal_date", "信号日"],
-              ["exec_date", "执行日"],
-              ["requested_trade_date", "请求交易日"],
-              ["regime", "市场状态"],
-              ["risk_budget", "风险预算"],
-              ["input_mode", "输入模式"],
-              ["fs_degrade_reason", "FS降级原因"],
-              ["pred_loaded", "pred_loaded"],
-              ["pred_rows", "pred_rows"],
-              ["features_base_rows", "features_base_rows"],
-              ["features_limit_rows", "features_limit_rows"],
-              ["truth_close_rows", "truth_close_rows"]
-            ])}
-          </div>
-
-          <div class="report-section">
-            <h2>模型状态</h2>
-            ${kvHtml(fields, [
-              ["p_fill_pred_src", "P_fill来源"],
-              ["p_fill_model_loaded", "P_fill模型加载"],
-              ["p_fill_model_kind", "P_fill模型类型"],
-              ["p_fill_degrade_reason", "P_fill降级原因"],
-              ["eret_pred_src", "E_ret来源"],
-              ["eret_model_loaded", "E_ret模型加载"],
-              ["eret_model_kind", "E_ret模型类型"],
-              ["eret_degrade_reason", "E_ret降级原因"]
-            ])}
-          </div>
-        `, true)}
-
-        ${collapsibleSectionHtml("Artifacts", kvHtml(fields, [
-          ["candidates_snapshot", "候选快照"],
-          ["execution_table", "执行表"],
-          ["learning_table", "学习表"],
-          ["weights_latest", "weights_latest"],
-          ["weights_dated", "weights_dated"],
-          ["top_evr_latest", "TopEVR_latest"],
-          ["top_evr_dated", "TopEVR_dated"]
-        ]), true)}
-
-        <div class="report-section">
-          <h2>EV &gt; 3% &amp; RiskPenalty &lt; 1%</h2>
-          ${tableHtml(evTable, "该严格筛选表当前为空：没有股票同时满足 EV > 3% 且 RiskPenalty < 1%。")}
-        </div>
-
-        <div class="report-section">
-          <h2>TopN Targets</h2>
-          ${tableHtml(topnTable, "TopN Targets 当前为空。")}
-        </div>
-
-        <div class="report-section">
-          <h2>Full Candidate Pool</h2>
-          ${tableHtml(fullTable, "Full Candidate Pool 当前未解析到数据。")}
-        </div>
-
-        <div class="report-section">
-          <h2>原始报告预览</h2>
-          <pre class="raw">${escapeHtml(md.slice(0, 8000))}</pre>
-        </div>
-      `;
-      bindReportSectionToggles(reportBox);
-    }
-
-    async function renderReportWithIndustry(mdRaw) {
-      const fields = extractFields(normalizeReport(mdRaw));
-      const industryMap = await loadIndustryMap(fields);
-      renderReport(mdRaw, industryMap);
-    }
-
-    function updateNavButtons() {
-      prevBtn.disabled = currentIndex >= reportFiles.length - 1;
-      nextBtn.disabled = currentIndex <= 0;
-    }
-
-    async function getReportFilesFromApi() {
-      const files = await fetchJson(API_LIST_URL);
-      const rows = Array.isArray(files) ? files : [];
-
-      return rows
-        .filter(x => x && x.type === "file" && /^decision_report_\d{8}\.md$/.test(x.name))
-        .filter(x => isAllowedReport(x.name))
-        .sort((a, b) => b.name.localeCompare(a.name))
-        .map(x => ({
-          name: x.name,
-          path: x.path,
-          rawUrl: contentUrl(x.path)
-        }));
-    }
-
-    function getFallbackReportFiles() {
-      return getDateCandidates(60).map(ymd => ({
-        name: `decision_report_${ymd}.md`,
-        path: `${REPO.reportDir}/decision_report_${ymd}.md`,
-        rawUrl: contentUrl(`${REPO.reportDir}/decision_report_${ymd}.md`)
-      }));
-    }
-
-    async function ensureReportList() {
-      if (reportFiles.length > 0) return;
-
+    async function initialize(force = false) {
+      els.refreshBtn.disabled = true;
       try {
-        setStatus("", "正在通过 GitHub API 定位报告列表...");
-        reportFiles = await getReportFilesFromApi();
-        lastLoadMode = "api-list";
-      } catch (err) {
-        console.warn("GitHub API list failed; using raw date probing.", err);
-        reportFiles = getFallbackReportFiles();
-        lastLoadMode = "raw-date-fallback";
-      }
-
-      if (!reportFiles.length) {
-        reportFiles = getFallbackReportFiles();
-        lastLoadMode = "raw-date-fallback";
-      }
-    }
-
-    async function loadReportByIndex(index) {
-      try {
-        await ensureReportList();
-
-        currentIndex = Math.max(0, Math.min(index, reportFiles.length - 1));
-        updateNavButtons();
-
-        reportBox.className = "empty";
-        reportBox.innerHTML = "正在加载...";
-        metaGrid.innerHTML = "";
-
-        let lastErr = null;
-
-        for (let i = currentIndex; i < reportFiles.length; i += 1) {
-          const info = reportFiles[i];
-          currentIndex = i;
-          currentFileName = info.name;
-          updateNavButtons();
-
-          try {
-            setStatus("", `正在读取：${info.name}`);
-            const mdRaw = await fetchText(info.rawUrl);
-            await renderReportWithIndustry(mdRaw);
-            saveCachedReport(info, mdRaw);
-            setStatus("ok", `加载成功：${info.name}（${currentIndex + 1}/${reportFiles.length}）`);
-            footerText.textContent = `Top10 Decision · ${info.name} · 最近刷新：${new Date().toLocaleString("zh-CN")}`;
-            return;
-          } catch (err) {
-            lastErr = err;
-            console.warn(`Report not loaded: ${info.name}`, err);
-            if (lastLoadMode !== "raw-date-fallback") break;
-          }
-        }
-
-        throw lastErr || new Error("未找到可读取的 decision_report_YYYYMMDD.md");
-      } catch (err) {
-        console.error(err);
-        const cached = loadCachedReport();
-        if (cached) {
-          currentFileName = cached.info.name || "cached_report";
-          reportFiles = [cached.info];
-          currentIndex = 0;
-          updateNavButtons();
-          await renderReportWithIndustry(cached.mdRaw);
-          setStatus("warn", `已显示本地缓存：${currentFileName}`);
-          footerText.textContent = `Top10 Decision · ${currentFileName} · 缓存时间：${new Date(cached.savedAt || Date.now()).toLocaleString("zh-CN")}`;
-          return;
-        }
-        setStatus("bad", "页面加载失败");
-        reportBox.className = "error";
-        reportBox.innerHTML = `
-          <strong>页面加载失败</strong><br><br>
-          ${escapeHtml(err?.message || String(err))}<br><br>
-          请检查：<br>
-          1. 仓库是否公开；<br>
-          2. outputs/decision/ 下是否已有 decision_report_YYYYMMDD.md；<br>
-          3. GitHub raw 或 GitHub API 是否临时限流；<br>
-          4. 浏览器是否阻止跨域 fetch。
-        `;
-        metaGrid.innerHTML = "";
+        if (force) state.reports = [];
+        const index = await fetchPath("outputs/decision/report_index.json");
+        const reports = Array.isArray(index?.reports) ? index.reports : [];
+        state.reports = reports.filter(item => /^decision_report_20\d{6}\.md$/.test(item.report_file || ""));
+        if (!state.reports.length) throw new Error("report_index 没有报告记录");
+        state.index = 0;
+        await loadReport(0);
+      } catch (error) {
+        const cached = loadCache();
+        if (!cached?.plan) throw error;
+        state.reports = [cached.info || { report_file: "cached_report", report_date: cached.plan.report_date || "" }];
+        state.index = 0;
+        renderStatus(cached.plan);
+        renderMetrics(cached.plan);
+        renderStageWatchlist(cached.plan);
+        renderActions(cached.plan);
+        renderAudit(cached.plan);
+        renderReport(cached.md || "", cached.info?.report_file || "cached_report");
+        els.sourcePill.textContent = "本地缓存";
+        els.loadStatus.innerHTML = `<strong>网络读取失败，显示最近缓存</strong> · ${escapeHtml(error.message || error)}`;
+        setNavigation();
+      } finally {
+        els.refreshBtn.disabled = false;
       }
     }
 
-    refreshBtn.addEventListener("click", () => {
-      reportFiles = [];
-      currentIndex = 0;
-      loadReportByIndex(0);
-    });
+    els.refreshBtn.addEventListener("click", () => initialize(true));
+    els.prevBtn.addEventListener("click", () => loadReport(state.index + 1).catch(showError));
+    els.nextBtn.addEventListener("click", () => loadReport(state.index - 1).catch(showError));
 
-    prevBtn.addEventListener("click", () => loadReportByIndex(currentIndex + 1));
-    nextBtn.addEventListener("click", () => loadReportByIndex(currentIndex - 1));
+    function showError(error) {
+      els.loadStatus.innerHTML = `<strong>读取失败</strong> · ${escapeHtml(error?.message || error)}`;
+      els.sourcePill.textContent = "错误";
+    }
 
-    window.addEventListener("error", event => {
-      console.error("Global page error:", event.error || event.message);
-      setStatus("bad", "页面脚本异常");
-      reportBox.className = "error";
-      reportBox.innerHTML = `
-        <strong>页面脚本异常</strong><br><br>
-        ${escapeHtml(event.message || "未知脚本错误")}
-      `;
-    });
-
-    setStatus("", "正在定位报告...");
-    loadReportByIndex(0);
+    window.addEventListener("error", event => showError(event.error || event.message));
+    initialize(false).catch(showError);
   </script>
 </body>
 </html>

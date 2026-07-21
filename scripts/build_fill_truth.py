@@ -10,7 +10,7 @@ build_fill_truth.py
 - 生成 P_fill 学习标签文件：
     data/market/fill_truth_{trade_date}.csv
 
-当前阶段只做 P_fill 标签层：
+当前阶段只做公开行情可成交性代理标签层，不连接券商、不声称真实成交：
 - y_fill
 - fill_label_quality
 - entry_price_proxy_t1
@@ -30,7 +30,7 @@ build_fill_truth.py
 - run_v2.py 接入
 
 主口径（与契约一致）：
-- P_fill 只回答：T+1 是否可买
+- P_fill 只回答：若人工在 T 日 9:25 前按规则挂单，公开行情是否支持“可成交”的保守判断
 - 计算对象必须严格限制在 pred_source 候选池名单内
 - features_limit / raw 只负责给候选池股票补字段，不得反向扩池
 - EntryPriceProxy_T+1 不是 PredOpen_T+1，也不是理想成交价
@@ -58,6 +58,9 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from top10decision.configs import entry_price_proxy_config, fill_truth_config
+from top10decision.data.tushare_minute import opening_auction_price
+from top10decision.decision.eligibility import filter_standard_limit_universe
+from top10decision.decision.contracts import PFILL_EXECUTION_CONTRACT, PFILL_TRUTH_VERSION
 
 
 # =========================
@@ -318,6 +321,7 @@ def load_candidate_pool(paths: Paths, trade_date: str) -> Tuple[pd.DataFrame, st
 @dataclass
 class T1Truth:
     daily: pd.DataFrame
+    stk_auction: pd.DataFrame
     stk_limit: pd.DataFrame
     limit_list_d: pd.DataFrame
     limit_break_d: pd.DataFrame
@@ -333,6 +337,7 @@ def load_t1_truth(raw_root: Path, exec_date: str) -> T1Truth:
     base = snapshot_dir(raw_root, exec_date)
     return T1Truth(
         daily=_read_snapshot_csv(base, "daily.csv"),
+        stk_auction=_read_snapshot_csv(base, "stk_auction.csv"),
         stk_limit=_read_snapshot_csv(base, "stk_limit.csv"),
         limit_list_d=_read_snapshot_csv(base, "limit_list_d.csv"),
         limit_break_d=_read_snapshot_csv(base, "limit_break_d.csv"),
@@ -344,12 +349,25 @@ def prep_daily(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=["ts_code", "open_t1"])
     out = ensure_ts_code(df)
-    open_col = first_existing(out, ["open", "开盘价", "open_price"])
-    if open_col is None:
+    aliases = {
+        "open_t1": ["open", "开盘价", "open_price"],
+        "high_t1": ["high", "最高价"],
+        "low_t1": ["low", "最低价"],
+        "close_t1": ["close", "收盘价"],
+        "pre_close_t1": ["pre_close", "昨收价"],
+        "vol_t1": ["vol", "volume", "成交量"],
+        "amount_t1": ["amount", "成交额"],
+        "pct_chg_t1": ["pct_chg", "涨跌幅"],
+    }
+    rename = {}
+    for target, candidates in aliases.items():
+        source = first_existing(out, candidates)
+        if source is not None:
+            rename[source] = target
+    if "open_t1" not in rename.values():
         return pd.DataFrame(columns=["ts_code", "open_t1"])
-    out = out[["ts_code", open_col]].copy()
-    out = out.rename(columns={open_col: "open_t1"})
-    return out
+    keep = ["ts_code"] + list(rename)
+    return out[keep].rename(columns=rename).drop_duplicates("ts_code", keep="last")
 
 
 def prep_stk_limit(df: pd.DataFrame) -> pd.DataFrame:
@@ -371,6 +389,25 @@ def prep_stk_limit(df: pd.DataFrame) -> pd.DataFrame:
         ren[down_col] = "down_limit_t1"
     out = out.rename(columns=ren)
     return out
+
+
+def prep_stk_auction(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["ts_code", "auction_price_t1", "auction_amount_t1"])
+    out = ensure_ts_code(df)
+    price_col = first_existing(out, ["price", "auction_price", "竞价成交价"])
+    amount_col = first_existing(out, ["amount", "auction_amount", "竞价成交额"])
+    volume_col = first_existing(out, ["vol", "volume", "auction_vol", "竞价成交量"])
+    keep = ["ts_code"] + [c for c in (price_col, amount_col, volume_col) if c is not None]
+    out = out[keep].copy()
+    rename = {}
+    if price_col is not None:
+        rename[price_col] = "auction_price_t1"
+    if amount_col is not None:
+        rename[amount_col] = "auction_amount_t1"
+    if volume_col is not None:
+        rename[volume_col] = "auction_vol_t1"
+    return out.rename(columns=rename).drop_duplicates("ts_code", keep="last")
 
 
 def _pick_open_times_col(df: pd.DataFrame) -> Optional[str]:
@@ -437,6 +474,7 @@ def prep_suspend(df: pd.DataFrame) -> pd.DataFrame:
 def merge_t1_truth(truth: T1Truth) -> pd.DataFrame:
     dfs = [
         prep_daily(truth.daily),
+        prep_stk_auction(truth.stk_auction),
         prep_stk_limit(truth.stk_limit),
         prep_limit_list(truth.limit_list_d),
         prep_limit_break(truth.limit_break_d),
@@ -474,30 +512,34 @@ def infer_fill_label(row: pd.Series) -> Tuple[int, str, Optional[float], str]:
         return 0, "strong_suspend", None, ""
 
     open_t1 = to_float(row.get("open_t1"))
+    auction_price_t1 = to_float(row.get("auction_price_t1"))
+    minute_open_t1 = to_float(row.get("minute_open_t1"))
     up_limit_t1 = to_float(row.get("up_limit_t1"))
-    open_times_t1 = to_float(row.get("open_times_t1"))
-    break_open_times_t1 = to_float(row.get("break_open_times_t1"))
 
-    if pd.notna(open_t1):
-        if pd.isna(up_limit_t1) or abs(open_t1 - up_limit_t1) >= 1e-8:
-            return 1, "strong_open_tradable", float(open_t1), entry_price_proxy_config.mode_default
+    if pd.notna(auction_price_t1) and auction_price_t1 > 0:
+        execution_price = auction_price_t1
+        mode = entry_price_proxy_config.mode_default
+        quality = "strong_official_opening_auction"
+    elif pd.notna(minute_open_t1) and minute_open_t1 > 0:
+        execution_price = minute_open_t1
+        mode = "t_minute_0930_open_proxy"
+        quality = "strong_minute_opening_proxy"
+    elif pd.notna(open_t1) and open_t1 > 0:
+        execution_price = open_t1
+        mode = entry_price_proxy_config.mode_fallback
+        quality = "strong_daily_open_auction_proxy"
+    else:
+        return 0, "weak_missing_opening_auction_truth", None, ""
 
-    has_break = (
-        (pd.notna(open_times_t1) and open_times_t1 > 0)
-        or (pd.notna(break_open_times_t1) and break_open_times_t1 > 0)
-    )
-    if has_break:
-        if pd.notna(open_t1):
-            return 1, "weak_intraday_break_without_minbar", float(open_t1), entry_price_proxy_config.mode_fallback
-        return 1, "weak_intraday_break_without_price", None, ""
+    if pd.notna(open_t1) and open_t1 > 0 and abs(execution_price - open_t1) > 0.011:
+        return 0, "weak_auction_daily_open_conflict", None, ""
 
-    if is_limit_up_dead(row):
-        return 0, "strong_dead_limit_up", None, ""
+    # A later intraday board break cannot prove an order submitted for the
+    # opening call auction was filled. Limit-up auction opens fail closed.
+    if pd.notna(up_limit_t1) and abs(execution_price - up_limit_t1) <= 0.011:
+        return 0, "strong_opening_auction_limit_up_unconfirmed", None, ""
 
-    if pd.isna(open_t1) and pd.isna(up_limit_t1):
-        return 0, "weak_missing_truth", None, ""
-
-    return 0, "soft_not_tradable", None, ""
+    return 1, quality, float(execution_price), mode
 
 
 # =========================
@@ -558,7 +600,19 @@ def build_fill_truth(
             how="left",
         )
 
+    out, universe_audit = filter_standard_limit_universe(
+        out,
+        code_col="ts_code",
+        name_col="name",
+    )
+
     out = out.merge(t1, on="ts_code", how="left")
+    out["minute_open_t1"] = out["ts_code"].map(
+        lambda code: opening_auction_price(paths.project_root, exec_date, code)
+    )
+    out["minute_open_available_t1"] = pd.to_numeric(
+        out["minute_open_t1"], errors="coerce"
+    ).gt(0).astype(int)
     out["exec_date"] = exec_date
     out["target_date"] = target_date
 
@@ -575,7 +629,8 @@ def build_fill_truth(
     out["label_ready_fill"] = int(label_ready_fill)
     out["label_ready_ret"] = int(label_ready_ret)
 
-    out["label_version"] = "pfill_truth_v4_maturity_resolved"
+    out["label_version"] = PFILL_TRUTH_VERSION
+    out["execution_contract"] = PFILL_EXECUTION_CONTRACT
     out["buy_window_start"] = fill_truth_config.buy_window_start
     out["buy_window_end"] = fill_truth_config.buy_window_end
 
@@ -597,7 +652,12 @@ def build_fill_truth(
         "fill_label_quality",
         "entry_price_proxy_t1",
         "entry_price_proxy_mode",
+        "auction_price_t1",
+        "auction_amount_t1",
+        "minute_open_t1",
+        "minute_open_available_t1",
         "label_version",
+        "execution_contract",
         "buy_window_start",
         "buy_window_end",
     ]
@@ -607,6 +667,7 @@ def build_fill_truth(
     out["y_fill"] = out["y_fill"].fillna(0).astype(int)
     out["label_ready_fill"] = out["label_ready_fill"].fillna(0).astype(int)
     out["label_ready_ret"] = out["label_ready_ret"].fillna(0).astype(int)
+    out.attrs["universe_audit"] = universe_audit
 
     return out, pred_source_path
 
@@ -635,10 +696,19 @@ def write_meta(
             df["fill_label_quality"].astype(str).value_counts(dropna=False).to_dict()
             if "fill_label_quality" in df.columns else {}
         ),
+        "execution_contract": PFILL_EXECUTION_CONTRACT,
+        "guidance_only": True,
+        "broker_connected": False,
+        "actual_fill_observed": False,
+        "y_fill_semantics": "public_market_fillability_proxy; manual actual fills require explicit feedback",
+        "universe_eligibility": dict(df.attrs.get("universe_audit", {}) or {}),
         "source": {
             "pred_source": pred_source_path,
             "features_limit": str(paths.features_limit),
             "raw_exec_snapshot": str(snapshot_dir(paths.raw_root, exec_date)),
+            "minute_exec_snapshot_root": str(
+                paths.project_root / "data" / "market" / "minute_1m" / exec_date[:4] / exec_date
+            ),
             "sample_maturity_csv": str(paths.maturity_csv),
         },
         "output": str(paths.out_csv),
@@ -657,7 +727,7 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Build fill_truth_{trade_date}.csv")
     ap.add_argument("--trade-date", required=True, help="T 日，格式 YYYYMMDD")
     ap.add_argument("--exec-date", default="", help="可选覆盖 T+1 日期；默认从 sample_maturity 读取")
-    ap.add_argument("--target-date", default="", help="可选覆盖 T+2 日期；默认从 sample_maturity 读取")
+    ap.add_argument("--target-date", default="", help="可选覆盖 T+1 退出日期；默认从 sample_maturity 读取")
     ap.add_argument("--maturity-csv", default="", help="sample_maturity_latest.csv 路径")
     return ap.parse_args()
 

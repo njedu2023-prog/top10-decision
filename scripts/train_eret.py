@@ -17,7 +17,7 @@ train_eret.py
 
 本版关键修复：
 - E_ret 训练特征合同必须与线上 decision 推理可获得字段一致。
-- 严禁未来真值、标签字段、训练权重、审计字段、T+1/T+2 真值字段进入 feature_cols。
+- 严禁未来真值、标签字段、训练权重、审计字段、T买入/T+1退出真值字段进入 feature_cols。
 - 剔除股票标识、全市场广播资金流、线上缺失 prior 与盘中审计字段。
 - 按交易日均衡训练权重，避免单日股票数被误当成独立市场样本。
 - 至少积累 20 个独立交易日，并使用多交易日时间留出验证后才训练。
@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -51,6 +52,20 @@ try:
 except Exception:
     HAS_LGBM = False
     LGBMRegressor = None  # type: ignore
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from top10decision.decision.eligibility import filter_standard_limit_universe  # noqa: E402
+from top10decision.decision.contracts import (  # noqa: E402
+    ERET_COMPAT_TARGET_COLUMN,
+    ERET_HOLDING_MODE,
+    ERET_TARGET_COLUMN,
+    ERET_TRUTH_VERSION,
+)
 
 
 DEFAULT_MIN_INDEPENDENT_DATES = 20
@@ -154,8 +169,8 @@ def load_one_trainset(project_root: Path, trade_date: str) -> Tuple[pd.DataFrame
     df = safe_read_csv(path)
     if df.empty:
         raise ValueError(f"训练样本为空：{path}")
-    if "realized_ret_t1_to_t2" not in df.columns:
-        raise ValueError(f"训练样本缺少 realized_ret_t1_to_t2 列：{path}")
+    if ERET_TARGET_COLUMN not in df.columns and ERET_COMPAT_TARGET_COLUMN not in df.columns:
+        raise ValueError(f"训练样本缺少 E_ret 目标列：{path}")
 
     df = df.copy()
     if "trade_date" in df.columns:
@@ -218,6 +233,15 @@ def mask_unavailable_intraday_features(df: pd.DataFrame) -> pd.DataFrame:
 def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
     out = mask_unavailable_intraday_features(df)
 
+    if "eret_truth_version" not in out.columns or "return_holding_mode" not in out.columns:
+        raise ValueError("训练样本缺少 E_ret 目标版本合同，拒绝混用旧收盘收益标签")
+    out = out[
+        out["eret_truth_version"].astype(str).eq(ERET_TRUTH_VERSION)
+        & out["return_holding_mode"].astype(str).eq(ERET_HOLDING_MODE)
+    ].copy()
+    if out.empty:
+        raise ValueError(f"没有符合 {ERET_TRUTH_VERSION} 的T日竞价到T+1择机退出样本")
+
     if "label_ready_ret" in out.columns:
         out["label_ready_ret"] = pd.to_numeric(out["label_ready_ret"], errors="coerce").fillna(0).astype(int)
         out = out[out["label_ready_ret"] == 1].copy()
@@ -226,17 +250,22 @@ def prepare_train_df(df: pd.DataFrame) -> pd.DataFrame:
         out["eret_sample_eligible"] = pd.to_numeric(out["eret_sample_eligible"], errors="coerce").fillna(0).astype(int)
         out = out[out["eret_sample_eligible"] == 1].copy()
 
-    if "realized_ret_t1_to_t2" not in out.columns:
-        raise ValueError("训练样本缺少 realized_ret_t1_to_t2 列")
+    if ERET_TARGET_COLUMN not in out.columns:
+        raise ValueError(f"训练样本缺少 {ERET_TARGET_COLUMN} 列")
 
-    out["realized_ret_t1_to_t2"] = pd.to_numeric(out["realized_ret_t1_to_t2"], errors="coerce")
-    out = out[out["realized_ret_t1_to_t2"].notna()].copy()
+    out[ERET_TARGET_COLUMN] = pd.to_numeric(out[ERET_TARGET_COLUMN], errors="coerce")
+    out = out[out[ERET_TARGET_COLUMN].notna()].copy()
 
     if out.empty:
         raise ValueError("过滤 label_ready_ret=1 / eret_sample_eligible=1 / 非空目标后无可训练样本")
 
     if "trade_date" in out.columns:
         out["trade_date"] = out["trade_date"].map(norm_ymd)
+
+    out, eligibility_audit = filter_standard_limit_universe(out, code_col="ts_code", name_col="name")
+    if out.empty:
+        raise ValueError("过滤涨跌幅机制大于10%的股票后无可训练样本")
+    out.attrs["eligibility_audit"] = eligibility_audit
 
     # sample_weight 只允许作为训练权重，不允许进入 feature_cols。
     if "sample_weight" in out.columns:
@@ -318,13 +347,23 @@ def split_train_valid(
 # 未来真值 / 标签 / 交易执行真值 / 审计字段，绝不允许进入线上推理特征合同。
 LEAKAGE_COLS = {
     # 目标与其等价列
-    "realized_ret_t1_to_t2",
+    ERET_TARGET_COLUMN,
+    ERET_COMPAT_TARGET_COLUMN,
     "premium_ret_t1_to_t2",
 
-    # T+2 未来真值
+    # T+1 退出日未来真值
     "target_date",
     "exit_date",
     "exit_price_t2_close",
+    "exit_price_tplus1_open",
+    "exit_price_tplus1_timed",
+    "exit_price_source",
+    "exit_on_time",
+    "exit_reason",
+    "take_profit_price_tplus1",
+    "stop_loss_price_tplus1",
+    "latest_exit_time",
+    "exit_policy_version",
     "close_t2",
     "open_t2",
     "high_t2",
@@ -344,6 +383,7 @@ LEAKAGE_COLS = {
     "amount_t1",
     "pct_chg_t1",
     "entry_price_t1",
+    "entry_price_t_opening_auction",
     "entry_price_proxy_t1",
     "entry_price_proxy_mode",
 
@@ -460,7 +500,7 @@ def _is_forbidden_feature_col(col: object) -> bool:
     if low in forbidden_exact or base_low in forbidden_exact:
         return True
 
-    # 兜底：任何 T+2 字段或 merge 出来的 T+2 重复列都不能进特征。
+    # 兜底：任何 T+1 退出真值或 merge 出来的重复真值列都不能进特征。
     if re.search(r"(^|_)t2(\.|_|$)", low) or re.search(r"(^|_)t2(\.|_|$)", base_low):
         return True
 
@@ -609,7 +649,7 @@ def fit_gbm_train_only(
     x_train = encode_gbm_frame(train_df, feature_cols)
     model = build_gbm_model()
     sample_weight = build_date_balanced_sample_weight(train_df)
-    model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values, sample_weight=sample_weight)
+    model.fit(x_train, train_df[ERET_TARGET_COLUMN].astype(float).values, sample_weight=sample_weight)
     return model
 
 
@@ -635,7 +675,7 @@ def fit_gbm_with_valid(
 
     model = build_gbm_model()
     sample_weight = build_date_balanced_sample_weight(train_df)
-    model.fit(x_train, train_df["realized_ret_t1_to_t2"].astype(float).values, sample_weight=sample_weight)
+    model.fit(x_train, train_df[ERET_TARGET_COLUMN].astype(float).values, sample_weight=sample_weight)
 
     return model, x_valid
 
@@ -773,16 +813,37 @@ def choose_selected_model(metrics_valid: Dict[str, Dict[str, object]]) -> Tuple[
     因此先看多日平均 Spearman IC，再看相对训练均值基线的 RMSE skill，
     最后才用 RMSE / MAE / 方向准确率打破平局。
     """
-    candidates: list[tuple[tuple[float, float, float, float, float, int], str, Dict[str, object]]] = []
+    candidates: list[tuple[tuple[int, float, float, float, float, float, int], str, Dict[str, object], bool]] = []
     for preference, kind in enumerate(("lgbm", "lr")):
         metrics = metrics_valid.get(kind, {}) or {}
         daily_rank_ic = _metric_value(metrics, "daily_spearman_corr_mean", -1.0)
+        valid_dates = _metric_value(metrics, "daily_spearman_valid_dates", 0.0)
         rmse_skill = _metric_value(metrics, "rmse_skill_vs_train_mean", -1.0)
         rmse = _metric_value(metrics, "rmse", float("inf"))
         mae = _metric_value(metrics, "mae", float("inf"))
         directional_acc = _metric_value(metrics, "directional_acc", -1.0)
+        acceptance_eligible = bool(
+            valid_dates >= 4
+            and daily_rank_ic > 0.0
+            and rmse_skill > 0.0
+            and rmse <= 0.15
+            and directional_acc >= 0.50
+        )
         candidates.append(
-            ((-daily_rank_ic, -rmse_skill, rmse, mae, -directional_acc, preference), kind, metrics)
+            (
+                (
+                    0 if acceptance_eligible else 1,
+                    -daily_rank_ic,
+                    -rmse_skill,
+                    rmse,
+                    mae,
+                    -directional_acc,
+                    preference,
+                ),
+                kind,
+                metrics,
+                acceptance_eligible,
+            )
         )
 
     candidates.sort(key=lambda x: x[0])
@@ -790,8 +851,12 @@ def choose_selected_model(metrics_valid: Dict[str, Dict[str, object]]) -> Tuple[
     selected_metrics = candidates[0][2] if candidates else {}
     return selected_kind, {
         "selected_model": selected_kind,
-        "selection_rule": "max_daily_spearman_then_rmse_skill_then_rmse_mae_directional_prefer_lgbm",
+        "selected_model_acceptance_eligible": candidates[0][3] if candidates else False,
+        "selection_rule": "acceptance_eligible_then_daily_spearman_rmse_skill_rmse_mae_directional",
         "selected_metrics": selected_metrics,
+        "candidate_acceptance_eligible": {
+            kind: eligible for _, kind, _, eligible in candidates
+        },
         "candidate_metrics": metrics_valid,
     }
 
@@ -839,7 +904,9 @@ def build_skip_meta(
         "anchor_trade_date": anchor_trade_date,
         "status": "skipped",
         "skip_reason": skip_reason,
-        "target_column": "realized_ret_t1_to_t2",
+        "target_column": ERET_TARGET_COLUMN,
+        "eret_truth_version": ERET_TRUTH_VERSION,
+        "return_holding_mode": ERET_HOLDING_MODE,
         "split_mode": "skipped",
         "small_sample_mode": False,
         "model_paths": {
@@ -870,6 +937,7 @@ def build_skip_meta(
             "valid": 0,
         },
         "eret_truth_ready_only": True,
+        "universe_eligibility": dict(df.attrs.get("eligibility_audit", {}) or {}),
         "training_governance": {
             "minimum_independent_dates": int(min_independent_dates),
             "available_independent_dates": int(len(loaded_trade_dates)),
@@ -878,10 +946,10 @@ def build_skip_meta(
         },
         "sample_maturity_distribution": sample_maturity_distribution,
         "target_distribution": {
-            "mean": float(df["realized_ret_t1_to_t2"].mean()) if "realized_ret_t1_to_t2" in df.columns and len(df) else None,
-            "median": float(df["realized_ret_t1_to_t2"].median()) if "realized_ret_t1_to_t2" in df.columns and len(df) else None,
-            "min": float(df["realized_ret_t1_to_t2"].min()) if "realized_ret_t1_to_t2" in df.columns and len(df) else None,
-            "max": float(df["realized_ret_t1_to_t2"].max()) if "realized_ret_t1_to_t2" in df.columns and len(df) else None,
+            "mean": float(df[ERET_TARGET_COLUMN].mean()) if ERET_TARGET_COLUMN in df.columns and len(df) else None,
+            "median": float(df[ERET_TARGET_COLUMN].median()) if ERET_TARGET_COLUMN in df.columns and len(df) else None,
+            "min": float(df[ERET_TARGET_COLUMN].min()) if ERET_TARGET_COLUMN in df.columns and len(df) else None,
+            "max": float(df[ERET_TARGET_COLUMN].max()) if ERET_TARGET_COLUMN in df.columns and len(df) else None,
         },
         "features": {
             "n_total": 0,
@@ -964,7 +1032,7 @@ def train_window_as_of(
             maturity_path=maturity_path,
             loaded_trainset_paths=loaded_trainset_paths,
             matured_trade_dates=matured_trade_dates,
-            loaded_trade_dates=loaded_trade_dates,
+            loaded_trade_dates=independent_dates,
             missing_trade_dates=missing_trade_dates,
             raw_df=raw_df,
             df=df,
@@ -998,7 +1066,7 @@ def train_window_as_of(
         str(c) for c in df.columns if _is_forbidden_feature_col(c)
     ]
 
-    train_target = train_df["realized_ret_t1_to_t2"].astype(float).to_numpy()
+    train_target = train_df[ERET_TARGET_COLUMN].astype(float).to_numpy()
     train_sample_weight = build_date_balanced_sample_weight(train_df)
     train_mean_baseline = float(np.average(train_target, weights=train_sample_weight))
     valid_baseline = (
@@ -1018,7 +1086,7 @@ def train_window_as_of(
     if valid_df is not None:
         lr_valid_pred = lr_pipe.predict(valid_df[feature_cols])
         lr_metrics = evaluate_regression(
-            valid_df["realized_ret_t1_to_t2"].astype(float).values,
+            valid_df[ERET_TARGET_COLUMN].astype(float).values,
             np.asarray(lr_valid_pred, dtype=float),
             trade_dates=valid_df["trade_date"] if "trade_date" in valid_df.columns else None,
             baseline_pred=valid_baseline,
@@ -1031,7 +1099,7 @@ def train_window_as_of(
         gbm_model, x_valid_gbm = fit_gbm_with_valid(train_df, valid_df, feature_cols)
         gbm_valid_pred = gbm_model.predict(x_valid_gbm)
         gbm_metrics = evaluate_regression(
-            valid_df["realized_ret_t1_to_t2"].astype(float).values,
+            valid_df[ERET_TARGET_COLUMN].astype(float).values,
             np.asarray(gbm_valid_pred, dtype=float),
             trade_dates=valid_df["trade_date"] if "trade_date" in valid_df.columns else None,
             baseline_pred=valid_baseline,
@@ -1074,14 +1142,16 @@ def train_window_as_of(
     valid_dates = sorted(set(valid_df["trade_date"].map(norm_ymd).tolist())) if valid_df is not None and "trade_date" in valid_df.columns else []
 
     missing_ratio = {c: round(float(df[c].isna().mean()), 6) for c in feature_cols}
-    target_s = pd.to_numeric(df["realized_ret_t1_to_t2"], errors="coerce")
+    target_s = pd.to_numeric(df[ERET_TARGET_COLUMN], errors="coerce")
 
     meta: Dict[str, object] = {
         "train_time_utc": utc_now_iso(),
         "anchor_trade_date": anchor_trade_date,
         "status": "trained",
         "skip_reason": "",
-        "target_column": "realized_ret_t1_to_t2",
+        "target_column": ERET_TARGET_COLUMN,
+        "eret_truth_version": ERET_TRUTH_VERSION,
+        "return_holding_mode": ERET_HOLDING_MODE,
         "split_mode": split_mode,
         "small_sample_mode": bool(small_sample_mode),
         "model_paths": {
@@ -1100,13 +1170,14 @@ def train_window_as_of(
         "window": {
             "maturity_csv": str(maturity_path),
             "matured_trade_dates": matured_trade_dates,
-            "loaded_trade_dates": loaded_trade_dates,
+            "loaded_trade_dates": independent_dates,
+            "source_loaded_trade_dates": loaded_trade_dates,
             "missing_trade_dates": missing_trade_dates,
             "loaded_trainset_paths": loaded_trainset_paths,
             "n_matured_dates": int(len(matured_trade_dates)),
-            "n_loaded_dates": int(len(loaded_trade_dates)),
-            "window_start": loaded_trade_dates[0] if loaded_trade_dates else "",
-            "window_end": loaded_trade_dates[-1] if loaded_trade_dates else "",
+            "n_loaded_dates": int(len(independent_dates)),
+            "window_start": independent_dates[0] if independent_dates else "",
+            "window_end": independent_dates[-1] if independent_dates else "",
             "train_dates": train_dates,
             "valid_dates": valid_dates,
         },
@@ -1117,6 +1188,7 @@ def train_window_as_of(
             "valid": int(len(valid_df)) if valid_df is not None else 0,
         },
         "eret_truth_ready_only": True,
+        "universe_eligibility": dict(df.attrs.get("eligibility_audit", {}) or {}),
         "training_governance": {
             "minimum_independent_dates": int(min_independent_dates),
             "available_independent_dates": int(len(independent_dates)),
@@ -1157,6 +1229,7 @@ def train_window_as_of(
             "训练权重按 trade_date 均衡，验证集覆盖多个连续交易日。",
             "同时输出 latest 与 dated 模型文件，便于追溯。",
             "线上 E_ret 模型按多日 Spearman IC、RMSE skill 与校准误差联合选择。",
+            "训练、验证和线上候选均剔除涨跌幅机制大于10%的股票。",
         ],
     }
 

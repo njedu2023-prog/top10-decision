@@ -38,6 +38,8 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from top10decision.decision.contracts import ERET_HOLDING_MODE, ERET_TRUTH_VERSION
+
 try:
     from top10decision.models.overnight_model import overnight_model_rule
 except Exception:  # pragma: no cover
@@ -182,7 +184,11 @@ def _model_acceptance_status(root: Path, meta: Dict[str, Any]) -> Tuple[bool, st
 
     checks = (
         (str(meta.get("status", "") or "").strip().lower() == "trained", "model_meta_not_trained"),
+        (str(meta.get("eret_truth_version", "") or "") == ERET_TRUTH_VERSION, "eret_truth_version_mismatch"),
+        (str(meta.get("return_holding_mode", "") or "") == ERET_HOLDING_MODE, "eret_holding_mode_mismatch"),
         (str(eret.get("status", "") or "").strip().lower() == "trained", "acceptance_status_not_trained"),
+        (str(eret.get("eret_truth_version", "") or "") == ERET_TRUTH_VERSION, "acceptance_truth_version_mismatch"),
+        (str(eret.get("return_holding_mode", "") or "") == ERET_HOLDING_MODE, "acceptance_holding_mode_mismatch"),
         (eret.get("selected_model_pass") is True, "selected_model_pass_false"),
         (eret.get("acceptance_pass") is True, "acceptance_pass_false"),
         (bool(meta_anchor) and meta_anchor == acceptance_anchor, "acceptance_anchor_mismatch"),
@@ -518,11 +524,22 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
 
 
 LEAKAGE_COLS = {
+    "realized_ret_open_to_tplus1_timed_exit",
+    "realized_ret_open_to_next_open",
     "realized_ret_t1_to_t2",
     "premium_ret_t1_to_t2",
     "target_date",
     "exit_date",
     "exit_price_t2_close",
+    "exit_price_tplus1_open",
+    "exit_price_tplus1_timed",
+    "exit_price_source",
+    "exit_on_time",
+    "exit_reason",
+    "take_profit_price_tplus1",
+    "stop_loss_price_tplus1",
+    "latest_exit_time",
+    "exit_policy_version",
     "close_t2",
     "open_t2",
     "high_t2",
@@ -533,6 +550,7 @@ LEAKAGE_COLS = {
     "exec_date",
     "entry_date",
     "entry_price_t1",
+    "entry_price_t_opening_auction",
     "entry_price_proxy_t1",
     "entry_price_proxy_mode",
     "sample_maturity",

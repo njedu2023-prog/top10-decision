@@ -1,83 +1,70 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-20T15:25:24+00:00",
-  "model_version": "auction_v3_walkforward_3",
-  "history_dates": 85,
-  "oos_dates": 63,
-  "signals": 129,
-  "filled_trades": 106,
-  "fill_rate": 0.8217054264,
-  "mean_trade_net_return": -0.013882955,
-  "median_trade_net_return": -0.0144963881,
-  "win_rate": 0.3490566038,
-  "profit_factor": 0.4688575415,
-  "mean_daily_return": -0.0077862076,
-  "stress_1_5x_cost_mean_daily_return": -0.0090481123,
-  "stress_2x_cost_mean_daily_return": -0.0103100171,
-  "benchmark_mean_daily_return": -0.0135963377,
-  "uncapped_model_mean_daily_return": -0.0083701205,
-  "cumulative_return": -0.398704758,
-  "max_drawdown": -0.3699560214,
-  "sharpe": -5.4631417314,
-  "positive_20d_window_ratio": 0.0,
-  "positive_month_ratio": 0.0,
-  "max_positive_month_profit_contribution": null,
-  "bootstrap_probability_mean_positive": 0.002,
-  "forecast_mae": 0.0455779099,
-  "forecast_rmse": 0.0577268225,
-  "direction_accuracy": 0.3490566038,
-  "prediction_interval_coverage": 0.7358490566,
-  "return_rank_ic": 0.0697231529,
-  "return_calibration": [
-    {
-      "bucket": "(0.0044599999999999996, 0.0116]",
-      "trades": 22,
-      "predicted_mean": 0.008433568,
-      "actual_mean": -0.0141408265
-    },
-    {
-      "bucket": "(0.0116, 0.0149]",
-      "trades": 21,
-      "predicted_mean": 0.0136340676,
-      "actual_mean": -0.0213065524
-    },
-    {
-      "bucket": "(0.0149, 0.018]",
-      "trades": 21,
-      "predicted_mean": 0.0168736046,
-      "actual_mean": -0.0167420328
-    },
-    {
-      "bucket": "(0.018, 0.0221]",
-      "trades": 21,
-      "predicted_mean": 0.0198264266,
-      "actual_mean": -0.0099302195
-    },
-    {
-      "bucket": "(0.0221, 0.036]",
-      "trades": 21,
-      "predicted_mean": 0.0271373603,
-      "actual_mean": -0.007282864
-    }
-  ],
+  "generated_at_utc": "2026-07-21T11:12:14+00:00",
+  "model_version": "auction_v5_manual_guidance_4",
+  "history_dates": 94,
+  "oos_dates": 72,
+  "signals": 6,
+  "signal_dates": 2,
+  "signal_date_ratio": 0.0277777778,
+  "max_no_signal_streak": 52,
+  "average_signals_per_signal_date": 3.0,
+  "filled_trades": 5,
+  "fill_rate": 0.8333333333,
+  "exit_on_time_rate": 1.0,
+  "mean_trade_net_return": 0.0144357602,
+  "median_trade_net_return": 0.0254453503,
+  "win_rate": 0.8,
+  "stage_focus_signals": 0,
+  "stage_focus_filled_trades": 0,
+  "stage_focus_continuation_hit_rate": null,
+  "realized_big_loss_rate": 0.0,
+  "big_loss_threshold": -0.03,
+  "tail_10pct_mean_return": -0.0294995889,
+  "worst_trade_net_return": -0.0294995889,
+  "profit_factor": 3.4467731238,
+  "mean_daily_return": 0.0003341611,
+  "stress_1_5x_cost_mean_daily_return": 0.0002820778,
+  "stress_2x_cost_mean_daily_return": 0.0002299945,
+  "benchmark_mean_daily_return": -0.0153662213,
+  "uncapped_model_mean_daily_return": 9.27603e-05,
+  "cumulative_return": 0.0240253725,
+  "max_drawdown": -0.0013471954,
+  "sharpe": 1.7678265615,
+  "positive_20d_window_ratio": 0.2075471698,
+  "positive_month_ratio": 0.2,
+  "max_positive_month_profit_contribution": 1.0,
+  "bootstrap_probability_mean_positive": 0.667,
+  "forecast_mae": 0.0178043757,
+  "forecast_rmse": 0.0232235886,
+  "direction_accuracy": 0.8,
+  "prediction_interval_coverage": 1.0,
+  "return_rank_ic": -0.8,
+  "return_calibration": [],
   "promotion_checks": {
-    "history_dates": false,
-    "oos_dates": false,
-    "filled_trades": true,
-    "mean_daily_return": false,
-    "stress_2x_cost": false,
+    "history_dates": true,
+    "oos_dates": true,
+    "filled_trades": false,
+    "stage_focus_filled_trades": false,
+    "signal_date_ratio": false,
+    "no_signal_streak": false,
+    "mean_daily_return": true,
+    "stress_2x_cost": true,
     "bootstrap_95": false,
     "rolling_20d_60pct": false,
     "positive_months_60pct": false,
     "month_concentration": false,
     "beats_source_topn": true,
-    "price_cap_not_worse": true
+    "price_cap_not_worse": true,
+    "exit_on_time_90pct": true,
+    "big_loss_rate_cap": true,
+    "tail_loss_floor": true
   },
   "promotion_failures": [
-    "history_dates",
-    "oos_dates",
-    "mean_daily_return",
-    "stress_2x_cost",
+    "filled_trades",
+    "stage_focus_filled_trades",
+    "signal_date_ratio",
+    "no_signal_streak",
     "bootstrap_95",
     "rolling_20d_60pct",
     "positive_months_60pct",
@@ -86,319 +73,364 @@
   "promoted": false,
   "daily_equity": [
     {
+      "signal_date": "20260331",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260401",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260402",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260403",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260407",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260409",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260410",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260413",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20260414",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
       "signal_date": "20260415",
-      "daily_return": -0.0456297299,
-      "nav": 0.9543702701
+      "daily_return": 0.0,
+      "nav": 1.0
     },
     {
       "signal_date": "20260416",
-      "daily_return": -0.0265499139,
-      "nav": 0.9290318216
+      "daily_return": 0.0254067958,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260417",
-      "daily_return": -0.0015636213,
-      "nav": 0.9275791677
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260420",
-      "daily_return": -0.0548778178,
-      "nav": 0.8766756471
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260421",
-      "daily_return": -0.0468773973,
-      "nav": 0.8355793745
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260422",
-      "daily_return": 0.0199590039,
-      "nav": 0.8522567065
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260423",
-      "daily_return": -0.0485640555,
-      "nav": 0.8108676645
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260424",
-      "daily_return": 0.0059195974,
-      "nav": 0.8156676746
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260427",
-      "daily_return": -0.01813465,
-      "nav": 0.8008758268
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260428",
-      "daily_return": 0.0434618562,
-      "nav": 0.8356833768
+      "daily_return": 0.0,
+      "nav": 1.0254067958
     },
     {
       "signal_date": "20260429",
-      "daily_return": 0.0213862548,
-      "nav": 0.8535555144
+      "daily_return": -0.0013471954,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260430",
-      "daily_return": -0.0077149644,
-      "nav": 0.846970364
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260506",
-      "daily_return": -0.035268615,
-      "nav": 0.8170988923
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260507",
-      "daily_return": 0.013282957,
-      "nav": 0.8279523818
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260508",
       "daily_return": 0.0,
-      "nav": 0.8279523818
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260511",
-      "daily_return": -0.0289702898,
-      "nav": 0.8039663613
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260512",
-      "daily_return": -0.0174536537,
-      "nav": 0.7899342108
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260513",
-      "daily_return": -0.0125879489,
-      "nav": 0.7799905593
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260514",
-      "daily_return": 0.0074512973,
-      "nav": 0.7858025009
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260515",
-      "daily_return": 0.0241514201,
-      "nav": 0.8047807472
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260518",
-      "daily_return": -0.0524254484,
-      "nav": 0.7625897556
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260519",
-      "daily_return": 0.0282855501,
-      "nav": 0.7841600264
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260520",
-      "daily_return": -0.0284171479,
-      "nav": 0.7618764349
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260521",
-      "daily_return": 0.0105772585,
-      "nav": 0.7699349989
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260522",
-      "daily_return": -0.0006846473,
-      "nav": 0.769407865
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260525",
-      "daily_return": -0.014322137,
-      "nav": 0.7583883002
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260526",
-      "daily_return": -0.027946809,
-      "nav": 0.7371937672
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260527",
-      "daily_return": 0.0311368793,
-      "nav": 0.7601476806
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260528",
-      "daily_return": -0.0489156758,
-      "nav": 0.722964543
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260529",
-      "daily_return": 0.0018669355,
-      "nav": 0.7243142712
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260601",
-      "daily_return": -0.0064497747,
-      "nav": 0.7196426074
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260602",
-      "daily_return": -0.0125904359,
-      "nav": 0.7105819933
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260603",
-      "daily_return": -0.0366368052,
-      "nav": 0.6845485392
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260604",
-      "daily_return": -0.0429514331,
-      "nav": 0.6551461984
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260605",
-      "daily_return": 0.0052008579,
-      "nav": 0.6585535207
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260608",
-      "daily_return": -0.0173122559,
-      "nav": 0.6471524737
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260609",
-      "daily_return": 0.0205083157,
-      "nav": 0.6604244809
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260610",
-      "daily_return": -0.01290579,
-      "nav": 0.6519011812
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260611",
-      "daily_return": 0.0063621681,
-      "nav": 0.6560486861
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260612",
-      "daily_return": 0.0083924244,
-      "nav": 0.6615545251
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260615",
-      "daily_return": 0.0240751501,
-      "nav": 0.6774815496
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260616",
       "daily_return": 0.0,
-      "nav": 0.6774815496
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260617",
-      "daily_return": 0.0104999623,
-      "nav": 0.6845950804
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260618",
       "daily_return": 0.0,
-      "nav": 0.6845950804
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260622",
-      "daily_return": -0.0439022878,
-      "nav": 0.6545397901
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260623",
       "daily_return": 0.0,
-      "nav": 0.6545397901
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260624",
       "daily_return": 0.0,
-      "nav": 0.6545397901
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260625",
       "daily_return": 0.0,
-      "nav": 0.6545397901
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260626",
-      "daily_return": -0.0192403587,
-      "nav": 0.6419462098
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260629",
-      "daily_return": -0.0041258305,
-      "nav": 0.6392976486
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260630",
       "daily_return": 0.0,
-      "nav": 0.6392976486
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260701",
-      "daily_return": -0.0122549605,
-      "nav": 0.6314630812
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260702",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260703",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260706",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260707",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260708",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260709",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260710",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260713",
       "daily_return": 0.0,
-      "nav": 0.6314630812
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260714",
-      "daily_return": -0.0477745098,
-      "nav": 0.601295242
+      "daily_return": 0.0,
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260715",
       "daily_return": 0.0,
-      "nav": 0.601295242
+      "nav": 1.0240253725
     },
     {
       "signal_date": "20260716",
       "daily_return": 0.0,
-      "nav": 0.601295242
+      "nav": 1.0240253725
     }
   ]
 }

@@ -127,6 +127,13 @@ jobs:
           echo "[fs] generated market files:"
           ls -lah data/market || true
 
+      - name: Sync strict A-share exchange calendar
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          set -e
+          python scripts/sync_tushare_minute.py --calendar-only --optional
+
       - name: Run decision pipeline before learning
         env:
           TRADE_DATE: ${{ inputs.trade_date }}
@@ -139,6 +146,11 @@ jobs:
             echo "[run_v2-initial] auto mode"
             python scripts/run_v2.py
           fi
+
+      - name: Publish unified Decision action plan
+        run: |
+          set -e
+          python scripts/publish_decision_action.py
 
       - name: Validate IO contract
         run: |
@@ -164,6 +176,7 @@ jobs:
           git add data/pred/pred_top10_latest.csv || true
           git add data/pred/pred_top10_*.csv || true
           git add -A data/market/raw || true
+          git add data/market/trade_cal_sse.csv || true
           git add data/market/features_base_*.csv || true
           git add data/market/features_limit_*.csv || true
           git add data/market/truth_close_*.csv || true
@@ -221,7 +234,7 @@ jobs:
     name: Train P_fill and E_ret
     needs: decision_initial
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     outputs:
       learning_gate_pass: ${{ steps.learning_gate.outputs.learning_gate_pass }}
 
@@ -341,6 +354,7 @@ jobs:
           python scripts/resolve_sample_maturity.py \
             --current-run-date "${{ steps.resolve_current_run_date.outputs.current_run_date }}" \
             --raw-root "data/market/raw" \
+            --trade-calendar-file "data/market/trade_cal_sse.csv" \
             --trade-dates-file "data/market/sample_maturity_candidates.csv" \
             --trade-date-column "trade_date" \
             --output-csv "data/market/sample_maturity_latest.csv" \
@@ -377,8 +391,24 @@ jobs:
           def has_pred_source(td):
               return Path(f'data/pred/archive/pred_source_{td}.csv').exists()
 
-          def has_pfill_trainset(td):
-              return Path(f'data/market/pfill_trainset_{td}.csv').exists()
+          pfill_truth_version = 'pfill_truth_v6_manual_0925_proxy'
+          pfill_execution_contract = 'manual_guidance_0925_public_market_fillability_proxy'
+
+          def pfill_trainset_is_current(td):
+              path = Path(f'data/market/pfill_trainset_{td}.csv')
+              if not path.exists():
+                  return False
+              try:
+                  import pandas as pd
+                  df = pd.read_csv(path, encoding='utf-8-sig')
+              except Exception:
+                  return False
+              if 'label_version' not in df.columns or 'execution_contract' not in df.columns:
+                  return False
+              return (
+                  set(df['label_version'].dropna().astype(str)) == {pfill_truth_version}
+                  and set(df['execution_contract'].dropna().astype(str)) == {pfill_execution_contract}
+              )
 
           def has_eret_trainset(td):
               return Path(f'data/market/eret_trainset_{td}.csv').exists()
@@ -390,7 +420,10 @@ jobs:
               'bid_ask_proxy', 'spread_proxy',
           ]
 
-          def eret_trainset_has_fs_v2(td):
+          eret_truth_version = 'eret_truth_v3_tplus1_first_touch_exit'
+          eret_holding_mode = 'manual_buy_t_0925_auction_to_tplus1_first_touch_exit'
+
+          def eret_trainset_is_current(td):
               path = Path(f'data/market/eret_trainset_{td}.csv')
               if not path.exists():
                   return False
@@ -398,6 +431,14 @@ jobs:
                   import pandas as pd
                   df = pd.read_csv(path, encoding='utf-8-sig')
               except Exception:
+                  return False
+              if 'eret_truth_version' not in df.columns or 'return_holding_mode' not in df.columns:
+                  return False
+              versions = set(df['eret_truth_version'].dropna().astype(str))
+              modes = set(df['return_holding_mode'].dropna().astype(str))
+              if versions != {eret_truth_version} or modes != {eret_holding_mode}:
+                  return False
+              if 'realized_ret_open_to_tplus1_timed_exit' not in df.columns:
                   return False
               for col in fs_v2_cols:
                   if col not in df.columns:
@@ -428,16 +469,17 @@ jobs:
                   continue
               valid_rows.append((td, pfill_ready, eret_ready))
 
-          window_size = 8
+          pfill_window_size = 24
+          eret_window_size = 24
           target_pfill = {td for td, pfill_ready, _ in valid_rows if pfill_ready}
           target_eret = {td for td, _, eret_ready in valid_rows if eret_ready}
-          target_pfill = set(sorted(target_pfill)[-window_size:])
-          target_eret = set(sorted(target_eret)[-window_size:])
+          target_pfill = set(sorted(target_pfill)[-pfill_window_size:])
+          target_eret = set(sorted(target_eret)[-eret_window_size:])
 
           eligible_rows = []
           for td, pfill_ready, eret_ready in valid_rows:
-              needs_pfill = td in target_pfill and pfill_ready and not has_pfill_trainset(td)
-              needs_eret = td in target_eret and eret_ready and not eret_trainset_has_fs_v2(td)
+              needs_pfill = td in target_pfill and pfill_ready and not pfill_trainset_is_current(td)
+              needs_eret = td in target_eret and eret_ready and not eret_trainset_is_current(td)
               if not (needs_pfill or needs_eret):
                   if td in target_pfill or td in target_eret:
                       print(f'[learning-rebuild][skip] trainsets already usable for {td}')
@@ -526,7 +568,7 @@ jobs:
         if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}" --window-size 8
+          python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}" --window-size 0 --min-independent-dates 20
 
       - name: Resolve latest ERET_READY trade_date
         id: resolve_eret_learning_td
@@ -597,7 +639,7 @@ jobs:
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
         run: |
           set -e
-          python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}" --window-size 8
+          python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}" --window-size 0 --min-independent-dates 20
 
       - name: Build learning acceptance artifacts
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
@@ -643,6 +685,22 @@ jobs:
               except Exception:
                   return default
 
+          pfill_metrics = pfill.get('metrics_valid', {}) or {}
+          pfill_selected_model = str(
+              pfill.get('selected_model')
+              or (pfill.get('model_selection', {}) or {}).get('selected_model')
+              or ''
+          ).strip().lower()
+          pfill_selected_metrics = pfill_metrics.get(pfill_selected_model, {}) or {}
+          pfill_selected_model_pass = (
+              pfill_selected_model in ('lgbm', 'lr')
+              and pfill.get('label_version') == 'pfill_truth_v6_manual_0925_proxy'
+              and pfill.get('execution_contract') == 'manual_guidance_0925_public_market_fillability_proxy'
+              and metric_float(pfill_selected_metrics, 'valid_dates', 0) >= 4
+              and metric_float(pfill_selected_metrics, 'auc', -1) >= 0.55
+              and metric_float(pfill_selected_metrics, 'brier_skill_vs_train_rate', -1) > 0.0
+          )
+
           eret_metrics = eret.get('metrics_valid', {}) or {}
           eret_selected_model = str(
               eret.get('selected_model')
@@ -663,12 +721,22 @@ jobs:
           eret_selected_metrics = eret_metrics.get(eret_selected_model, {}) or {}
           eret_selected_rmse = metric_float(eret_selected_metrics, 'rmse')
           eret_selected_directional = metric_float(eret_selected_metrics, 'directional_acc')
+          eret_selected_daily_ic = metric_float(eret_selected_metrics, 'daily_spearman_corr_mean')
+          eret_selected_daily_ic_dates = metric_float(eret_selected_metrics, 'daily_spearman_valid_dates', 0)
+          eret_selected_rmse_skill = metric_float(eret_selected_metrics, 'rmse_skill_vs_train_mean')
           eret_selected_model_pass = (
               eret_selected_model in ('lgbm', 'lr')
+              and eret.get('eret_truth_version') == 'eret_truth_v3_tplus1_first_touch_exit'
+              and eret.get('return_holding_mode') == 'manual_buy_t_0925_auction_to_tplus1_first_touch_exit'
               and eret_selected_rmse is not None
               and eret_selected_rmse <= 0.15
               and eret_selected_directional is not None
               and eret_selected_directional >= 0.50
+              and eret_selected_daily_ic is not None
+              and eret_selected_daily_ic > 0.0
+              and eret_selected_daily_ic_dates >= 4
+              and eret_selected_rmse_skill is not None
+              and eret_selected_rmse_skill > 0.0
           )
 
           acceptance = {
@@ -680,7 +748,12 @@ jobs:
                   'loaded_trade_dates': len(pfill_window.get('loaded_trade_dates', []) or []),
                   'missing_trade_dates': len(pfill_window.get('missing_trade_dates', []) or []),
                   'metrics_valid': pfill.get('metrics_valid', {}) or {},
-                  'acceptance_pass': bool(pfill.get('anchor_trade_date')) and pfill.get('status') == 'trained',
+                  'selected_model': pfill_selected_model,
+                  'label_version': pfill.get('label_version', ''),
+                  'execution_contract': pfill.get('execution_contract', ''),
+                  'selected_model_metrics': pfill_selected_metrics,
+                  'selected_model_pass': pfill_selected_model_pass,
+                  'acceptance_pass': bool(pfill.get('anchor_trade_date')) and pfill.get('status') == 'trained' and len(pfill_window.get('loaded_trade_dates', []) or []) >= 20 and pfill_selected_model_pass,
               },
               'eret': {
                   'anchor_trade_date': eret.get('anchor_trade_date', ''),
@@ -690,9 +763,11 @@ jobs:
                   'metrics_valid': eret.get('metrics_valid', {}) or {},
                   'fs_v2_still_all_missing': still_all_missing,
                   'selected_model': eret_selected_model,
+                  'eret_truth_version': eret.get('eret_truth_version', ''),
+                  'return_holding_mode': eret.get('return_holding_mode', ''),
                   'selected_model_metrics': eret_selected_metrics,
                   'selected_model_pass': eret_selected_model_pass,
-                  'acceptance_pass': bool(eret.get('anchor_trade_date')) and eret.get('status') == 'trained' and len(still_all_missing) == 0 and eret_selected_model_pass,
+                  'acceptance_pass': bool(eret.get('anchor_trade_date')) and eret.get('status') == 'trained' and len(eret_window.get('loaded_trade_dates', []) or []) >= 20 and len(still_all_missing) == 0 and eret_selected_model_pass,
               },
           }
           acceptance['overall_pass'] = bool(acceptance['pfill']['acceptance_pass'] and acceptance['eret']['acceptance_pass'])
@@ -713,6 +788,8 @@ jobs:
               f"- status: {acceptance['pfill']['status']}",
               f"- loaded_trade_dates: {acceptance['pfill']['loaded_trade_dates']}",
               f"- missing_trade_dates: {acceptance['pfill']['missing_trade_dates']}",
+              f"- selected_model: {acceptance['pfill']['selected_model']}",
+              f"- selected_model_pass: {'PASS' if acceptance['pfill']['selected_model_pass'] else 'FAIL'}",
               f"- acceptance_pass: {'PASS' if acceptance['pfill']['acceptance_pass'] else 'FAIL'}",
               '',
               '## E_ret',
@@ -728,6 +805,7 @@ jobs:
           ]
           md_path.write_text('\n'.join(lines), encoding='utf-8')
           print(f'[learning-acceptance] overall_pass={acceptance["overall_pass"]}')
+          print(f'[learning-acceptance] pfill_selected_model={pfill_selected_model} pass={pfill_selected_model_pass}')
           print(f'[learning-acceptance] eret_fs_v2_still_all_missing={still_all_missing}')
           print(f'[learning-acceptance] eret_selected_model={eret_selected_model} pass={eret_selected_model_pass}')
           PY
@@ -982,6 +1060,7 @@ jobs:
           echo "[refresh] using latest committed models after learning"
           echo "[run_v2-refresh] refresh_trade_date=${REFRESH_TRADE_DATE}"
           python scripts/run_v2.py --trade-date "${REFRESH_TRADE_DATE}"
+          python scripts/publish_decision_action.py
 
       - name: Validate IO contract after refresh
         run: |
