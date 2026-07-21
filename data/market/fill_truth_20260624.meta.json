@@ -2,23 +2,39 @@
   "trade_date": "20260624",
   "exec_date": "20260625",
   "target_date": "20260626",
-  "rows": 98,
+  "rows": 89,
   "sample_maturity": {
-    "FULLY_READY": 98
+    "FULLY_READY": 89
   },
-  "label_ready_fill": 98,
-  "label_ready_ret": 98,
-  "y_fill_rate": 0.9591836734693877,
+  "label_ready_fill": 89,
+  "label_ready_ret": 89,
+  "y_fill_rate": 0.9438202247191011,
   "quality_counts": {
-    "strong_open_tradable": 93,
-    "strong_dead_limit_up": 3,
-    "soft_not_tradable": 1,
-    "weak_intraday_break_without_minbar": 1
+    "strong_official_opening_auction": 84,
+    "strong_opening_auction_limit_up_unconfirmed": 4,
+    "weak_missing_opening_auction_truth": 1
+  },
+  "execution_contract": "manual_guidance_0925_public_market_fillability_proxy",
+  "guidance_only": true,
+  "broker_connected": false,
+  "actual_fill_observed": false,
+  "y_fill_semantics": "public_market_fillability_proxy; manual actual fills require explicit feedback",
+  "universe_eligibility": {
+    "rule": "a_share_price_limit_le_10_v2",
+    "max_allowed_limit_pct": 10.0,
+    "input_rows": 98,
+    "eligible_rows": 89,
+    "rejected_rows": 9,
+    "rejected_reasons": {
+      "excluded_limit_gt_10:20.00%:growth_board_20pct": 6,
+      "excluded_limit_gt_10:20.00%:star_market_20pct": 3
+    }
   },
   "source": {
     "pred_source": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260624.csv",
     "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260624.csv",
     "raw_exec_snapshot": "/home/runner/work/top10-decision/top10-decision/data/market/raw/2026/20260625",
+    "minute_exec_snapshot_root": "/home/runner/work/top10-decision/top10-decision/data/market/minute_1m/2026/20260625",
     "sample_maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv"
   },
   "output": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260624.csv"

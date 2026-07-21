@@ -2,6 +2,8 @@
   "trade_date": "20260616",
   "rows": 50,
   "fill_truth_ready_only": true,
+  "label_version": "pfill_truth_v6_manual_0925_proxy",
+  "execution_contract": "manual_guidance_0925_public_market_fillability_proxy",
   "source": {
     "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260616.csv",
     "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260616.csv",
@@ -19,7 +21,7 @@
   "coverage": {
     "y_fill": 1.0,
     "fill_label_quality": 1.0,
-    "entry_price_proxy_t1": 0.9,
+    "entry_price_proxy_t1": 0.88,
     "open_t1": 0.96,
     "up_limit_t1": 1.0,
     "open_times_t1": 0.22,
@@ -29,17 +31,16 @@
     "rank": 1.0
   },
   "label_distribution": {
-    "1": 45,
-    "0": 5
+    "1": 44,
+    "0": 6
   },
   "quality_distribution": {
-    "strong_open_tradable": 44,
-    "strong_dead_limit_up": 3,
-    "soft_not_tradable": 2,
-    "weak_intraday_break_without_minbar": 1
+    "strong_daily_open_auction_proxy": 44,
+    "strong_opening_auction_limit_up_unconfirmed": 4,
+    "weak_missing_opening_auction_truth": 2
   },
   "sample_maturity_distribution": {
-    "PFILL_READY": 50
+    "FULLY_READY": 50
   },
   "column_groups": {
     "base_cols": [
@@ -98,7 +99,11 @@
       "float_values",
       "abnormal_volume",
       "has_namechange_record",
-      "latest_change_reason"
+      "latest_change_reason",
+      "auction_vol",
+      "auction_price",
+      "auction_amount",
+      "auction_strength_score"
     ],
     "limit_cols": [
       "name",
@@ -108,6 +113,31 @@
       "seal_amount",
       "first_seal_time",
       "last_seal_time",
+      "intraday_available",
+      "intraday_status",
+      "intraday_missing_reason",
+      "minute_freq",
+      "minute_rows",
+      "first_limit_time",
+      "last_limit_time",
+      "limit_touch_count",
+      "open_board_count",
+      "max_drawdown_after_limit",
+      "reseal_count",
+      "reseal_minutes_avg",
+      "late_volume_ratio",
+      "late_price_weakness",
+      "late_limit_hold_minutes",
+      "late_withdraw_score",
+      "reseal_score",
+      "intraday_quality_score",
+      "intraday_confidence_score",
+      "intraday_risk_score",
+      "intraday_soft_risk_score",
+      "intraday_hard_risk_flag",
+      "intraday_tag",
+      "auction_strength_score",
+      "auction_amount",
       "open_times_break",
       "fd_amount_break",
       "seal_amount_break",
@@ -135,9 +165,15 @@
       "entry_price_proxy_t1",
       "entry_price_proxy_mode",
       "label_version",
+      "execution_contract",
       "buy_window_start",
       "buy_window_end",
+      "minute_open_t1",
+      "minute_open_available_t1",
       "open_t1",
+      "high_t1",
+      "low_t1",
+      "close_t1",
       "up_limit_t1",
       "down_limit_t1",
       "open_times_t1"
@@ -151,12 +187,13 @@
       "prior_board"
     ]
   },
-  "cold_start_ratio": 0.02,
+  "cold_start_ratio": 0.04,
   "feature_coverage_score_mean": 0.836,
   "sample_weight_mean": 1.295,
   "notes": [
     "本文件是 P_fill 训练前宽表，不是训练结果文件。",
     "训练集只保留 label_ready_fill=1 的成熟样本。",
+    "P_fill 只学习开盘集合竞价是否可成交；盘中后来开板不算竞价成交。",
     "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_pfill.py 再做。",
     "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。"
   ]

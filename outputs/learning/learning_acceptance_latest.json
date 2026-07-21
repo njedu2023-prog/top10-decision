@@ -1,75 +1,95 @@
 {
-  "generated_at_utc": "2026-07-20T15:22:44+00:00",
-  "current_run_date": "20260720",
+  "generated_at_utc": "2026-07-21T13:45:37+00:00",
+  "current_run_date": "20260721",
   "pfill": {
-    "anchor_trade_date": "20260717",
+    "anchor_trade_date": "20260720",
     "status": "trained",
-    "loaded_trade_dates": 8,
-    "missing_trade_dates": 0,
+    "loaded_trade_dates": 24,
+    "missing_trade_dates": 1,
     "metrics_valid": {
       "lr": {
-        "auc": 0.7111111111111111,
-        "logloss": 1.2117041473191048,
-        "brier": 0.16238778809137858
+        "auc": 0.8326359832635983,
+        "pr_auc": 0.9836638219200508,
+        "logloss": 0.22155077209444657,
+        "brier": 0.05688431340771468,
+        "baseline_brier_train_rate": 0.04896682820597777,
+        "brier_skill_vs_train_rate": -0.16169079133392494,
+        "valid_dates": 5
       },
       "lgbm": {
-        "auc": 0.7999999999999999,
-        "logloss": 0.6082164425379389,
-        "brier": 0.11683935933005243
+        "auc": 0.8123591889282266,
+        "pr_auc": 0.9819273781659213,
+        "logloss": 0.175720034549118,
+        "brier": 0.034018095121513506,
+        "baseline_brier_train_rate": 0.04896682820597777,
+        "brier_skill_vs_train_rate": 0.3052828543760847,
+        "valid_dates": 5
       }
     },
+    "selected_model": "lgbm",
+    "label_version": "pfill_truth_v6_manual_0925_proxy",
+    "execution_contract": "manual_guidance_0925_public_market_fillability_proxy",
+    "selected_model_metrics": {
+      "auc": 0.8123591889282266,
+      "pr_auc": 0.9819273781659213,
+      "logloss": 0.175720034549118,
+      "brier": 0.034018095121513506,
+      "baseline_brier_train_rate": 0.04896682820597777,
+      "brier_skill_vs_train_rate": 0.3052828543760847,
+      "valid_dates": 5
+    },
+    "selected_model_pass": true,
     "acceptance_pass": true
   },
   "eret": {
-    "anchor_trade_date": "20260716",
-    "status": "skipped",
-    "loaded_trade_dates": 8,
-    "missing_trade_dates": 0,
+    "anchor_trade_date": "20260717",
+    "status": "trained",
+    "loaded_trade_dates": 24,
+    "missing_trade_dates": 1,
     "metrics_valid": {
       "lr": {
-        "mae": null,
-        "rmse": null,
-        "r2": null,
-        "corr": null,
-        "spearman_corr": null,
-        "daily_spearman_corr_mean": null,
-        "daily_spearman_valid_dates": 0,
-        "baseline_rmse_train_mean": null,
-        "rmse_skill_vs_train_mean": null,
-        "directional_acc": null,
-        "reason": "insufficient_independent_dates_skip_train"
+        "mae": 0.03757507120535213,
+        "rmse": 0.04987886313509768,
+        "r2": 0.08334670485341344,
+        "corr": 0.2952583545235704,
+        "spearman_corr": 0.2435635025427297,
+        "daily_spearman_corr_mean": 0.20746182523501622,
+        "daily_spearman_valid_dates": 5,
+        "directional_acc": 0.6901408450704225,
+        "baseline_rmse_train_mean": 0.05244714534894005,
+        "rmse_skill_vs_train_mean": 0.048968960974999476
       },
       "lgbm": {
-        "mae": null,
-        "rmse": null,
-        "r2": null,
-        "corr": null,
-        "spearman_corr": null,
-        "daily_spearman_corr_mean": null,
-        "daily_spearman_valid_dates": 0,
-        "baseline_rmse_train_mean": null,
-        "rmse_skill_vs_train_mean": null,
-        "directional_acc": null,
-        "reason": "insufficient_independent_dates_skip_train"
+        "mae": 0.03897457177125117,
+        "rmse": 0.05125707639782203,
+        "r2": 0.031990378541214115,
+        "corr": 0.23637001836810953,
+        "spearman_corr": 0.22269127878720066,
+        "daily_spearman_corr_mean": 0.21362716666593115,
+        "daily_spearman_valid_dates": 5,
+        "directional_acc": 0.6901408450704225,
+        "baseline_rmse_train_mean": 0.05244714534894005,
+        "rmse_skill_vs_train_mean": 0.0226908241278011
       }
     },
     "fs_v2_still_all_missing": [],
     "selected_model": "lgbm",
+    "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
+    "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
     "selected_model_metrics": {
-      "mae": null,
-      "rmse": null,
-      "r2": null,
-      "corr": null,
-      "spearman_corr": null,
-      "daily_spearman_corr_mean": null,
-      "daily_spearman_valid_dates": 0,
-      "baseline_rmse_train_mean": null,
-      "rmse_skill_vs_train_mean": null,
-      "directional_acc": null,
-      "reason": "insufficient_independent_dates_skip_train"
+      "mae": 0.03897457177125117,
+      "rmse": 0.05125707639782203,
+      "r2": 0.031990378541214115,
+      "corr": 0.23637001836810953,
+      "spearman_corr": 0.22269127878720066,
+      "daily_spearman_corr_mean": 0.21362716666593115,
+      "daily_spearman_valid_dates": 5,
+      "directional_acc": 0.6901408450704225,
+      "baseline_rmse_train_mean": 0.05244714534894005,
+      "rmse_skill_vs_train_mean": 0.0226908241278011
     },
-    "selected_model_pass": false,
-    "acceptance_pass": false
+    "selected_model_pass": true,
+    "acceptance_pass": true
   },
-  "overall_pass": false
+  "overall_pass": true
 }

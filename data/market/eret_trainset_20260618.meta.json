@@ -1,9 +1,11 @@
 {
   "trade_date": "20260618",
-  "rows": 88,
+  "rows": 69,
   "eret_truth_ready_only": true,
   "eret_sample_eligible_only": true,
-  "target_column": "realized_ret_t1_to_t2",
+  "target_column": "realized_ret_open_to_tplus1_timed_exit",
+  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
   "source": {
     "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260618.csv",
     "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260618.csv",
@@ -15,13 +17,17 @@
   "input_rows": {
     "features_base": 5507,
     "features_limit": 5507,
-    "eret_truth_after_filter": 88,
+    "eret_truth_after_filter": 69,
     "prior": 93
   },
   "coverage": {
+    "realized_ret_open_to_tplus1_timed_exit": 1.0,
     "realized_ret_t1_to_t2": 1.0,
     "premium_ret_t1_to_t2": 1.0,
     "entry_price_t1": 1.0,
+    "entry_price_t_opening_auction": 1.0,
+    "exit_price_tplus1_timed": 1.0,
+    "exit_price_tplus1_open": 1.0,
     "exit_price_t2_close": 1.0,
     "y_fill": 1.0,
     "fill_label_quality": 1.0,
@@ -199,24 +205,28 @@
     }
   },
   "y_fill_distribution": {
-    "1": 88
+    "1": 69
   },
   "eret_quality_distribution": {
-    "strong_close_t2_over_entry_proxy_t1": 88
+    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 21,
+    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 19,
+    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 15,
+    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 7,
+    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 6,
+    "strong_daily_ohlc_conservative_proxy_time_exit_close_proxy": 1
   },
   "fill_quality_distribution": {
-    "strong_open_tradable": 85,
-    "weak_intraday_break_without_minbar": 3
+    "strong_official_opening_auction": 69
   },
   "sample_maturity_distribution": {
-    "FULLY_READY": 88
+    "FULLY_READY": 69
   },
   "target_stats": {
-    "mean": -0.004092,
-    "median": -0.003356,
-    "min": -0.166437,
-    "max": 0.232745,
-    "positive_rate": 0.431818
+    "mean": -0.009516,
+    "median": -0.024963,
+    "min": -0.091053,
+    "max": 0.03038,
+    "positive_rate": 0.405797
   },
   "column_groups": {
     "base_cols": [
@@ -345,15 +355,30 @@
       "entry_price_t1",
       "entry_price_proxy_t1",
       "entry_price_proxy_mode",
+      "entry_price_t_opening_auction",
+      "exit_price_tplus1_timed",
+      "exit_price_tplus1_open",
+      "exit_price_source",
+      "exit_on_time",
+      "exit_reason",
+      "take_profit_price_tplus1",
+      "stop_loss_price_tplus1",
+      "latest_exit_time",
+      "exit_policy_version",
       "exit_price_t2_close",
       "close_t2",
+      "realized_ret_open_to_tplus1_timed_exit",
       "realized_ret_t1_to_t2",
       "premium_ret_t1_to_t2",
       "eret_truth_version",
       "return_holding_mode",
+      "execution_contract",
       "buy_window_start",
       "buy_window_end",
       "open_t1",
+      "high_t1",
+      "low_t1",
+      "close_t1",
       "open_t2",
       "high_t2",
       "low_t2",
@@ -373,11 +398,12 @@
   },
   "cold_start_ratio": 0.0,
   "feature_coverage_score_mean": 1.0,
-  "sample_weight_mean": 1.276705,
+  "sample_weight_mean": 1.293478,
   "notes": [
     "本文件是 E_ret 训练前宽表，不是训练结果文件。",
     "训练集只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本。",
-    "当前 realized_ret_t1_to_t2 / premium_ret_t1_to_t2 口径来自 build_eret_truth.py。",
+    "主目标为T日开盘竞价买入到T+1预声明止盈、止损或14:50时间退出的可执行收益。",
+    "realized_ret_t1_to_t2 仅为Decision兼容别名；premium_ret_t1_to_t2继续保留原收盘口径，premium不受影响。",
     "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_eret.py 再做。",
     "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。",
     "FS V2 历史滚动字段已做强制保护与专项审计，防止 E_ret 训练窗口继续吃空特征。"

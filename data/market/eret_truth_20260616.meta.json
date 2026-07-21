@@ -3,27 +3,46 @@
   "exec_date": "20260617",
   "target_date": "20260618",
   "rows": 50,
-  "eret_sample_eligible_rows": 45,
+  "eret_sample_eligible_rows": 44,
   "sample_maturity": {
     "FULLY_READY": 50
   },
   "label_ready_fill": 50,
   "label_ready_ret": 50,
   "quality_counts": {
-    "strong_close_t2_over_entry_proxy_t1": 45,
-    "not_filled_no_trade": 5
+    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 17,
+    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 12,
+    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 7,
+    "not_filled_no_trade": 6,
+    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 3,
+    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 3,
+    "strong_daily_ohlc_conservative_proxy_time_exit_close_proxy": 2
   },
   "ret_stats": {
-    "mean": -0.0007613600584494945,
-    "median": -0.0073584905660377675,
-    "min": -0.11546840958605675,
-    "max": 0.18639798488664971,
-    "positive_rate": 0.4444444444444444
+    "mean": -0.006771800112306941,
+    "median": -0.024371806537411556,
+    "min": -0.06804949053857345,
+    "max": 0.030470914127423976,
+    "positive_rate": 0.4318181818181818
+  },
+  "target_column": "realized_ret_open_to_tplus1_timed_exit",
+  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
+  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_timed_exit",
+  "exit_policy": {
+    "version": "tplus1_first_touch_tp3_sl2p5_time1450_v1",
+    "latest_exit_time": "14:50",
+    "source_counts": {
+      "daily_ohlc_conservative_proxy": 44,
+      "": 6
+    }
   },
   "source": {
     "pred_source": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260616.csv",
     "fill_truth": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260616.csv",
     "target_daily": "/home/runner/work/top10-decision/top10-decision/data/market/raw/2026/20260618/daily.csv",
+    "target_auction": "/home/runner/work/top10-decision/top10-decision/data/market/raw/2026/20260618/stk_auction.csv",
+    "target_minute_root": "/home/runner/work/top10-decision/top10-decision/data/market/minute_1m/2026/20260618",
     "sample_maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv"
   },
   "output": "/home/runner/work/top10-decision/top10-decision/data/market/eret_truth_20260616.csv"
