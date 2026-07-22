@@ -2,7 +2,7 @@
   "signal_date": "20260722",
   "exec_date": "20260723",
   "exit_date": "20260724",
-  "requested_trade_date": "",
+  "requested_trade_date": "20260722",
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.2724,volatility_mean=0.0557",
@@ -1024,7 +1024,7 @@
         "intraday_execution_penalty": 0.008173785309734513,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.04283852278868889
+        "ev_pred": -0.04283852278868888
       },
       {
         "ts_code": "600644.SH",
@@ -1087,7 +1087,7 @@
         "intraday_execution_penalty": 0.007474536654247389,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.04281936812492843
+        "ev_pred": -0.04281936812492844
       }
     ]
   },
@@ -1099,7 +1099,7 @@
     "p_fill_pred_min": 0.4482946327471185,
     "p_fill_pred_max": 0.9172756520698393,
     "p_fill_pred_mean": 0.8268608831308715,
-    "e_ret_pred_min": -0.046302127505780305,
+    "e_ret_pred_min": -0.04630212750578031,
     "e_ret_pred_max": 0.035688719316526465,
     "e_ret_pred_mean": -0.009897176858142962,
     "cost_est_min": 0.0011450835,
@@ -1200,10 +1200,10 @@
       {
         "ts_code": "002953.SZ",
         "name": "日丰股份",
-        "ev_pred": -0.009757352168854566,
-        "ev_base": -0.009757352168854566,
+        "ev_pred": -0.00975735216885457,
+        "ev_base": -0.00975735216885457,
         "p_fill_pred": 0.9003217212540572,
-        "e_ret_pred": 0.009638563373440639,
+        "e_ret_pred": 0.009638563373440635,
         "cost_est": 0.0015111945,
         "risk_penalty": 0.016923965635646954,
         "extra_penalty": 0.0,
