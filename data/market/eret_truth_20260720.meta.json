@@ -10,16 +10,15 @@
   "label_ready_fill": 49,
   "label_ready_ret": 49,
   "quality_counts": {
-    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 19,
-    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 15,
-    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 5,
-    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 4,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 19,
+    "strong_minute_1m_first_touch_take_profit_first_touch": 15,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 7,
+    "strong_minute_1m_first_touch_take_profit_gap_conservative": 4,
     "not_filled_no_trade": 2,
-    "strong_daily_ohlc_conservative_proxy_time_exit_close_proxy": 2,
-    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 2
+    "strong_minute_1m_time_exit_time_exit": 2
   },
   "ret_stats": {
-    "mean": -0.018356109198626777,
+    "mean": -0.018478196820971446,
     "median": -0.02469879518072282,
     "min": -0.1617647058823527,
     "max": 0.031161473087818692,
@@ -33,8 +32,9 @@
     "version": "tplus1_first_touch_tp3_sl2p5_time1450_v1",
     "latest_exit_time": "14:50",
     "source_counts": {
-      "daily_ohlc_conservative_proxy": 47,
-      "": 2
+      "minute_1m_first_touch": 45,
+      "": 2,
+      "minute_1m_time_exit": 2
     }
   },
   "source": {
