@@ -9,14 +9,14 @@
   "guardrail_reason": "CAUTION:intraday_coverage_low=0.439,tail_risk_mean=0.2724,volatility_mean=0.0557",
   "topk": 41,
   "picked": 0,
-  "cost_est_mean": 0.0016591324878048783,
+  "cost_est_mean": 0.0016591324878048779,
   "cost_est_min": 0.0011450835,
   "cost_est_max": 0.00235665,
-  "risk_penalty_mean": 0.01970904923872538,
+  "risk_penalty_mean": 0.019709049238725383,
   "risk_penalty_min": 0.007865957193945717,
   "risk_penalty_max": 0.036000000000000004,
-  "ev_base_mean": -0.046853265395312156,
-  "ev_final_mean": -0.046853265395312156,
+  "ev_base_mean": -0.029000182373671097,
+  "ev_final_mean": -0.029000182373671097,
   "pfill_penalty_extra_mean": 0.0,
   "risk_penalty_extra_mean": 0.0,
   "intraday_penalty_extra_mean": 0.0,
@@ -977,15 +977,15 @@
     "risk_intraday_confidence_penalty_mean": 0.0006059867073170733,
     "risk_intraday_confidence_penalty_max": 0.0013125000000000003,
     "risk_intraday_confidence_penalty_sum": 0.024845455000000002,
-    "risk_intraday_missing_penalty_mean": 0.001121951219512195,
+    "risk_intraday_missing_penalty_mean": 0.0011219512195121953,
     "risk_intraday_missing_penalty_max": 0.002,
-    "risk_intraday_missing_penalty_sum": 0.046,
+    "risk_intraday_missing_penalty_sum": 0.046000000000000006,
     "risk_late_withdraw_penalty_mean": 1.951219512195122e-05,
     "risk_late_withdraw_penalty_max": 0.0007999999999999999,
     "risk_late_withdraw_penalty_sum": 0.0007999999999999999,
-    "risk_reseal_weakness_penalty_mean": 0.0020138096008869184,
+    "risk_reseal_weakness_penalty_mean": 0.002013809600886918,
     "risk_reseal_weakness_penalty_max": 0.004,
-    "risk_reseal_weakness_penalty_sum": 0.08256619363636365,
+    "risk_reseal_weakness_penalty_sum": 0.08256619363636364,
     "risk_auction_weakness_penalty_mean": 0.0014166007304152765,
     "risk_auction_weakness_penalty_max": 0.003,
     "risk_auction_weakness_penalty_sum": 0.058080629947026334,
@@ -1006,7 +1006,7 @@
         "intraday_execution_penalty": 0.008403409090909092,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.039727599513796175
+        "ev_pred": -0.041066694775034704
       },
       {
         "ts_code": "600744.SH",
@@ -1015,7 +1015,7 @@
         "intraday_execution_penalty": 0.008310993983883155,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.04870969994363318
+        "ev_pred": -0.036414562857418536
       },
       {
         "ts_code": "600396.SH",
@@ -1024,7 +1024,7 @@
         "intraday_execution_penalty": 0.008173785309734513,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.06788832730899383
+        "ev_pred": -0.04283852278868889
       },
       {
         "ts_code": "600644.SH",
@@ -1033,7 +1033,7 @@
         "intraday_execution_penalty": 0.007935388896642775,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.026876977530025877
+        "ev_pred": -0.014681577821532735
       },
       {
         "ts_code": "603725.SH",
@@ -1042,7 +1042,7 @@
         "intraday_execution_penalty": 0.007774440408163264,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.05222580814337095
+        "ev_pred": -0.02784576433555779
       },
       {
         "ts_code": "600722.SH",
@@ -1051,7 +1051,7 @@
         "intraday_execution_penalty": 0.007661103270608415,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.04221041943057804
+        "ev_pred": -0.025615707379255222
       },
       {
         "ts_code": "000839.SZ",
@@ -1060,7 +1060,7 @@
         "intraday_execution_penalty": 0.007618799999999997,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.04761073801262597
+        "ev_pred": -0.03413837977023984
       },
       {
         "ts_code": "600726.SH",
@@ -1069,7 +1069,7 @@
         "intraday_execution_penalty": 0.007503181818181818,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.03409710922407809
+        "ev_pred": -0.03895736701416998
       },
       {
         "ts_code": "603893.SH",
@@ -1078,7 +1078,7 @@
         "intraday_execution_penalty": 0.007479092785606609,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.06051049010067847
+        "ev_pred": -0.050730281939715835
       },
       {
         "ts_code": "603803.SH",
@@ -1087,7 +1087,7 @@
         "intraday_execution_penalty": 0.007474536654247389,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.05480942116714303
+        "ev_pred": -0.04281936812492843
       }
     ]
   },
@@ -1098,19 +1098,19 @@
     "stop_reason": "",
     "p_fill_pred_min": 0.4482946327471185,
     "p_fill_pred_max": 0.9172756520698393,
-    "p_fill_pred_mean": 0.8292714183088397,
-    "e_ret_pred_min": -0.06018062447548972,
-    "e_ret_pred_max": -0.0021038428239300703,
-    "e_ret_pred_mean": -0.030937882285223164,
+    "p_fill_pred_mean": 0.8268608831308715,
+    "e_ret_pred_min": -0.046302127505780305,
+    "e_ret_pred_max": 0.035688719316526465,
+    "e_ret_pred_mean": -0.009897176858142962,
     "cost_est_min": 0.0011450835,
     "cost_est_max": 0.00235665,
-    "cost_est_mean": 0.0016591324878048783,
+    "cost_est_mean": 0.0016591324878048779,
     "risk_penalty_min": 0.007865957193945717,
     "risk_penalty_max": 0.036000000000000004,
-    "risk_penalty_mean": 0.01970904923872538,
-    "ev_base_min": -0.07542361899037484,
-    "ev_base_max": -0.02394048208735749,
-    "ev_base_mean": -0.046853265395312156,
+    "risk_penalty_mean": 0.019709049238725383,
+    "ev_base_min": -0.05705444682956234,
+    "ev_base_max": -0.005773066275628678,
+    "ev_base_mean": -0.029000182373671097,
     "pfill_penalty_extra_min": 0.0,
     "pfill_penalty_extra_max": 0.0,
     "pfill_penalty_extra_mean": 0.0,
@@ -1126,86 +1126,86 @@
     "ev_penalty_total_extra_min": 0.0,
     "ev_penalty_total_extra_max": 0.0,
     "ev_penalty_total_extra_mean": 0.0,
-    "ev_final_min": -0.07542361899037484,
-    "ev_final_max": -0.02394048208735749,
-    "ev_final_mean": -0.046853265395312156,
-    "ev_pred_min": -0.07542361899037484,
-    "ev_pred_max": -0.02394048208735749,
-    "ev_pred_mean": -0.046853265395312156,
+    "ev_final_min": -0.05705444682956234,
+    "ev_final_max": -0.005773066275628678,
+    "ev_final_mean": -0.029000182373671097,
+    "ev_pred_min": -0.05705444682956234,
+    "ev_pred_max": -0.005773066275628678,
+    "ev_pred_mean": -0.029000182373671097,
     "positive_ev_rows": 0,
     "positive_ev_base_rows": 0,
-    "positive_e_ret_rows": 0,
+    "positive_e_ret_rows": 10,
     "high_pfill_rows": 5,
     "low_risk_rows": 1,
     "top_mean_penalty_drivers": [
       {
         "name": "risk_penalty",
-        "mean": 0.01970904923872538
+        "mean": 0.019709049238725383
       },
       {
         "name": "cost_est",
-        "mean": 0.0016591324878048783
+        "mean": 0.0016591324878048779
       }
     ],
-    "primary_no_trade_reason": "no_positive_e_ret_after_model",
+    "primary_no_trade_reason": "positive_e_ret_cannot_cover_cost_and_risk",
     "top_ev_rows": [
-      {
-        "ts_code": "000506.SZ",
-        "name": "招金黄金",
-        "ev_pred": -0.02394048208735749,
-        "ev_base": -0.02394048208735749,
-        "p_fill_pred": 0.8632251834167903,
-        "e_ret_pred": -0.013752510803818443,
-        "cost_est": 0.0011450835,
-        "risk_penalty": 0.010923884926289923,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
-        "ts_code": "600594.SH",
-        "name": "益佰制药",
-        "ev_pred": -0.02597082826568914,
-        "ev_base": -0.02597082826568914,
-        "p_fill_pred": 0.812950464388764,
-        "e_ret_pred": -0.01233619133099839,
-        "cost_est": 0.0013369935,
-        "risk_penalty": 0.014605122294365351,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
       {
         "ts_code": "001258.SZ",
         "name": "立新能源",
-        "ev_pred": -0.026247051255658706,
-        "ev_base": -0.026247051255658706,
-        "p_fill_pred": 0.7130466887510969,
-        "e_ret_pred": -0.024164913509229842,
+        "ev_pred": -0.005773066275628678,
+        "ev_base": -0.005773066275628678,
+        "p_fill_pred": 0.7391472434120419,
+        "e_ret_pred": 0.004387858369525242,
         "cost_est": 0.0011503824999999999,
         "risk_penalty": 0.007865957193945717,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
-        "ts_code": "600644.SH",
-        "name": "乐山电力",
-        "ev_pred": -0.026876977530025877,
-        "ev_base": -0.026876977530025877,
-        "p_fill_pred": 0.8189536050363425,
-        "e_ret_pred": -0.015611698212301316,
-        "cost_est": 0.001365965,
-        "risk_penalty": 0.012725755998322291,
+        "ts_code": "002900.SZ",
+        "name": "哈三联",
+        "ev_pred": -0.006222612372467944,
+        "ev_base": -0.006222612372467944,
+        "p_fill_pred": 0.8656664932397082,
+        "e_ret_pred": 0.01751066309023181,
+        "cost_est": 0.0013009515,
+        "risk_penalty": 0.02008005518409091,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
         "ts_code": "002412.SZ",
         "name": "汉森制药",
-        "ev_pred": -0.027338211112815092,
-        "ev_base": -0.027338211112815092,
+        "ev_pred": -0.009292937349820273,
+        "ev_base": -0.009292937349820273,
         "p_fill_pred": 0.9172756520698393,
-        "e_ret_pred": -0.009035210324422747,
+        "e_ret_pred": 0.01063747336916001,
         "cost_est": 0.0014708745,
         "risk_penalty": 0.01757955817089207,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "002879.SZ",
+        "name": "长缆科技",
+        "ev_pred": -0.009353518832935663,
+        "ev_base": -0.009353518832935663,
+        "p_fill_pred": 0.7768138945192414,
+        "e_ret_pred": 0.035688719316526465,
+        "cost_est": 0.00235665,
+        "risk_penalty": 0.034720361875610666,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "002953.SZ",
+        "name": "日丰股份",
+        "ev_pred": -0.009757352168854566,
+        "ev_base": -0.009757352168854566,
+        "p_fill_pred": 0.9003217212540572,
+        "e_ret_pred": 0.009638563373440639,
+        "cost_est": 0.0015111945,
+        "risk_penalty": 0.016923965635646954,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       }
@@ -1217,10 +1217,10 @@
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
     "p_fill_degrade_reason": "",
-    "eret_pred_src": "model:lgbm",
+    "eret_pred_src": "model:lr",
     "eret_model_loaded": true,
-    "eret_model_kind": "lgbm",
-    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lgbm.joblib",
+    "eret_model_kind": "lr",
+    "eret_model_path": "/home/runner/work/top10-decision/top10-decision/models/eret_lr.joblib",
     "eret_degrade_reason": ""
   },
   "paths": {
