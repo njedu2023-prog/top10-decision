@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,10 @@ from sklearn.preprocessing import StandardScaler
 from top10decision.data.tushare_minute import opening_auction_price_from_snapshot
 from top10decision.decision.eligibility import filter_standard_limit_universe
 from top10decision.decision.exit_policy import simulate_tplus1_exit
+from top10decision.decision.observation import (
+    observation_price_contract,
+    rank_observation_rows,
+)
 from top10decision.writers.io_contract import (
     choose_exec_date,
     choose_exit_date,
@@ -1687,6 +1692,33 @@ class AuctionV3Engine:
         ]
         scored["max_auction_change_pct"] = (100.0 * scored["recommended_max_gap"]).round(2)
         scored["stage_transition"] = scored["stage"].where(scored["stage"].astype(str).str.strip().ne(""), "-")
+        observation_contracts = [
+            observation_price_contract(row.to_dict())
+            for _, row in scored.iterrows()
+        ]
+        scored["observation_max_price"] = [
+            item["observation_max_price"] for item in observation_contracts
+        ]
+        scored["observation_auction_change_pct"] = [
+            item["observation_auction_change_pct"] for item in observation_contracts
+        ]
+        scored["observation_price_basis"] = [
+            item["observation_price_basis"] for item in observation_contracts
+        ]
+        scored["observation_price_is_formal"] = [
+            int(item["observation_price_is_formal"]) for item in observation_contracts
+        ]
+        observation_rows, observation_pool_size = rank_observation_rows(
+            scored.to_dict(orient="records"),
+            limit=self.config.max_observation_candidates,
+        )
+        observation_rank = {
+            str(row.get("ts_code")): int(row["observation_rank"])
+            for row in observation_rows
+        }
+        scored["observation_rank"] = scored["ts_code"].map(observation_rank)
+        scored["observation_selected"] = scored["observation_rank"].notna().astype(int)
+        scored["observation_pool_size"] = int(observation_pool_size)
         scored["take_profit_pct"] = float(self.config.take_profit_pct)
         scored["stop_loss_pct"] = float(self.config.stop_loss_pct)
         scored["take_profit_price"] = scored["recommended_max_price"].map(
@@ -1740,6 +1772,13 @@ class AuctionV3Engine:
             "estimated_up_limit",
             "recommended_max_price",
             "max_auction_change_pct",
+            "observation_max_price",
+            "observation_auction_change_pct",
+            "observation_price_basis",
+            "observation_price_is_formal",
+            "observation_rank",
+            "observation_selected",
+            "observation_pool_size",
             "take_profit_pct",
             "stop_loss_pct",
             "take_profit_price",
@@ -1926,6 +1965,459 @@ class AuctionV3Engine:
             records.append(base)
         return pd.DataFrame(records)
 
+    def _verify_observation_prediction_file(
+        self,
+        path: Path,
+        dates: Sequence[str],
+    ) -> pd.DataFrame:
+        pred = _read_csv(path)
+        if pred.empty:
+            return pd.DataFrame()
+        ranked, pool_size = rank_observation_rows(
+            pred.to_dict(orient="records"),
+            limit=self.config.max_observation_candidates,
+        )
+        records: list[dict[str, Any]] = []
+        for row in ranked:
+            signal_date = _normal_date(row.get("signal_date"))
+            buy_date = _normal_date(row.get("expected_buy_date"))
+            exit_date = _normal_date(row.get("expected_exit_date"))
+            if not buy_date or buy_date < self.config.observation_validation_start_date:
+                continue
+            code = _normal_code(row.get("ts_code"))
+            timing_status, timing_valid, prediction_deadline = (
+                self._prediction_timing_status(
+                    row.get("generated_at_utc"),
+                    buy_date,
+                )
+            )
+            base = dict(row)
+            base.update(
+                {
+                    "signal_date": signal_date,
+                    "expected_buy_date": buy_date,
+                    "expected_exit_date": exit_date,
+                    "observation_pool_size": int(pool_size),
+                    "observation_rank": int(row.get("observation_rank") or 0),
+                    "validation_mode": "public_market_proxy",
+                    "prediction_timing_status": timing_status,
+                    "prediction_timing_valid": timing_valid,
+                    "prediction_deadline_utc": prediction_deadline,
+                    "validation_status": "PENDING_T",
+                    "actual_buy_date": "",
+                    "actual_open_price": np.nan,
+                    "actual_t_close": np.nan,
+                    "market_daily_return": np.nan,
+                    "observation_fill": np.nan,
+                    "observation_fill_reason": "truth_pending",
+                    "observation_t_return": np.nan,
+                    "continuation_limit_up_hit": np.nan,
+                    "actual_exit_date": "",
+                    "actual_exit_price": np.nan,
+                    "actual_gross_return": np.nan,
+                    "actual_net_return": np.nan,
+                    "exit_reason": "",
+                    "truth_source": "pending",
+                    "truth_generated_at_utc": _utc_now(),
+                }
+            )
+            if buy_date not in dates:
+                records.append(base)
+                continue
+            buy_daily = self._row(self.market_table(buy_date, "daily"), code)
+            if buy_daily is None:
+                base.update(
+                    {
+                        "actual_buy_date": buy_date,
+                        "observation_fill": 0,
+                        "observation_fill_reason": "suspended_or_daily_missing",
+                        "validation_status": "FINAL_NO_FILL",
+                        "truth_source": "daily_missing",
+                    }
+                )
+                records.append(base)
+                continue
+
+            open_price = self._execution_open_price(buy_date, code, buy_daily)
+            close_price = _numeric_from(buy_daily, ("close",))
+            daily_pct = _numeric_from(buy_daily, ("pct_chg",))
+            d_close = _finite(row.get("d_close"))
+            market_return = (
+                daily_pct / 100.0
+                if math.isfinite(daily_pct)
+                else close_price / d_close - 1.0
+                if close_price > 0 and d_close > 0
+                else np.nan
+            )
+            max_price = _finite(row.get("observation_max_price"))
+            market_fill, market_reason = self._market_buyable(buy_date, code)
+            cap_accept = math.isfinite(max_price) and open_price > 0 and open_price <= max_price + 0.005
+            observation_fill = int(cap_accept and market_fill == 1)
+            fill_reason = (
+                "filled_public_market_proxy"
+                if observation_fill
+                else "price_above_observation_cap"
+                if not cap_accept
+                else market_reason
+            )
+            limit_row = self._row(self.market_table(buy_date, "stk_limit"), code)
+            up_limit = _numeric_from(limit_row, ("up_limit",)) if limit_row is not None else float("nan")
+            continuation_hit = (
+                int(_is_close(close_price, up_limit))
+                if close_price > 0 and math.isfinite(up_limit)
+                else np.nan
+            )
+            t_return = (
+                close_price / open_price - 1.0
+                if observation_fill and close_price > 0 and open_price > 0
+                else np.nan
+            )
+            base.update(
+                {
+                    "actual_buy_date": buy_date,
+                    "actual_open_price": open_price,
+                    "actual_t_close": close_price,
+                    "market_daily_return": market_return,
+                    "observation_fill": observation_fill,
+                    "observation_fill_reason": fill_reason,
+                    "observation_t_return": t_return,
+                    "continuation_limit_up_hit": continuation_hit,
+                    "validation_status": "T_VERIFIED_FILLED" if observation_fill else "T_VERIFIED_NO_FILL",
+                    "truth_source": (
+                        "tushare_minute_proxy"
+                        if not self.minute_table(buy_date, code).empty
+                        else "official_daily_open_proxy"
+                    ),
+                }
+            )
+            if not observation_fill:
+                base["validation_status"] = "FINAL_NO_FILL"
+                records.append(base)
+                continue
+            if not exit_date or exit_date not in dates:
+                base["validation_status"] = "PENDING_T1"
+                records.append(base)
+                continue
+
+            date_index = dates.index(exit_date)
+            actual_exit_date, actual_exit_price, _, exit_reason = self._resolve_exit(
+                code,
+                date_index,
+                dates,
+                entry_price=open_price,
+                buy_date=buy_date,
+            )
+            if not actual_exit_date:
+                base["validation_status"] = "PENDING_EXIT_TRUTH"
+                records.append(base)
+                continue
+            gross = self._realized_gross_return(
+                code,
+                buy_date,
+                open_price,
+                actual_exit_date,
+                dates,
+                exit_price=actual_exit_price,
+            )
+            net = gross - self.config.cost_rate if math.isfinite(gross) else np.nan
+            base.update(
+                {
+                    "actual_exit_date": actual_exit_date,
+                    "actual_exit_price": actual_exit_price,
+                    "actual_gross_return": gross,
+                    "actual_net_return": net,
+                    "exit_reason": exit_reason,
+                    "validation_status": "FINAL_VERIFIED",
+                }
+            )
+            records.append(base)
+        return pd.DataFrame(records)
+
+    @staticmethod
+    def _prediction_timing_status(
+        generated_at_utc: Any,
+        buy_date: str,
+    ) -> tuple[str, int, str]:
+        normalized_buy_date = _normal_date(buy_date)
+        if not normalized_buy_date:
+            return "UNKNOWN_BUY_DATE", 0, ""
+        deadline = datetime.strptime(normalized_buy_date, "%Y%m%d").replace(
+            hour=9,
+            minute=25,
+            tzinfo=ZoneInfo("Asia/Shanghai"),
+        )
+        raw_generated = str(generated_at_utc or "").strip()
+        if not raw_generated:
+            return "UNKNOWN_GENERATION_TIME", 0, deadline.astimezone(timezone.utc).isoformat()
+        try:
+            generated = datetime.fromisoformat(raw_generated.replace("Z", "+00:00"))
+        except ValueError:
+            return "UNKNOWN_GENERATION_TIME", 0, deadline.astimezone(timezone.utc).isoformat()
+        if generated.tzinfo is None:
+            generated = generated.replace(tzinfo=timezone.utc)
+        valid = generated <= deadline
+        return (
+            "PREMARKET_VALID" if valid else "RETROSPECTIVE_LATE_GENERATION",
+            int(valid),
+            deadline.astimezone(timezone.utc).isoformat(),
+        )
+
+    @staticmethod
+    def _wilson_interval(successes: int, total: int) -> tuple[float | None, float | None]:
+        if total <= 0:
+            return None, None
+        z = 1.959963984540054
+        rate = successes / total
+        denominator = 1.0 + z * z / total
+        centre = (rate + z * z / (2.0 * total)) / denominator
+        radius = (
+            z
+            * math.sqrt(rate * (1.0 - rate) / total + z * z / (4.0 * total * total))
+            / denominator
+        )
+        return _safe_metric(max(0.0, centre - radius)), _safe_metric(min(1.0, centre + radius))
+
+    def _observation_metrics(self, ledger: pd.DataFrame) -> dict[str, Any]:
+        if ledger.empty:
+            return {
+                "schema_version": "decision_observation_validation_v2_timing_audited",
+                "status": "no_observation_predictions",
+                "generated_at_utc": _utc_now(),
+                "validation_start_exec_date": self.config.observation_validation_start_date,
+                "observation_rows": 0,
+            }
+        frame = ledger.copy()
+        frame["expected_buy_date"] = frame["expected_buy_date"].map(_normal_date)
+        frame["observation_rank"] = pd.to_numeric(frame.get("observation_rank"), errors="coerce")
+        timing_valid = pd.to_numeric(
+            frame.get("prediction_timing_valid"), errors="coerce"
+        ).fillna(0).eq(1)
+        eligible_frame = frame[timing_valid].copy()
+        all_t_validated = frame[frame["validation_status"].ne("PENDING_T")].copy()
+        t_validated = eligible_frame[
+            eligible_frame["validation_status"].ne("PENDING_T")
+        ].copy()
+        retrospective_truth = all_t_validated[
+            all_t_validated["prediction_timing_status"].eq(
+                "RETROSPECTIVE_LATE_GENERATION"
+            )
+        ]
+        unknown_timing_truth = all_t_validated[
+            all_t_validated["prediction_timing_status"].astype(str).str.startswith(
+                "UNKNOWN_"
+            )
+        ]
+        market_returns = pd.to_numeric(t_validated.get("market_daily_return"), errors="coerce").dropna()
+        fill_flags = pd.to_numeric(t_validated.get("observation_fill"), errors="coerce").dropna()
+        t_fill_returns = pd.to_numeric(
+            t_validated.loc[
+                pd.to_numeric(t_validated.get("observation_fill"), errors="coerce").eq(1),
+                "observation_t_return",
+            ],
+            errors="coerce",
+        ).dropna()
+        continuation = pd.to_numeric(
+            t_validated.get("continuation_limit_up_hit"), errors="coerce"
+        ).dropna()
+        final = eligible_frame[
+            eligible_frame["validation_status"].eq("FINAL_VERIFIED")
+        ].copy()
+        final_returns = pd.to_numeric(final.get("actual_net_return"), errors="coerce").dropna()
+        all_final = frame[frame["validation_status"].eq("FINAL_VERIFIED")].copy()
+        all_final_returns = pd.to_numeric(
+            all_final.get("actual_net_return"), errors="coerce"
+        ).dropna()
+        positive = float(final_returns[final_returns > 0].sum())
+        negative = float(-final_returns[final_returns < 0].sum())
+
+        daily_records: list[dict[str, Any]] = []
+        for exec_date, group in eligible_frame.groupby("expected_buy_date", sort=True):
+            statuses = set(group["validation_status"].astype(str))
+            if not statuses or any(not status.startswith("FINAL_") for status in statuses):
+                continue
+            slot_returns = pd.to_numeric(group.get("actual_net_return"), errors="coerce").fillna(0.0)
+            daily_records.append(
+                {
+                    "exec_date": exec_date,
+                    "observation_slots": int(len(group)),
+                    "filled_slots": int(pd.to_numeric(group.get("observation_fill"), errors="coerce").fillna(0).sum()),
+                    "equal_slot_net_return": float(slot_returns.sum() / max(len(group), 1)),
+                }
+            )
+        daily = pd.DataFrame(daily_records)
+        if not daily.empty:
+            daily["nav"] = (1.0 + daily["equal_slot_net_return"]).cumprod()
+            peak = daily["nav"].cummax().clip(lower=1.0)
+            drawdown = daily["nav"] / peak - 1.0
+            cumulative_return = float(daily["nav"].iloc[-1] - 1.0)
+            max_drawdown = float(drawdown.min())
+        else:
+            cumulative_return = float("nan")
+            max_drawdown = float("nan")
+
+        win_low, win_high = self._wilson_interval(
+            int((final_returns > 0).sum()),
+            int(len(final_returns)),
+        )
+        continuation_low, continuation_high = self._wilson_interval(
+            int(continuation.sum()),
+            int(len(continuation)),
+        )
+        payload: dict[str, Any] = {
+            "schema_version": "decision_observation_validation_v2_timing_audited",
+            "status": "ok",
+            "generated_at_utc": _utc_now(),
+            "validation_start_exec_date": self.config.observation_validation_start_date,
+            "validation_mode": "public_market_proxy",
+            "performance_scope": "premarket_valid_predictions_only",
+            "prediction_deadline": "T 09:25 Asia/Shanghai",
+            "top_n": int(self.config.max_observation_candidates),
+            "observation_dates": int(frame["expected_buy_date"].nunique()),
+            "observation_rows": int(len(frame)),
+            "t_validated_rows": int(len(all_t_validated)),
+            "t_pending_rows": int(len(frame) - len(all_t_validated)),
+            "premarket_valid_rows": int(timing_valid.sum()),
+            "premarket_validated_rows": int(len(t_validated)),
+            "retrospective_truth_rows": int(len(retrospective_truth)),
+            "unknown_timing_truth_rows": int(len(unknown_timing_truth)),
+            "market_positive_rate": _safe_metric((market_returns > 0).mean()),
+            "mean_market_daily_return": _safe_metric(market_returns.mean()),
+            "median_market_daily_return": _safe_metric(market_returns.median()),
+            "fillable_rows": int(fill_flags.sum()) if len(fill_flags) else 0,
+            "observation_fill_rate": _safe_metric(fill_flags.mean()),
+            "mean_t_observation_return": _safe_metric(t_fill_returns.mean()),
+            "median_t_observation_return": _safe_metric(t_fill_returns.median()),
+            "continuation_hits": int(continuation.sum()) if len(continuation) else 0,
+            "continuation_samples": int(len(continuation)),
+            "continuation_hit_rate": _safe_metric(continuation.mean()),
+            "continuation_hit_rate_95ci_low": continuation_low,
+            "continuation_hit_rate_95ci_high": continuation_high,
+            "final_verified_trades": int(len(final_returns)),
+            "final_win_rate": _safe_metric((final_returns > 0).mean()),
+            "final_win_rate_95ci_low": win_low,
+            "final_win_rate_95ci_high": win_high,
+            "mean_final_net_return": _safe_metric(final_returns.mean()),
+            "median_final_net_return": _safe_metric(final_returns.median()),
+            "worst_final_net_return": _safe_metric(final_returns.min()),
+            "tail_10pct_mean_return": _safe_metric(
+                final_returns.nsmallest(max(1, math.ceil(len(final_returns) * 0.10))).mean()
+                if len(final_returns)
+                else np.nan
+            ),
+            "profit_factor": _safe_metric(positive / negative if negative > 0 else np.nan),
+            "matured_portfolio_dates": int(len(daily)),
+            "equal_slot_cumulative_return": _safe_metric(cumulative_return),
+            "equal_slot_max_drawdown": _safe_metric(max_drawdown),
+            "equal_slot_mean_daily_return": _safe_metric(
+                daily["equal_slot_net_return"].mean() if not daily.empty else np.nan
+            ),
+            "latest_t_validated_exec_date": (
+                max(t_validated["expected_buy_date"]) if not t_validated.empty else ""
+            ),
+            "latest_all_truth_exec_date": (
+                max(all_t_validated["expected_buy_date"])
+                if not all_t_validated.empty
+                else ""
+            ),
+            "latest_final_exec_date": (
+                max(daily["exec_date"]) if not daily.empty else ""
+            ),
+            "daily_portfolio": [
+                {
+                    "exec_date": str(row["exec_date"]),
+                    "observation_slots": int(row["observation_slots"]),
+                    "filled_slots": int(row["filled_slots"]),
+                    "equal_slot_net_return": _safe_metric(row["equal_slot_net_return"]),
+                    "nav": _safe_metric(row["nav"]),
+                }
+                for _, row in daily.iterrows()
+            ],
+            "all_truth_summary": {
+                "t_validated_rows": int(len(all_t_validated)),
+                "fillable_rows": int(
+                    pd.to_numeric(
+                        all_t_validated.get("observation_fill"),
+                        errors="coerce",
+                    )
+                    .fillna(0)
+                    .sum()
+                ),
+                "final_verified_trades": int(len(all_final_returns)),
+                "final_win_rate": _safe_metric(
+                    (all_final_returns > 0).mean()
+                ),
+                "mean_final_net_return": _safe_metric(all_final_returns.mean()),
+            },
+        }
+
+        for transition, key in (("2→3", "stage_2_to_3"), ("3→4", "stage_3_to_4")):
+            sample = t_validated[t_validated["stage_transition"].eq(transition)]
+            hits = pd.to_numeric(sample.get("continuation_limit_up_hit"), errors="coerce").dropna()
+            payload[key] = {
+                "samples": int(len(hits)),
+                "hits": int(hits.sum()) if len(hits) else 0,
+                "hit_rate": _safe_metric(hits.mean()),
+            }
+        for cutoff in (1, 3, 10):
+            sample = t_validated[t_validated["observation_rank"].le(cutoff)]
+            hits = pd.to_numeric(sample.get("continuation_limit_up_hit"), errors="coerce").dropna()
+            payload[f"top{cutoff}_continuation"] = {
+                "samples": int(len(hits)),
+                "hits": int(hits.sum()) if len(hits) else 0,
+                "hit_rate": _safe_metric(hits.mean()),
+            }
+
+        rolling: dict[str, Any] = {}
+        for label, size in (("20", 20), ("60", 60), ("all", 0)):
+            sample_daily = daily.tail(size) if size else daily
+            dates_in_window = set(sample_daily["exec_date"].astype(str)) if not sample_daily.empty else set()
+            sample_trades = final[final["expected_buy_date"].isin(dates_in_window)]
+            sample_returns = pd.to_numeric(sample_trades.get("actual_net_return"), errors="coerce").dropna()
+            rolling[label] = {
+                "portfolio_dates": int(len(sample_daily)),
+                "filled_trades": int(len(sample_returns)),
+                "mean_net_return": _safe_metric(sample_returns.mean()),
+                "win_rate": _safe_metric((sample_returns > 0).mean()),
+                "equal_slot_cumulative_return": _safe_metric(
+                    (1.0 + sample_daily["equal_slot_net_return"]).prod() - 1.0
+                    if not sample_daily.empty
+                    else np.nan
+                ),
+            }
+        payload["trading_date_windows"] = rolling
+        return payload
+
+    def settle_observations(self) -> tuple[pd.DataFrame, dict[str, Any]]:
+        dates = self.market_dates()
+        parts: list[pd.DataFrame] = []
+        for path in sorted(self.config.prediction_root.glob("pred_20*.csv")):
+            if not re.fullmatch(r"pred_20\d{6}\.csv", path.name):
+                continue
+            verified = self._verify_observation_prediction_file(path, dates)
+            if not verified.empty:
+                parts.append(verified)
+        ledger = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+        if not ledger.empty:
+            ledger = ledger.sort_values(
+                ["expected_buy_date", "observation_rank", "ts_code"],
+                kind="stable",
+            ).reset_index(drop=True)
+            for exec_date, group in ledger.groupby("expected_buy_date", sort=True):
+                _write_csv(
+                    group.reset_index(drop=True),
+                    self.config.verification_root / f"observation_{exec_date}.csv",
+                )
+        _write_csv(
+            ledger,
+            self.config.verification_root / "observation_latest.csv",
+        )
+        metrics = self._observation_metrics(ledger)
+        _write_json(
+            metrics,
+            self.config.metrics_root / "observation_cumulative_latest.json",
+        )
+        return ledger, metrics
+
     def settle_predictions(self) -> tuple[pd.DataFrame, dict[str, Any]]:
         dates = self.market_dates()
         feedback = self._manual_feedback()
@@ -1943,6 +2435,7 @@ class AuctionV3Engine:
         _write_csv(ledger, self.config.verification_root / "verify_latest.csv")
         metrics = self._verification_metrics(ledger)
         _write_json(metrics, self.config.metrics_root / "cumulative_latest.json")
+        self.settle_observations()
         return ledger, metrics
 
     def _verification_metrics(self, ledger: pd.DataFrame) -> dict[str, Any]:
