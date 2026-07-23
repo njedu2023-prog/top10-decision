@@ -1,8 +1,8 @@
 trade_date: 20260723
-run_id: gh_30009422788
-commit_sha: bb14fa6912d2
+run_id: gh_30020474045
+commit_sha: 540f8cc241c6
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-07-23T13:02:52Z
+created_at_utc: 2026-07-23T15:27:01Z
 ok: True
 buy_date: 20260724
 target_date: 20260727
@@ -50,7 +50,7 @@ limitup_calibration_reason: ok
 limitup_calibration_platt_raw_brier: 0.26670033351449746
 limitup_calibration_platt_brier: 0.11691938114859911
 limitup_calibration_platt_kind: platt_monotonic
-limitup_calibration_avg_delta: -0.19977104801556356
+limitup_calibration_avg_delta: -0.20043545134561652
 limitup_calibration_platt_slope: 0.1152135266024012
 limitup_calibration_platt_intercept: -1.7040466545410462
 t1_calibration_mode: validated_platt_v1
@@ -58,7 +58,7 @@ t1_calibration_reason: ok
 t1_calibration_raw_brier: 0.29671297445498723
 t1_calibration_brier: 0.26785428454339666
 t1_calibration_kind: platt_monotonic
-t1_calibration_avg_delta: -0.1521649723729272
+t1_calibration_avg_delta: -0.1521941821842042
 t1_calibration_slope: 0.34408294721873955
 t1_calibration_intercept: -0.6191721281771243
 adaptive_rank_mode: history_ic_weighted_v1
@@ -80,8 +80,8 @@ premium_stage_avg_quality_weight: 0.8052991452991453
 premium_stage_avg_risk_weight: 0.03264957264957267
 premium_intraday_hard_risk_count: 0
 premium_eligible_count: 0
-premium_watch_count: 48
-premium_excluded_count: 69
+premium_watch_count: 49
+premium_excluded_count: 68
 premium_model_can_rank_count: 0
 premium_ehx_validated_count: 0
 premium_rank_blend: professional_75_adaptive_25
