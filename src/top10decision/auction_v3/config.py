@@ -9,6 +9,10 @@ from top10decision.decision.contracts import (
     EXIT_STOP_LOSS_PCT,
     EXIT_TAKE_PROFIT_PCT,
 )
+from top10decision.decision.observation import (
+    OBSERVATION_START_EXEC_DATE,
+    OBSERVATION_TOP_N,
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +22,8 @@ class AuctionV3Config:
     root: Path = Path(".")
     max_candidates: int = 0
     max_positions: int = 3
+    max_observation_candidates: int = OBSERVATION_TOP_N
+    observation_validation_start_date: str = OBSERVATION_START_EXEC_DATE
     round_trip_cost_bps: float = 35.0
     slippage_bps_each_side: float = 5.0
     order_amount_cny: float = 100_000.0
