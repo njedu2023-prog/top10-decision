@@ -34,6 +34,7 @@ class AuctionV3Test(unittest.TestCase):
             backtest_block_dates=4,
             order_amount_cny=10_000,
             max_auction_participation=0.02,
+            observation_validation_start_date=self.dates[0],
         )
 
     def tearDown(self) -> None:
@@ -134,12 +135,18 @@ class AuctionV3Test(unittest.TestCase):
         candidates = engine.load_candidates(signal_date)
         first = engine.build_prediction(signal_date, candidates, bundle, metrics)
         self.assertIn("recommended_max_price", first.columns)
+        self.assertIn("observation_max_price", first.columns)
+        self.assertIn("observation_rank", first.columns)
         self.assertIn("predicted_continuation_limit_up_probability", first.columns)
         self.assertIn("market_order_allowed", first.columns)
         self.assertIn("feature_contract", first.columns)
         self.assertTrue(first["recommended_max_price"].notna().any())
         priced = first[first["recommended_max_price"].notna()]
         self.assertTrue((priced["recommended_max_price"] < priced["estimated_up_limit"]).all())
+        observed = first[first["observation_selected"].eq(1)]
+        self.assertLessEqual(len(observed), self.config.max_observation_candidates)
+        self.assertTrue(observed["observation_max_price"].notna().all())
+        self.assertTrue((observed["observation_max_price"] < observed["estimated_up_limit"]).all())
         self.assertTrue((first["market_order_allowed"] == 0).all())
         dated = self.config.prediction_root / f"pred_{signal_date}.csv"
         before = dated.read_bytes()
@@ -232,7 +239,7 @@ class AuctionV3Test(unittest.TestCase):
 
     def test_true_price_verification_and_reports(self) -> None:
         engine = AuctionV3Engine(self.config)
-        signal_date = self.dates[-4]
+        signal_date = self.dates[1]
         history = engine.build_history()
         oos, metrics = engine.run_backtest(history)
         prediction = engine.build_prediction(signal_date, engine.load_candidates(signal_date), engine.fit_models(history), metrics)
@@ -242,6 +249,25 @@ class AuctionV3Test(unittest.TestCase):
         self.assertIn("actual_exit_price", ledger.columns)
         self.assertIn("truth_source", ledger.columns)
         self.assertGreaterEqual(cumulative.get("selected_predictions", 0), 1)
+        observation, observation_metrics = engine.settle_observations()
+        self.assertFalse(observation.empty)
+        self.assertIn("market_daily_return", observation.columns)
+        self.assertIn("continuation_limit_up_hit", observation.columns)
+        self.assertIn("actual_net_return", observation.columns)
+        self.assertIn("prediction_timing_status", observation.columns)
+        self.assertLessEqual(
+            int(observation.groupby("expected_buy_date").size().max()),
+            self.config.max_observation_candidates,
+        )
+        self.assertGreater(observation_metrics.get("t_validated_rows", 0), 0)
+        self.assertEqual(
+            observation_metrics.get("performance_scope"),
+            "premarket_valid_predictions_only",
+        )
+        self.assertGreater(
+            observation_metrics.get("retrospective_truth_rows", 0),
+            0,
+        )
         from top10decision.auction_v3.reporting import write_reports
 
         paths = write_reports(
@@ -256,6 +282,19 @@ class AuctionV3Test(unittest.TestCase):
             self.assertTrue(Path(path).exists())
             self.assertIn("Decision", Path(path).read_text(encoding="utf-8"))
         self.assertIn("竞价", Path(paths["current"]).read_text(encoding="utf-8"))
+
+    def test_observation_timing_audit_uses_t_0925_deadline(self) -> None:
+        valid = AuctionV3Engine._prediction_timing_status(
+            "2026-07-22T13:12:08+00:00",
+            "20260723",
+        )
+        late = AuctionV3Engine._prediction_timing_status(
+            "2026-07-23T11:13:00+00:00",
+            "20260723",
+        )
+        self.assertEqual(valid[0:2], ("PREMARKET_VALID", 1))
+        self.assertEqual(late[0:2], ("RETROSPECTIVE_LATE_GENERATION", 0))
+        self.assertEqual(valid[2], "2026-07-23T01:25:00+00:00")
 
 
 if __name__ == "__main__":
