@@ -11,6 +11,11 @@ import numpy as np
 import pandas as pd
 
 from .eligibility import annotate_standard_limit_universe, filter_standard_limit_universe
+from .observation import (
+    OBSERVATION_START_EXEC_DATE,
+    OBSERVATION_TOP_N,
+    rank_observation_rows,
+)
 
 
 REPORT_RE = re.compile(r"decision_report_(20\d{6})\.md$")
@@ -202,8 +207,19 @@ def _merge_auction_candidates(
                 "stage_focus": _integer(row.get("stage_focus")),
                 "target_weight": per_position_weight if action == "BUY" else 0.0,
                 "mechanism_limit_pct": _number(row.get("decision_limit_pct")),
+                "d_close": _number(row.get("d_close")),
+                "estimated_up_limit": _number(row.get("estimated_up_limit")),
                 "recommended_max_price": _number(row.get("recommended_max_price")),
                 "max_auction_change_pct": _number(row.get("max_auction_change_pct")),
+                "diagnostic_gap": _number(row.get("diagnostic_gap")),
+                "observation_max_price": _number(row.get("observation_max_price")),
+                "observation_auction_change_pct": _number(
+                    row.get("observation_auction_change_pct")
+                ),
+                "observation_price_basis": _text(row.get("observation_price_basis")),
+                "observation_price_is_formal": _integer(
+                    row.get("observation_price_is_formal")
+                ),
                 "take_profit_pct": _number(row.get("take_profit_pct")),
                 "stop_loss_pct": _number(row.get("stop_loss_pct")),
                 "take_profit_price": _number(row.get("take_profit_price")),
@@ -237,29 +253,152 @@ def _merge_auction_candidates(
     return rows
 
 
-def _stage_watchlist(rows: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
-    focused = [
-        dict(row)
-        for row in rows
-        if _text(row.get("stage_transition")) in {"2→3", "3→4"}
-    ]
+def _stage_watchlist(
+    rows: list[dict[str, Any]],
+    limit: int = OBSERVATION_TOP_N,
+) -> tuple[list[dict[str, Any]], int]:
+    return rank_observation_rows(rows, limit=limit)
 
-    def sort_key(row: dict[str, Any]) -> tuple[float, float, float, int]:
-        continuation = _number(row.get("predicted_continuation_limit_up_probability"))
-        big_loss = _number(row.get("predicted_big_loss_probability"))
-        conservative = _number(row.get("conservative_ev"))
-        return (
-            -(continuation if continuation is not None else -1.0),
-            big_loss if big_loss is not None else 2.0,
-            -(conservative if conservative is not None else -1.0),
-            _integer(row.get("rank"), 9999),
+
+def _observation_status_label(value: Any) -> str:
+    return {
+        "PENDING_T": "等待T日收盘",
+        "PENDING_T1": "T日已验证，等待T+1",
+        "T_VERIFIED_FILLED": "T日已验证",
+        "T_VERIFIED_NO_FILL": "T日未成交",
+        "FINAL_VERIFIED": "T+1最终完成",
+        "FINAL_NO_FILL": "最终未成交",
+        "PENDING_EXIT_TRUTH": "等待可退出真值",
+    }.get(_text(value), _text(value) or "待验证")
+
+
+def _prediction_timing_label(value: Any) -> str:
+    return {
+        "PREMARKET_VALID": "9:25前冻结",
+        "RETROSPECTIVE_LATE_GENERATION": "收盘后回溯",
+        "UNKNOWN_GENERATION_TIME": "生成时间未知",
+        "UNKNOWN_BUY_DATE": "执行日未知",
+    }.get(_text(value), _text(value) or "待审计")
+
+
+def _observation_frame(root: Path, exec_date: str) -> pd.DataFrame:
+    dated = root / "outputs" / "auction_v3" / "verification" / f"observation_{exec_date}.csv"
+    if dated.exists():
+        return _read_csv(dated)
+    ledger = _read_csv(
+        root / "outputs" / "auction_v3" / "verification" / "observation_latest.csv"
+    )
+    if ledger.empty or "expected_buy_date" not in ledger.columns:
+        return pd.DataFrame()
+    dates = ledger["expected_buy_date"].map(_date)
+    return ledger[dates.eq(exec_date)].copy()
+
+
+def _attach_observation_validation(
+    root: Path,
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    plan = dict(plan)
+    candidates = [
+        dict(row)
+        for row in plan.get("candidates", [])
+        if isinstance(row, dict)
+    ]
+    watchlist, watch_total = _stage_watchlist(candidates)
+    exec_date = _date(plan.get("exec_date"))
+    truth = _observation_frame(root, exec_date)
+    lookup: dict[str, pd.Series] = {}
+    if not truth.empty and "ts_code" in truth.columns:
+        lookup = {
+            _text(row.get("ts_code")): row
+            for _, row in truth.drop_duplicates("ts_code", keep="last").iterrows()
+        }
+    truth_fields = (
+        "observation_max_price",
+        "observation_auction_change_pct",
+        "observation_price_basis",
+        "observation_price_is_formal",
+        "observation_rank",
+        "observation_pool_size",
+        "validation_mode",
+        "prediction_timing_status",
+        "prediction_timing_valid",
+        "prediction_deadline_utc",
+        "validation_status",
+        "actual_buy_date",
+        "actual_open_price",
+        "actual_t_close",
+        "market_daily_return",
+        "observation_fill",
+        "observation_fill_reason",
+        "observation_t_return",
+        "continuation_limit_up_hit",
+        "actual_exit_date",
+        "actual_exit_price",
+        "actual_gross_return",
+        "actual_net_return",
+        "exit_reason",
+        "truth_source",
+        "truth_generated_at_utc",
+    )
+    for row in watchlist:
+        verified = lookup.get(_text(row.get("ts_code")))
+        if verified is not None:
+            for field in truth_fields:
+                value = verified.get(field)
+                row[field] = _json_safe(value)
+        row["validation_status_label"] = _observation_status_label(
+            row.get("validation_status")
+        )
+        row["prediction_timing_label"] = _prediction_timing_label(
+            row.get("prediction_timing_status")
         )
 
-    focused.sort(key=sort_key)
-    for rank, row in enumerate(focused[:limit], start=1):
-        row["stage_watch_rank"] = rank
-        row["watch_label"] = "正式买入" if row.get("action") == "BUY" else "仅观察"
-    return focused[:limit]
+    metrics = _read_json(
+        root
+        / "outputs"
+        / "auction_v3"
+        / "metrics"
+        / "observation_cumulative_latest.json"
+    )
+    statuses = [_text(row.get("validation_status")) for row in watchlist]
+    plan.update(
+        {
+            "schema_version": "decision_action_plan_v5_observation_truth",
+            "stage_watchlist": watchlist,
+            "stage_watch_count": len(watchlist),
+            "stage_watch_eligible_count": watch_total,
+            "stage_watch_display_limit": OBSERVATION_TOP_N,
+            "observation_validation": {
+                "schema_version": "decision_observation_validation_v2_timing_audited",
+                "exec_date": exec_date,
+                "rows": len(watchlist),
+                "t_validated_rows": sum(status not in {"", "PENDING_T"} for status in statuses),
+                "final_rows": sum(status.startswith("FINAL_") for status in statuses),
+                "premarket_valid_rows": sum(
+                    int((_number(row.get("prediction_timing_valid")) or 0) == 1)
+                    for row in watchlist
+                ),
+                "retrospective_rows": sum(
+                    _text(row.get("prediction_timing_status"))
+                    == "RETROSPECTIVE_LATE_GENERATION"
+                    for row in watchlist
+                ),
+                "pending_rows": sum(
+                    status in {"", "PENDING_T", "PENDING_T1", "PENDING_EXIT_TRUTH"}
+                    for status in statuses
+                ),
+                "generated_at_utc": max(
+                    (_text(row.get("truth_generated_at_utc")) for row in watchlist),
+                    default="",
+                ),
+                "public_market_proxy": True,
+                "manual_actual_separate": True,
+            },
+            "observation_statistics": metrics,
+        }
+    )
+    return _json_safe(plan)
 
 
 def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
@@ -325,9 +464,9 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
 
     formal_count = sum(row["action"] == "BUY" for row in action_rows)
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
-    stage_watchlist = _stage_watchlist(action_rows)
+    stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)
     plan = {
-        "schema_version": "decision_action_plan_v4_full_limit_pool_stage_watch",
+        "schema_version": "decision_action_plan_v5_observation_truth",
         "generated_at_utc": _utc_now(),
         "report_date": chosen_date,
         "report_file": f"decision_report_{chosen_date}.md",
@@ -339,6 +478,8 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
         "formal_buy_count": formal_count,
         "shadow_count": shadow_count,
         "stage_watch_count": len(stage_watchlist),
+        "stage_watch_eligible_count": stage_watch_total,
+        "stage_watch_display_limit": OBSERVATION_TOP_N,
         "risk_budget": risk_budget,
         "guidance_only": True,
         "broker_connected": False,
@@ -406,7 +547,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
         "stage_watchlist": stage_watchlist,
         "candidates": action_rows,
     }
-    return _json_safe(plan)
+    return _attach_observation_validation(root, plan)
 
 
 def build_report_index(root: Path, latest_report_date: str = "") -> dict[str, Any]:
@@ -446,4 +587,36 @@ def publish_action_plan(root: Path, report_date: str = "") -> tuple[Path, Path, 
     return dated_path, latest_path, index_path, plan
 
 
-__all__ = ["build_action_plan", "build_report_index", "publish_action_plan"]
+def refresh_action_plan_observations(
+    root: Path,
+    from_exec_date: str = OBSERVATION_START_EXEC_DATE,
+) -> list[Path]:
+    """Attach observation truth without recomputing frozen historical decisions."""
+    root = root.resolve()
+    output = root / "outputs" / "decision"
+    threshold = _date(from_exec_date) or OBSERVATION_START_EXEC_DATE
+    changed: list[Path] = []
+    for path in sorted(output.glob("action_plan_20*.json")):
+        if not re.fullmatch(r"action_plan_20\d{6}\.json", path.name):
+            continue
+        plan = _read_json(path)
+        if not plan or _date(plan.get("exec_date")) < threshold:
+            continue
+        _write_json(path, _attach_observation_validation(root, plan))
+        changed.append(path)
+
+    latest_path = output / "action_plan_latest.json"
+    latest = _read_json(latest_path)
+    if latest and _date(latest.get("exec_date")) >= threshold:
+        latest = _attach_observation_validation(root, latest)
+        _write_json(latest_path, latest)
+        changed.append(latest_path)
+    return changed
+
+
+__all__ = [
+    "build_action_plan",
+    "build_report_index",
+    "publish_action_plan",
+    "refresh_action_plan_observations",
+]
