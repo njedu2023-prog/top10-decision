@@ -18,6 +18,10 @@
       --brand-soft: #e8f4f0;
       --good: #167248;
       --good-soft: #e8f5ee;
+      --up: #b42318;
+      --up-soft: #fff0ee;
+      --down: #167248;
+      --down-soft: #e8f5ee;
       --warn: #986300;
       --warn-soft: #fff5d9;
       --bad: #b42318;
@@ -175,7 +179,7 @@
 
     .table-wrap { width: 100%; overflow: auto; border-top: 1px solid var(--line); }
     table { border-collapse: collapse; width: 100%; min-width: 1380px; font-size: 12px; }
-    table.stage-table { min-width: 1120px; }
+    table.stage-table { min-width: 1900px; }
     th, td { height: 42px; padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
     th { position: sticky; top: 0; z-index: 4; background: #f2f5f4; color: #52605c; font-weight: 680; }
     th.left, td.left { text-align: left; }
@@ -195,8 +199,24 @@
     .action.buy { color: var(--good); border-color: #8cc6a8; background: var(--good-soft); }
     .action.reject { color: var(--bad); border-color: #e4aaa4; background: var(--bad-soft); }
     .action.shadow, .action.pending { color: var(--warn); border-color: #ddc47f; background: var(--warn-soft); }
-    .positive { color: var(--good); font-weight: 650; }
-    .negative { color: var(--bad); font-weight: 650; }
+    .positive { color: var(--up); font-weight: 650; }
+    .negative { color: var(--down); font-weight: 650; }
+    .truth-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .truth-badge.final { color: var(--good); border-color: #8cc6a8; background: var(--good-soft); }
+    .truth-badge.pending { color: var(--warn); border-color: #ddc47f; background: var(--warn-soft); }
+    .truth-badge.no-fill { color: var(--muted); }
+    .panel-metrics { padding: 0 16px; margin-bottom: 16px; }
+    .stats-note { margin: 0 16px 16px; color: var(--muted); font-size: 12px; line-height: 1.65; }
     .reason { max-width: 300px; white-space: normal; line-height: 1.45; color: var(--muted); text-align: left; }
 
     .audit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 16px; }
@@ -258,6 +278,8 @@
       .metric strong { font-size: 17px; }
       .panel-head { padding: 11px 12px; }
       .empty { margin: 0 12px 12px; }
+      .panel-metrics { padding: 0 12px; }
+      .stats-note { margin: 0 12px 12px; }
       .audit-grid, .report-body { padding: 0 12px 12px; }
       .report-meta { grid-template-columns: 1fr 1fr; }
     }
@@ -313,6 +335,18 @@
     <section class="panel">
       <div class="panel-head">
         <div>
+          <h2>观察真值与累计统计</h2>
+          <p>T日收盘后验证市场表现与成交代理，T+1按预声明退出规则形成最终净收益；收益统计只纳入T日9:25前已冻结的预测，收盘后生成的历史样本单列回溯。</p>
+        </div>
+        <span id="observationUpdate" class="count">待验证</span>
+      </div>
+      <div id="observationMetrics" class="metrics panel-metrics"></div>
+      <p id="observationNote" class="stats-note"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <h2>人工操作参考</h2>
           <p>系统不连接券商、不代替下单；只支持人工限价参考，禁止无上限市价单。</p>
         </div>
@@ -344,11 +378,11 @@
 
     const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
-    const CACHE_KEY = "decision-dashboard-v4-cache";
+    const CACHE_KEY = "decision-dashboard-v5-observation-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub",
-      "signalDate", "execDate", "exitDate", "metrics", "stageCount", "stageContent", "candidateCount", "actionContent", "auditContent",
-      "reportContent", "footer"
+      "signalDate", "execDate", "exitDate", "metrics", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "observationNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
     const state = { reports: [], index: 0, mode: "report_index", current: null };
@@ -395,6 +429,20 @@
       return parsed == null ? "-" : `${(parsed * 100).toFixed(digits)}%`;
     }
 
+    function signedPct(value, digits = 2) {
+      const parsed = finiteNumber(value);
+      if (parsed == null) return "-";
+      const prefix = parsed > 0 ? "+" : "";
+      const arrow = parsed > 0 ? " ↑" : parsed < 0 ? " ↓" : "";
+      return `${prefix}${(parsed * 100).toFixed(digits)}%${arrow}`;
+    }
+
+    function signedPercentValue(value, digits = 2) {
+      const parsed = finiteNumber(value);
+      if (parsed == null) return "-";
+      return `${parsed > 0 ? "+" : ""}${parsed.toFixed(digits)}%`;
+    }
+
     function price(value) {
       const parsed = finiteNumber(value);
       return parsed == null ? "-" : parsed.toFixed(2);
@@ -428,6 +476,29 @@
     function valueTone(value) {
       const parsed = finiteNumber(value);
       return parsed == null ? "" : parsed > 0 ? "positive" : parsed < 0 ? "negative" : "";
+    }
+
+    function fillLabel(value) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "待验证" : parsed === 1 ? "可成交" : "未成交";
+    }
+
+    function continuationLabel(value) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "待验证" : parsed === 1 ? "晋级涨停" : "未晋级";
+    }
+
+    function truthClass(status) {
+      const value = String(status || "");
+      if (value === "FINAL_VERIFIED") return "final";
+      if (value === "FINAL_NO_FILL" || value === "T_VERIFIED_NO_FILL") return "no-fill";
+      return "pending";
+    }
+
+    function timingClass(status) {
+      if (status === "PREMARKET_VALID") return "final";
+      if (status === "RETROSPECTIVE_LATE_GENERATION") return "no-fill";
+      return "pending";
     }
 
     function renderStatus(plan) {
@@ -470,27 +541,81 @@
 
     function renderStageWatchlist(plan) {
       const rows = Array.isArray(plan?.stage_watchlist) ? plan.stage_watchlist : [];
-      els.stageCount.textContent = `${rows.length} 条`;
+      const total = Number(plan?.stage_watch_eligible_count ?? rows.length);
+      const limit = Number(plan?.stage_watch_display_limit ?? 10);
+      els.stageCount.textContent = `共 ${total} 只，仅展示前 ${Math.min(limit, rows.length)} 只`;
       if (!rows.length) {
         els.stageContent.innerHTML = '<div class="empty"><strong>当前没有2进3或3进4候选</strong>D日确认涨停池中没有对应连板阶段。</div>';
         return;
       }
-      const headers = ["观察排名", "状态", "代码", "股票", "行业板块", "晋级", "继续涨停概率", "大跌概率", "预计净收益", "保守下界", "盈利概率", "结论"];
+      const headers = [
+        "观察排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "观察参考限价", "相对D收盘",
+        "T实际开盘", "成交代理", "T市场涨跌幅", "T观察收益", "T晋级结果", "T+1验证状态",
+        "T+1净收益", "继续涨停概率", "大跌概率", "结论"
+      ];
       const body = rows.map(row => `<tr>
         <td>${escapeHtml(row.stage_watch_rank ?? "-")}</td>
         <td class="left"><span class="action ${row.action === "BUY" ? "buy" : "pending"}">${escapeHtml(row.watch_label || "仅观察")}</span></td>
+        <td><span class="truth-badge ${timingClass(row.prediction_timing_status)}">${escapeHtml(row.prediction_timing_label || "待审计")}</span></td>
         <td class="left">${escapeHtml(row.ts_code || "-")}</td>
         <td class="left name">${escapeHtml(row.name || "-")}</td>
         <td class="left">${escapeHtml(row.industry || "未分类")}</td>
         <td>${escapeHtml(row.stage_transition || "-")}</td>
+        <td title="${escapeHtml(row.observation_price_basis || "观察价格契约")}">${price(row.observation_max_price)}</td>
+        <td class="${valueTone(finiteNumber(row.observation_auction_change_pct) == null ? null : finiteNumber(row.observation_auction_change_pct) / 100)}">${signedPercentValue(row.observation_auction_change_pct)}</td>
+        <td>${price(row.actual_open_price)}</td>
+        <td>${escapeHtml(fillLabel(row.observation_fill))}</td>
+        <td class="${valueTone(row.market_daily_return)}">${signedPct(row.market_daily_return)}</td>
+        <td class="${valueTone(row.observation_t_return)}">${signedPct(row.observation_t_return)}</td>
+        <td>${escapeHtml(continuationLabel(row.continuation_limit_up_hit))}</td>
+        <td><span class="truth-badge ${truthClass(row.validation_status)}">${escapeHtml(row.validation_status_label || "待验证")}</span></td>
+        <td class="${valueTone(row.actual_net_return)}">${signedPct(row.actual_net_return)}</td>
         <td>${pct(row.predicted_continuation_limit_up_probability)}</td>
         <td>${pct(row.predicted_big_loss_probability)}</td>
-        <td class="${valueTone(row.predicted_net_return)}">${pct(row.predicted_net_return)}</td>
-        <td class="${valueTone(row.predicted_return_lcb)}">${pct(row.predicted_return_lcb)}</td>
-        <td>${pct(row.predicted_profit_probability)}</td>
         <td class="reason">${escapeHtml(row.action === "BUY" ? (row.exit_rule || "通过全部风控") : (row.rejection_reason || "仅观察"))}</td>
       </tr>`).join("");
-      els.stageContent.innerHTML = `<div class="empty"><strong>观察不等于买入</strong>系统始终展示阶段机会，但只有通过全部样本外晋级与风险门槛的行才会标记为“买入”。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,2,3,4,11].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.stageContent.innerHTML = `<div class="empty"><strong>观察参考限价不等于正式买入</strong>超过该价格放弃；风险门槛未通过的股票仍保持“仅观察”。旧冻结预测缺少诊断价差时，回补采用不使用未来信息的D日收盘价作为保守上限；T日9:25后生成的预测仅展示真值，不计入可执行收益统计。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,18].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+
+    function renderObservationStatistics(plan) {
+      const stats = plan?.observation_statistics || {};
+      const current = plan?.observation_validation || {};
+      const stage23 = stats.stage_2_to_3 || {};
+      const stage34 = stats.stage_3_to_4 || {};
+      const top1 = stats.top1_continuation || {};
+      const top3 = stats.top3_continuation || {};
+      const allTruth = stats.all_truth_summary || {};
+      const rows = [
+        metric("累计观察交易日", String(stats.observation_dates ?? "-")),
+        metric("T日已验证", `${stats.t_validated_rows ?? 0}/${stats.observation_rows ?? 0}`),
+        metric("9:25前时序合格", String(stats.premarket_validated_rows ?? 0), "good"),
+        metric("收盘后回溯真值", String(stats.retrospective_truth_rows ?? 0), Number(stats.retrospective_truth_rows) ? "warn" : ""),
+        metric("成交代理率", pct(stats.observation_fill_rate)),
+        metric("T日市场上涨率", pct(stats.market_positive_rate)),
+        metric("T日平均市场涨跌", signedPct(stats.mean_market_daily_return), valueTone(stats.mean_market_daily_return)),
+        metric("T日平均观察收益", signedPct(stats.mean_t_observation_return), valueTone(stats.mean_t_observation_return)),
+        metric("2进3命中率", pct(stage23.hit_rate)),
+        metric("3进4命中率", pct(stage34.hit_rate)),
+        metric("Top1晋级命中率", pct(top1.hit_rate)),
+        metric("Top3晋级命中率", pct(top3.hit_rate)),
+        metric("时序合格T+1笔数", String(stats.final_verified_trades ?? 0)),
+        metric("时序合格T+1胜率", pct(stats.final_win_rate)),
+        metric("时序合格平均净收益", signedPct(stats.mean_final_net_return), valueTone(stats.mean_final_net_return)),
+        metric("全部回补T+1笔数", String(allTruth.final_verified_trades ?? 0)),
+        metric("全部回补平均净收益", signedPct(allTruth.mean_final_net_return), valueTone(allTruth.mean_final_net_return)),
+        metric("等权槽位累计收益", signedPct(stats.equal_slot_cumulative_return), valueTone(stats.equal_slot_cumulative_return)),
+        metric("等权槽位最大回撤", signedPct(stats.equal_slot_max_drawdown), valueTone(stats.equal_slot_max_drawdown)),
+        metric("最差单笔净收益", signedPct(stats.worst_final_net_return), valueTone(stats.worst_final_net_return)),
+        metric("尾部10%平均收益", signedPct(stats.tail_10pct_mean_return), valueTone(stats.tail_10pct_mean_return)),
+        metric("盈亏比", number(stats.profit_factor, 2))
+      ];
+      els.observationMetrics.innerHTML = rows.join("");
+      const generated = current.generated_at_utc ? new Date(current.generated_at_utc).toLocaleString("zh-CN") : "尚未生成";
+      const retrospective = Number(current.retrospective_rows || 0);
+      els.observationUpdate.textContent = `${dateText(current.exec_date)} · ${current.final_rows || 0} 条最终${retrospective ? ` · ${retrospective} 条回溯` : ""}`;
+      const window20 = stats?.trading_date_windows?.["20"] || {};
+      const window60 = stats?.trading_date_windows?.["60"] || {};
+      els.observationNote.textContent = `数据更新时间：${generated}。全部真值从 ${dateText(stats.validation_start_exec_date || "20260721")} 起回补；核心命中率和收益只统计T日9:25前已冻结样本，未成交按空仓0收益计入等权槽位组合。20日累计 ${signedPct(window20.equal_slot_cumulative_return)}，60日累计 ${signedPct(window60.equal_slot_cumulative_return)}。公开行情代理与人工实际成交分开，不把未成交票虚构为交易收益。`;
     }
 
     function renderActions(plan) {
@@ -682,6 +807,7 @@
       renderStatus(plan);
       renderMetrics(plan);
       renderStageWatchlist(plan);
+      renderObservationStatistics(plan);
       renderActions(plan);
       renderAudit(plan);
       renderReport(md, info.report_file);
@@ -709,6 +835,7 @@
         renderStatus(cached.plan);
         renderMetrics(cached.plan);
         renderStageWatchlist(cached.plan);
+        renderObservationStatistics(cached.plan);
         renderActions(cached.plan);
         renderAudit(cached.plan);
         renderReport(cached.md || "", cached.info?.report_file || "cached_report");
