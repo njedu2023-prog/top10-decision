@@ -11,6 +11,7 @@ on:
       - "scripts/run_auction_v3.py"
       - "scripts/sync_tushare_minute.py"
       - "scripts/publish_decision_action.py"
+      - "scripts/verify_decision_observations.py"
       - "tests/test_auction_v3.py"
       - "tests/test_decision_contract.py"
   workflow_run:
@@ -109,6 +110,8 @@ jobs:
           test -f outputs/auction_v3/predictions/pred_latest.csv
           test -f outputs/auction_v3/metrics/backtest_latest.json
           test -f outputs/auction_v3/metrics/cumulative_latest.json
+          test -f outputs/auction_v3/metrics/observation_cumulative_latest.json
+          test -f outputs/auction_v3/verification/observation_latest.csv
           test -f docs/reports/auction_v3_latest.html
           test -f docs/reports/auction_v3_verify_latest.html
           test -f docs/reports/auction_v3_validation_dashboard.html
@@ -116,6 +119,7 @@ jobs:
           test -f outputs/decision/report_index.json
           python -m json.tool outputs/auction_v3/metrics/backtest_latest.json >/dev/null
           python -m json.tool outputs/auction_v3/metrics/cumulative_latest.json >/dev/null
+          python -m json.tool outputs/auction_v3/metrics/observation_cumulative_latest.json >/dev/null
           python -m json.tool outputs/decision/action_plan_latest.json >/dev/null
           python -m json.tool outputs/decision/report_index.json >/dev/null
 
