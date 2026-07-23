@@ -1,6 +1,6 @@
 {
   "trade_date": "20260721",
-  "rows": 79,
+  "rows": 80,
   "eret_truth_ready_only": true,
   "eret_sample_eligible_only": true,
   "target_column": "realized_ret_open_to_tplus1_timed_exit",
@@ -17,18 +17,18 @@
   "input_rows": {
     "features_base": 5525,
     "features_limit": 5525,
-    "eret_truth_after_filter": 79,
+    "eret_truth_after_filter": 80,
     "prior": 121
   },
   "coverage": {
     "realized_ret_open_to_tplus1_timed_exit": 1.0,
     "realized_ret_t1_to_t2": 1.0,
-    "premium_ret_t1_to_t2": 1.0,
+    "premium_ret_t1_to_t2": 0.9875,
     "entry_price_t1": 1.0,
     "entry_price_t_opening_auction": 1.0,
     "exit_price_tplus1_timed": 1.0,
     "exit_price_tplus1_open": 1.0,
-    "exit_price_t2_close": 1.0,
+    "exit_price_t2_close": 0.9875,
     "y_fill": 1.0,
     "fill_label_quality": 1.0,
     "open_t1": 1.0,
@@ -205,28 +205,29 @@
     }
   },
   "y_fill_distribution": {
-    "1": 79
+    "1": 80
   },
   "eret_quality_distribution": {
-    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 20,
-    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 19,
-    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 16,
-    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 13,
-    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 10,
-    "strong_daily_ohlc_conservative_proxy_time_exit_close_proxy": 1
+    "strong_minute_1m_first_touch_take_profit_first_touch": 27,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 18,
+    "strong_minute_1m_first_touch_take_profit_gap_conservative": 16,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 14,
+    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 3,
+    "strong_minute_1m_first_touch_both_hit_stop_first_conservative": 1,
+    "strong_minute_1m_time_exit_time_exit": 1
   },
   "fill_quality_distribution": {
-    "strong_official_opening_auction": 79
+    "strong_official_opening_auction": 80
   },
   "sample_maturity_distribution": {
-    "FULLY_READY": 79
+    "FULLY_READY": 80
   },
   "target_stats": {
-    "mean": -0.000756,
-    "median": 0.0103,
+    "mean": 0.003595,
+    "median": 0.02981,
     "min": -0.079462,
     "max": 0.030568,
-    "positive_rate": 0.506329
+    "positive_rate": 0.5875
   },
   "column_groups": {
     "base_cols": [
@@ -397,8 +398,8 @@
     ]
   },
   "cold_start_ratio": 0.0,
-  "feature_coverage_score_mean": 1.0,
-  "sample_weight_mean": 1.275316,
+  "feature_coverage_score_mean": 0.9975,
+  "sample_weight_mean": 1.275,
   "notes": [
     "本文件是 E_ret 训练前宽表，不是训练结果文件。",
     "训练集只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本。",
