@@ -1,7 +1,7 @@
 {
   "schema_version": "decision_observation_validation_v3_market_open_proxy",
   "status": "ok",
-  "generated_at_utc": "2026-07-24T14:12:06+00:00",
+  "generated_at_utc": "2026-07-24T15:19:09+00:00",
   "validation_start_exec_date": "20260721",
   "validation_mode": "market_at_open_proxy",
   "market_open_fill_assumption": true,
