@@ -480,7 +480,7 @@
 
     function fillLabel(value) {
       const parsed = finiteNumber(value);
-      return parsed == null ? "待验证" : parsed === 1 ? "可成交" : "未成交";
+      return parsed == null ? "待验证" : parsed === 1 ? "市价成交" : "无有效开盘价";
     }
 
     function continuationLabel(value) {
@@ -550,7 +550,7 @@
       }
       const headers = [
         "观察排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "观察参考限价", "相对D收盘",
-        "T实际开盘", "成交代理", "T市场涨跌幅", "T观察收益", "T晋级结果", "T+1验证状态",
+        "T实际开盘", "开盘较限价", "市价成交代理", "T市场涨跌幅", "T观察收益", "T晋级结果", "T+1验证状态",
         "T+1净收益", "继续涨停概率", "大跌概率", "结论"
       ];
       const body = rows.map(row => `<tr>
@@ -564,6 +564,7 @@
         <td title="${escapeHtml(row.observation_price_basis || "观察价格契约")}">${price(row.observation_max_price)}</td>
         <td class="${valueTone(finiteNumber(row.observation_auction_change_pct) == null ? null : finiteNumber(row.observation_auction_change_pct) / 100)}">${signedPercentValue(row.observation_auction_change_pct)}</td>
         <td>${price(row.actual_open_price)}</td>
+        <td class="${valueTone(row.observation_price_vs_cap)}">${signedPct(row.observation_price_vs_cap)}</td>
         <td>${escapeHtml(fillLabel(row.observation_fill))}</td>
         <td class="${valueTone(row.market_daily_return)}">${signedPct(row.market_daily_return)}</td>
         <td class="${valueTone(row.observation_t_return)}">${signedPct(row.observation_t_return)}</td>
@@ -574,7 +575,7 @@
         <td>${pct(row.predicted_big_loss_probability)}</td>
         <td class="reason">${escapeHtml(row.action === "BUY" ? (row.exit_rule || "通过全部风控") : (row.rejection_reason || "仅观察"))}</td>
       </tr>`).join("");
-      els.stageContent.innerHTML = `<div class="empty"><strong>观察参考限价不等于正式买入</strong>超过该价格放弃；风险门槛未通过的股票仍保持“仅观察”。旧冻结预测缺少诊断价差时，回补采用不使用未来信息的D日收盘价作为保守上限；T日9:25后生成的预测仅展示真值，不计入可执行收益统计。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,18].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.stageContent.innerHTML = `<div class="empty"><strong>限价保留展示，验证统一按市价成交代理</strong>观察参考限价仍用于正式人工挂单风控；真值验证独立按T日实际集合竞价/开盘价成交，不因开盘超过限价而剔除。开盘较限价幅度继续保留用于风险诊断；停牌或无有效开盘价除外。T日9:25后生成的预测仅展示真值，不计入可执行收益统计。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,19].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function renderObservationStatistics(plan) {
@@ -590,7 +591,10 @@
         metric("T日已验证", `${stats.t_validated_rows ?? 0}/${stats.observation_rows ?? 0}`),
         metric("9:25前时序合格", String(stats.premarket_validated_rows ?? 0), "good"),
         metric("收盘后回溯真值", String(stats.retrospective_truth_rows ?? 0), Number(stats.retrospective_truth_rows) ? "warn" : ""),
-        metric("成交代理率", pct(stats.observation_fill_rate)),
+        metric("市价成交验证率", pct(stats.observation_fill_rate)),
+        metric("开盘不超限率", pct(stats.display_limit_met_rate)),
+        metric("开盘超限样本", String(stats.above_display_limit_rows ?? 0)),
+        metric("平均开盘较限价", signedPct(stats.mean_open_vs_display_limit), valueTone(stats.mean_open_vs_display_limit)),
         metric("T日市场上涨率", pct(stats.market_positive_rate)),
         metric("T日平均市场涨跌", signedPct(stats.mean_market_daily_return), valueTone(stats.mean_market_daily_return)),
         metric("T日平均观察收益", signedPct(stats.mean_t_observation_return), valueTone(stats.mean_t_observation_return)),

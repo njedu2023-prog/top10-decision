@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -183,6 +184,51 @@ class AuctionV3Test(unittest.TestCase):
         fill, reason = AuctionV3Engine(self.config)._market_buyable(trade_date, code)
         self.assertEqual(fill, 0)
         self.assertEqual(reason, "opening_auction_limit_up_unconfirmed")
+
+    def test_observation_truth_uses_market_open_even_above_displayed_limit(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        history = engine.build_history()
+        _, metrics = engine.run_backtest(history)
+        bundle = engine.fit_models(history)
+        self.assertIsNotNone(bundle)
+        signal_date = self.dates[1]
+        prediction = engine.build_prediction(
+            signal_date,
+            engine.load_candidates(signal_date),
+            bundle,
+            metrics,
+        )
+        observed = prediction["observation_selected"].eq(1)
+        self.assertTrue(observed.any())
+        prediction["observation_max_price"] = 0.01
+        prediction["recommended_max_price"] = 0.01
+        prediction["generated_at_utc"] = "2026-01-01T00:00:00+00:00"
+        dated = self.config.prediction_root / f"pred_{signal_date}.csv"
+        prediction.to_csv(dated, index=False)
+
+        with mock.patch.object(
+            engine,
+            "_market_buyable",
+            return_value=(0, "diagnostic_only"),
+        ):
+            verified = engine._verify_observation_prediction_file(
+                dated,
+                engine.market_dates(),
+            )
+
+        self.assertFalse(verified.empty)
+        self.assertTrue(verified["observation_fill"].eq(1).all())
+        self.assertTrue(verified["observation_limit_accept"].eq(0).all())
+        self.assertTrue(verified["observation_price_vs_cap"].gt(0).all())
+        self.assertTrue(verified["market_buyable_diagnostic"].eq(0).all())
+        self.assertEqual(
+            set(verified["observation_fill_reason"]),
+            {"filled_market_at_open_proxy"},
+        )
+        self.assertEqual(
+            set(verified["observation_execution_mode"]),
+            {"market_at_open_proxy"},
+        )
 
     def test_big_loss_probability_is_a_hard_veto(self) -> None:
         engine = AuctionV3Engine(self.config)

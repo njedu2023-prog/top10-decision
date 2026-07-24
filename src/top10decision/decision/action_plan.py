@@ -263,11 +263,11 @@ def _stage_watchlist(
 def _observation_status_label(value: Any) -> str:
     return {
         "PENDING_T": "等待T日收盘",
-        "PENDING_T1": "T日已验证，等待T+1",
-        "T_VERIFIED_FILLED": "T日已验证",
-        "T_VERIFIED_NO_FILL": "T日未成交",
+        "PENDING_T1": "T日市价已验证，等待T+1",
+        "T_VERIFIED_FILLED": "T日市价已验证",
+        "T_VERIFIED_NO_FILL": "无有效开盘成交价",
         "FINAL_VERIFIED": "T+1最终完成",
-        "FINAL_NO_FILL": "最终未成交",
+        "FINAL_NO_FILL": "无有效开盘成交价",
         "PENDING_EXIT_TRUTH": "等待可退出真值",
     }.get(_text(value), _text(value) or "待验证")
 
@@ -321,6 +321,7 @@ def _attach_observation_validation(
         "observation_rank",
         "observation_pool_size",
         "validation_mode",
+        "observation_execution_mode",
         "prediction_timing_status",
         "prediction_timing_valid",
         "prediction_deadline_utc",
@@ -331,6 +332,10 @@ def _attach_observation_validation(
         "market_daily_return",
         "observation_fill",
         "observation_fill_reason",
+        "observation_limit_accept",
+        "observation_price_vs_cap",
+        "market_buyable_diagnostic",
+        "market_buyable_reason",
         "observation_t_return",
         "continuation_limit_up_hit",
         "actual_exit_date",
@@ -364,13 +369,13 @@ def _attach_observation_validation(
     statuses = [_text(row.get("validation_status")) for row in watchlist]
     plan.update(
         {
-            "schema_version": "decision_action_plan_v5_observation_truth",
+            "schema_version": "decision_action_plan_v6_market_open_truth",
             "stage_watchlist": watchlist,
             "stage_watch_count": len(watchlist),
             "stage_watch_eligible_count": watch_total,
             "stage_watch_display_limit": OBSERVATION_TOP_N,
             "observation_validation": {
-                "schema_version": "decision_observation_validation_v2_timing_audited",
+                "schema_version": "decision_observation_validation_v3_market_open_proxy",
                 "exec_date": exec_date,
                 "rows": len(watchlist),
                 "t_validated_rows": sum(status not in {"", "PENDING_T"} for status in statuses),
@@ -393,6 +398,9 @@ def _attach_observation_validation(
                     default="",
                 ),
                 "public_market_proxy": True,
+                "execution_mode": "market_at_open_proxy",
+                "market_open_fill_assumption": True,
+                "displayed_limit_affects_fill": False,
                 "manual_actual_separate": True,
             },
             "observation_statistics": metrics,
@@ -466,7 +474,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
     stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)
     plan = {
-        "schema_version": "decision_action_plan_v5_observation_truth",
+        "schema_version": "decision_action_plan_v6_market_open_truth",
         "generated_at_utc": _utc_now(),
         "report_date": chosen_date,
         "report_file": f"decision_report_{chosen_date}.md",

@@ -1999,7 +1999,8 @@ class AuctionV3Engine:
                     "expected_exit_date": exit_date,
                     "observation_pool_size": int(pool_size),
                     "observation_rank": int(row.get("observation_rank") or 0),
-                    "validation_mode": "public_market_proxy",
+                    "validation_mode": "market_at_open_proxy",
+                    "observation_execution_mode": "market_at_open_proxy",
                     "prediction_timing_status": timing_status,
                     "prediction_timing_valid": timing_valid,
                     "prediction_deadline_utc": prediction_deadline,
@@ -2010,6 +2011,10 @@ class AuctionV3Engine:
                     "market_daily_return": np.nan,
                     "observation_fill": np.nan,
                     "observation_fill_reason": "truth_pending",
+                    "observation_limit_accept": np.nan,
+                    "observation_price_vs_cap": np.nan,
+                    "market_buyable_diagnostic": np.nan,
+                    "market_buyable_reason": "truth_pending",
                     "observation_t_return": np.nan,
                     "continuation_limit_up_hit": np.nan,
                     "actual_exit_date": "",
@@ -2052,13 +2057,18 @@ class AuctionV3Engine:
             max_price = _finite(row.get("observation_max_price"))
             market_fill, market_reason = self._market_buyable(buy_date, code)
             cap_accept = math.isfinite(max_price) and open_price > 0 and open_price <= max_price + 0.005
-            observation_fill = int(cap_accept and market_fill == 1)
+            price_vs_cap = (
+                open_price / max_price - 1.0
+                if open_price > 0 and math.isfinite(max_price) and max_price > 0
+                else np.nan
+            )
+            # Observation truth uses a market-at-open proxy. The displayed cap
+            # remains a risk diagnostic and does not gate the validation fill.
+            observation_fill = int(open_price > 0)
             fill_reason = (
-                "filled_public_market_proxy"
+                "filled_market_at_open_proxy"
                 if observation_fill
-                else "price_above_observation_cap"
-                if not cap_accept
-                else market_reason
+                else "invalid_market_open_price"
             )
             limit_row = self._row(self.market_table(buy_date, "stk_limit"), code)
             up_limit = _numeric_from(limit_row, ("up_limit",)) if limit_row is not None else float("nan")
@@ -2080,6 +2090,10 @@ class AuctionV3Engine:
                     "market_daily_return": market_return,
                     "observation_fill": observation_fill,
                     "observation_fill_reason": fill_reason,
+                    "observation_limit_accept": int(cap_accept),
+                    "observation_price_vs_cap": price_vs_cap,
+                    "market_buyable_diagnostic": int(market_fill),
+                    "market_buyable_reason": market_reason,
                     "observation_t_return": t_return,
                     "continuation_limit_up_hit": continuation_hit,
                     "validation_status": "T_VERIFIED_FILLED" if observation_fill else "T_VERIFIED_NO_FILL",
@@ -2180,7 +2194,7 @@ class AuctionV3Engine:
     def _observation_metrics(self, ledger: pd.DataFrame) -> dict[str, Any]:
         if ledger.empty:
             return {
-                "schema_version": "decision_observation_validation_v2_timing_audited",
+                "schema_version": "decision_observation_validation_v3_market_open_proxy",
                 "status": "no_observation_predictions",
                 "generated_at_utc": _utc_now(),
                 "validation_start_exec_date": self.config.observation_validation_start_date,
@@ -2209,6 +2223,12 @@ class AuctionV3Engine:
         ]
         market_returns = pd.to_numeric(t_validated.get("market_daily_return"), errors="coerce").dropna()
         fill_flags = pd.to_numeric(t_validated.get("observation_fill"), errors="coerce").dropna()
+        limit_accept_flags = pd.to_numeric(
+            t_validated.get("observation_limit_accept"), errors="coerce"
+        ).dropna()
+        price_vs_cap = pd.to_numeric(
+            t_validated.get("observation_price_vs_cap"), errors="coerce"
+        ).dropna()
         t_fill_returns = pd.to_numeric(
             t_validated.loc[
                 pd.to_numeric(t_validated.get("observation_fill"), errors="coerce").eq(1),
@@ -2264,11 +2284,13 @@ class AuctionV3Engine:
             int(len(continuation)),
         )
         payload: dict[str, Any] = {
-            "schema_version": "decision_observation_validation_v2_timing_audited",
+            "schema_version": "decision_observation_validation_v3_market_open_proxy",
             "status": "ok",
             "generated_at_utc": _utc_now(),
             "validation_start_exec_date": self.config.observation_validation_start_date,
-            "validation_mode": "public_market_proxy",
+            "validation_mode": "market_at_open_proxy",
+            "market_open_fill_assumption": True,
+            "displayed_limit_affects_fill": False,
             "performance_scope": "premarket_valid_predictions_only",
             "prediction_deadline": "T 09:25 Asia/Shanghai",
             "top_n": int(self.config.max_observation_candidates),
@@ -2284,7 +2306,16 @@ class AuctionV3Engine:
             "mean_market_daily_return": _safe_metric(market_returns.mean()),
             "median_market_daily_return": _safe_metric(market_returns.median()),
             "fillable_rows": int(fill_flags.sum()) if len(fill_flags) else 0,
+            "market_filled_rows": int(fill_flags.sum()) if len(fill_flags) else 0,
             "observation_fill_rate": _safe_metric(fill_flags.mean()),
+            "display_limit_met_rows": (
+                int(limit_accept_flags.sum()) if len(limit_accept_flags) else 0
+            ),
+            "above_display_limit_rows": (
+                int(limit_accept_flags.eq(0).sum()) if len(limit_accept_flags) else 0
+            ),
+            "display_limit_met_rate": _safe_metric(limit_accept_flags.mean()),
+            "mean_open_vs_display_limit": _safe_metric(price_vs_cap.mean()),
             "mean_t_observation_return": _safe_metric(t_fill_returns.mean()),
             "median_t_observation_return": _safe_metric(t_fill_returns.median()),
             "continuation_hits": int(continuation.sum()) if len(continuation) else 0,

@@ -411,7 +411,7 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertFalse(any(row["action"] == "BUY" for row in plan["candidates"]))
         self.assertEqual(plan["stage_watch_count"], 1)
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
-        self.assertEqual(plan["schema_version"], "decision_action_plan_v5_observation_truth")
+        self.assertEqual(plan["schema_version"], "decision_action_plan_v6_market_open_truth")
         self.assertEqual(plan["stage_watchlist"][0]["observation_max_price"], 10.5)
         self.assertIn("observation_statistics", plan)
 
