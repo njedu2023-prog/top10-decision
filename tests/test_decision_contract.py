@@ -27,6 +27,7 @@ from top10decision.data.tushare_minute import opening_auction_price_from_snapsho
 from top10decision.decision.action_plan import build_action_plan  # noqa: E402
 from top10decision.decision.eligibility import filter_standard_limit_universe  # noqa: E402
 from top10decision.decision.exit_policy import simulate_tplus1_exit  # noqa: E402
+from top10decision.decision.observation import rank_observation_rows  # noqa: E402
 from top10decision.writers import io_contract  # noqa: E402
 
 
@@ -294,6 +295,30 @@ class DecisionUniverseAndEvTests(unittest.TestCase):
         self.assertEqual(float(result["ev_penalty_total_extra"]), 0.0)
 
 
+class DecisionObservationContractTests(unittest.TestCase):
+    def test_watchlist_is_capped_and_legacy_price_is_reproducible(self) -> None:
+        rows = [
+            {
+                "ts_code": f"600{i:03d}.SH",
+                "stage_transition": "2→3",
+                "mechanism_limit_pct": 10.0,
+                "d_close": 10.0 + i,
+                "estimated_up_limit": 11.0 + i,
+                "predicted_continuation_limit_up_probability": 0.9 - i * 0.01,
+                "predicted_big_loss_probability": 0.1 + i * 0.01,
+                "conservative_ev": 0.02 - i * 0.001,
+                "rank": i + 1,
+            }
+            for i in range(12)
+        ]
+        ranked, total = rank_observation_rows(rows)
+        self.assertEqual(total, 12)
+        self.assertEqual(len(ranked), 10)
+        self.assertEqual([row["observation_rank"] for row in ranked], list(range(1, 11)))
+        self.assertEqual(ranked[0]["observation_max_price"], 10.0)
+        self.assertEqual(ranked[0]["observation_price_basis"], "legacy_d_close_cap")
+
+
 class DecisionActionPlanTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -386,6 +411,9 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertFalse(any(row["action"] == "BUY" for row in plan["candidates"]))
         self.assertEqual(plan["stage_watch_count"], 1)
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
+        self.assertEqual(plan["schema_version"], "decision_action_plan_v5_observation_truth")
+        self.assertEqual(plan["stage_watchlist"][0]["observation_max_price"], 10.5)
+        self.assertIn("observation_statistics", plan)
 
     def test_promoted_model_still_rejects_above_ten_percent_board(self) -> None:
         self._write_model_artifacts(promoted=True)
@@ -400,6 +428,7 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertEqual(main_board["market_order_allowed"], 0)
         self.assertFalse(plan["broker_connected"])
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "正式买入")
+        self.assertLessEqual(plan["stage_watch_count"], 10)
 
     def test_artifact_version_mismatch_fails_closed(self) -> None:
         self._write_model_artifacts(promoted=True)

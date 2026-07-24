@@ -12,7 +12,10 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from top10decision.decision.action_plan import publish_action_plan  # noqa: E402
+from top10decision.decision.action_plan import (  # noqa: E402
+    publish_action_plan,
+    refresh_action_plan_observations,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,7 +27,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    dated, latest, index, plan = publish_action_plan(Path(args.root), args.report_date)
+    root = Path(args.root)
+    dated, latest, index, plan = publish_action_plan(root, args.report_date)
+    refreshed = refresh_action_plan_observations(root)
     print(
         json.dumps(
             {
@@ -33,6 +38,7 @@ def main() -> int:
                 "index": str(index),
                 "status_code": plan.get("status_code"),
                 "formal_buy_count": plan.get("formal_buy_count"),
+                "observation_action_plans_refreshed": len(refreshed),
             },
             ensure_ascii=False,
             indent=2,
