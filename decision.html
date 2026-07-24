@@ -631,7 +631,6 @@
         metric("累计观察交易日", String(stats.observation_dates ?? "-")),
         metric("T日已验证", `${stats.t_validated_rows ?? 0}/${stats.observation_rows ?? 0}`),
         metric("9:25前时序合格", String(stats.premarket_validated_rows ?? 0), "good"),
-        metric("收盘后回溯真值", String(stats.retrospective_truth_rows ?? 0), Number(stats.retrospective_truth_rows) ? "warn" : ""),
         metric("市价成交验证率", pct(stats.observation_fill_rate)),
         metric("开盘不超限率", pct(stats.display_limit_met_rate)),
         metric("开盘超限样本", String(stats.above_display_limit_rows ?? 0)),
