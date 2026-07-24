@@ -158,7 +158,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "最终未成交",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -231,7 +231,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "最终未成交",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -304,7 +304,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "最终未成交",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -377,7 +377,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "最终未成交",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -450,7 +450,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "T日已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -523,7 +523,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "T日已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -596,7 +596,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "最终未成交",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -669,7 +669,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "T日已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -742,7 +742,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "最终未成交",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -815,7 +815,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_minute_proxy",
-      "truth_generated_at_utc": "2026-07-24T12:52:51+00:00",
+      "truth_generated_at_utc": "2026-07-24T13:22:23+00:00",
       "validation_status_label": "最终未成交",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -5615,14 +5615,14 @@
     "premarket_valid_rows": 10,
     "retrospective_rows": 0,
     "pending_rows": 3,
-    "generated_at_utc": "2026-07-24T12:52:51+00:00",
+    "generated_at_utc": "2026-07-24T13:22:23+00:00",
     "public_market_proxy": true,
     "manual_actual_separate": true
   },
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v2_timing_audited",
     "status": "ok",
-    "generated_at_utc": "2026-07-24T12:52:51+00:00",
+    "generated_at_utc": "2026-07-24T13:22:23+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "public_market_proxy",
     "performance_scope": "premarket_valid_predictions_only",
