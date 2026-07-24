@@ -149,6 +149,10 @@ jobs:
             exit 0
           fi
           git commit -m "auto: verify Decision Top10 observation truth"
+          # Market sync files are runtime inputs only. Remove their unstaged
+          # worktree changes so the output-only commit can rebase cleanly.
+          git restore --worktree -- data/market
+          git clean -fd -- data/market
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main
