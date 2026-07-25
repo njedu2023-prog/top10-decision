@@ -205,6 +205,23 @@ def _merge_auction_candidates(
                 "industry": _text(row.get("industry")) or _industry(old),
                 "stage_transition": _text(row.get("stage_transition")) or _text(row.get("stage")),
                 "stage_focus": _integer(row.get("stage_focus")),
+                "path_label_code": _text(row.get("path_label_code")),
+                "path_label": _text(row.get("path_label")) or "路径数据不足",
+                "path_explanation": _text(row.get("path_explanation")),
+                "path_data_coverage": _number(row.get("path_data_coverage")),
+                "path_strength_latest": _number(row.get("path_strength_latest")),
+                "path_strength_delta": _number(row.get("path_strength_delta")),
+                "stage_pool_size": _integer(row.get("stage_pool_size")),
+                "focus_pool_size": _integer(row.get("focus_pool_size")),
+                "same_industry_stage_count": _integer(
+                    row.get("same_industry_stage_count")
+                ),
+                "stage_recent_promotion_rate": _number(
+                    row.get("stage_recent_promotion_rate")
+                ),
+                "stage_recent_promotion_samples": _integer(
+                    row.get("stage_recent_promotion_samples")
+                ),
                 "target_weight": per_position_weight if action == "BUY" else 0.0,
                 "mechanism_limit_pct": _number(row.get("decision_limit_pct")),
                 "d_close": _number(row.get("d_close")),
@@ -219,6 +236,13 @@ def _merge_auction_candidates(
                 "observation_price_basis": _text(row.get("observation_price_basis")),
                 "observation_price_is_formal": _integer(
                     row.get("observation_price_is_formal")
+                ),
+                "observation_risk_tier": _integer(
+                    row.get("observation_risk_tier"),
+                    2,
+                ),
+                "observation_risk_label": _text(
+                    row.get("observation_risk_label")
                 ),
                 "take_profit_pct": _number(row.get("take_profit_pct")),
                 "stop_loss_pct": _number(row.get("stop_loss_pct")),
@@ -369,7 +393,7 @@ def _attach_observation_validation(
     statuses = [_text(row.get("validation_status")) for row in watchlist]
     plan.update(
         {
-            "schema_version": "decision_action_plan_v6_market_open_truth",
+            "schema_version": "decision_action_plan_v7_streak_path_risk_first",
             "stage_watchlist": watchlist,
             "stage_watch_count": len(watchlist),
             "stage_watch_eligible_count": watch_total,
@@ -474,7 +498,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
     stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)
     plan = {
-        "schema_version": "decision_action_plan_v6_market_open_truth",
+        "schema_version": "decision_action_plan_v7_streak_path_risk_first",
         "generated_at_utc": _utc_now(),
         "report_date": chosen_date,
         "report_file": f"decision_report_{chosen_date}.md",
@@ -509,6 +533,21 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "continuation_model": _text(
                 ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("selected")
             ),
+            "continuation_feature_set": _text(
+                ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("feature_set")
+            ),
+            "continuation_training_scope": _text(
+                ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("training_scope")
+            ),
+            "continuation_path_ablation": (
+                ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("ablation")
+                or {}
+            ),
+            "stage_recent_promotion_rate": model_meta.get("stage_recent_promotion_rate") or {},
+            "continuation_stage_logit_adjustments": model_meta.get(
+                "continuation_stage_logit_adjustments"
+            )
+            or {},
         },
         "backtest": {
             key: backtest.get(key)
@@ -534,13 +573,16 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
                 "stress_2x_cost_mean_daily_return",
                 "bootstrap_probability_mean_positive",
                 "exit_on_time_rate",
+                "path_oos",
             )
         },
         "universe_eligibility": model_meta.get("universe_eligibility") or evaluation.get("universe_eligibility") or {},
         "execution_contract": {
             "objective": "D日冻结信号，指导人工在T日9:25前参与开盘集合竞价，T+1按预声明择机规则卖出，最大化扣除费用和不可成交风险后的样本外收益",
             "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
-            "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；2进3、3进4作为重点晋级目标",
+            "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
+            "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
+            "observation_ranking": "先按正式安全门槛和大跌风险分层，再比较保守收益、晋级概率与收益下界",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
             "exit": "T+1按实际成交价计算3%止盈、2.5%止损，首次触发即人工退出；均未触发则14:50退出；一字跌停顺延",

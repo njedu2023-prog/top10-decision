@@ -220,7 +220,7 @@
 
     .table-wrap { width: 100%; overflow: auto; border-top: 1px solid var(--line); }
     table { border-collapse: collapse; width: 100%; min-width: 1380px; font-size: 12px; }
-    table.stage-table { min-width: 1900px; }
+    table.stage-table { min-width: 2200px; }
     th, td { height: 42px; padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
     th { position: sticky; top: 0; z-index: 4; background: #f2f5f4; color: #52605c; font-weight: 680; }
     th.left, td.left { text-align: left; }
@@ -366,7 +366,7 @@
       <div class="panel-head">
         <div>
           <h2>2进3 / 3进4 机会观察</h2>
-          <p>按继续涨停概率排序，同时公开大跌风险与收益下界；仅标记“买入”的行属于正式人工参考。</p>
+          <p>量化弱转强、强转弱、加速一致等逐板路径；先按安全门槛与大跌风险分层，再比较收益和晋级机会。</p>
         </div>
         <span id="stageCount" class="count">0 条</span>
       </div>
@@ -419,7 +419,7 @@
 
     const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
-    const CACHE_KEY = "decision-dashboard-v5-observation-cache";
+    const CACHE_KEY = "decision-dashboard-v6-streak-path-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub",
       "signalDate", "execDate", "exitDate", "metrics", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
@@ -542,6 +542,12 @@
       return "pending";
     }
 
+    function pathClass(code) {
+      if (["WEAK_TO_STRONG", "ACCELERATION_CONSENSUS", "STABLE_STRONG"].includes(code)) return "final";
+      if (code === "STRONG_TO_WEAK") return "no-fill";
+      return "pending";
+    }
+
     function renderStatus(plan) {
       const status = String(plan?.status_code || "PENDING_AUCTION_MODEL");
       const tone = status === "ACTIONABLE_BUY" ? "good" : status.startsWith("NO_TRADE") ? "bad" : "warn";
@@ -590,7 +596,7 @@
         return;
       }
       const headers = [
-        "观察排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "观察参考限价", "相对D收盘",
+        "观察排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "风险层", "观察参考限价", "相对D收盘",
         "T实际开盘", "开盘较限价", "市价成交代理", "T市场涨跌幅", "T观察收益", "T晋级结果", "T+1验证状态",
         "T+1净收益", "继续涨停概率", "大跌概率", "结论"
       ];
@@ -602,6 +608,9 @@
         <td class="left name">${escapeHtml(row.name || "-")}</td>
         <td class="left">${escapeHtml(row.industry || "未分类")}</td>
         <td>${escapeHtml(row.stage_transition || "-")}</td>
+        <td class="left"><span class="truth-badge ${pathClass(row.path_label_code)}" title="${escapeHtml(row.path_explanation || "路径数据不足")}">${escapeHtml(row.path_label || "路径数据不足")}</span></td>
+        <td class="${valueTone(row.path_strength_delta)}">${signedPct(row.path_strength_delta)}</td>
+        <td class="left">${escapeHtml(row.observation_risk_label || "待分层")}</td>
         <td title="${escapeHtml(row.observation_price_basis || "观察价格契约")}">${price(row.observation_max_price)}</td>
         <td class="${valueTone(finiteNumber(row.observation_auction_change_pct) == null ? null : finiteNumber(row.observation_auction_change_pct) / 100)}">${signedPercentValue(row.observation_auction_change_pct)}</td>
         <td>${price(row.actual_open_price)}</td>
@@ -616,7 +625,7 @@
         <td>${pct(row.predicted_big_loss_probability)}</td>
         <td class="reason">${escapeHtml(row.action === "BUY" ? (row.exit_rule || "通过全部风控") : (row.rejection_reason || "仅观察"))}</td>
       </tr>`).join("");
-      els.stageContent.innerHTML = `<div class="empty"><strong>限价保留展示，验证统一按市价成交代理</strong>观察参考限价仍用于正式人工挂单风控；真值验证独立按T日实际集合竞价/开盘价成交，不因开盘超过限价而剔除。开盘较限价幅度继续保留用于风险诊断；停牌或无有效开盘价除外。T日9:25后生成的预测仅展示真值，不计入可执行收益统计。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,19].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.stageContent.innerHTML = `<div class="empty"><strong>路径量化，风险优先，限价保留展示</strong>观察排名先按正式安全门槛和大跌风险分层，再比较保守收益与晋级概率。观察参考限价用于正式人工挂单风控；真值验证独立按T日实际集合竞价/开盘价成交，不因开盘超过限价而剔除。T日9:25后生成的预测仅展示真值，不计入可执行收益统计。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,7,9,22].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function renderObservationStatistics(plan) {
@@ -627,6 +636,7 @@
       const top1 = stats.top1_continuation || {};
       const top3 = stats.top3_continuation || {};
       const allTruth = stats.all_truth_summary || {};
+      const pathPerformance = stats.path_performance || {};
       const rows = [
         metric("累计观察交易日", String(stats.observation_dates ?? "-")),
         metric("T日已验证", `${stats.t_validated_rows ?? 0}/${stats.observation_rows ?? 0}`),
@@ -653,6 +663,12 @@
         metric("尾部10%平均收益", signedPct(stats.tail_10pct_mean_return), valueTone(stats.tail_10pct_mean_return)),
         metric("盈亏比", number(stats.profit_factor, 2))
       ];
+      ["WEAK_TO_STRONG", "ACCELERATION_CONSENSUS", "STRONG_TO_WEAK"].forEach(code => {
+        const item = pathPerformance[code];
+        if (!item) return;
+        rows.push(metric(`${item.label || code}晋级率`, `${pct(item.continuation_hit_rate)} · ${item.t_validated_rows || 0} 样本`));
+        rows.push(metric(`${item.label || code}T+1净收益`, signedPct(item.mean_final_net_return), valueTone(item.mean_final_net_return)));
+      });
       els.observationMetrics.innerHTML = rows.join("");
       const generated = current.generated_at_utc ? new Date(current.generated_at_utc).toLocaleString("zh-CN") : "尚未生成";
       const retrospective = Number(current.retrospective_rows || 0);
@@ -673,7 +689,7 @@
       const notice = formal.length
         ? `<div class="empty"><strong>本次正式人工建议 ${formal.length} 只</strong>请在 9:25 前仅用限价单按冻结上限自行挂单；禁止无上限市价单，超过上限或未成交均放弃。</div>`
         : '<div class="empty"><strong>本次没有正式买入建议</strong>影子验证只用于累计样本外证据；未晋级模型不得作为人工交易依据。</div>';
-      const headers = ["操作", "排名", "代码", "股票", "行业板块", "晋级", "竞价上限", "最高涨幅", "止盈价", "止损价", "最迟退出", "P_fill", "P_exit", "晋级涨停概率", "盈利概率", "预计净收益", "保守下界", "大跌概率", "目标仓位", "原因 / 退出规则"];
+      const headers = ["操作", "排名", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "同梯队", "近20日晋级率", "竞价上限", "最高涨幅", "止盈价", "止损价", "最迟退出", "P_fill", "P_exit", "晋级涨停概率", "盈利概率", "预计净收益", "保守下界", "大跌概率", "目标仓位", "原因 / 退出规则"];
       const body = rows.map(row => {
         const reason = row.action === "BUY" ? (row.exit_rule || "T+1按止盈、止损、14:50规则退出") : (row.rejection_reason || "-");
         return `<tr>
@@ -683,6 +699,10 @@
           <td class="left name">${escapeHtml(row.name || "-")}</td>
           <td class="left">${escapeHtml(row.industry || "未分类")}</td>
           <td>${escapeHtml(row.stage_transition || "-")}</td>
+          <td class="left"><span class="truth-badge ${pathClass(row.path_label_code)}" title="${escapeHtml(row.path_explanation || "路径数据不足")}">${escapeHtml(row.path_label || "路径数据不足")}</span></td>
+          <td class="${valueTone(row.path_strength_delta)}">${signedPct(row.path_strength_delta)}</td>
+          <td>${escapeHtml(row.stage_pool_size ?? "-")}</td>
+          <td title="最近20个可用信号日，同一晋级阶段的历史真值">${pct(row.stage_recent_promotion_rate)}</td>
           <td>${price(row.recommended_max_price)}</td>
           <td>${finiteNumber(row.max_auction_change_pct) == null ? "-" : `${finiteNumber(row.max_auction_change_pct).toFixed(2)}%`}</td>
           <td>${price(row.take_profit_price)}</td>
@@ -699,7 +719,7 @@
           <td class="reason">${escapeHtml(reason)}</td>
         </tr>`;
       }).join("");
-      els.actionContent.innerHTML = `${notice}<div class="table-wrap"><table><thead><tr>${headers.map((h, i) => `<th class="${[0,2,3,4,19].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.actionContent.innerHTML = `${notice}<div class="table-wrap"><table><thead><tr>${headers.map((h, i) => `<th class="${[0,2,3,4,6,23].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function auditRow(label, value) {
@@ -711,12 +731,20 @@
       const universe = plan?.universe_eligibility || {};
       const failures = Array.isArray(model.promotion_failures) ? model.promotion_failures : [];
       const contract = plan?.execution_contract || {};
+      const ablation = model?.continuation_path_ablation || {};
+      const pathAblation = typeof ablation.path_selected !== "boolean"
+        ? "等待新模型生成"
+        : ablation.path_selected === true
+          ? `路径特征通过消融，Brier ${number(ablation.streak_path_and_cohort_brier, 4)}`
+          : `路径特征未优于基线，自动回退；Brier ${number(ablation.baseline_without_streak_path_brier, 4)}`;
       els.auditContent.innerHTML = `
         <div class="audit-block">
           <h3>执行合同</h3>
           <div class="audit-list">
             ${auditRow("候选池", contract.candidate_pool || "仅D日已涨停股票")}
             ${auditRow("候选范围", contract.eligible_universe || "D日已涨停且涨跌幅机制不超过10%的A股")}
+            ${auditRow("连板路径", contract.streak_path || "逐板量化路径")}
+            ${auditRow("观察排序", contract.observation_ranking || "风险优先")}
             ${auditRow("交易日历", contract.calendar || "严格A股交易日历")}
             ${auditRow("买入规则", contract.entry || "-")}
             ${auditRow("退出规则", contract.exit || "-")}
@@ -744,6 +772,9 @@
             ${auditRow("盈利模型", model.profit_model || "-")}
             ${auditRow("大跌模型", model.big_loss_model || "-")}
             ${auditRow("连板模型", model.continuation_model || "-")}
+            ${auditRow("连板特征集", model.continuation_feature_set || "-")}
+            ${auditRow("连板训练范围", model.continuation_training_scope === "stage_2_to_3_and_3_to_4" ? "仅2进3、3进4" : (model.continuation_training_scope || "-"))}
+            ${auditRow("路径消融", pathAblation)}
             ${auditRow("训练就绪", model.ready === true ? "是" : "否")}
             ${auditRow("样本外晋级", model.promoted === true ? "通过" : "未通过")}
             ${auditRow("日期一致", model.prediction_matches_report === true ? "一致" : "未对齐")}

@@ -17,7 +17,7 @@ from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run Decision manual auction-guidance V5")
+    parser = argparse.ArgumentParser(description="Run Decision manual auction-guidance V6 with streak-path features")
     parser.add_argument("--signal-date", default="", help="D-day signal date, YYYYMMDD; default latest frozen pred source")
     parser.add_argument("--root", default=str(ROOT), help="Repository root")
     parser.add_argument("--force-prediction", action="store_true", help="Replace a dated prediction snapshot; disabled by default")

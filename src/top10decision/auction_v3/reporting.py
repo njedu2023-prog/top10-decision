@@ -72,7 +72,7 @@ def _write(path: Path, content: str) -> None:
 
 
 def _current_table(frame: pd.DataFrame) -> str:
-    headers = ["操作", "代码", "股票", "行业板块", "晋级", "原排名", "前收", "竞价上限价", "止盈价", "止损价", "晋级涨停概率", "预计净收益", "保守收益", "成交概率", "次日可退出概率", "大跌概率", "价格动作"]
+    headers = ["操作", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "路径依据", "同梯队", "原排名", "前收", "竞价上限价", "止盈价", "止损价", "晋级涨停概率", "预计净收益", "保守收益", "成交概率", "次日可退出概率", "大跌概率", "价格动作"]
     rows: list[str] = []
     for _, row in frame.iterrows():
         action = str(row.get("action", ""))
@@ -83,6 +83,10 @@ def _current_table(frame: pd.DataFrame) -> str:
             _esc(row.get("name")),
             _esc(row.get("industry")),
             _esc(row.get("stage")),
+            _esc(row.get("path_label")),
+            _pct(row.get("path_strength_delta")),
+            _esc(row.get("path_explanation")),
+            _float(row.get("stage_pool_size"), 0),
             _float(row.get("source_rank"), 0),
             _price(row.get("d_close")),
             _price(row.get("recommended_max_price")),
@@ -128,7 +132,7 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     body += "</section>"
     body += '<section><h2>候选复核记录（非买入名单）</h2><p class="note">下表只来自D日已涨停候选池，2进3、3进4在全部风险门禁通过后优先。模型未晋级时，SHADOW_ONLY只用于验证。当前未通过项目：' + _esc(fail_text) + "。</p>"
     body += _current_table(prediction.head(20)) + "</section>"
-    return _page("Decision 竞价人工指导 V5", "D日涨停池，重点识别2进3/3进4；T日人工限价，T+1预声明规则退出", body)
+    return _page("Decision 竞价人工指导 V6", "D日涨停池，量化连板路径并风险优先识别2进3/3进4；T日人工限价，T+1预声明规则退出", body)
 
 
 def _verification_table(frame: pd.DataFrame) -> str:
@@ -175,7 +179,7 @@ def verification_report(ledger: pd.DataFrame, cumulative: dict[str, Any]) -> str
     body += '<section><h2>每笔人工参考的累计验证</h2><p class="note">公开行情只生成模拟真值；人工实际买卖价格可通过手工反馈文件回填。未成交不计作零收益，一字跌停顺延到首次可交易日。</p>'
     latest = ledger.sort_values(["signal_date", "source_rank"], ascending=[False, True]).head(300) if not ledger.empty else ledger
     body += _verification_table(latest) + "</section>"
-    return _page("Decision V5 逐笔验证", "冻结竞价建议价、公开行情模拟与人工成交反馈逐笔可追溯", body)
+    return _page("Decision V6 逐笔验证", "冻结竞价建议价、连板路径、公开行情模拟与人工成交反馈逐笔可追溯", body)
 
 
 def _equity_chart(points: Iterable[dict[str, Any]]) -> str:
@@ -221,7 +225,7 @@ def dashboard(backtest: dict[str, Any], cumulative: dict[str, Any]) -> str:
     body += _metric("正确放弃率", _pct(cumulative.get("correct_rejection_rate")))
     body += _metric("机会遗漏率", _pct(cumulative.get("missed_opportunity_rate")))
     body += "</div></section>"
-    return _page("Decision V5 回测与累计验证", "人工建议资格由收益、尾部风险、连板晋级、成本压力和逐笔验证共同决定", body)
+    return _page("Decision V6 回测与累计验证", "人工建议资格由路径、收益、尾部风险、连板晋级、成本压力和逐笔验证共同决定", body)
 
 
 def write_reports(

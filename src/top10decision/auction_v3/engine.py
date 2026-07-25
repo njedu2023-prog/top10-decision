@@ -95,6 +95,8 @@ MODEL_FEATURES = [
     "d_turnover_rate",
     "d_volume_ratio",
     "d_float_mv_log",
+    "order_to_d_amount",
+    "order_to_float_mv",
     "is_hot_board",
     "board_rank",
     "board_limit_up_count",
@@ -111,11 +113,73 @@ MODEL_FEATURES = [
     "minute_opening_volume_share",
     "minute_closing_volume_share",
     "minute_close_location",
+    "path_days_observed",
+    "path_data_coverage",
+    "path_strength_latest",
+    "path_strength_delta",
+    "path_gap_slope",
+    "path_first_seal_slope",
+    "path_open_times_slope",
+    "path_turnover_slope",
+    "path_amount_log_slope",
+    "path_seal_ratio_slope",
+    "path_one_price_ratio",
+    "path_weak_to_strong",
+    "path_strong_to_weak",
+    "path_acceleration_consensus",
+    "path_divergence_reseal",
+    "stage_pool_size",
+    "focus_pool_size",
+    "market_max_limit_times",
+    "same_industry_stage_count",
+    "stage_pool_share",
+    "stage_recent_promotion_rate",
+    "stage_recent_promotion_samples",
     "proposed_gap",
 ]
 CONTINUATION_FEATURES = [name for name in MODEL_FEATURES if name != "proposed_gap"]
+STREAK_PATH_FEATURES = [
+    "path_days_observed",
+    "path_data_coverage",
+    "path_strength_latest",
+    "path_strength_delta",
+    "path_gap_slope",
+    "path_first_seal_slope",
+    "path_open_times_slope",
+    "path_turnover_slope",
+    "path_amount_log_slope",
+    "path_seal_ratio_slope",
+    "path_one_price_ratio",
+    "path_weak_to_strong",
+    "path_strong_to_weak",
+    "path_acceleration_consensus",
+    "path_divergence_reseal",
+]
+COHORT_FEATURES = [
+    "stage_pool_size",
+    "focus_pool_size",
+    "market_max_limit_times",
+    "same_industry_stage_count",
+    "stage_pool_share",
+    "stage_recent_promotion_rate",
+    "stage_recent_promotion_samples",
+]
+CONTINUATION_BASELINE_FEATURES = [
+    name
+    for name in CONTINUATION_FEATURES
+    if name not in set(STREAK_PATH_FEATURES + COHORT_FEATURES)
+]
 
 INDUSTRY_ALIASES = ("industry", "industry_tag", "行业", "行业板块", "board")
+PATH_LABELS = {
+    "WEAK_TO_STRONG": "弱转强",
+    "STRONG_TO_WEAK": "强转弱",
+    "ACCELERATION_CONSENSUS": "加速一致",
+    "DIVERGENCE_RESEAL": "分歧回封",
+    "STABLE_STRONG": "持续强势",
+    "MIXED": "路径混合",
+    "INSUFFICIENT": "路径数据不足",
+}
 
 
 @dataclass
@@ -158,6 +222,10 @@ class ModelBundle:
     calibration_dates: int
     return_selection: dict[str, Any]
     classifier_selection: dict[str, dict[str, Any]]
+    stage_recent_rates: dict[int, float]
+    stage_recent_samples: dict[int, int]
+    continuation_stage_logit_adjustments: dict[int, float]
+    continuation_features: tuple[str, ...]
 
 
 def _utc_now() -> str:
@@ -314,6 +382,7 @@ class AuctionV3Engine:
         self._market_cache: dict[tuple[str, str], pd.DataFrame] = {}
         self._minute_cache: dict[tuple[str, str], pd.DataFrame] = {}
         self._context_cache: dict[str, dict[str, Any]] = {}
+        self._path_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._eligibility_audit: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
@@ -619,6 +688,336 @@ class AuctionV3Engine:
             newer_date = trade_date
         return count
 
+    @staticmethod
+    def _path_slope(values: Sequence[Any]) -> float:
+        points = [
+            (index, _finite(value))
+            for index, value in enumerate(values)
+            if math.isfinite(_finite(value))
+        ]
+        if len(points) < 2:
+            return float("nan")
+        first_index, first_value = points[0]
+        last_index, last_value = points[-1]
+        distance = last_index - first_index
+        return (last_value - first_value) / distance if distance > 0 else float("nan")
+
+    @staticmethod
+    def _available_weighted_mean(parts: Sequence[tuple[float, float]]) -> tuple[float, float]:
+        available = [
+            (value, weight)
+            for value, weight in parts
+            if math.isfinite(value) and weight > 0
+        ]
+        if not available:
+            return float("nan"), 0.0
+        available_weight = sum(weight for _, weight in available)
+        total_weight = sum(weight for _, weight in parts if weight > 0)
+        score = sum(value * weight for value, weight in available) / available_weight
+        coverage = available_weight / total_weight if total_weight > 0 else 0.0
+        return float(np.clip(score, 0.0, 1.0)), float(np.clip(coverage, 0.0, 1.0))
+
+    def _limit_session_path_snapshot(self, trade_date: str, code: str) -> dict[str, float]:
+        daily = self._row(self.market_table(trade_date, "daily"), code)
+        limit = self._row(self.market_table(trade_date, "stk_limit"), code)
+        detail = self._row(self.market_table(trade_date, "limit_list_d"), code)
+        basic = self._row(self.market_table(trade_date, "daily_basic"), code)
+        if daily is None:
+            return {}
+
+        pre_close = _pre_close(daily)
+        open_price = _numeric_from(daily, ("open",))
+        amount_yuan = _numeric_from(detail, ("amount",)) if detail is not None else float("nan")
+        if not math.isfinite(amount_yuan) or amount_yuan <= 0:
+            daily_amount = _numeric_from(daily, ("amount",))
+            amount_yuan = daily_amount * 1_000.0 if daily_amount > 0 else float("nan")
+        limit_ratio = self._limit_ratio(daily, limit)
+        open_gap = open_price / pre_close - 1.0 if open_price > 0 and pre_close > 0 else float("nan")
+        open_times = _numeric_from(detail, ("open_times",)) if detail is not None else float("nan")
+        first_seal = _time_to_minutes(detail.get("first_time")) if detail is not None else float("nan")
+        last_seal = _time_to_minutes(detail.get("last_time")) if detail is not None else float("nan")
+        seal_amount = (
+            _numeric_from(detail, ("seal_amount", "fd_amount"))
+            if detail is not None
+            else float("nan")
+        )
+        seal_ratio = (
+            seal_amount / amount_yuan
+            if seal_amount > 0 and amount_yuan > 0
+            else float("nan")
+        )
+        turnover_rate = _numeric_from(basic, ("turnover_rate",)) if basic is not None else float("nan")
+        turnover = turnover_rate / 100.0 if math.isfinite(turnover_rate) else float("nan")
+
+        opening_component = (
+            float(np.clip((open_gap / max(limit_ratio, 0.03) + 0.25) / 1.25, 0.0, 1.0))
+            if math.isfinite(open_gap)
+            else float("nan")
+        )
+        first_seal_component = (
+            float(np.clip((900.0 - first_seal) / 330.0, 0.0, 1.0))
+            if math.isfinite(first_seal)
+            else float("nan")
+        )
+        stability_component = (
+            1.0 / (1.0 + max(0.0, open_times))
+            if math.isfinite(open_times)
+            else float("nan")
+        )
+        seal_component = (
+            float(np.clip(math.log1p(100.0 * seal_ratio) / math.log(11.0), 0.0, 1.0))
+            if math.isfinite(seal_ratio) and seal_ratio >= 0
+            else float("nan")
+        )
+        strength, coverage = self._available_weighted_mean(
+            (
+                (opening_component, 0.25),
+                (first_seal_component, 0.30),
+                (stability_component, 0.20),
+                (seal_component, 0.25),
+            )
+        )
+        return {
+            "trade_date": trade_date,
+            "open_gap": open_gap,
+            "first_seal": first_seal,
+            "last_seal": last_seal,
+            "open_times": open_times,
+            "turnover": turnover,
+            "amount_log": math.log1p(amount_yuan) if amount_yuan > 0 else float("nan"),
+            "seal_ratio": seal_ratio,
+            "one_price": float(self._one_price_limit(daily, limit, "up")),
+            "strength": strength,
+            "coverage": coverage,
+        }
+
+    def _streak_path_features(
+        self,
+        signal_date: str,
+        code: str,
+        dates: Optional[Sequence[str]] = None,
+    ) -> dict[str, Any]:
+        cache_key = (signal_date, _normal_code(code))
+        if cache_key in self._path_cache:
+            return dict(self._path_cache[cache_key])
+
+        defaults: dict[str, Any] = {
+            "path_days_observed": 0.0,
+            "path_data_coverage": 0.0,
+            "path_strength_latest": np.nan,
+            "path_strength_delta": np.nan,
+            "path_gap_slope": np.nan,
+            "path_first_seal_slope": np.nan,
+            "path_open_times_slope": np.nan,
+            "path_turnover_slope": np.nan,
+            "path_amount_log_slope": np.nan,
+            "path_seal_ratio_slope": np.nan,
+            "path_one_price_ratio": np.nan,
+            "path_weak_to_strong": 0.0,
+            "path_strong_to_weak": 0.0,
+            "path_acceleration_consensus": 0.0,
+            "path_divergence_reseal": 0.0,
+            "path_label_code": "INSUFFICIENT",
+            "path_label": PATH_LABELS["INSUFFICIENT"],
+            "path_explanation": "连续涨停路径数据不足",
+        }
+        trading_dates = list(dates or self.market_dates())
+        try:
+            signal_index = trading_dates.index(signal_date)
+        except ValueError:
+            self._path_cache[cache_key] = defaults
+            return dict(defaults)
+
+        streak_count = self._consecutive_limit_up_count(signal_date, code, trading_dates)
+        if streak_count <= 0:
+            self._path_cache[cache_key] = defaults
+            return dict(defaults)
+        streak_dates = trading_dates[
+            max(0, signal_index - streak_count + 1) : signal_index + 1
+        ][-4:]
+        snapshots = [
+            self._limit_session_path_snapshot(trade_date, code)
+            for trade_date in streak_dates
+        ]
+        snapshots = [item for item in snapshots if item]
+        if not snapshots:
+            self._path_cache[cache_key] = defaults
+            return dict(defaults)
+
+        strengths = [item.get("strength") for item in snapshots]
+        latest_strength = _finite(strengths[-1])
+        previous_strength = _finite(strengths[-2]) if len(strengths) >= 2 else float("nan")
+        strength_delta = (
+            latest_strength - previous_strength
+            if math.isfinite(latest_strength) and math.isfinite(previous_strength)
+            else float("nan")
+        )
+        slopes = {
+            "path_gap_slope": self._path_slope([item.get("open_gap") for item in snapshots]),
+            "path_first_seal_slope": self._path_slope([item.get("first_seal") for item in snapshots]),
+            "path_open_times_slope": self._path_slope([item.get("open_times") for item in snapshots]),
+            "path_turnover_slope": self._path_slope([item.get("turnover") for item in snapshots]),
+            "path_amount_log_slope": self._path_slope([item.get("amount_log") for item in snapshots]),
+            "path_seal_ratio_slope": self._path_slope([item.get("seal_ratio") for item in snapshots]),
+        }
+        coverage_values = [
+            _finite(item.get("coverage"))
+            for item in snapshots
+            if math.isfinite(_finite(item.get("coverage")))
+        ]
+        one_price_values = [
+            _finite(item.get("one_price"))
+            for item in snapshots
+            if math.isfinite(_finite(item.get("one_price")))
+        ]
+        coverage = float(np.mean(coverage_values)) if coverage_values else 0.0
+        latest = snapshots[-1]
+        label_code = "INSUFFICIENT"
+        if (
+            len(snapshots) >= 2
+            and coverage >= 0.35
+            and math.isfinite(strength_delta)
+        ):
+            gap_slope = _finite(slopes["path_gap_slope"], 0.0)
+            first_seal_slope = _finite(slopes["path_first_seal_slope"], 0.0)
+            open_times_slope = _finite(slopes["path_open_times_slope"], 0.0)
+            acceleration_votes = sum(
+                (
+                    gap_slope >= 0.005,
+                    first_seal_slope <= -10.0,
+                    open_times_slope <= -0.5,
+                )
+            )
+            if previous_strength >= 0.60 and latest_strength < 0.60 and strength_delta <= -0.12:
+                label_code = "STRONG_TO_WEAK"
+            elif previous_strength < 0.58 and latest_strength >= 0.58 and strength_delta >= 0.12:
+                label_code = "WEAK_TO_STRONG"
+            elif (
+                previous_strength >= 0.58
+                and latest_strength >= 0.70
+                and strength_delta >= 0.05
+                and acceleration_votes >= 2
+            ):
+                label_code = "ACCELERATION_CONSENSUS"
+            elif (
+                _finite(latest.get("open_times"), 0.0) >= 1.0
+                and open_times_slope > 0.0
+                and latest_strength >= 0.45
+            ):
+                label_code = "DIVERGENCE_RESEAL"
+            elif (
+                previous_strength >= 0.65
+                and latest_strength >= 0.65
+                and abs(strength_delta) < 0.12
+            ):
+                label_code = "STABLE_STRONG"
+            else:
+                label_code = "MIXED"
+
+        explanation_parts: list[str] = []
+        if math.isfinite(previous_strength) and math.isfinite(latest_strength):
+            explanation_parts.append(f"路径强度{previous_strength:.2f}→{latest_strength:.2f}")
+        if math.isfinite(slopes["path_gap_slope"]):
+            explanation_parts.append(f"竞价斜率{slopes['path_gap_slope'] * 100:+.2f}pct/板")
+        if math.isfinite(slopes["path_first_seal_slope"]):
+            direction = "提前" if slopes["path_first_seal_slope"] < 0 else "推迟"
+            explanation_parts.append(f"首封每板{direction}{abs(slopes['path_first_seal_slope']):.0f}分钟")
+        if math.isfinite(slopes["path_open_times_slope"]):
+            explanation_parts.append(f"炸板变化{slopes['path_open_times_slope']:+.1f}/板")
+
+        result = {
+            **defaults,
+            "path_days_observed": float(len(snapshots)),
+            "path_data_coverage": coverage,
+            "path_strength_latest": latest_strength,
+            "path_strength_delta": strength_delta,
+            **slopes,
+            "path_one_price_ratio": (
+                float(np.mean(one_price_values)) if one_price_values else float("nan")
+            ),
+            "path_weak_to_strong": float(label_code == "WEAK_TO_STRONG"),
+            "path_strong_to_weak": float(label_code == "STRONG_TO_WEAK"),
+            "path_acceleration_consensus": float(label_code == "ACCELERATION_CONSENSUS"),
+            "path_divergence_reseal": float(label_code == "DIVERGENCE_RESEAL"),
+            "path_label_code": label_code,
+            "path_label": PATH_LABELS[label_code],
+            "path_explanation": "；".join(explanation_parts) or "连续涨停路径数据不足",
+        }
+        self._path_cache[cache_key] = result
+        return dict(result)
+
+    @staticmethod
+    def _attach_cohort_features(frame: pd.DataFrame) -> pd.DataFrame:
+        if frame.empty:
+            return frame
+        out = frame.copy()
+        stage = pd.to_numeric(out.get("limit_times"), errors="coerce").round()
+        industry = out.get("industry", pd.Series("", index=out.index)).fillna("").astype(str)
+        date_key = (
+            out["signal_date"].fillna("").astype(str)
+            if "signal_date" in out.columns
+            else pd.Series("__single_date__", index=out.index)
+        )
+        out["_cohort_date"] = date_key
+        out["_cohort_stage"] = stage
+        out["_cohort_industry"] = industry
+        out["stage_pool_size"] = (
+            out.groupby(["_cohort_date", "_cohort_stage"])["_cohort_stage"]
+            .transform("size")
+            .astype(float)
+        )
+        focus_mask = stage.isin((2.0, 3.0))
+        out["focus_pool_size"] = (
+            focus_mask.astype(float).groupby(date_key).transform("sum")
+        )
+        out["market_max_limit_times"] = stage.groupby(date_key).transform("max")
+        out["same_industry_stage_count"] = (
+            out.groupby(["_cohort_date", "_cohort_stage", "_cohort_industry"])["_cohort_stage"]
+            .transform("size")
+            .astype(float)
+        )
+        cohort_size = out.groupby("_cohort_date")["_cohort_date"].transform("size")
+        out["stage_pool_share"] = out["stage_pool_size"] / cohort_size.clip(lower=1)
+        if "stage_recent_promotion_rate" not in out.columns:
+            out["stage_recent_promotion_rate"] = np.nan
+        if "stage_recent_promotion_samples" not in out.columns:
+            out["stage_recent_promotion_samples"] = 0.0
+        return out.drop(columns=["_cohort_date", "_cohort_stage", "_cohort_industry"])
+
+    @classmethod
+    def _attach_point_in_time_stage_rates(cls, frame: pd.DataFrame) -> pd.DataFrame:
+        if frame.empty or "continuation_limit_up_hit" not in frame.columns:
+            return frame
+        out = frame.copy()
+        out["_stage_key"] = pd.to_numeric(out.get("limit_times"), errors="coerce").round()
+        daily = (
+            out.dropna(subset=["_stage_key"])
+            .groupby(["_stage_key", "signal_date"], as_index=False)
+            .agg(
+                promotion_hits=("continuation_limit_up_hit", "sum"),
+                promotion_samples=("continuation_limit_up_hit", "size"),
+            )
+            .sort_values(["_stage_key", "signal_date"])
+        )
+        rate_lookup: dict[tuple[float, str], float] = {}
+        sample_lookup: dict[tuple[float, str], float] = {}
+        for stage, group in daily.groupby("_stage_key", sort=False):
+            prior_hits = group["promotion_hits"].shift(1).rolling(20, min_periods=1).sum()
+            prior_samples = group["promotion_samples"].shift(1).rolling(20, min_periods=1).sum()
+            rates = prior_hits / prior_samples.replace(0.0, np.nan)
+            for trade_date, rate, samples in zip(
+                group["signal_date"].astype(str),
+                rates,
+                prior_samples,
+            ):
+                key = (float(stage), trade_date)
+                rate_lookup[key] = _finite(rate)
+                sample_lookup[key] = _finite(samples, 0.0)
+        keys = list(zip(out["_stage_key"], out["signal_date"].astype(str)))
+        out["stage_recent_promotion_rate"] = [rate_lookup.get(key, np.nan) for key in keys]
+        out["stage_recent_promotion_samples"] = [sample_lookup.get(key, 0.0) for key in keys]
+        return out.drop(columns=["_stage_key"])
+
     def _one_price_limit(self, daily_row: Optional[pd.Series], limit_row: Optional[pd.Series], side: str) -> bool:
         if daily_row is None or limit_row is None:
             return False
@@ -801,6 +1200,16 @@ class AuctionV3Engine:
         out["d_turnover_rate"] = turnover_rate / 100.0 if math.isfinite(turnover_rate) else np.nan
         out["d_volume_ratio"] = _numeric_from(daily_basic, ("volume_ratio",)) if daily_basic is not None else np.nan
         out["d_float_mv_log"] = math.log1p(float_mv_yuan) if float_mv_yuan > 0 else np.nan
+        out["order_to_d_amount"] = (
+            self.config.order_amount_cny / amount_yuan
+            if amount_yuan > 0
+            else np.nan
+        )
+        out["order_to_float_mv"] = (
+            self.config.order_amount_cny / float_mv_yuan
+            if float_mv_yuan > 0
+            else np.nan
+        )
         out["is_hot_board"] = _numeric_from(limit_tag, ("is_hot_board",)) if limit_tag is not None else np.nan
         out["board_rank"] = _numeric_from(limit_tag, ("board_rank",)) if limit_tag is not None else np.nan
         out["board_limit_up_count"] = _numeric_from(limit_tag, ("board_limit_up_count",)) if limit_tag is not None else np.nan
@@ -890,6 +1299,13 @@ class AuctionV3Engine:
                     dates,
                 )
                 features["limit_times"] = float(consecutive_limit_ups)
+                features.update(
+                    self._streak_path_features(
+                        signal_date,
+                        code,
+                        dates,
+                    )
+                )
                 features["proposed_gap"] = buy_open / d_close - 1.0
                 industry = _text_from(candidate, INDUSTRY_ALIASES)
                 records.append(
@@ -924,6 +1340,8 @@ class AuctionV3Engine:
         frame = pd.DataFrame(records)
         if frame.empty:
             return frame
+        frame = self._attach_cohort_features(frame)
+        frame = self._attach_point_in_time_stage_rates(frame)
         frame = frame.sort_values(["signal_date", "source_rank", "ts_code"]).reset_index(drop=True)
         return frame
 
@@ -1114,52 +1532,176 @@ class AuctionV3Engine:
         def fit_classifier(
             target: str,
             features: Sequence[str] = MODEL_FEATURES,
+            *,
+            model_clean: Optional[pd.DataFrame] = None,
+            model_fit: Optional[pd.DataFrame] = None,
+            model_calibration: Optional[pd.DataFrame] = None,
         ) -> tuple[Optional[Pipeline], float, dict[str, Any]]:
-            values = clean[target].astype(int)
+            clean_slice = model_clean if model_clean is not None else clean
+            fit_slice = model_fit if model_fit is not None else fit
+            calibration_slice = (
+                model_calibration
+                if model_calibration is not None
+                else calibration
+            )
+            values = clean_slice[target].astype(int)
             constant = float(values.mean())
             counts = values.value_counts()
-            if len(counts) < 2 or int(counts.min()) < 10:
+            fit_values = fit_slice[target].astype(int)
+            calibration_values = calibration_slice[target].astype(int)
+            if (
+                len(counts) < 2
+                or int(counts.min()) < 10
+                or fit_values.nunique() < 2
+                or calibration_slice.empty
+            ):
                 return None, constant, {
                     "selected": "constant",
                     "calibration_brier": None,
                     "base_rate": _safe_metric(constant),
                 }
-            fit_values = fit[target].astype(int)
-            calibration_values = calibration[target].astype(int)
             candidates: list[tuple[float, str]] = []
             for kind in ("hgb", "lr", "extra_trees"):
                 provisional_classifier = self._classifier_pipeline(kind)
                 provisional_classifier.fit(
-                    fit[list(features)],
+                    fit_slice[list(features)],
                     fit_values,
-                    model__sample_weight=_date_balanced_weights(fit),
+                    model__sample_weight=_date_balanced_weights(fit_slice),
                 )
                 probability = provisional_classifier.predict_proba(
-                    calibration[list(features)]
+                    calibration_slice[list(features)]
                 )[:, 1]
-                weights = _date_balanced_weights(calibration)
+                weights = _date_balanced_weights(calibration_slice)
                 brier = float(np.average((probability - calibration_values.to_numpy()) ** 2, weights=weights))
                 candidates.append((brier, kind))
             best_brier, best_kind = min(candidates, key=lambda item: (item[0], item[1]))
             model = self._classifier_pipeline(best_kind)
             model.fit(
-                clean[list(features)],
+                clean_slice[list(features)],
                 values,
-                model__sample_weight=_date_balanced_weights(clean),
+                model__sample_weight=_date_balanced_weights(clean_slice),
             )
             return model, constant, {
                 "selected": best_kind,
                 "calibration_brier": _safe_metric(best_brier),
                 "base_rate": _safe_metric(constant),
                 "features": list(features),
+                "training_rows": int(len(clean_slice)),
+                "training_dates": int(clean_slice["signal_date"].astype(str).nunique()),
             }
 
         profit_model, profit_constant, profit_selection = fit_classifier("profit_hit")
         loss_model, loss_constant, loss_selection = fit_classifier("big_loss_hit")
-        continuation_model, continuation_constant, continuation_selection = fit_classifier(
+        focus_clean = clean[
+            pd.to_numeric(clean.get("limit_times"), errors="coerce").round().isin((2.0, 3.0))
+        ].copy()
+        focus_fit = fit[
+            pd.to_numeric(fit.get("limit_times"), errors="coerce").round().isin((2.0, 3.0))
+        ].copy()
+        focus_calibration = calibration[
+            pd.to_numeric(calibration.get("limit_times"), errors="coerce").round().isin((2.0, 3.0))
+        ].copy()
+        focus_counts = focus_clean.get(
+            "continuation_limit_up_hit",
+            pd.Series(dtype=int),
+        ).value_counts()
+        use_focus_continuation = (
+            len(focus_clean) >= max(120, self.config.min_train_rows // 3)
+            and focus_clean["signal_date"].astype(str).nunique()
+            >= max(15, self.config.min_train_dates // 2)
+            and len(focus_counts) >= 2
+            and int(focus_counts.min()) >= 20
+            and focus_fit.get(
+                "continuation_limit_up_hit",
+                pd.Series(dtype=int),
+            ).nunique()
+            >= 2
+            and len(focus_calibration) >= 20
+        )
+        continuation_clean = focus_clean if use_focus_continuation else clean
+        continuation_fit = focus_fit if use_focus_continuation else fit
+        continuation_calibration = (
+            focus_calibration if use_focus_continuation else calibration
+        )
+        continuation_scope = (
+            "stage_2_to_3_and_3_to_4"
+            if use_focus_continuation
+            else "all_stages_fallback"
+        )
+        path_continuation = fit_classifier(
             "continuation_limit_up_hit",
             CONTINUATION_FEATURES,
+            model_clean=continuation_clean,
+            model_fit=continuation_fit,
+            model_calibration=continuation_calibration,
         )
+        baseline_continuation = fit_classifier(
+            "continuation_limit_up_hit",
+            CONTINUATION_BASELINE_FEATURES,
+            model_clean=continuation_clean,
+            model_fit=continuation_fit,
+            model_calibration=continuation_calibration,
+        )
+        path_brier = _finite(path_continuation[2].get("calibration_brier"), float("inf"))
+        baseline_brier = _finite(
+            baseline_continuation[2].get("calibration_brier"),
+            float("inf"),
+        )
+        if baseline_brier + 1e-6 < path_brier:
+            continuation_model, continuation_constant, continuation_selection = baseline_continuation
+            continuation_features = tuple(CONTINUATION_BASELINE_FEATURES)
+            feature_set = "baseline_without_streak_path"
+        else:
+            continuation_model, continuation_constant, continuation_selection = path_continuation
+            continuation_features = tuple(CONTINUATION_FEATURES)
+            feature_set = "streak_path_and_cohort"
+        continuation_selection = {
+            **continuation_selection,
+            "feature_set": feature_set,
+            "training_scope": continuation_scope,
+            "ablation": {
+                "streak_path_and_cohort_brier": _safe_metric(path_brier),
+                "baseline_without_streak_path_brier": _safe_metric(baseline_brier),
+                "path_selected": feature_set == "streak_path_and_cohort",
+            },
+        }
+        continuation_stage_logit_adjustments: dict[int, float] = {}
+        continuation_kind = str(continuation_selection.get("selected") or "")
+        if continuation_kind in {"hgb", "lr", "extra_trees"}:
+            provisional_continuation = self._classifier_pipeline(continuation_kind)
+            provisional_continuation.fit(
+                continuation_fit[list(continuation_features)],
+                continuation_fit["continuation_limit_up_hit"].astype(int),
+                model__sample_weight=_date_balanced_weights(continuation_fit),
+            )
+            calibration_probability = provisional_continuation.predict_proba(
+                continuation_calibration[list(continuation_features)]
+            )[:, 1]
+            calibration_stage = pd.to_numeric(
+                continuation_calibration.get("limit_times"),
+                errors="coerce",
+            ).round()
+            calibration_truth = (
+                continuation_calibration["continuation_limit_up_hit"]
+                .astype(int)
+                .to_numpy()
+            )
+            for stage in (2, 3):
+                mask = calibration_stage.eq(stage).to_numpy()
+                samples = int(mask.sum())
+                if samples < 10:
+                    continuation_stage_logit_adjustments[stage] = 0.0
+                    continue
+                predicted_rate = float(np.clip(calibration_probability[mask].mean(), 0.02, 0.98))
+                hits = int(calibration_truth[mask].sum())
+                actual_rate = float(np.clip((hits + 2.0) / (samples + 4.0), 0.02, 0.98))
+                raw_offset = math.log(actual_rate / (1.0 - actual_rate)) - math.log(
+                    predicted_rate / (1.0 - predicted_rate)
+                )
+                shrinkage = samples / (samples + 30.0)
+                continuation_stage_logit_adjustments[stage] = float(
+                    np.clip(raw_offset * shrinkage, -1.0, 1.0)
+                )
         exit_model, exit_constant, exit_selection = fit_classifier("exit_on_time")
         fill_parts: list[pd.DataFrame] = []
         proposal_grid = np.arange(
@@ -1191,6 +1733,19 @@ class AuctionV3Engine:
                 fill_values,
                 model__sample_weight=_date_balanced_weights(fill_train),
             )
+        recent_dates = set(dates[-20:])
+        recent = clean[clean["signal_date"].astype(str).isin(recent_dates)].copy()
+        recent_stage = pd.to_numeric(recent.get("limit_times"), errors="coerce").round()
+        stage_recent_rates: dict[int, float] = {}
+        stage_recent_samples: dict[int, int] = {}
+        for stage in (2, 3):
+            sample = recent[recent_stage.eq(float(stage))]
+            values = pd.to_numeric(
+                sample.get("continuation_limit_up_hit"),
+                errors="coerce",
+            ).dropna()
+            stage_recent_rates[stage] = float(values.mean()) if len(values) else float("nan")
+            stage_recent_samples[stage] = int(len(values))
         return ModelBundle(
             return_model=return_model,
             profit_model=profit_model,
@@ -1225,6 +1780,10 @@ class AuctionV3Engine:
                 "continuation_limit_up": continuation_selection,
                 "exit_on_time": exit_selection,
             },
+            stage_recent_rates=stage_recent_rates,
+            stage_recent_samples=stage_recent_samples,
+            continuation_stage_logit_adjustments=continuation_stage_logit_adjustments,
+            continuation_features=continuation_features,
         )
 
     def _score_candidate_at_gaps(self, row: pd.Series, bundle: ModelBundle) -> Optional[dict[str, Any]]:
@@ -1236,6 +1795,19 @@ class AuctionV3Engine:
         gaps = np.arange(low, high + self.config.gap_grid_step / 2.0, self.config.gap_grid_step)
         grid = pd.DataFrame([row.to_dict()] * len(gaps))
         grid["proposed_gap"] = gaps
+        limit_times = _finite(row.get("limit_times"), 0.0)
+        stage_key = int(round(limit_times))
+        if pd.to_numeric(
+            grid.get("stage_recent_promotion_rate"),
+            errors="coerce",
+        ).isna().all():
+            grid["stage_recent_promotion_rate"] = bundle.stage_recent_rates.get(
+                stage_key,
+                np.nan,
+            )
+            grid["stage_recent_promotion_samples"] = float(
+                bundle.stage_recent_samples.get(stage_key, 0)
+            )
         pred = bundle.return_model.predict(grid[MODEL_FEATURES]) + bundle.calibration_bias
         p_profit = _probability(bundle.profit_model, grid, bundle.profit_constant)
         p_loss = _probability(bundle.loss_model, grid, bundle.loss_constant)
@@ -1243,8 +1815,13 @@ class AuctionV3Engine:
             bundle.continuation_model,
             grid,
             bundle.continuation_constant,
-            CONTINUATION_FEATURES,
+            bundle.continuation_features,
         )
+        stage_logit_offset = bundle.continuation_stage_logit_adjustments.get(stage_key, 0.0)
+        if abs(stage_logit_offset) > EPS:
+            clipped = np.clip(p_continuation, 1e-6, 1.0 - 1e-6)
+            logits = np.log(clipped / (1.0 - clipped)) + stage_logit_offset
+            p_continuation = 1.0 / (1.0 + np.exp(-logits))
         p_exit = _probability(bundle.exit_model, grid, bundle.exit_constant)
         # A less aggressive limit price cannot have a higher execution chance.
         p_fill = np.maximum.accumulate(_probability(bundle.fill_model, grid, bundle.fill_constant))
@@ -1256,7 +1833,6 @@ class AuctionV3Engine:
             self.config.tail_risk_aversion * p_loss * abs(self.config.big_loss_threshold)
         ) - ((1.0 - p_exit) * self.config.blocked_exit_loss)
         conservative_ev = p_fill * risk_adjusted_return
-        limit_times = _finite(row.get("limit_times"), 0.0)
         stage_focus = 1.0 if int(round(limit_times)) in (2, 3) else 0.0
         selection_score = conservative_ev + (
             self.config.continuation_score_weight * stage_focus * p_continuation
@@ -1274,6 +1850,7 @@ class AuctionV3Engine:
             & fill_ok
             & exit_ok
             & edge_ok
+            & bool(stage_focus)
         )
         if supported.any():
             supported_indices = np.where(supported)[0]
@@ -1285,7 +1862,9 @@ class AuctionV3Engine:
                 return None
             chosen = int(finite[np.argmax(conservative_ev[finite])])
             progressive = big_loss_ok
-            if not progressive.any():
+            if not stage_focus:
+                model_reason = "outside_stage_2_to_3_3_to_4_focus"
+            elif not progressive.any():
                 model_reason = "big_loss_probability_exceeds_cap"
             elif not (progressive & lower_bound_ok).any():
                 model_reason = "return_lcb_not_positive"
@@ -1397,6 +1976,13 @@ class AuctionV3Engine:
             )
             consecutive_limit_ups = self._consecutive_limit_up_count(signal_date, code, dates)
             features["limit_times"] = float(consecutive_limit_ups)
+            features.update(
+                self._streak_path_features(
+                    signal_date,
+                    code,
+                    dates,
+                )
+            )
             rows.append(
                 {
                     "signal_date": signal_date,
@@ -1413,7 +1999,7 @@ class AuctionV3Engine:
                     **features,
                 }
             )
-        return pd.DataFrame(rows)
+        return self._attach_cohort_features(pd.DataFrame(rows))
 
     def _walkforward_predictions(self, history: pd.DataFrame) -> pd.DataFrame:
         if history.empty:
@@ -1629,6 +2215,30 @@ class AuctionV3Engine:
         metrics["promotion_checks"] = checks
         metrics["promotion_failures"] = failures
         metrics["promoted"] = not failures
+        path_oos: dict[str, Any] = {}
+        if "path_label_code" in filled.columns:
+            for label_code, group in filled.groupby("path_label_code", dropna=False):
+                code = (
+                    str(label_code)
+                    if not pd.isna(label_code) and str(label_code).strip()
+                    else "INSUFFICIENT"
+                )
+                path_returns = pd.to_numeric(
+                    group.get("strategy_net_return"),
+                    errors="coerce",
+                ).dropna()
+                path_hits = pd.to_numeric(
+                    group.get("continuation_limit_up_hit"),
+                    errors="coerce",
+                ).dropna()
+                path_oos[code] = {
+                    "label": PATH_LABELS.get(code, code),
+                    "filled_trades": int(len(path_returns)),
+                    "mean_net_return": _safe_metric(path_returns.mean()),
+                    "win_rate": _safe_metric((path_returns > 0).mean()),
+                    "continuation_hit_rate": _safe_metric(path_hits.mean()),
+                }
+        metrics["path_oos"] = path_oos
         metrics["daily_equity"] = [
             {"signal_date": date, "daily_return": _safe_metric(daily.loc[date]), "nav": _safe_metric(nav.loc[date])}
             for date in dates
@@ -1712,11 +2322,19 @@ class AuctionV3Engine:
             scored.to_dict(orient="records"),
             limit=self.config.max_observation_candidates,
         )
-        observation_rank = {
-            str(row.get("ts_code")): int(row["observation_rank"])
+        observation_lookup = {
+            str(row.get("ts_code")): row
             for row in observation_rows
         }
-        scored["observation_rank"] = scored["ts_code"].map(observation_rank)
+        scored["observation_rank"] = scored["ts_code"].map(
+            lambda code: observation_lookup.get(str(code), {}).get("observation_rank")
+        )
+        scored["observation_risk_tier"] = scored["ts_code"].map(
+            lambda code: observation_lookup.get(str(code), {}).get("observation_risk_tier")
+        )
+        scored["observation_risk_label"] = scored["ts_code"].map(
+            lambda code: observation_lookup.get(str(code), {}).get("observation_risk_label", "")
+        )
         scored["observation_selected"] = scored["observation_rank"].notna().astype(int)
         scored["observation_pool_size"] = int(observation_pool_size)
         scored["take_profit_pct"] = float(self.config.take_profit_pct)
@@ -1755,7 +2373,7 @@ class AuctionV3Engine:
         )
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
-        scored["feature_contract"] = "D_CLOSE_PLUS_D_MINUTE_NO_T_LEAKAGE_V4_DERIVED_LIMIT_STREAK"
+        scored["feature_contract"] = "D_CLOSE_PLUS_STREAK_PATH_AND_COHORT_V6_NO_T_LEAKAGE"
         ordered = [
             "prediction_id",
             "signal_date",
@@ -1767,6 +2385,31 @@ class AuctionV3Engine:
             "stage",
             "stage_transition",
             "stage_focus",
+            "path_label_code",
+            "path_label",
+            "path_explanation",
+            "path_days_observed",
+            "path_data_coverage",
+            "path_strength_latest",
+            "path_strength_delta",
+            "path_gap_slope",
+            "path_first_seal_slope",
+            "path_open_times_slope",
+            "path_turnover_slope",
+            "path_amount_log_slope",
+            "path_seal_ratio_slope",
+            "path_one_price_ratio",
+            "path_weak_to_strong",
+            "path_strong_to_weak",
+            "path_acceleration_consensus",
+            "path_divergence_reseal",
+            "stage_pool_size",
+            "focus_pool_size",
+            "market_max_limit_times",
+            "same_industry_stage_count",
+            "stage_pool_share",
+            "stage_recent_promotion_rate",
+            "stage_recent_promotion_samples",
             "source_rank",
             "d_close",
             "estimated_up_limit",
@@ -1777,6 +2420,8 @@ class AuctionV3Engine:
             "observation_price_basis",
             "observation_price_is_formal",
             "observation_rank",
+            "observation_risk_tier",
+            "observation_risk_label",
             "observation_selected",
             "observation_pool_size",
             "take_profit_pct",
@@ -2397,6 +3042,32 @@ class AuctionV3Engine:
                 "hits": int(hits.sum()) if len(hits) else 0,
                 "hit_rate": _safe_metric(hits.mean()),
             }
+        path_performance: dict[str, Any] = {}
+        if "path_label_code" in t_validated.columns:
+            for label_code, group in t_validated.groupby("path_label_code", dropna=False):
+                code = (
+                    str(label_code)
+                    if not pd.isna(label_code) and str(label_code).strip()
+                    else "INSUFFICIENT"
+                )
+                hits = pd.to_numeric(
+                    group.get("continuation_limit_up_hit"),
+                    errors="coerce",
+                ).dropna()
+                matured = group[group["validation_status"].eq("FINAL_VERIFIED")]
+                returns = pd.to_numeric(
+                    matured.get("actual_net_return"),
+                    errors="coerce",
+                ).dropna()
+                path_performance[code] = {
+                    "label": PATH_LABELS.get(code, code),
+                    "t_validated_rows": int(len(group)),
+                    "continuation_hit_rate": _safe_metric(hits.mean()),
+                    "final_verified_trades": int(len(returns)),
+                    "mean_final_net_return": _safe_metric(returns.mean()),
+                    "win_rate": _safe_metric((returns > 0).mean()),
+                }
+        payload["path_performance"] = path_performance
 
         rolling: dict[str, Any] = {}
         for label, size in (("20", 20), ("60", 60), ("all", 0)):
@@ -2563,6 +3234,30 @@ class AuctionV3Engine:
             ),
             "return_selection": bundle.return_selection if bundle else {},
             "classifier_selection": bundle.classifier_selection if bundle else {},
+            "stage_recent_promotion_rate": (
+                {
+                    str(stage): _safe_metric(rate)
+                    for stage, rate in bundle.stage_recent_rates.items()
+                }
+                if bundle
+                else {}
+            ),
+            "stage_recent_promotion_samples": (
+                {
+                    str(stage): int(samples)
+                    for stage, samples in bundle.stage_recent_samples.items()
+                }
+                if bundle
+                else {}
+            ),
+            "continuation_stage_logit_adjustments": (
+                {
+                    str(stage): _safe_metric(offset)
+                    for stage, offset in bundle.continuation_stage_logit_adjustments.items()
+                }
+                if bundle
+                else {}
+            ),
             "residual_q10": _safe_metric(bundle.residual_q10 if bundle else np.nan),
             "residual_q90": _safe_metric(bundle.residual_q90 if bundle else np.nan),
             "exit_on_time_base_rate": _safe_metric(bundle.exit_constant if bundle else np.nan),
@@ -2578,7 +3273,9 @@ class AuctionV3Engine:
             "contract": {
                 "signal": "D close",
                 "candidate_pool": "D-day confirmed limit-up candidates only",
-                "stage_focus": "prefer 2-to-3 and 3-to-4 by out-of-sample continuation probability after every risk veto passes",
+                "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path and cohort features",
+                "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
+                "observation_ranking": "formal risk gate, tail-loss risk, conservative EV, continuation probability, return lower bound",
                 "guidance_only": True,
                 "broker_connected": False,
                 "entry": "manual limit order only before T 09:25 opening-auction cutoff with a frozen maximum price; market order forbidden",

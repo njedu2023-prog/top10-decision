@@ -132,7 +132,7 @@ class AuctionV3Test(unittest.TestCase):
         bundle = engine.fit_models(history)
         self.assertIsNotNone(bundle)
         self.assertIsNotNone(bundle.fill_model)
-        signal_date = self.dates[-2]
+        signal_date = self.dates[1]
         candidates = engine.load_candidates(signal_date)
         first = engine.build_prediction(signal_date, candidates, bundle, metrics)
         self.assertIn("recommended_max_price", first.columns)
@@ -141,12 +141,27 @@ class AuctionV3Test(unittest.TestCase):
         self.assertIn("predicted_continuation_limit_up_probability", first.columns)
         self.assertIn("market_order_allowed", first.columns)
         self.assertIn("feature_contract", first.columns)
-        self.assertTrue(first["recommended_max_price"].notna().any())
-        priced = first[first["recommended_max_price"].notna()]
-        self.assertTrue((priced["recommended_max_price"] < priced["estimated_up_limit"]).all())
+        self.assertIn("path_label", first.columns)
+        self.assertIn("path_strength_delta", first.columns)
+        self.assertIn("stage_pool_size", first.columns)
+        self.assertIn("stage_recent_promotion_rate", first.columns)
+        self.assertIn("observation_risk_label", first.columns)
+        self.assertTrue(
+            first["feature_contract"]
+            .astype(str)
+            .str.contains("STREAK_PATH_AND_COHORT")
+            .all()
+        )
+        selected = first[first["selected"].eq(1)]
+        self.assertTrue(selected["recommended_max_price"].notna().all())
+        self.assertTrue(
+            (selected["recommended_max_price"] < selected["estimated_up_limit"]).all()
+        )
         observed = first[first["observation_selected"].eq(1)]
+        self.assertFalse(observed.empty)
         self.assertLessEqual(len(observed), self.config.max_observation_candidates)
         self.assertTrue(observed["observation_max_price"].notna().all())
+        self.assertTrue(observed["observation_risk_label"].astype(str).str.strip().ne("").all())
         self.assertTrue((observed["observation_max_price"] < observed["estimated_up_limit"]).all())
         self.assertTrue((first["market_order_allowed"] == 0).all())
         dated = self.config.prediction_root / f"pred_{signal_date}.csv"
@@ -237,10 +252,31 @@ class AuctionV3Test(unittest.TestCase):
         self.assertIsNotNone(bundle)
         bundle.loss_model = None
         bundle.loss_constant = self.config.max_big_loss_probability + 0.01
-        score = engine._score_candidate_at_gaps(history.iloc[-1], bundle)
+        focus_row = history[
+            pd.to_numeric(history["limit_times"], errors="coerce").round().isin((2.0, 3.0))
+        ].iloc[-1]
+        score = engine._score_candidate_at_gaps(focus_row, bundle)
         self.assertIsNotNone(score)
         self.assertEqual(score["risk_gate_pass"], 0)
         self.assertEqual(score["model_reason"], "big_loss_probability_exceeds_cap")
+        self.assertTrue(np.isnan(score["recommended_max_gap"]))
+
+    def test_formal_gate_rejects_candidates_outside_focus_stages(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        history = engine.build_history()
+        bundle = engine.fit_models(history)
+        self.assertIsNotNone(bundle)
+        outside_focus = history[
+            ~pd.to_numeric(history["limit_times"], errors="coerce").round().isin((2.0, 3.0))
+        ].iloc[-1]
+        score = engine._score_candidate_at_gaps(outside_focus, bundle)
+        self.assertIsNotNone(score)
+        self.assertEqual(score["stage_focus"], 0)
+        self.assertEqual(score["risk_gate_pass"], 0)
+        self.assertEqual(
+            score["model_reason"],
+            "outside_stage_2_to_3_3_to_4_focus",
+        )
         self.assertTrue(np.isnan(score["recommended_max_gap"]))
 
     def test_stage_is_derived_from_consecutive_limit_up_closes(self) -> None:
@@ -254,6 +290,72 @@ class AuctionV3Test(unittest.TestCase):
         row = current.loc[current["ts_code"].eq(self.codes[0])].iloc[0]
         self.assertEqual(row["stage"], "2→3")
         self.assertEqual(int(row["limit_times"]), 2)
+
+    def test_streak_path_detects_weak_to_strong_without_future_data(self) -> None:
+        code = self.codes[0]
+        weak_date, strong_date = self.dates[0], self.dates[1]
+        for trade_date, first_time, last_time, open_times, seal_amount, turnover in (
+            (weak_date, 143000, 145000, 4, 100_000, 20.0),
+            (strong_date, 93500, 93500, 0, 10_000_000, 8.0),
+        ):
+            market_root = (
+                self.root
+                / "data"
+                / "market"
+                / "raw"
+                / trade_date[:4]
+                / trade_date
+            )
+            pd.DataFrame(
+                [
+                    {
+                        "ts_code": code,
+                        "trade_date": trade_date,
+                        "limit_type": "U",
+                        "first_time": first_time,
+                        "last_time": last_time,
+                        "open_times": open_times,
+                        "amount": 50_000_000,
+                        "seal_amount": seal_amount,
+                        "fd_amount": seal_amount,
+                    }
+                ]
+            ).to_csv(market_root / "limit_list_d.csv", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "ts_code": code,
+                        "trade_date": trade_date,
+                        "turnover_rate": turnover,
+                    }
+                ]
+            ).to_csv(market_root / "daily_basic.csv", index=False)
+
+        strong_root = (
+            self.root
+            / "data"
+            / "market"
+            / "raw"
+            / strong_date[:4]
+            / strong_date
+        )
+        strong_daily = pd.read_csv(strong_root / "daily.csv")
+        row_mask = strong_daily["ts_code"].eq(code)
+        strong_daily.loc[row_mask, "open"] = (
+            strong_daily.loc[row_mask, "pre_close"] * 1.05
+        ).round(2)
+        strong_daily.to_csv(strong_root / "daily.csv", index=False)
+
+        features = AuctionV3Engine(self.config)._streak_path_features(
+            strong_date,
+            code,
+            self.dates,
+        )
+        self.assertEqual(features["path_label_code"], "WEAK_TO_STRONG")
+        self.assertEqual(features["path_label"], "弱转强")
+        self.assertGreater(features["path_strength_delta"], 0.12)
+        self.assertLess(features["path_first_seal_slope"], 0)
+        self.assertEqual(features["path_weak_to_strong"], 1.0)
 
     def test_authoritative_limit_list_restores_candidates_missing_from_old_ranking(self) -> None:
         signal_date = self.dates[10]

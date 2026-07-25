@@ -318,6 +318,42 @@ class DecisionObservationContractTests(unittest.TestCase):
         self.assertEqual(ranked[0]["observation_max_price"], 10.0)
         self.assertEqual(ranked[0]["observation_price_basis"], "legacy_d_close_cap")
 
+    def test_watchlist_places_safe_candidate_before_high_probability_high_risk(self) -> None:
+        rows = [
+            {
+                "ts_code": "600001.SH",
+                "stage_transition": "2→3",
+                "mechanism_limit_pct": 10.0,
+                "d_close": 10.0,
+                "estimated_up_limit": 11.0,
+                "risk_gate_pass": 0,
+                "predicted_continuation_limit_up_probability": 0.95,
+                "predicted_big_loss_probability": 0.60,
+                "predicted_return_lcb": -0.08,
+                "predicted_exit_probability": 0.70,
+                "conservative_ev": 0.03,
+                "rank": 1,
+            },
+            {
+                "ts_code": "600002.SH",
+                "stage_transition": "2→3",
+                "mechanism_limit_pct": 10.0,
+                "d_close": 10.0,
+                "estimated_up_limit": 11.0,
+                "risk_gate_pass": 1,
+                "predicted_continuation_limit_up_probability": 0.70,
+                "predicted_big_loss_probability": 0.10,
+                "predicted_return_lcb": 0.01,
+                "predicted_exit_probability": 0.95,
+                "conservative_ev": 0.01,
+                "rank": 2,
+            },
+        ]
+        ranked, _ = rank_observation_rows(rows)
+        self.assertEqual(ranked[0]["ts_code"], "600002.SH")
+        self.assertEqual(ranked[0]["observation_risk_label"], "正式安全门槛")
+        self.assertEqual(ranked[1]["observation_risk_label"], "高风险观察")
+
 
 class DecisionActionPlanTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -411,7 +447,10 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertFalse(any(row["action"] == "BUY" for row in plan["candidates"]))
         self.assertEqual(plan["stage_watch_count"], 1)
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
-        self.assertEqual(plan["schema_version"], "decision_action_plan_v6_market_open_truth")
+        self.assertEqual(
+            plan["schema_version"],
+            "decision_action_plan_v7_streak_path_risk_first",
+        )
         self.assertEqual(plan["stage_watchlist"][0]["observation_max_price"], 10.5)
         self.assertIn("observation_statistics", plan)
 

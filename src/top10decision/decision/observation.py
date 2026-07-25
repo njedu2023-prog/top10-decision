@@ -93,16 +93,35 @@ def rank_observation_rows(
         row.update(observation_price_contract(row))
         focused.append(row)
 
-    def sort_key(row: Mapping[str, Any]) -> tuple[float, float, float, float, int, str]:
+    def risk_tier(row: Mapping[str, Any]) -> int:
+        if _integer(row.get("risk_gate_pass")) == 1:
+            return 0
+        big_loss = _number(row.get("predicted_big_loss_probability"))
+        lower_bound = _number(row.get("predicted_return_lcb"))
+        exit_probability = _number(row.get("predicted_exit_probability"))
+        formal_cap = _number(row.get("max_big_loss_probability"))
+        relaxed_cap = max(0.30, 2.0 * (formal_cap if formal_cap is not None else 0.15))
+        if (
+            big_loss is not None
+            and big_loss <= relaxed_cap
+            and lower_bound is not None
+            and lower_bound >= -0.03
+            and (exit_probability is None or exit_probability >= 0.75)
+        ):
+            return 1
+        return 2
+
+    def sort_key(row: Mapping[str, Any]) -> tuple[int, float, float, float, float, int, str]:
         continuation = _number(row.get("predicted_continuation_limit_up_probability"))
         big_loss = _number(row.get("predicted_big_loss_probability"))
         conservative = _number(row.get("conservative_ev"))
         lower_bound = _number(row.get("predicted_return_lcb"))
         source_rank = _integer(row.get("rank", row.get("source_rank")), 999999)
         return (
-            -(continuation if continuation is not None else -1.0),
+            risk_tier(row),
             big_loss if big_loss is not None else 2.0,
             -(conservative if conservative is not None else -1.0),
+            -(continuation if continuation is not None else -1.0),
             -(lower_bound if lower_bound is not None else -1.0),
             source_rank,
             _text(row.get("ts_code")),
@@ -112,10 +131,17 @@ def rank_observation_rows(
     total = len(focused)
     selected = focused[: max(0, int(limit))]
     for rank, row in enumerate(selected, start=1):
+        tier = risk_tier(row)
         row["observation_rank"] = rank
         row["stage_watch_rank"] = rank
         row["observation_pool_size"] = total
         row["observation_selected"] = 1
+        row["observation_risk_tier"] = tier
+        row["observation_risk_label"] = {
+            0: "正式安全门槛",
+            1: "观察风险可控",
+            2: "高风险观察",
+        }[tier]
         row["watch_label"] = "正式买入" if row.get("action") == "BUY" else "仅观察"
     return selected, total
 

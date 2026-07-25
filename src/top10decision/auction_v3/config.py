@@ -64,7 +64,7 @@ class AuctionV3Config:
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v5_manual_guidance_4"
+    model_version: str = "auction_v6_streak_path_risk_first_2"
 
     @property
     def output_root(self) -> Path:
