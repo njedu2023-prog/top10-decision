@@ -33,6 +33,9 @@ class AuctionV3Config:
     min_exit_probability: float = 0.90
     min_profit_probability: float = 0.52
     continuation_score_weight: float = 0.005
+    sentiment_min_brier_improvement: float = 0.0005
+    sentiment_min_relative_brier_improvement: float = 0.005
+    sentiment_min_daily_win_rate: float = 0.55
     max_big_loss_probability: float = 0.15
     big_loss_threshold: float = -0.03
     min_return_lcb: float = 0.0
@@ -64,7 +67,7 @@ class AuctionV3Config:
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v6_streak_path_risk_first_2"
+    model_version: str = "auction_v7_market_sentiment_oos_1"
 
     @property
     def output_root(self) -> Path:

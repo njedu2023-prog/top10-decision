@@ -393,7 +393,7 @@ def _attach_observation_validation(
     statuses = [_text(row.get("validation_status")) for row in watchlist]
     plan.update(
         {
-            "schema_version": "decision_action_plan_v7_streak_path_risk_first",
+            "schema_version": "decision_action_plan_v8_market_sentiment_oos",
             "stage_watchlist": watchlist,
             "stage_watch_count": len(watchlist),
             "stage_watch_eligible_count": watch_total,
@@ -450,6 +450,19 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     prediction = _read_csv(root / "outputs" / "auction_v3" / "predictions" / "pred_latest.csv")
     backtest = _read_json(root / "outputs" / "auction_v3" / "metrics" / "backtest_latest.json")
     model_meta = _read_json(root / "outputs" / "auction_v3" / "models" / "model_meta_latest.json")
+    sentiment_meta = model_meta.get("current_market_sentiment") or {}
+
+    def sentiment_value(name: str) -> Any:
+        if not prediction.empty and name in prediction.columns:
+            value = prediction[name].iloc[0]
+            try:
+                if not pd.isna(value):
+                    return value
+            except Exception:
+                if value is not None:
+                    return value
+        return sentiment_meta.get(name)
+
     pred_signal = _date(prediction.get("signal_date", pd.Series([""])).iloc[0]) if not prediction.empty else ""
     pred_buy = _date(prediction.get("expected_buy_date", pd.Series([""])).iloc[0]) if not prediction.empty else ""
     pred_exit = _date(prediction.get("expected_exit_date", pd.Series([""])).iloc[0]) if not prediction.empty else ""
@@ -498,7 +511,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
     stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)
     plan = {
-        "schema_version": "decision_action_plan_v7_streak_path_risk_first",
+        "schema_version": "decision_action_plan_v8_market_sentiment_oos",
         "generated_at_utc": _utc_now(),
         "report_date": chosen_date,
         "report_file": f"decision_report_{chosen_date}.md",
@@ -543,11 +556,118 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
                 ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("ablation")
                 or {}
             ),
+            "continuation_sentiment_ablation": (
+                ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("ablation")
+                or {}
+            ),
             "stage_recent_promotion_rate": model_meta.get("stage_recent_promotion_rate") or {},
             "continuation_stage_logit_adjustments": model_meta.get(
                 "continuation_stage_logit_adjustments"
             )
             or {},
+        },
+        "market_sentiment": {
+            "signal_date": signal_date,
+            "score": _number(sentiment_value("market_sentiment_score")),
+            "delta": _number(sentiment_value("market_sentiment_delta")),
+            "acceleration": _number(
+                sentiment_value("market_sentiment_acceleration")
+            ),
+            "coverage": _number(sentiment_value("market_sentiment_coverage")),
+            "regime_code": _text(
+                sentiment_value("market_sentiment_regime_code")
+            ),
+            "regime_label": _text(
+                sentiment_value("market_sentiment_regime_label")
+            ),
+            "eligible_stock_count": _integer(
+                sentiment_value("market_eligible_stock_count")
+            ),
+            "equal_weight_return": _number(
+                sentiment_value("market_equal_weight_return")
+            ),
+            "up_ratio": _number(sentiment_value("market_up_ratio")),
+            "down_ratio": _number(sentiment_value("market_down_ratio")),
+            "limit_up_count": _integer(
+                sentiment_value("market_limit_up_count")
+            ),
+            "limit_down_count": _integer(
+                sentiment_value("market_limit_down_count")
+            ),
+            "touched_up_count": _integer(
+                sentiment_value("market_touched_up_count")
+            ),
+            "failed_limit_up_count": _integer(
+                sentiment_value("market_failed_limit_up_count")
+            ),
+            "failed_limit_up_rate": _number(
+                sentiment_value("market_failed_limit_up_rate")
+            ),
+            "reseal_count": _integer(
+                sentiment_value("market_reseal_count")
+            ),
+            "reseal_rate": _number(
+                sentiment_value("market_reseal_rate")
+            ),
+            "previous_limit_up_sample": _integer(
+                sentiment_value("market_prev_limit_up_sample")
+            ),
+            "previous_limit_up_mean_return": _number(
+                sentiment_value("market_prev_limit_up_mean_return")
+            ),
+            "previous_limit_up_positive_rate": _number(
+                sentiment_value("market_prev_limit_up_positive_rate")
+            ),
+            "previous_limit_up_open_gap_mean": _number(
+                sentiment_value("market_prev_limit_up_open_gap_mean")
+            ),
+            "promotion_2_to_3_rate": _number(
+                sentiment_value("market_2_to_3_promotion_rate")
+            ),
+            "promotion_2_to_3_samples": _integer(
+                sentiment_value("market_2_to_3_promotion_samples")
+            ),
+            "promotion_3_to_4_rate": _number(
+                sentiment_value("market_3_to_4_promotion_rate")
+            ),
+            "promotion_3_to_4_samples": _integer(
+                sentiment_value("market_3_to_4_promotion_samples")
+            ),
+            "focus_promotion_rate": _number(
+                sentiment_value("market_focus_promotion_rate")
+            ),
+            "focus_promotion_samples": _integer(
+                sentiment_value("market_focus_promotion_samples")
+            ),
+            "max_streak": _integer(
+                sentiment_value("market_max_streak")
+            ),
+            "industry_concentration": _number(
+                sentiment_value(
+                    "market_limit_up_industry_concentration"
+                )
+            ),
+            "limit_up_amount_top3_share": _number(
+                sentiment_value("market_limit_up_amount_top3_share")
+            ),
+            "amount_ratio_5d": _number(
+                sentiment_value("market_amount_ratio_5d")
+            ),
+            "breadth_score": _number(
+                sentiment_value("market_sentiment_breadth_score")
+            ),
+            "limit_ecology_score": _number(
+                sentiment_value("market_sentiment_limit_ecology_score")
+            ),
+            "promotion_score": _number(
+                sentiment_value("market_sentiment_promotion_score")
+            ),
+            "profit_effect_score": _number(
+                sentiment_value("market_sentiment_profit_effect_score")
+            ),
+            "liquidity_score": _number(
+                sentiment_value("market_sentiment_liquidity_score")
+            ),
         },
         "backtest": {
             key: backtest.get(key)
@@ -582,6 +702,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
             "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
             "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
+            "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在留出期Brier和逐日一致性门槛同时改善时进入连板模型，否则自动回退",
             "observation_ranking": "先按正式安全门槛和大跌风险分层，再比较保守收益、晋级概率与收益下界",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",

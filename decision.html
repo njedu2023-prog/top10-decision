@@ -365,6 +365,18 @@
     <section class="panel">
       <div class="panel-head">
         <div>
+          <h2>市场情绪量化</h2>
+          <p>严格使用D日及更早的A股交易日数据，联合市场广度、涨跌停生态、炸板回封、昨日涨停溢价、真实晋级、拥挤度与流动性。</p>
+        </div>
+        <span id="sentimentState" class="count">数据不足</span>
+      </div>
+      <div id="sentimentMetrics" class="metrics panel-metrics"></div>
+      <p id="sentimentNote" class="stats-note"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
           <h2>2进3 / 3进4 机会观察</h2>
           <p>量化弱转强、强转弱、加速一致等逐板路径；先按安全门槛与大跌风险分层，再比较收益和晋级机会。</p>
         </div>
@@ -419,10 +431,10 @@
 
     const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
-    const CACHE_KEY = "decision-dashboard-v6-streak-path-cache";
+    const CACHE_KEY = "decision-dashboard-v7-market-sentiment-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub",
-      "signalDate", "execDate", "exitDate", "metrics", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "signalDate", "execDate", "exitDate", "metrics", "sentimentState", "sentimentMetrics", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -497,6 +509,13 @@
     function dateText(value) {
       const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
       return digits.length === 8 ? `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}` : "-";
+    }
+
+    function modelDisplayName(value) {
+      const text = String(value || "");
+      if (text.startsWith("auction_v7_")) return "V7 · 市场情绪消融";
+      if (text.startsWith("auction_v6_")) return "V6 · 连板路径";
+      return text || "-";
     }
 
     function metric(label, value, tone = "") {
@@ -581,9 +600,52 @@
         metric("双倍成本日收益", pct(bt.stress_2x_cost_mean_daily_return, 3), valueTone(bt.stress_2x_cost_mean_daily_return)),
         metric("次日按时退出率", pct(bt.exit_on_time_rate)),
         metric("Bootstrap 正收益概率", pct(bt.bootstrap_probability_mean_positive)),
-        metric("模型版本", plan?.model?.version || "-")
+        metric("模型版本", modelDisplayName(plan?.model?.version))
       ];
       els.metrics.innerHTML = rows.join("");
+    }
+
+    function renderSentiment(plan) {
+      const sentiment = plan?.market_sentiment || {};
+      const model = plan?.model || {};
+      const ablation = model?.continuation_sentiment_ablation || {};
+      const score = finiteNumber(sentiment.score);
+      const regime = sentiment.regime_label || "数据不足";
+      const regimeCode = String(sentiment.regime_code || "INSUFFICIENT");
+      const stateTone = ["EXPANSION", "EUPHORIA"].includes(regimeCode)
+        ? "positive"
+        : ["ICE", "EBB"].includes(regimeCode)
+          ? "negative"
+          : "warn";
+      els.sentimentState.innerHTML = `<span class="${stateTone}">${escapeHtml(regime)}${score == null ? "" : ` · ${(score * 100).toFixed(1)}分`}</span>`;
+      const rows = [
+        metric("情绪综合分", score == null ? "-" : `${(score * 100).toFixed(1)} / 100`, stateTone),
+        metric("较前一交易日", signedPct(sentiment.delta), valueTone(sentiment.delta)),
+        metric("因子覆盖率", pct(sentiment.coverage)),
+        metric("10%机制样本", String(sentiment.eligible_stock_count ?? "-")),
+        metric("市场上涨率", pct(sentiment.up_ratio)),
+        metric("市场等权涨跌", signedPct(sentiment.equal_weight_return), valueTone(sentiment.equal_weight_return)),
+        metric("涨停 / 跌停", `${sentiment.limit_up_count ?? "-"} / ${sentiment.limit_down_count ?? "-"}`),
+        metric("触板 / 炸板", `${sentiment.touched_up_count ?? "-"} / ${sentiment.failed_limit_up_count ?? "-"}`),
+        metric("炸板率", pct(sentiment.failed_limit_up_rate), Number(sentiment.failed_limit_up_rate) > 0.5 ? "bad" : ""),
+        metric("回封率", pct(sentiment.reseal_rate)),
+        metric("昨日涨停平均涨跌", signedPct(sentiment.previous_limit_up_mean_return), valueTone(sentiment.previous_limit_up_mean_return)),
+        metric("昨日涨停红盘率", pct(sentiment.previous_limit_up_positive_rate)),
+        metric("2进3真实晋级", `${pct(sentiment.promotion_2_to_3_rate)} · ${sentiment.promotion_2_to_3_samples ?? 0}样本`),
+        metric("3进4真实晋级", `${pct(sentiment.promotion_3_to_4_rate)} · ${sentiment.promotion_3_to_4_samples ?? 0}样本`),
+        metric("最高连板", sentiment.max_streak == null ? "-" : `${sentiment.max_streak}板`),
+        metric("成交额 / 5日均值", sentiment.amount_ratio_5d == null ? "-" : `${number(sentiment.amount_ratio_5d, 2)}倍`),
+        metric("行业集中度 HHI", number(sentiment.industry_concentration, 3)),
+        metric("涨停成交额Top3占比", pct(sentiment.limit_up_amount_top3_share))
+      ];
+      els.sentimentMetrics.innerHTML = rows.join("");
+      const selected = ablation.sentiment_selected === true;
+      const selectionText = selected
+        ? `情绪因子通过留出期消融，已进入连板模型；Brier改善 ${number(ablation.sentiment_brier_improvement, 4)}，逐日胜率 ${pct(ablation.sentiment_daily_win_rate)}。`
+        : ablation.sentiment_selected === false
+          ? `情绪因子未同时达到留出期Brier改善与逐日一致性门槛，当前自动回退，仅作诊断展示；不会成为新的硬否决。`
+          : "等待新模型生成情绪消融结果。";
+      els.sentimentNote.textContent = `口径：只使用D日收盘及更早信息，不含T日竞价或T+1真值。综合分用于解释状态，交易概率只使用原始因子并接受严格样本外消融。${selectionText}`;
     }
 
     function renderStageWatchlist(plan) {
@@ -737,6 +799,11 @@
         : ablation.path_selected === true
           ? `路径特征通过消融，Brier ${number(ablation.streak_path_and_cohort_brier, 4)}`
           : `路径特征未优于基线，自动回退；Brier ${number(ablation.baseline_without_streak_path_brier, 4)}`;
+      const sentimentAblation = typeof ablation.sentiment_selected !== "boolean"
+        ? "等待新模型生成"
+        : ablation.sentiment_selected === true
+          ? `通过，Brier ${number(ablation.streak_path_cohort_and_sentiment_brier, 4)}，逐日胜率 ${pct(ablation.sentiment_daily_win_rate)}`
+          : `未通过，自动回退；Brier ${number(ablation.streak_path_cohort_and_sentiment_brier, 4)}，逐日胜率 ${pct(ablation.sentiment_daily_win_rate)}`;
       els.auditContent.innerHTML = `
         <div class="audit-block">
           <h3>执行合同</h3>
@@ -744,6 +811,7 @@
             ${auditRow("候选池", contract.candidate_pool || "仅D日已涨停股票")}
             ${auditRow("候选范围", contract.eligible_universe || "D日已涨停且涨跌幅机制不超过10%的A股")}
             ${auditRow("连板路径", contract.streak_path || "逐板量化路径")}
+            ${auditRow("市场情绪", contract.market_sentiment || "仅D日及更早数据，样本外消融后决定是否采用")}
             ${auditRow("观察排序", contract.observation_ranking || "风险优先")}
             ${auditRow("交易日历", contract.calendar || "严格A股交易日历")}
             ${auditRow("买入规则", contract.entry || "-")}
@@ -775,6 +843,7 @@
             ${auditRow("连板特征集", model.continuation_feature_set || "-")}
             ${auditRow("连板训练范围", model.continuation_training_scope === "stage_2_to_3_and_3_to_4" ? "仅2进3、3进4" : (model.continuation_training_scope || "-"))}
             ${auditRow("路径消融", pathAblation)}
+            ${auditRow("情绪消融", sentimentAblation)}
             ${auditRow("训练就绪", model.ready === true ? "是" : "否")}
             ${auditRow("样本外晋级", model.promoted === true ? "通过" : "未通过")}
             ${auditRow("日期一致", model.prediction_matches_report === true ? "一致" : "未对齐")}
@@ -881,6 +950,7 @@
       state.current = { info, plan, md };
       renderStatus(plan);
       renderMetrics(plan);
+      renderSentiment(plan);
       renderStageWatchlist(plan);
       renderObservationStatistics(plan);
       renderActions(plan);
@@ -909,6 +979,7 @@
         state.index = 0;
         renderStatus(cached.plan);
         renderMetrics(cached.plan);
+        renderSentiment(cached.plan);
         renderStageWatchlist(cached.plan);
         renderObservationStatistics(cached.plan);
         renderActions(cached.plan);

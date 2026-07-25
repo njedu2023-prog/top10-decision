@@ -137,7 +137,56 @@ MODEL_FEATURES = [
     "stage_recent_promotion_samples",
     "proposed_gap",
 ]
-CONTINUATION_FEATURES = [name for name in MODEL_FEATURES if name != "proposed_gap"]
+MARKET_SENTIMENT_FEATURES = [
+    "market_equal_weight_return",
+    "market_down_ratio",
+    "market_strong_up_ratio",
+    "market_strong_down_ratio",
+    "market_limit_up_count_log",
+    "market_limit_down_count_log",
+    "market_limit_up_down_log_ratio",
+    "market_failed_limit_up_rate",
+    "market_reseal_rate",
+    "market_prev_limit_up_mean_return",
+    "market_prev_limit_up_positive_rate",
+    "market_prev_limit_up_open_gap_mean",
+    "market_focus_promotion_rate",
+    "market_limit_up_industry_concentration",
+    "market_limit_up_amount_top3_share",
+    "market_amount_ratio_5d",
+    "market_sentiment_score",
+    "market_sentiment_delta",
+]
+MARKET_SENTIMENT_OUTPUT_FIELDS = MARKET_SENTIMENT_FEATURES + [
+    "market_sentiment_coverage",
+    "market_sentiment_acceleration",
+    "market_sentiment_regime_code",
+    "market_sentiment_regime_label",
+    "market_sentiment_breadth_score",
+    "market_sentiment_limit_ecology_score",
+    "market_sentiment_promotion_score",
+    "market_sentiment_profit_effect_score",
+    "market_sentiment_liquidity_score",
+    "market_eligible_stock_count",
+    "market_limit_up_count",
+    "market_limit_down_count",
+    "market_touched_up_count",
+    "market_failed_limit_up_count",
+    "market_reseal_count",
+    "market_prev_limit_up_sample",
+    "market_2_to_3_promotion_rate",
+    "market_2_to_3_promotion_samples",
+    "market_3_to_4_promotion_rate",
+    "market_3_to_4_promotion_samples",
+    "market_focus_promotion_samples",
+    "market_max_streak",
+]
+CONTINUATION_PATH_COHORT_FEATURES = [
+    name for name in MODEL_FEATURES if name != "proposed_gap"
+]
+CONTINUATION_FEATURES = (
+    CONTINUATION_PATH_COHORT_FEATURES + MARKET_SENTIMENT_FEATURES
+)
 STREAK_PATH_FEATURES = [
     "path_days_observed",
     "path_data_coverage",
@@ -166,7 +215,7 @@ COHORT_FEATURES = [
 ]
 CONTINUATION_BASELINE_FEATURES = [
     name
-    for name in CONTINUATION_FEATURES
+    for name in CONTINUATION_PATH_COHORT_FEATURES
     if name not in set(STREAK_PATH_FEATURES + COHORT_FEATURES)
 ]
 
@@ -179,6 +228,16 @@ PATH_LABELS = {
     "STABLE_STRONG": "持续强势",
     "MIXED": "路径混合",
     "INSUFFICIENT": "路径数据不足",
+}
+SENTIMENT_REGIME_LABELS = {
+    "ICE": "冰点",
+    "REPAIR": "修复",
+    "NEUTRAL": "震荡",
+    "EXPANSION": "发酵",
+    "EUPHORIA": "高潮",
+    "HIGH_DIVERGENCE": "高位分歧",
+    "EBB": "退潮",
+    "INSUFFICIENT": "数据不足",
 }
 
 
@@ -379,9 +438,13 @@ class AuctionV3Engine:
     def __init__(self, config: AuctionV3Config):
         self.config = config
         self.config.ensure_directories()
+        self._market_dates_cache: Optional[list[str]] = None
         self._market_cache: dict[tuple[str, str], pd.DataFrame] = {}
         self._minute_cache: dict[tuple[str, str], pd.DataFrame] = {}
         self._context_cache: dict[str, dict[str, Any]] = {}
+        self._eligible_market_cache: dict[str, pd.DataFrame] = {}
+        self._sentiment_raw_cache: dict[str, dict[str, Any]] = {}
+        self._streak_count_cache: dict[tuple[str, str], int] = {}
         self._path_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._eligibility_audit: dict[str, Any] = {}
 
@@ -389,6 +452,8 @@ class AuctionV3Engine:
     # Source discovery and point-in-time inputs
     # ------------------------------------------------------------------
     def market_dates(self) -> list[str]:
+        if self._market_dates_cache is not None:
+            return list(self._market_dates_cache)
         root = self.config.root / "data" / "market" / "raw"
         dates: set[str] = set()
         if root.exists():
@@ -401,7 +466,10 @@ class AuctionV3Engine:
                     dates.add(match.group(1))
         # Raw folders can exist for a holiday because upstream sync jobs run on
         # weekdays. They are not evidence of an exchange session.
-        return sorted(date for date in dates if is_a_share_trading_day(date))
+        self._market_dates_cache = sorted(
+            date for date in dates if is_a_share_trading_day(date)
+        )
+        return list(self._market_dates_cache)
 
     def _market_path(self, trade_date: str, name: str) -> Optional[Path]:
         root = self.config.root / "data" / "market" / "raw"
@@ -448,6 +516,492 @@ class AuctionV3Engine:
         self._minute_cache[key] = frame
         return frame
 
+    @staticmethod
+    def _daily_return_series(frame: pd.DataFrame) -> pd.Series:
+        if frame.empty:
+            return pd.Series(dtype=float)
+        pct = (
+            pd.to_numeric(frame["pct_chg"], errors="coerce") / 100.0
+            if "pct_chg" in frame.columns
+            else pd.Series(np.nan, index=frame.index, dtype=float)
+        )
+        if pct.notna().sum() < max(20, len(frame) // 2):
+            close = (
+                pd.to_numeric(frame["close"], errors="coerce")
+                if "close" in frame.columns
+                else pd.Series(np.nan, index=frame.index, dtype=float)
+            )
+            if "pre_close" in frame.columns:
+                pre_close = pd.to_numeric(frame["pre_close"], errors="coerce")
+            elif "pre_close_est" in frame.columns:
+                pre_close = pd.to_numeric(frame["pre_close_est"], errors="coerce")
+            else:
+                pre_close = pd.Series(np.nan, index=frame.index, dtype=float)
+            derived = close / pre_close.replace(0.0, np.nan) - 1.0
+            pct = pct.where(pct.notna(), derived)
+        return pct.replace([np.inf, -np.inf], np.nan)
+
+    def _eligible_market_daily(self, trade_date: str) -> pd.DataFrame:
+        if trade_date in self._eligible_market_cache:
+            return self._eligible_market_cache[trade_date]
+        daily = self.market_table(trade_date, "daily")
+        if daily.empty:
+            self._eligible_market_cache[trade_date] = pd.DataFrame()
+            return self._eligible_market_cache[trade_date]
+        frame = daily.reset_index(drop=True).copy()
+        limit = self.market_table(trade_date, "stk_limit")
+        if not limit.empty:
+            limit_columns = [
+                name
+                for name in ("ts_code", "up_limit", "down_limit")
+                if name in limit.columns
+            ]
+            frame = frame.merge(
+                limit.reset_index(drop=True)[limit_columns],
+                on="ts_code",
+                how="left",
+                suffixes=("", "_limit"),
+            )
+        if "name" not in frame.columns:
+            stock_basic = self.market_table(trade_date, "stock_basic")
+            if not stock_basic.empty and "name" in stock_basic.columns:
+                names = (
+                    stock_basic.reset_index(drop=True)
+                    .drop_duplicates("ts_code", keep="last")
+                    .set_index("ts_code")["name"]
+                )
+                frame["name"] = frame["ts_code"].map(names)
+            else:
+                frame["name"] = ""
+        if "trade_date" not in frame.columns:
+            frame["trade_date"] = trade_date
+        eligible, _ = filter_standard_limit_universe(
+            frame,
+            code_col="ts_code",
+            name_col="name",
+        )
+        if not eligible.empty:
+            eligible["ts_code"] = eligible["ts_code"].map(_normal_code)
+            eligible = (
+                eligible.drop_duplicates("ts_code", keep="last")
+                .set_index("ts_code", drop=False)
+            )
+        self._eligible_market_cache[trade_date] = eligible
+        return eligible
+
+    def _previous_market_date(self, trade_date: str) -> str:
+        dates = self.market_dates()
+        try:
+            index = dates.index(trade_date)
+        except ValueError:
+            return ""
+        if index <= 0:
+            return ""
+        previous = dates[index - 1]
+        return (
+            previous
+            if next_a_share_trading_day(previous) == trade_date
+            else ""
+        )
+
+    def _market_sentiment_raw(self, trade_date: str) -> dict[str, Any]:
+        if trade_date in self._sentiment_raw_cache:
+            return self._sentiment_raw_cache[trade_date]
+        frame = self._eligible_market_daily(trade_date)
+        empty = {
+            "market_equal_weight_return": np.nan,
+            "market_down_ratio": np.nan,
+            "market_strong_up_ratio": np.nan,
+            "market_strong_down_ratio": np.nan,
+            "market_limit_up_count_log": np.nan,
+            "market_limit_down_count_log": np.nan,
+            "market_limit_up_down_log_ratio": np.nan,
+            "market_failed_limit_up_rate": np.nan,
+            "market_reseal_rate": np.nan,
+            "market_prev_limit_up_mean_return": np.nan,
+            "market_prev_limit_up_positive_rate": np.nan,
+            "market_prev_limit_up_open_gap_mean": np.nan,
+            "market_focus_promotion_rate": np.nan,
+            "market_limit_up_industry_concentration": np.nan,
+            "market_limit_up_amount_top3_share": np.nan,
+            "market_amount_ratio_5d": np.nan,
+            "market_eligible_stock_count": 0.0,
+            "market_limit_up_count": 0.0,
+            "market_limit_down_count": 0.0,
+            "market_touched_up_count": 0.0,
+            "market_failed_limit_up_count": 0.0,
+            "market_reseal_count": 0.0,
+            "market_prev_limit_up_sample": 0.0,
+            "market_2_to_3_promotion_rate": np.nan,
+            "market_2_to_3_promotion_samples": 0.0,
+            "market_3_to_4_promotion_rate": np.nan,
+            "market_3_to_4_promotion_samples": 0.0,
+            "market_focus_promotion_samples": 0.0,
+            "market_max_streak": np.nan,
+            "_closed_up_codes": frozenset(),
+            "_total_amount": np.nan,
+        }
+        if frame.empty:
+            self._sentiment_raw_cache[trade_date] = empty
+            return empty
+
+        pct = self._daily_return_series(frame)
+        valid = pct.dropna()
+        def numeric_column(name: str) -> pd.Series:
+            return (
+                pd.to_numeric(frame[name], errors="coerce")
+                if name in frame.columns
+                else pd.Series(np.nan, index=frame.index, dtype=float)
+            )
+
+        close = numeric_column("close")
+        high = numeric_column("high")
+        open_price = numeric_column("open")
+        pre_close = (
+            numeric_column("pre_close")
+            if "pre_close" in frame.columns
+            else numeric_column("pre_close_est")
+        )
+        derived_pre_close = close / (1.0 + pct).replace(0.0, np.nan)
+        pre_close = pre_close.where(
+            pre_close.gt(0),
+            derived_pre_close,
+        )
+        up_limit = numeric_column("up_limit")
+        down_limit = numeric_column("down_limit")
+        up_tolerance = pd.Series(
+            np.maximum(0.01, up_limit.abs().fillna(0.0) * 0.0025),
+            index=frame.index,
+        )
+        down_tolerance = pd.Series(
+            np.maximum(0.01, down_limit.abs().fillna(0.0) * 0.0025),
+            index=frame.index,
+        )
+        closed_up = (
+            close.notna()
+            & up_limit.notna()
+            & close.sub(up_limit).abs().le(up_tolerance)
+        )
+        closed_down = (
+            close.notna()
+            & down_limit.notna()
+            & close.sub(down_limit).abs().le(down_tolerance)
+        )
+        touched_up = (
+            high.notna()
+            & up_limit.notna()
+            & high.ge(up_limit.sub(up_tolerance))
+        )
+        failed_up = touched_up & ~closed_up
+        closed_up_codes = frozenset(frame.loc[closed_up, "ts_code"].astype(str))
+
+        detail = self.market_table(trade_date, "limit_list_d")
+        detail_up = (
+            detail[detail["ts_code"].isin(closed_up_codes)].copy()
+            if not detail.empty and "ts_code" in detail.columns
+            else pd.DataFrame()
+        )
+        open_times = (
+            pd.to_numeric(detail_up.get("open_times"), errors="coerce").dropna()
+            if not detail_up.empty
+            else pd.Series(dtype=float)
+        )
+        reseal_count = int((open_times > 0).sum()) if len(open_times) else 0
+        reseal_rate = (
+            float((open_times > 0).mean()) if len(open_times) else float("nan")
+        )
+
+        industry_concentration = float("nan")
+        if not detail_up.empty and "industry" in detail_up.columns:
+            industry = (
+                detail_up["industry"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+            industry = industry[industry.ne("")]
+            if len(industry):
+                shares = industry.value_counts(normalize=True)
+                industry_concentration = float((shares**2).sum())
+
+        amount_top3_share = float("nan")
+        limit_up_amount = (
+            pd.to_numeric(detail_up.get("amount"), errors="coerce")
+            if not detail_up.empty and "amount" in detail_up.columns
+            else pd.Series(dtype=float)
+        )
+        limit_up_amount = limit_up_amount[limit_up_amount.gt(0)].dropna()
+        if limit_up_amount.empty and closed_up_codes and "amount" in frame.columns:
+            limit_up_amount = pd.to_numeric(
+                frame.loc[list(closed_up_codes), "amount"],
+                errors="coerce",
+            )
+            limit_up_amount = limit_up_amount[limit_up_amount.gt(0)].dropna()
+        if len(limit_up_amount) and float(limit_up_amount.sum()) > 0:
+            amount_top3_share = float(
+                limit_up_amount.nlargest(3).sum() / limit_up_amount.sum()
+            )
+
+        previous_date = self._previous_market_date(trade_date)
+        previous_raw = (
+            self._market_sentiment_raw(previous_date)
+            if previous_date
+            else {}
+        )
+        previous_codes = set(previous_raw.get("_closed_up_codes") or ())
+        previous_returns = (
+            pct.reindex(list(previous_codes)).dropna()
+            if previous_codes
+            else pd.Series(dtype=float)
+        )
+        previous_open_gap = (
+            (open_price / pre_close.replace(0.0, np.nan) - 1.0)
+            .reindex(list(previous_codes))
+            .replace([np.inf, -np.inf], np.nan)
+            .dropna()
+            if previous_codes
+            else pd.Series(dtype=float)
+        )
+
+        dates = self.market_dates()
+        promotion_hits = {2: 0, 3: 0}
+        promotion_samples = {2: 0, 3: 0}
+        if previous_date and previous_codes:
+            for code in previous_codes:
+                stage = self._consecutive_limit_up_count(
+                    previous_date,
+                    code,
+                    dates,
+                )
+                if stage not in promotion_samples:
+                    continue
+                promotion_samples[stage] += 1
+                promotion_hits[stage] += int(code in closed_up_codes)
+        focus_samples = promotion_samples[2] + promotion_samples[3]
+        focus_hits = promotion_hits[2] + promotion_hits[3]
+
+        streaks = [
+            self._consecutive_limit_up_count(trade_date, code, dates)
+            for code in closed_up_codes
+        ]
+        amount = (
+            pd.to_numeric(frame["amount"], errors="coerce")
+            if "amount" in frame.columns
+            else pd.Series(dtype=float)
+        )
+        total_amount = float(amount[amount.gt(0)].sum()) if len(amount) else float("nan")
+        try:
+            date_index = dates.index(trade_date)
+        except ValueError:
+            date_index = -1
+        trailing_amounts = []
+        if date_index > 0:
+            for prior_date in dates[max(0, date_index - 5) : date_index]:
+                prior_total = _finite(
+                    self._market_sentiment_raw(prior_date).get("_total_amount")
+                )
+                if prior_total > 0:
+                    trailing_amounts.append(prior_total)
+        amount_ratio_5d = (
+            total_amount / float(np.mean(trailing_amounts))
+            if total_amount > 0 and trailing_amounts
+            else float("nan")
+        )
+
+        limit_up_count = int(closed_up.sum())
+        limit_down_count = int(closed_down.sum())
+        touched_up_count = int(touched_up.sum())
+        failed_count = int(failed_up.sum())
+        result = {
+            **empty,
+            "market_equal_weight_return": (
+                float(valid.mean()) if len(valid) else float("nan")
+            ),
+            "market_down_ratio": (
+                float((valid < 0).mean()) if len(valid) else float("nan")
+            ),
+            "market_strong_up_ratio": (
+                float((valid >= 0.05).mean()) if len(valid) else float("nan")
+            ),
+            "market_strong_down_ratio": (
+                float((valid <= -0.05).mean()) if len(valid) else float("nan")
+            ),
+            "market_limit_up_count_log": math.log1p(limit_up_count),
+            "market_limit_down_count_log": math.log1p(limit_down_count),
+            "market_limit_up_down_log_ratio": math.log(
+                (limit_up_count + 1.0) / (limit_down_count + 1.0)
+            ),
+            "market_failed_limit_up_rate": (
+                failed_count / touched_up_count
+                if touched_up_count
+                else float("nan")
+            ),
+            "market_reseal_rate": reseal_rate,
+            "market_prev_limit_up_mean_return": (
+                float(previous_returns.mean())
+                if len(previous_returns)
+                else float("nan")
+            ),
+            "market_prev_limit_up_positive_rate": (
+                float((previous_returns > 0).mean())
+                if len(previous_returns)
+                else float("nan")
+            ),
+            "market_prev_limit_up_open_gap_mean": (
+                float(previous_open_gap.mean())
+                if len(previous_open_gap)
+                else float("nan")
+            ),
+            "market_focus_promotion_rate": (
+                focus_hits / focus_samples
+                if focus_samples
+                else float("nan")
+            ),
+            "market_limit_up_industry_concentration": industry_concentration,
+            "market_limit_up_amount_top3_share": amount_top3_share,
+            "market_amount_ratio_5d": amount_ratio_5d,
+            "market_eligible_stock_count": float(len(valid)),
+            "market_limit_up_count": float(limit_up_count),
+            "market_limit_down_count": float(limit_down_count),
+            "market_touched_up_count": float(touched_up_count),
+            "market_failed_limit_up_count": float(failed_count),
+            "market_reseal_count": float(reseal_count),
+            "market_prev_limit_up_sample": float(len(previous_returns)),
+            "market_2_to_3_promotion_rate": (
+                promotion_hits[2] / promotion_samples[2]
+                if promotion_samples[2]
+                else float("nan")
+            ),
+            "market_2_to_3_promotion_samples": float(promotion_samples[2]),
+            "market_3_to_4_promotion_rate": (
+                promotion_hits[3] / promotion_samples[3]
+                if promotion_samples[3]
+                else float("nan")
+            ),
+            "market_3_to_4_promotion_samples": float(promotion_samples[3]),
+            "market_focus_promotion_samples": float(focus_samples),
+            "market_max_streak": (
+                float(max(streaks)) if streaks else float("nan")
+            ),
+            "_closed_up_codes": closed_up_codes,
+            "_total_amount": total_amount,
+        }
+        self._sentiment_raw_cache[trade_date] = result
+        return result
+
+    @staticmethod
+    def _linear_sentiment_score(value: Any, low: float, high: float) -> float:
+        number = _finite(value)
+        if not math.isfinite(number) or high <= low:
+            return float("nan")
+        return float(np.clip((number - low) / (high - low), 0.0, 1.0))
+
+    def _sentiment_components(
+        self,
+        raw: dict[str, Any],
+    ) -> dict[str, float]:
+        breadth, _ = self._available_weighted_mean(
+            (
+                (
+                    self._linear_sentiment_score(
+                        raw.get("market_equal_weight_return"),
+                        -0.03,
+                        0.03,
+                    ),
+                    0.55,
+                ),
+                (
+                    1.0 - _finite(raw.get("market_down_ratio")),
+                    0.45,
+                ),
+            )
+        )
+        limit_ecology, _ = self._available_weighted_mean(
+            (
+                (
+                    self._linear_sentiment_score(
+                        raw.get("market_limit_up_down_log_ratio"),
+                        -1.5,
+                        3.0,
+                    ),
+                    0.40,
+                ),
+                (
+                    1.0 - _finite(raw.get("market_failed_limit_up_rate")),
+                    0.40,
+                ),
+                (_finite(raw.get("market_reseal_rate")), 0.20),
+            )
+        )
+        promotion = _finite(raw.get("market_focus_promotion_rate"))
+        profit_effect, _ = self._available_weighted_mean(
+            (
+                (
+                    self._linear_sentiment_score(
+                        raw.get("market_prev_limit_up_mean_return"),
+                        -0.05,
+                        0.05,
+                    ),
+                    0.60,
+                ),
+                (
+                    _finite(raw.get("market_prev_limit_up_positive_rate")),
+                    0.40,
+                ),
+            )
+        )
+        liquidity = self._linear_sentiment_score(
+            raw.get("market_amount_ratio_5d"),
+            0.75,
+            1.25,
+        )
+        return {
+            "market_sentiment_breadth_score": breadth,
+            "market_sentiment_limit_ecology_score": limit_ecology,
+            "market_sentiment_promotion_score": promotion,
+            "market_sentiment_profit_effect_score": profit_effect,
+            "market_sentiment_liquidity_score": liquidity,
+        }
+
+    def _sentiment_score(
+        self,
+        raw: dict[str, Any],
+    ) -> tuple[float, float, dict[str, float]]:
+        components = self._sentiment_components(raw)
+        score, coverage = self._available_weighted_mean(
+            (
+                (components["market_sentiment_breadth_score"], 0.20),
+                (components["market_sentiment_limit_ecology_score"], 0.20),
+                (components["market_sentiment_promotion_score"], 0.25),
+                (components["market_sentiment_profit_effect_score"], 0.25),
+                (components["market_sentiment_liquidity_score"], 0.10),
+            )
+        )
+        return score, coverage, components
+
+    @staticmethod
+    def _sentiment_regime(score: float, delta: float) -> str:
+        if not math.isfinite(score):
+            return "INSUFFICIENT"
+        change = delta if math.isfinite(delta) else 0.0
+        if score >= 0.70 and change <= -0.05:
+            return "HIGH_DIVERGENCE"
+        if change <= -0.08:
+            return "EBB"
+        if score < 0.28:
+            return "REPAIR" if change >= 0.05 else "ICE"
+        if score < 0.42:
+            return "REPAIR" if change >= 0.04 else "EBB"
+        if change >= 0.06:
+            return "REPAIR" if score < 0.55 else "EXPANSION"
+        if score >= 0.75:
+            return "EUPHORIA"
+        if score >= 0.58:
+            return "EXPANSION"
+        if change <= -0.04:
+            return "EBB"
+        return "NEUTRAL"
+
     def _market_context(self, trade_date: str) -> dict[str, Any]:
         if trade_date in self._context_cache:
             return self._context_cache[trade_date]
@@ -458,28 +1012,87 @@ class AuctionV3Engine:
                 "market_up_ratio": np.nan,
                 "market_return_dispersion": np.nan,
                 "amount_percentile": {},
+                "market_sentiment_score": np.nan,
+                "market_sentiment_delta": np.nan,
+                "market_sentiment_coverage": 0.0,
+                "market_sentiment_regime_code": "INSUFFICIENT",
+                "market_sentiment_regime_label": SENTIMENT_REGIME_LABELS[
+                    "INSUFFICIENT"
+                ],
             }
             self._context_cache[trade_date] = context
             return context
 
-        pct = pd.to_numeric(daily["pct_chg"], errors="coerce") / 100.0 if "pct_chg" in daily.columns else pd.Series(np.nan, index=daily.index)
-        if pct.notna().sum() < max(20, len(daily) // 2):
-            close = pd.to_numeric(daily["close"], errors="coerce") if "close" in daily.columns else pd.Series(np.nan, index=daily.index)
-            if "pre_close" in daily.columns:
-                pre_close = pd.to_numeric(daily["pre_close"], errors="coerce")
-            elif "pre_close_est" in daily.columns:
-                pre_close = pd.to_numeric(daily["pre_close_est"], errors="coerce")
-            else:
-                pre_close = pd.Series(np.nan, index=daily.index)
-            derived = close / pre_close.replace(0.0, np.nan) - 1.0
-            pct = pct.where(pct.notna(), derived)
-        valid = pct.replace([np.inf, -np.inf], np.nan).dropna()
-        amount = pd.to_numeric(daily.get("amount"), errors="coerce") if "amount" in daily.columns else pd.Series(np.nan, index=daily.index)
+        pct = self._daily_return_series(daily)
+        valid = pct.dropna()
+        amount = (
+            pd.to_numeric(daily.get("amount"), errors="coerce")
+            if "amount" in daily.columns
+            else pd.Series(np.nan, index=daily.index, dtype=float)
+        )
+        raw = self._market_sentiment_raw(trade_date)
+        sentiment_score, sentiment_coverage, components = self._sentiment_score(
+            raw
+        )
+        previous_date = self._previous_market_date(trade_date)
+        previous_score = float("nan")
+        previous_delta = float("nan")
+        if previous_date:
+            previous_raw = self._market_sentiment_raw(previous_date)
+            previous_score, _, _ = self._sentiment_score(previous_raw)
+            previous_previous_date = self._previous_market_date(previous_date)
+            if previous_previous_date:
+                previous_previous_raw = self._market_sentiment_raw(
+                    previous_previous_date
+                )
+                previous_previous_score, _, _ = self._sentiment_score(
+                    previous_previous_raw
+                )
+                if (
+                    math.isfinite(previous_score)
+                    and math.isfinite(previous_previous_score)
+                ):
+                    previous_delta = previous_score - previous_previous_score
+        sentiment_delta = (
+            sentiment_score - previous_score
+            if math.isfinite(sentiment_score) and math.isfinite(previous_score)
+            else float("nan")
+        )
+        sentiment_acceleration = (
+            sentiment_delta - previous_delta
+            if math.isfinite(sentiment_delta) and math.isfinite(previous_delta)
+            else float("nan")
+        )
+        regime_code = self._sentiment_regime(
+            sentiment_score,
+            sentiment_delta,
+        )
+        public_raw = {
+            key: value
+            for key, value in raw.items()
+            if not key.startswith("_")
+        }
         context = {
-            "market_median_return": float(valid.median()) if len(valid) else np.nan,
-            "market_up_ratio": float((valid > 0).mean()) if len(valid) else np.nan,
-            "market_return_dispersion": float(valid.std(ddof=0)) if len(valid) else np.nan,
+            "market_median_return": (
+                float(valid.median()) if len(valid) else np.nan
+            ),
+            "market_up_ratio": (
+                float((valid > 0).mean()) if len(valid) else np.nan
+            ),
+            "market_return_dispersion": (
+                float(valid.std(ddof=0)) if len(valid) else np.nan
+            ),
             "amount_percentile": amount.rank(pct=True).to_dict(),
+            **public_raw,
+            **components,
+            "market_sentiment_score": sentiment_score,
+            "market_sentiment_delta": sentiment_delta,
+            "market_sentiment_acceleration": sentiment_acceleration,
+            "market_sentiment_coverage": sentiment_coverage,
+            "market_sentiment_regime_code": regime_code,
+            "market_sentiment_regime_label": SENTIMENT_REGIME_LABELS[
+                regime_code
+            ],
         }
         self._context_cache[trade_date] = context
         return context
@@ -668,6 +1281,9 @@ class AuctionV3Engine:
         dates: Optional[Sequence[str]] = None,
     ) -> int:
         """Count consecutive close-at-limit sessions ending on D without using future data."""
+        cache_key = (signal_date, _normal_code(code))
+        if cache_key in self._streak_count_cache:
+            return self._streak_count_cache[cache_key]
         trading_dates = list(dates or self.market_dates())
         try:
             index = trading_dates.index(signal_date)
@@ -686,6 +1302,7 @@ class AuctionV3Engine:
                 break
             count += 1
             newer_date = trade_date
+        self._streak_count_cache[cache_key] = count
         return count
 
     @staticmethod
@@ -1148,8 +1765,8 @@ class AuctionV3Engine:
         limit_ratio: float,
         market_context: Optional[dict[str, Any]] = None,
         signal_date: str = "",
-    ) -> dict[str, float]:
-        out: dict[str, float] = {}
+    ) -> dict[str, Any]:
+        out: dict[str, Any] = {}
         for canonical, aliases in FEATURE_ALIASES.items():
             out[canonical] = _numeric_from(candidate, aliases)
         d_return = np.nan
@@ -1217,6 +1834,15 @@ class AuctionV3Engine:
         out["market_median_return"] = market_median
         out["market_up_ratio"] = _finite(context.get("market_up_ratio"))
         out["market_return_dispersion"] = _finite(context.get("market_return_dispersion"))
+        for name in MARKET_SENTIMENT_OUTPUT_FIELDS:
+            value = context.get(name)
+            if name in {
+                "market_sentiment_regime_code",
+                "market_sentiment_regime_label",
+            }:
+                out[name] = str(value or "")
+            else:
+                out[name] = _finite(value)
         out["relative_d_return"] = d_return - market_median if math.isfinite(d_return) and math.isfinite(market_median) else np.nan
         out.update(self._minute_features(signal_date, code) if signal_date and code else self._minute_features("", ""))
         out["limit_ratio"] = limit_ratio
@@ -1549,18 +2175,57 @@ class AuctionV3Engine:
             counts = values.value_counts()
             fit_values = fit_slice[target].astype(int)
             calibration_values = calibration_slice[target].astype(int)
+
+            def calibration_audit(
+                probability: np.ndarray,
+            ) -> tuple[Optional[float], dict[str, float]]:
+                if calibration_slice.empty or len(probability) != len(calibration_slice):
+                    return None, {}
+                truth = calibration_values.to_numpy(dtype=float)
+                squared_error = (np.asarray(probability, dtype=float) - truth) ** 2
+                weights = _date_balanced_weights(calibration_slice)
+                brier = float(np.average(squared_error, weights=weights))
+                daily_frame = pd.DataFrame(
+                    {
+                        "signal_date": calibration_slice["signal_date"]
+                        .astype(str)
+                        .to_numpy(),
+                        "squared_error": squared_error,
+                    }
+                )
+                daily = daily_frame.groupby("signal_date")[
+                    "squared_error"
+                ].mean()
+                return brier, {
+                    str(date): float(value)
+                    for date, value in daily.items()
+                }
+
             if (
                 len(counts) < 2
                 or int(counts.min()) < 10
                 or fit_values.nunique() < 2
                 or calibration_slice.empty
             ):
+                constant_probability = np.repeat(constant, len(calibration_slice))
+                constant_brier, daily_brier = calibration_audit(
+                    constant_probability
+                )
                 return None, constant, {
                     "selected": "constant",
-                    "calibration_brier": None,
+                    "calibration_brier": _safe_metric(constant_brier),
+                    "calibration_daily_brier": {
+                        date: _safe_metric(value)
+                        for date, value in daily_brier.items()
+                    },
                     "base_rate": _safe_metric(constant),
+                    "features": list(features),
+                    "training_rows": int(len(clean_slice)),
+                    "training_dates": int(
+                        clean_slice["signal_date"].astype(str).nunique()
+                    ),
                 }
-            candidates: list[tuple[float, str]] = []
+            candidates: list[tuple[float, str, np.ndarray, dict[str, float]]] = []
             for kind in ("hgb", "lr", "extra_trees"):
                 provisional_classifier = self._classifier_pipeline(kind)
                 provisional_classifier.fit(
@@ -1571,10 +2236,19 @@ class AuctionV3Engine:
                 probability = provisional_classifier.predict_proba(
                     calibration_slice[list(features)]
                 )[:, 1]
-                weights = _date_balanced_weights(calibration_slice)
-                brier = float(np.average((probability - calibration_values.to_numpy()) ** 2, weights=weights))
-                candidates.append((brier, kind))
-            best_brier, best_kind = min(candidates, key=lambda item: (item[0], item[1]))
+                brier, daily_brier = calibration_audit(probability)
+                candidates.append(
+                    (
+                        _finite(brier, float("inf")),
+                        kind,
+                        probability,
+                        daily_brier,
+                    )
+                )
+            best_brier, best_kind, _, best_daily_brier = min(
+                candidates,
+                key=lambda item: (item[0], item[1]),
+            )
             model = self._classifier_pipeline(best_kind)
             model.fit(
                 clean_slice[list(features)],
@@ -1584,6 +2258,10 @@ class AuctionV3Engine:
             return model, constant, {
                 "selected": best_kind,
                 "calibration_brier": _safe_metric(best_brier),
+                "calibration_daily_brier": {
+                    date: _safe_metric(value)
+                    for date, value in best_daily_brier.items()
+                },
                 "base_rate": _safe_metric(constant),
                 "features": list(features),
                 "training_rows": int(len(clean_slice)),
@@ -1630,6 +2308,13 @@ class AuctionV3Engine:
         )
         path_continuation = fit_classifier(
             "continuation_limit_up_hit",
+            CONTINUATION_PATH_COHORT_FEATURES,
+            model_clean=continuation_clean,
+            model_fit=continuation_fit,
+            model_calibration=continuation_calibration,
+        )
+        sentiment_continuation = fit_classifier(
+            "continuation_limit_up_hit",
             CONTINUATION_FEATURES,
             model_clean=continuation_clean,
             model_fit=continuation_fit,
@@ -1647,22 +2332,129 @@ class AuctionV3Engine:
             baseline_continuation[2].get("calibration_brier"),
             float("inf"),
         )
+        sentiment_brier = _finite(
+            sentiment_continuation[2].get("calibration_brier"),
+            float("inf"),
+        )
         if baseline_brier + 1e-6 < path_brier:
-            continuation_model, continuation_constant, continuation_selection = baseline_continuation
-            continuation_features = tuple(CONTINUATION_BASELINE_FEATURES)
-            feature_set = "baseline_without_streak_path"
+            legacy_continuation = baseline_continuation
+            legacy_features = tuple(CONTINUATION_BASELINE_FEATURES)
+            legacy_feature_set = "baseline_without_streak_path_or_sentiment"
+            legacy_brier = baseline_brier
         else:
-            continuation_model, continuation_constant, continuation_selection = path_continuation
+            legacy_continuation = path_continuation
+            legacy_features = tuple(CONTINUATION_PATH_COHORT_FEATURES)
+            legacy_feature_set = "streak_path_and_cohort"
+            legacy_brier = path_brier
+
+        legacy_daily = (
+            legacy_continuation[2].get("calibration_daily_brier") or {}
+        )
+        sentiment_daily = (
+            sentiment_continuation[2].get("calibration_daily_brier") or {}
+        )
+        common_daily_dates = sorted(
+            set(legacy_daily).intersection(sentiment_daily)
+        )
+        sentiment_daily_win_rate = (
+            float(
+                np.mean(
+                    [
+                        _finite(sentiment_daily[date], float("inf"))
+                        < _finite(legacy_daily[date], float("inf"))
+                        for date in common_daily_dates
+                    ]
+                )
+            )
+            if common_daily_dates
+            else float("nan")
+        )
+        sentiment_improvement = (
+            legacy_brier - sentiment_brier
+            if math.isfinite(legacy_brier) and math.isfinite(sentiment_brier)
+            else float("nan")
+        )
+        sentiment_relative_improvement = (
+            sentiment_improvement / legacy_brier
+            if math.isfinite(sentiment_improvement) and legacy_brier > 0
+            else float("nan")
+        )
+        required_improvement = (
+            max(
+                self.config.sentiment_min_brier_improvement,
+                self.config.sentiment_min_relative_brier_improvement
+                * legacy_brier,
+            )
+            if math.isfinite(legacy_brier)
+            else self.config.sentiment_min_brier_improvement
+        )
+        sentiment_selected = (
+            math.isfinite(sentiment_brier)
+            and (
+                not math.isfinite(legacy_brier)
+                or (
+                    sentiment_improvement >= required_improvement
+                    and math.isfinite(sentiment_daily_win_rate)
+                    and sentiment_daily_win_rate
+                    >= self.config.sentiment_min_daily_win_rate
+                )
+            )
+        )
+        if sentiment_selected:
+            (
+                continuation_model,
+                continuation_constant,
+                continuation_selection,
+            ) = sentiment_continuation
             continuation_features = tuple(CONTINUATION_FEATURES)
-            feature_set = "streak_path_and_cohort"
+            feature_set = "streak_path_cohort_and_market_sentiment"
+            selection_reason = (
+                "sentiment_passed_oos_brier_and_daily_consistency_gate"
+            )
+        else:
+            (
+                continuation_model,
+                continuation_constant,
+                continuation_selection,
+            ) = legacy_continuation
+            continuation_features = legacy_features
+            feature_set = legacy_feature_set
+            selection_reason = (
+                "sentiment_auto_fallback_no_robust_oos_improvement"
+            )
         continuation_selection = {
             **continuation_selection,
             "feature_set": feature_set,
             "training_scope": continuation_scope,
+            "selection_reason": selection_reason,
             "ablation": {
                 "streak_path_and_cohort_brier": _safe_metric(path_brier),
                 "baseline_without_streak_path_brier": _safe_metric(baseline_brier),
-                "path_selected": feature_set == "streak_path_and_cohort",
+                "baseline_without_path_or_sentiment_brier": _safe_metric(
+                    baseline_brier
+                ),
+                "streak_path_cohort_and_sentiment_brier": _safe_metric(
+                    sentiment_brier
+                ),
+                "path_selected": feature_set
+                != "baseline_without_streak_path_or_sentiment",
+                "sentiment_selected": sentiment_selected,
+                "sentiment_brier_improvement": _safe_metric(
+                    sentiment_improvement
+                ),
+                "sentiment_relative_brier_improvement": _safe_metric(
+                    sentiment_relative_improvement
+                ),
+                "sentiment_daily_win_rate": _safe_metric(
+                    sentiment_daily_win_rate
+                ),
+                "sentiment_daily_comparison_dates": len(common_daily_dates),
+                "sentiment_required_brier_improvement": _safe_metric(
+                    required_improvement
+                ),
+                "sentiment_min_daily_win_rate": (
+                    self.config.sentiment_min_daily_win_rate
+                ),
             },
         }
         continuation_stage_logit_adjustments: dict[int, float] = {}
@@ -2373,7 +3165,9 @@ class AuctionV3Engine:
         )
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
-        scored["feature_contract"] = "D_CLOSE_PLUS_STREAK_PATH_AND_COHORT_V6_NO_T_LEAKAGE"
+        scored["feature_contract"] = (
+            "D_CLOSE_PLUS_STREAK_PATH_AND_COHORT_AND_MARKET_SENTIMENT_V7_NO_T_LEAKAGE"
+        )
         ordered = [
             "prediction_id",
             "signal_date",
@@ -2410,6 +3204,10 @@ class AuctionV3Engine:
             "stage_pool_share",
             "stage_recent_promotion_rate",
             "stage_recent_promotion_samples",
+            "market_median_return",
+            "market_up_ratio",
+            "market_return_dispersion",
+            *MARKET_SENTIMENT_OUTPUT_FIELDS,
             "source_rank",
             "d_close",
             "estimated_up_limit",
@@ -3219,6 +4017,18 @@ class AuctionV3Engine:
             backtest_metrics=backtest_metrics,
             cumulative_metrics=cumulative_metrics,
         )
+        current_sentiment: dict[str, Any] = {}
+        if not prediction.empty:
+            sentiment_row = prediction.iloc[0]
+            for name in MARKET_SENTIMENT_OUTPUT_FIELDS:
+                value = sentiment_row.get(name)
+                if name in {
+                    "market_sentiment_regime_code",
+                    "market_sentiment_regime_label",
+                }:
+                    current_sentiment[name] = str(value or "")
+                else:
+                    current_sentiment[name] = _safe_metric(value)
         model_meta = {
             "generated_at_utc": _utc_now(),
             "model_version": self.config.model_version,
@@ -3234,6 +4044,7 @@ class AuctionV3Engine:
             ),
             "return_selection": bundle.return_selection if bundle else {},
             "classifier_selection": bundle.classifier_selection if bundle else {},
+            "current_market_sentiment": current_sentiment,
             "stage_recent_promotion_rate": (
                 {
                     str(stage): _safe_metric(rate)
@@ -3273,8 +4084,9 @@ class AuctionV3Engine:
             "contract": {
                 "signal": "D close",
                 "candidate_pool": "D-day confirmed limit-up candidates only",
-                "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path and cohort features",
+                "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path, cohort, and market-sentiment features",
                 "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
+                "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
                 "observation_ranking": "formal risk gate, tail-loss risk, conservative EV, continuation probability, return lower bound",
                 "guidance_only": True,
                 "broker_connected": False,

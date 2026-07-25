@@ -449,10 +449,11 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
         self.assertEqual(
             plan["schema_version"],
-            "decision_action_plan_v7_streak_path_risk_first",
+            "decision_action_plan_v8_market_sentiment_oos",
         )
         self.assertEqual(plan["stage_watchlist"][0]["observation_max_price"], 10.5)
         self.assertIn("observation_statistics", plan)
+        self.assertIn("market_sentiment", plan)
 
     def test_promoted_model_still_rejects_above_ten_percent_board(self) -> None:
         self._write_model_artifacts(promoted=True)

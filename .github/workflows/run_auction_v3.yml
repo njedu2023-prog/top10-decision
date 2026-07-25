@@ -1,4 +1,4 @@
-name: Run Decision Manual Auction Guidance V6
+name: Run Decision Manual Auction Guidance V7
 
 on:
   push:
@@ -37,11 +37,11 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  group: decision-auction-guidance-v6
+  group: decision-auction-guidance-v7
   cancel-in-progress: true
 
 jobs:
-  auction_guidance_v6:
+  auction_guidance_v7:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -83,7 +83,7 @@ jobs:
           fi
           python scripts/sync_tushare_minute.py "${args[@]}"
 
-      - name: Run Decision manual auction guidance V6
+      - name: Run Decision manual auction guidance V7
         env:
           SIGNAL_DATE: ${{ inputs.signal_date }}
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
@@ -134,10 +134,10 @@ jobs:
           git add -A data/market/minute_1m || true
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision guidance V6 has no changed artifacts"
+            echo "Decision guidance V7 has no changed artifacts"
             exit 0
           fi
-          git commit -m "auto: update Decision V6 guidance and validation"
+          git commit -m "auto: update Decision V7 guidance and validation"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main

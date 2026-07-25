@@ -145,11 +145,22 @@ class AuctionV3Test(unittest.TestCase):
         self.assertIn("path_strength_delta", first.columns)
         self.assertIn("stage_pool_size", first.columns)
         self.assertIn("stage_recent_promotion_rate", first.columns)
+        self.assertIn("market_sentiment_score", first.columns)
+        self.assertIn("market_sentiment_delta", first.columns)
+        self.assertIn("market_sentiment_regime_label", first.columns)
+        self.assertIn("market_failed_limit_up_rate", first.columns)
+        self.assertIn("market_focus_promotion_rate", first.columns)
         self.assertIn("observation_risk_label", first.columns)
         self.assertTrue(
             first["feature_contract"]
             .astype(str)
             .str.contains("STREAK_PATH_AND_COHORT")
+            .all()
+        )
+        self.assertTrue(
+            first["feature_contract"]
+            .astype(str)
+            .str.contains("MARKET_SENTIMENT")
             .all()
         )
         selected = first[first["selected"].eq(1)]
@@ -177,6 +188,90 @@ class AuctionV3Test(unittest.TestCase):
         self.assertEqual({self.config.model_version}, set(migrated["model_version"]))
         ledger, _ = engine.settle_predictions()
         self.assertEqual(len(migrated), len(ledger))
+
+    def test_market_sentiment_uses_only_d_and_prior_trading_days(self) -> None:
+        signal_date = self.dates[2]
+        engine = AuctionV3Engine(self.config)
+        context = engine._market_context(signal_date)
+        self.assertEqual(context["market_eligible_stock_count"], 6.0)
+        self.assertEqual(context["market_limit_up_count"], 6.0)
+        self.assertEqual(context["market_limit_down_count"], 0.0)
+        self.assertEqual(context["market_failed_limit_up_count"], 0.0)
+        self.assertAlmostEqual(context["market_prev_limit_up_mean_return"], 0.10)
+        self.assertEqual(context["market_prev_limit_up_sample"], 6.0)
+        self.assertAlmostEqual(context["market_2_to_3_promotion_rate"], 1.0)
+        self.assertEqual(context["market_2_to_3_promotion_samples"], 6.0)
+        self.assertTrue(np.isfinite(context["market_sentiment_score"]))
+        self.assertIn(
+            context["market_sentiment_regime_label"],
+            {"冰点", "修复", "震荡", "发酵", "高潮", "高位分歧", "退潮"},
+        )
+
+        future_date = self.dates[3]
+        future_root = (
+            self.root
+            / "data"
+            / "market"
+            / "raw"
+            / future_date[:4]
+            / future_date
+        )
+        future = pd.read_csv(future_root / "daily.csv")
+        future["pct_chg"] = -10.0
+        future["close"] = future["pre_close"] * 0.90
+        future.to_csv(future_root / "daily.csv", index=False)
+        recomputed = AuctionV3Engine(self.config)._market_context(signal_date)
+        for field in (
+            "market_sentiment_score",
+            "market_sentiment_delta",
+            "market_limit_up_count",
+            "market_2_to_3_promotion_rate",
+            "market_prev_limit_up_mean_return",
+        ):
+            self.assertAlmostEqual(context[field], recomputed[field])
+
+    def test_market_sentiment_derives_missing_pre_close_per_stock(self) -> None:
+        signal_date = self.dates[2]
+        daily_path = (
+            self.root
+            / "data"
+            / "market"
+            / "raw"
+            / signal_date[:4]
+            / signal_date
+            / "daily.csv"
+        )
+        daily = pd.read_csv(daily_path).drop(columns=["pre_close"])
+        daily.to_csv(daily_path, index=False)
+        context = AuctionV3Engine(self.config)._market_context(signal_date)
+        self.assertTrue(
+            np.isfinite(context["market_prev_limit_up_open_gap_mean"])
+        )
+        self.assertTrue(np.isfinite(context["market_sentiment_score"]))
+
+    def test_continuation_model_audits_sentiment_ablation(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        bundle = engine.fit_models(engine.build_history())
+        self.assertIsNotNone(bundle)
+        selection = bundle.classifier_selection["continuation_limit_up"]
+        ablation = selection["ablation"]
+        self.assertIn(
+            selection["feature_set"],
+            {
+                "baseline_without_streak_path_or_sentiment",
+                "streak_path_and_cohort",
+                "streak_path_cohort_and_market_sentiment",
+            },
+        )
+        self.assertIn("streak_path_cohort_and_sentiment_brier", ablation)
+        self.assertIn("sentiment_brier_improvement", ablation)
+        self.assertIn("sentiment_daily_win_rate", ablation)
+        self.assertIsInstance(ablation["sentiment_selected"], bool)
+        if ablation["sentiment_selected"]:
+            self.assertIn(
+                "market_sentiment_score",
+                bundle.continuation_features,
+            )
 
     def test_opening_limit_up_that_breaks_later_is_not_a_confirmed_fill(self) -> None:
         trade_date = self.dates[5]

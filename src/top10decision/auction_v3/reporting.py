@@ -111,6 +111,7 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     formal_buys = prediction[actions.eq("BUY")]
     status_class = "good" if promoted else "warn"
     status_text = "正式模型" if promoted else "影子验证"
+    sentiment_row = prediction.iloc[0] if not prediction.empty else pd.Series(dtype=object)
     body = f'<div class="status"><span class="badge {status_class}">{status_text}</span><span class="badge">信号日 {signal_date}</span><span class="badge">模型 {_esc(prediction.get("model_version", pd.Series(["-"])).iloc[0] if not prediction.empty else "-")}</span></div>'
     body += '<div class="metrics">'
     body += _metric("候选数", str(len(prediction)))
@@ -121,6 +122,22 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     body += _metric("样本外大跌率", _pct(backtest.get("realized_big_loss_rate")))
     body += _metric("2进3/3进4命中率", _pct(backtest.get("stage_focus_continuation_hit_rate")))
     body += "</div>"
+    body += '<section><h2>D日市场情绪量化</h2><p class="note">仅使用D日及更早的10%涨跌幅机制A股数据；综合分用于解释，原始因子是否进入连板模型由留出期消融决定。</p><div class="metrics">'
+    sentiment_score = _num(sentiment_row.get("market_sentiment_score"))
+    body += _metric(
+        "情绪状态",
+        f"{_esc(sentiment_row.get('market_sentiment_regime_label'))} · {sentiment_score * 100:.1f}分"
+        if math.isfinite(sentiment_score)
+        else "-",
+    )
+    body += _metric("较前一交易日", _pct(sentiment_row.get("market_sentiment_delta")))
+    body += _metric("涨停 / 跌停", f"{_float(sentiment_row.get('market_limit_up_count'), 0)} / {_float(sentiment_row.get('market_limit_down_count'), 0)}")
+    body += _metric("炸板率", _pct(sentiment_row.get("market_failed_limit_up_rate")))
+    body += _metric("昨日涨停平均涨跌", _pct(sentiment_row.get("market_prev_limit_up_mean_return")))
+    body += _metric("2进3真实晋级", _pct(sentiment_row.get("market_2_to_3_promotion_rate")))
+    body += _metric("3进4真实晋级", _pct(sentiment_row.get("market_3_to_4_promotion_rate")))
+    body += _metric("成交额/5日均值", _float(sentiment_row.get("market_amount_ratio_5d"), 2))
+    body += "</div></section>"
     failures = backtest.get("promotion_failures", []) or []
     fail_text = "、".join(str(x) for x in failures) if failures else "全部通过"
     body += '<section class="buy-list-section"><h2>正式买入名单</h2>'
@@ -132,7 +149,7 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     body += "</section>"
     body += '<section><h2>候选复核记录（非买入名单）</h2><p class="note">下表只来自D日已涨停候选池，2进3、3进4在全部风险门禁通过后优先。模型未晋级时，SHADOW_ONLY只用于验证。当前未通过项目：' + _esc(fail_text) + "。</p>"
     body += _current_table(prediction.head(20)) + "</section>"
-    return _page("Decision 竞价人工指导 V6", "D日涨停池，量化连板路径并风险优先识别2进3/3进4；T日人工限价，T+1预声明规则退出", body)
+    return _page("Decision 竞价人工指导 V7", "D日涨停池，量化连板路径与市场情绪并风险优先识别2进3/3进4；T日人工限价，T+1预声明规则退出", body)
 
 
 def _verification_table(frame: pd.DataFrame) -> str:
@@ -179,7 +196,7 @@ def verification_report(ledger: pd.DataFrame, cumulative: dict[str, Any]) -> str
     body += '<section><h2>每笔人工参考的累计验证</h2><p class="note">公开行情只生成模拟真值；人工实际买卖价格可通过手工反馈文件回填。未成交不计作零收益，一字跌停顺延到首次可交易日。</p>'
     latest = ledger.sort_values(["signal_date", "source_rank"], ascending=[False, True]).head(300) if not ledger.empty else ledger
     body += _verification_table(latest) + "</section>"
-    return _page("Decision V6 逐笔验证", "冻结竞价建议价、连板路径、公开行情模拟与人工成交反馈逐笔可追溯", body)
+    return _page("Decision V7 逐笔验证", "冻结竞价建议价、连板路径、市场情绪、公开行情模拟与人工成交反馈逐笔可追溯", body)
 
 
 def _equity_chart(points: Iterable[dict[str, Any]]) -> str:
@@ -225,7 +242,7 @@ def dashboard(backtest: dict[str, Any], cumulative: dict[str, Any]) -> str:
     body += _metric("正确放弃率", _pct(cumulative.get("correct_rejection_rate")))
     body += _metric("机会遗漏率", _pct(cumulative.get("missed_opportunity_rate")))
     body += "</div></section>"
-    return _page("Decision V6 回测与累计验证", "人工建议资格由路径、收益、尾部风险、连板晋级、成本压力和逐笔验证共同决定", body)
+    return _page("Decision V7 回测与累计验证", "人工建议资格由路径、情绪消融、收益、尾部风险、连板晋级、成本压力和逐笔验证共同决定", body)
 
 
 def write_reports(
