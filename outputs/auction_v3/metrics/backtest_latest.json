@@ -1,7 +1,7 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-25T14:46:47+00:00",
-  "model_version": "auction_v6_streak_path_risk_first_2",
+  "generated_at_utc": "2026-07-25T17:03:39+00:00",
+  "model_version": "auction_v7_market_sentiment_oos_1",
   "history_dates": 98,
   "oos_dates": 76,
   "signals": 0,

@@ -1,6 +1,6 @@
 {
-  "schema_version": "decision_action_plan_v7_streak_path_risk_first",
-  "generated_at_utc": "2026-07-25T14:48:05+00:00",
+  "schema_version": "decision_action_plan_v8_market_sentiment_oos",
+  "generated_at_utc": "2026-07-25T17:05:09+00:00",
   "report_date": "20260727",
   "report_file": "decision_report_20260727.md",
   "signal_date": "20260724",
@@ -18,7 +18,7 @@
   "broker_connected": false,
   "order_execution": "manual_only",
   "model": {
-    "version": "auction_v6_streak_path_risk_first_2",
+    "version": "auction_v7_market_sentiment_oos_1",
     "ready": true,
     "promoted": false,
     "prediction_matches_report": true,
@@ -47,7 +47,30 @@
     "continuation_path_ablation": {
       "streak_path_and_cohort_brier": 0.1630113745,
       "baseline_without_streak_path_brier": 0.1645982427,
-      "path_selected": true
+      "baseline_without_path_or_sentiment_brier": 0.1645982427,
+      "streak_path_cohort_and_sentiment_brier": 0.1633440766,
+      "path_selected": true,
+      "sentiment_selected": false,
+      "sentiment_brier_improvement": -0.0003327021,
+      "sentiment_relative_brier_improvement": -0.0020409748,
+      "sentiment_daily_win_rate": 0.45,
+      "sentiment_daily_comparison_dates": 20,
+      "sentiment_required_brier_improvement": 0.0008150569,
+      "sentiment_min_daily_win_rate": 0.55
+    },
+    "continuation_sentiment_ablation": {
+      "streak_path_and_cohort_brier": 0.1630113745,
+      "baseline_without_streak_path_brier": 0.1645982427,
+      "baseline_without_path_or_sentiment_brier": 0.1645982427,
+      "streak_path_cohort_and_sentiment_brier": 0.1633440766,
+      "path_selected": true,
+      "sentiment_selected": false,
+      "sentiment_brier_improvement": -0.0003327021,
+      "sentiment_relative_brier_improvement": -0.0020409748,
+      "sentiment_daily_win_rate": 0.45,
+      "sentiment_daily_comparison_dates": 20,
+      "sentiment_required_brier_improvement": 0.0008150569,
+      "sentiment_min_daily_win_rate": 0.55
     },
     "stage_recent_promotion_rate": {
       "2": 0.1428571429,
@@ -57,6 +80,45 @@
       "2": -0.4582087928,
       "3": -0.1794823824
     }
+  },
+  "market_sentiment": {
+    "signal_date": "20260724",
+    "score": 0.2950088785,
+    "delta": -0.4154557669,
+    "acceleration": -0.5910014832,
+    "coverage": 1.0,
+    "regime_code": "EBB",
+    "regime_label": "退潮",
+    "eligible_stock_count": 3147,
+    "equal_weight_return": -0.0261589847,
+    "up_ratio": 0.1004343105,
+    "down_ratio": 0.9091197966,
+    "limit_up_count": 38,
+    "limit_down_count": 27,
+    "touched_up_count": 54,
+    "failed_limit_up_count": 16,
+    "failed_limit_up_rate": 0.2962962963,
+    "reseal_count": 21,
+    "reseal_rate": 0.5833333333,
+    "previous_limit_up_sample": 109,
+    "previous_limit_up_mean_return": -0.0058112294,
+    "previous_limit_up_positive_rate": 0.3486238532,
+    "previous_limit_up_open_gap_mean": 0.0170332009,
+    "promotion_2_to_3_rate": 0.125,
+    "promotion_2_to_3_samples": 8,
+    "promotion_3_to_4_rate": 0.5,
+    "promotion_3_to_4_samples": 4,
+    "focus_promotion_rate": 0.25,
+    "focus_promotion_samples": 12,
+    "max_streak": 4,
+    "industry_concentration": 0.0586419753,
+    "limit_up_amount_top3_share": 0.2214311814,
+    "amount_ratio_5d": 0.7697758387,
+    "breadth_score": 0.076105398,
+    "limit_ecology_score": 0.5609354491,
+    "promotion_score": 0.25,
+    "profit_effect_score": 0.4045821651,
+    "liquidity_score": 0.0395516774
   },
   "backtest": {
     "history_dates": 98,
@@ -99,6 +161,7 @@
     "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
     "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
     "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
+    "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在留出期Brier和逐日一致性门槛同时改善时进入连板模型，否则自动回退",
     "observation_ranking": "先按正式安全门槛和大跌风险分层，再比较保守收益、晋级概率与收益下界",
     "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
     "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
@@ -199,7 +262,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -290,7 +353,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -381,7 +444,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -472,7 +535,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -563,7 +626,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -654,7 +717,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -745,7 +808,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -836,7 +899,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -927,7 +990,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -1018,7 +1081,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T14:48:04+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -3158,7 +3221,7 @@
     "premarket_valid_rows": 10,
     "retrospective_rows": 0,
     "pending_rows": 10,
-    "generated_at_utc": "2026-07-25T14:48:04+00:00",
+    "generated_at_utc": "2026-07-25T17:05:08+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -3168,7 +3231,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v3_market_open_proxy",
     "status": "ok",
-    "generated_at_utc": "2026-07-25T14:48:04+00:00",
+    "generated_at_utc": "2026-07-25T17:05:08+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
