@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-25T17:05:08+00:00",
+  "generated_at_utc": "2026-07-25T17:57:51+00:00",
   "model_version": "auction_v7_market_sentiment_oos_1",
   "ready": true,
   "promoted": false,
@@ -496,7 +496,39 @@
     "market_3_to_4_promotion_rate": 0.5,
     "market_3_to_4_promotion_samples": 4.0,
     "market_focus_promotion_samples": 12.0,
-    "market_max_streak": 4.0
+    "market_max_streak": 4.0,
+    "market_limit_up_industry_top5": [
+      {
+        "rank": 1,
+        "industry": "电网设备",
+        "limit_up_count": 5,
+        "share": 0.1388888888888889
+      },
+      {
+        "rank": 2,
+        "industry": "房地产开发",
+        "limit_up_count": 3,
+        "share": 0.08333333333333333
+      },
+      {
+        "rank": 3,
+        "industry": "汽车零部件",
+        "limit_up_count": 3,
+        "share": 0.08333333333333333
+      },
+      {
+        "rank": 4,
+        "industry": "其他电子",
+        "limit_up_count": 2,
+        "share": 0.05555555555555555
+      },
+      {
+        "rank": 5,
+        "industry": "包装印刷",
+        "limit_up_count": 2,
+        "share": 0.05555555555555555
+      }
+    ]
   },
   "stage_recent_promotion_rate": {
     "2": 0.1428571429,
@@ -520,7 +552,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-25T17:03:39+00:00",
+    "generated_at_utc": "2026-07-25T17:56:28+00:00",
     "model_version": "auction_v7_market_sentiment_oos_1",
     "history_dates": 98,
     "oos_dates": 76,
@@ -997,7 +1029,7 @@
     "candidate_pool": "D-day confirmed limit-up candidates only",
     "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path, cohort, and market-sentiment features",
     "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
-    "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
+    "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top5, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
     "observation_ranking": "formal risk gate, tail-loss risk, conservative EV, continuation probability, return lower bound",
     "guidance_only": true,
     "broker_connected": false,

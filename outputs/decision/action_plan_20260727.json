@@ -1,6 +1,6 @@
 {
-  "schema_version": "decision_action_plan_v8_market_sentiment_oos",
-  "generated_at_utc": "2026-07-25T17:05:09+00:00",
+  "schema_version": "decision_action_plan_v9_market_sentiment_industries",
+  "generated_at_utc": "2026-07-25T17:57:52+00:00",
   "report_date": "20260727",
   "report_file": "decision_report_20260727.md",
   "signal_date": "20260724",
@@ -113,6 +113,38 @@
     "max_streak": 4,
     "industry_concentration": 0.0586419753,
     "limit_up_amount_top3_share": 0.2214311814,
+    "limit_up_industry_top5": [
+      {
+        "rank": 1,
+        "industry": "电网设备",
+        "limit_up_count": 5,
+        "share": 0.1388888889
+      },
+      {
+        "rank": 2,
+        "industry": "房地产开发",
+        "limit_up_count": 3,
+        "share": 0.0833333333
+      },
+      {
+        "rank": 3,
+        "industry": "汽车零部件",
+        "limit_up_count": 3,
+        "share": 0.0833333333
+      },
+      {
+        "rank": 4,
+        "industry": "其他电子",
+        "limit_up_count": 2,
+        "share": 0.0555555556
+      },
+      {
+        "rank": 5,
+        "industry": "包装印刷",
+        "limit_up_count": 2,
+        "share": 0.0555555556
+      }
+    ],
     "amount_ratio_5d": 0.7697758387,
     "breadth_score": 0.076105398,
     "limit_ecology_score": 0.5609354491,
@@ -161,7 +193,7 @@
     "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
     "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
     "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
-    "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在留出期Brier和逐日一致性门槛同时改善时进入连板模型，否则自动回退",
+    "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top5、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在留出期Brier和逐日一致性门槛同时改善时进入连板模型，否则自动回退",
     "observation_ranking": "先按正式安全门槛和大跌风险分层，再比较保守收益、晋级概率与收益下界",
     "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
     "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
@@ -262,7 +294,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -353,7 +385,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -444,7 +476,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -535,7 +567,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -626,7 +658,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -717,7 +749,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -808,7 +840,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -899,7 +931,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -990,7 +1022,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -1081,7 +1113,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-25T17:05:08+00:00",
+      "truth_generated_at_utc": "2026-07-25T17:57:50+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -3221,7 +3253,7 @@
     "premarket_valid_rows": 10,
     "retrospective_rows": 0,
     "pending_rows": 10,
-    "generated_at_utc": "2026-07-25T17:05:08+00:00",
+    "generated_at_utc": "2026-07-25T17:57:50+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -3231,7 +3263,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v3_market_open_proxy",
     "status": "ok",
-    "generated_at_utc": "2026-07-25T17:05:08+00:00",
+    "generated_at_utc": "2026-07-25T17:57:50+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
