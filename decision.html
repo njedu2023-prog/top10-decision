@@ -490,6 +490,14 @@
       return `${prefix}${(parsed * 100).toFixed(digits)}%${arrow}`;
     }
 
+    function signedScoreDelta(value, digits = 1) {
+      const parsed = finiteNumber(value);
+      if (parsed == null) return "-";
+      const prefix = parsed > 0 ? "+" : "";
+      const arrow = parsed > 0 ? " ↑" : parsed < 0 ? " ↓" : "";
+      return `${prefix}${(parsed * 100).toFixed(digits)}分${arrow}`;
+    }
+
     function signedPercentValue(value, digits = 2) {
       const parsed = finiteNumber(value);
       if (parsed == null) return "-";
@@ -620,7 +628,7 @@
       els.sentimentState.innerHTML = `<span class="${stateTone}">${escapeHtml(regime)}${score == null ? "" : ` · ${(score * 100).toFixed(1)}分`}</span>`;
       const rows = [
         metric("情绪综合分", score == null ? "-" : `${(score * 100).toFixed(1)} / 100`, stateTone),
-        metric("较前一交易日", signedPct(sentiment.delta), valueTone(sentiment.delta)),
+        metric("情绪分变化", signedScoreDelta(sentiment.delta), valueTone(sentiment.delta)),
         metric("因子覆盖率", pct(sentiment.coverage)),
         metric("10%机制样本", String(sentiment.eligible_stock_count ?? "-")),
         metric("市场上涨率", pct(sentiment.up_ratio)),
