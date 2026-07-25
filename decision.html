@@ -591,10 +591,20 @@
     function renderMetrics(plan) {
       const bt = plan?.backtest || {};
       const promoted = plan?.model?.promoted === true;
+      const sentiment = plan?.market_sentiment || {};
+      const sentimentScore = finiteNumber(sentiment.score);
+      const sentimentRegime = sentiment.regime_label || "数据不足";
+      const sentimentRegimeCode = String(sentiment.regime_code || "INSUFFICIENT");
+      const sentimentTone = ["EXPANSION", "EUPHORIA"].includes(sentimentRegimeCode)
+        ? "positive"
+        : ["ICE", "EBB"].includes(sentimentRegimeCode)
+          ? "negative"
+          : "warn";
       const rows = [
         metric("正式模型状态", promoted ? "已晋级" : "未晋级", promoted ? "good" : "bad"),
         metric("正式人工建议数", String(plan?.formal_buy_count || 0), plan?.formal_buy_count ? "good" : "warn"),
         metric("风险预算", number(plan?.risk_budget, 2)),
+        metric("市场情绪", sentimentScore == null ? sentimentRegime : `${sentimentRegime} · ${(sentimentScore * 100).toFixed(1)}分`, sentimentTone),
         metric("样本外交易日", String(bt.oos_dates ?? "-")),
         metric("样本外出手日占比", pct(bt.signal_date_ratio), Number(bt.signal_date_ratio) < 0.05 ? "warn" : ""),
         metric("最长连续空仓", bt.max_no_signal_streak == null ? "-" : `${bt.max_no_signal_streak} 日`, Number(bt.max_no_signal_streak) > 30 ? "warn" : ""),
