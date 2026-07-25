@@ -436,7 +436,30 @@ class DecisionActionPlanTests(unittest.TestCase):
             json.dumps({"model_version": version, "promoted": promoted, "promotion_failures": []}), encoding="utf-8"
         )
         (self.root / "outputs" / "auction_v3" / "models" / "model_meta_latest.json").write_text(
-            json.dumps({"model_version": version, "ready": True, "promoted": promoted}), encoding="utf-8"
+            json.dumps(
+                {
+                    "model_version": version,
+                    "ready": True,
+                    "promoted": promoted,
+                    "current_market_sentiment": {
+                        "market_limit_up_industry_top5": [
+                            {
+                                "rank": 1,
+                                "industry": "银行",
+                                "limit_up_count": 3,
+                                "share": 0.3,
+                            },
+                            {
+                                "rank": 2,
+                                "industry": "软件",
+                                "limit_up_count": 2,
+                                "share": 0.2,
+                            },
+                        ]
+                    },
+                }
+            ),
+            encoding="utf-8",
         )
 
     def test_unpromoted_model_can_never_emit_formal_buy(self) -> None:
@@ -449,11 +472,28 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
         self.assertEqual(
             plan["schema_version"],
-            "decision_action_plan_v8_market_sentiment_oos",
+            "decision_action_plan_v9_market_sentiment_industries",
         )
         self.assertEqual(plan["stage_watchlist"][0]["observation_max_price"], 10.5)
         self.assertIn("observation_statistics", plan)
         self.assertIn("market_sentiment", plan)
+        self.assertEqual(
+            plan["market_sentiment"]["limit_up_industry_top5"],
+            [
+                {
+                    "rank": 1,
+                    "industry": "银行",
+                    "limit_up_count": 3,
+                    "share": 0.3,
+                },
+                {
+                    "rank": 2,
+                    "industry": "软件",
+                    "limit_up_count": 2,
+                    "share": 0.2,
+                },
+            ],
+        )
 
     def test_promoted_model_still_rejects_above_ten_percent_board(self) -> None:
         self._write_model_artifacts(promoted=True)

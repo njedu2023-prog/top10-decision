@@ -249,6 +249,95 @@ class AuctionV3Test(unittest.TestCase):
         )
         self.assertTrue(np.isfinite(context["market_sentiment_score"]))
 
+    def test_market_sentiment_lists_top_five_limit_up_industries(self) -> None:
+        signal_date = self.dates[2]
+        market_root = (
+            self.root
+            / "data"
+            / "market"
+            / "raw"
+            / signal_date[:4]
+            / signal_date
+        )
+        extra_code = "601999.SH"
+        daily = pd.read_csv(market_root / "daily.csv")
+        daily = pd.concat(
+            [
+                daily,
+                pd.DataFrame(
+                    [
+                        {
+                            "ts_code": extra_code,
+                            "trade_date": signal_date,
+                            "open": 10.2,
+                            "high": 11.0,
+                            "low": 10.1,
+                            "close": 11.0,
+                            "pre_close": 10.0,
+                            "vol": 1_000_000,
+                            "amount": 30_000_000,
+                            "pct_chg": 10.0,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        daily.to_csv(market_root / "daily.csv", index=False)
+        limits = pd.read_csv(market_root / "stk_limit.csv")
+        limits = pd.concat(
+            [
+                limits,
+                pd.DataFrame(
+                    [
+                        {
+                            "ts_code": extra_code,
+                            "trade_date": signal_date,
+                            "up_limit": 11.0,
+                            "down_limit": 9.0,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        limits.to_csv(market_root / "stk_limit.csv", index=False)
+        pd.DataFrame(
+            {
+                "ts_code": [*self.codes, extra_code],
+                "trade_date": signal_date,
+                "industry": [
+                    "电力",
+                    "电力",
+                    "电网设备",
+                    "机械",
+                    "医药",
+                    "化工",
+                    "房地产",
+                ],
+                "amount": [50_000_000] * 7,
+                "open_times": [0] * 7,
+            }
+        ).to_csv(market_root / "limit_list_d.csv", index=False)
+
+        raw = AuctionV3Engine(self.config)._market_sentiment_raw(signal_date)
+        leaders = raw["_limit_up_industry_top5"]
+        self.assertEqual(len(leaders), 5)
+        self.assertEqual(
+            leaders[0],
+            {
+                "rank": 1,
+                "industry": "电力",
+                "limit_up_count": 2,
+                "share": 2 / 7,
+            },
+        )
+        self.assertEqual(
+            [item["industry"] for item in leaders[1:]],
+            sorted(item["industry"] for item in leaders[1:]),
+        )
+        self.assertTrue(all(item["rank"] == index for index, item in enumerate(leaders, 1)))
+
     def test_continuation_model_audits_sentiment_ablation(self) -> None:
         engine = AuctionV3Engine(self.config)
         bundle = engine.fit_models(engine.build_history())

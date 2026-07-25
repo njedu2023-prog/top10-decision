@@ -63,6 +63,7 @@
     .brand { min-width: 0; }
     .brand h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 720; }
     .brand p { margin: 5px 0 0; color: #b9c8c4; font-size: 12px; line-height: 1.4; }
+    .brand-dates { margin-left: 8px; color: #fff; font-weight: 650; white-space: nowrap; }
     .controls { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
     .icon-btn {
       width: 42px;
@@ -257,6 +258,20 @@
     .truth-badge.pending { color: var(--warn); border-color: #ddc47f; background: var(--warn-soft); }
     .truth-badge.no-fill { color: var(--muted); }
     .panel-metrics { padding: 0 16px; margin-bottom: 16px; }
+    .sentiment-industries {
+      margin: -2px 16px 14px;
+      padding: 12px 0;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      line-height: 1.5;
+    }
+    .sentiment-industries > strong { font-size: 12px; color: var(--ink); }
+    .industry-leaders { display: flex; flex-wrap: wrap; gap: 7px 18px; }
+    .industry-leader { color: var(--muted); white-space: nowrap; }
+    .industry-leader b { margin-left: 4px; color: var(--up); font-variant-numeric: tabular-nums; }
     .stats-note { margin: 0 16px 16px; color: var(--muted); font-size: 12px; line-height: 1.65; }
     .reason { max-width: 300px; white-space: normal; line-height: 1.45; color: var(--muted); text-align: left; }
 
@@ -307,7 +322,9 @@
     @media (max-width: 640px) {
       .topbar-inner { padding: 10px 12px; min-height: 68px; }
       .brand h1 { font-size: 18px; }
-      .brand p { display: none; }
+      .brand p { margin-top: 4px; font-size: 10px; }
+      .brand-scope { display: none; }
+      .brand-dates { margin-left: 0; }
       .icon-btn { width: 38px; height: 38px; }
       main { padding: 12px 0 26px; }
       .loadline { padding: 0 12px; }
@@ -320,6 +337,7 @@
       .panel-head { padding: 11px 12px; }
       .empty { margin: 0 12px 12px; }
       .panel-metrics { padding: 0 12px; }
+      .sentiment-industries { margin: -2px 12px 12px; }
       .stats-note { margin: 0 12px 12px; }
       .audit-grid, .report-body { padding: 0 12px 12px; }
       .report-meta { grid-template-columns: 1fr 1fr; }
@@ -331,7 +349,7 @@
     <div class="topbar-inner">
       <div class="brand">
         <h1>Decision 开盘竞价决策</h1>
-        <p>D日涨停候选 · 重点识别2进3/3进4 · T日人工限价竞价 · T+1择机退出</p>
+        <p><span class="brand-scope">D日涨停候选 · 重点识别2进3/3进4 · T日人工限价竞价 · T+1择机退出</span><span id="brandDates" class="brand-dates">D:- · T:- · T+1:-</span></p>
       </div>
       <nav class="controls" aria-label="报告导航">
         <button id="prevBtn" class="icon-btn" type="button" title="上一份历史报告" aria-label="上一份历史报告">←</button>
@@ -366,18 +384,19 @@
       <div class="panel-head">
         <div>
           <h2>市场情绪量化</h2>
-          <p>严格使用D日及更早的A股交易日数据，联合市场广度、涨跌停生态、炸板回封、昨日涨停溢价、真实晋级、拥挤度与流动性。</p>
+          <p>严格使用D日及更早的A股交易日数据，联合市场广度、涨跌停生态、涨停行业、炸板回封、昨日涨停溢价、真实晋级、拥挤度与流动性。</p>
         </div>
         <span id="sentimentState" class="count">数据不足</span>
       </div>
       <div id="sentimentMetrics" class="metrics panel-metrics"></div>
+      <div id="sentimentIndustries" class="sentiment-industries"></div>
       <p id="sentimentNote" class="stats-note"></p>
     </section>
 
     <section class="panel">
       <div class="panel-head">
         <div>
-          <h2>2进3 / 3进4 机会观察</h2>
+          <h2>2进3 &amp; 3进4</h2>
           <p>量化弱转强、强转弱、加速一致等逐板路径；先按安全门槛与大跌风险分层，再比较收益和晋级机会。</p>
         </div>
         <span id="stageCount" class="count">0 条</span>
@@ -431,10 +450,10 @@
 
     const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
-    const CACHE_KEY = "decision-dashboard-v7-market-sentiment-cache";
+    const CACHE_KEY = "decision-dashboard-v9-industry-sentiment-cache";
     const els = Object.fromEntries([
-      "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub",
-      "signalDate", "execDate", "exitDate", "metrics", "sentimentState", "sentimentMetrics", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
+      "signalDate", "execDate", "exitDate", "metrics", "sentimentState", "sentimentMetrics", "sentimentIndustries", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -583,6 +602,7 @@
       const modelVersion = plan?.model?.version || "模型待定";
       const consistency = plan?.model?.prediction_matches_report === false ? "；竞价预测与当前报告日期尚未对齐" : "";
       els.statusSub.textContent = `${modelVersion}；正式人工建议 ${plan?.formal_buy_count || 0} 只，影子验证 ${plan?.shadow_count || 0} 只；系统不下单${consistency}`;
+      els.brandDates.textContent = `D:${dateText(plan?.signal_date)} · T:${dateText(plan?.exec_date)} · T+1:${dateText(plan?.exit_date)}`;
       els.signalDate.textContent = dateText(plan?.signal_date);
       els.execDate.textContent = dateText(plan?.exec_date);
       els.exitDate.textContent = dateText(plan?.exit_date);
@@ -657,6 +677,19 @@
         metric("涨停成交额Top3占比", pct(sentiment.limit_up_amount_top3_share))
       ];
       els.sentimentMetrics.innerHTML = rows.join("");
+      const industryLeaders = Array.isArray(sentiment.limit_up_industry_top5)
+        ? sentiment.limit_up_industry_top5.slice(0, 5)
+        : [];
+      const industryHtml = industryLeaders
+        .map((item, index) => {
+          const industry = String(item?.industry || "").trim();
+          const count = Math.trunc(Number(item?.limit_up_count));
+          if (!industry || !Number.isFinite(count) || count <= 0) return "";
+          return `<span class="industry-leader">${index + 1}. ${escapeHtml(industry)}<b>涨停 ${count}</b></span>`;
+        })
+        .filter(Boolean)
+        .join("");
+      els.sentimentIndustries.innerHTML = `<strong>行业板块 · 涨停 Top5</strong><div class="industry-leaders">${industryHtml || '<span class="industry-leader">暂无有效行业分类</span>'}</div>`;
       const selected = ablation.sentiment_selected === true;
       const selectionText = selected
         ? `情绪因子通过留出期消融，已进入连板模型；Brier改善 ${number(ablation.sentiment_brier_improvement, 4)}，逐日胜率 ${pct(ablation.sentiment_daily_win_rate)}。`
@@ -705,7 +738,7 @@
         <td>${pct(row.predicted_big_loss_probability)}</td>
         <td class="reason">${escapeHtml(row.action === "BUY" ? (row.exit_rule || "通过全部风控") : (row.rejection_reason || "仅观察"))}</td>
       </tr>`).join("");
-      els.stageContent.innerHTML = `<div class="empty"><strong>路径量化，风险优先，限价保留展示</strong>观察排名先按正式安全门槛和大跌风险分层，再比较保守收益与晋级概率。观察参考限价用于正式人工挂单风控；真值验证独立按T日实际集合竞价/开盘价成交，不因开盘超过限价而剔除。T日9:25后生成的预测仅展示真值，不计入可执行收益统计。</div><div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,7,9,22].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.stageContent.innerHTML = `<div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,7,9,22].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function renderObservationStatistics(plan) {
