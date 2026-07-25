@@ -1,13 +1,13 @@
 {
   "source": "tushare",
-  "trade_date": "20260724",
+  "trade_date": "20260725",
   "signal_date": "",
   "calendar_path": "data/market/trade_cal_sse.csv",
   "calendar_rows": 365,
-  "candidate_codes": 80,
+  "candidate_codes": 36,
   "request_timeout_seconds": 8,
   "workers": 6,
-  "minute_files_written": 80,
+  "minute_files_written": 0,
   "minute_sync_skipped_non_current_date": false,
   "failures": [],
   "token_persisted": false

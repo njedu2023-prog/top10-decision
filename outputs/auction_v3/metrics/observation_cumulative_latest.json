@@ -1,7 +1,7 @@
 {
   "schema_version": "decision_observation_validation_v3_market_open_proxy",
   "status": "ok",
-  "generated_at_utc": "2026-07-24T15:19:09+00:00",
+  "generated_at_utc": "2026-07-25T14:48:04+00:00",
   "validation_start_exec_date": "20260721",
   "validation_mode": "market_at_open_proxy",
   "market_open_fill_assumption": true,
@@ -17,23 +17,23 @@
   "premarket_validated_rows": 23,
   "retrospective_truth_rows": 8,
   "unknown_timing_truth_rows": 0,
-  "market_positive_rate": 0.7391304348,
-  "mean_market_daily_return": 0.0400125652,
-  "median_market_daily_return": 0.048624,
+  "market_positive_rate": 0.6956521739,
+  "mean_market_daily_return": 0.029955913,
+  "median_market_daily_return": 0.022485,
   "fillable_rows": 23,
   "market_filled_rows": 23,
   "observation_fill_rate": 1.0,
   "display_limit_met_rows": 4,
   "above_display_limit_rows": 19,
   "display_limit_met_rate": 0.1739130435,
-  "mean_open_vs_display_limit": 0.0382942091,
-  "mean_t_observation_return": 0.0027115646,
-  "median_t_observation_return": 0.0,
-  "continuation_hits": 10,
+  "mean_open_vs_display_limit": 0.0379268793,
+  "mean_t_observation_return": -0.0067015578,
+  "median_t_observation_return": -0.0021466905,
+  "continuation_hits": 9,
   "continuation_samples": 23,
-  "continuation_hit_rate": 0.4347826087,
-  "continuation_hit_rate_95ci_low": 0.2563463533,
-  "continuation_hit_rate_95ci_high": 0.6318862491,
+  "continuation_hit_rate": 0.3913043478,
+  "continuation_hit_rate_95ci_low": 0.2215762279,
+  "continuation_hit_rate_95ci_high": 0.5921447761,
   "final_verified_trades": 12,
   "final_win_rate": 0.5833333333,
   "final_win_rate_95ci_low": 0.3195113125,
@@ -67,29 +67,39 @@
     "mean_final_net_return": -0.0298404319
   },
   "stage_2_to_3": {
-    "samples": 17,
+    "samples": 19,
     "hits": 6,
-    "hit_rate": 0.3529411765
+    "hit_rate": 0.3157894737
   },
   "stage_3_to_4": {
-    "samples": 6,
-    "hits": 4,
-    "hit_rate": 0.6666666667
+    "samples": 4,
+    "hits": 3,
+    "hit_rate": 0.75
   },
   "top1_continuation": {
     "samples": 3,
-    "hits": 2,
-    "hit_rate": 0.6666666667
+    "hits": 1,
+    "hit_rate": 0.3333333333
   },
   "top3_continuation": {
     "samples": 9,
-    "hits": 7,
-    "hit_rate": 0.7777777778
+    "hits": 3,
+    "hit_rate": 0.3333333333
   },
   "top10_continuation": {
     "samples": 23,
-    "hits": 10,
-    "hit_rate": 0.4347826087
+    "hits": 9,
+    "hit_rate": 0.3913043478
+  },
+  "path_performance": {
+    "INSUFFICIENT": {
+      "label": "路径数据不足",
+      "t_validated_rows": 23,
+      "continuation_hit_rate": 0.3913043478,
+      "final_verified_trades": 12,
+      "mean_final_net_return": -0.0169575765,
+      "win_rate": 0.5833333333
+    }
   },
   "trading_date_windows": {
     "20": {
