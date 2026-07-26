@@ -495,7 +495,30 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     pred_version = _text(prediction.get("model_version", pd.Series([""])).iloc[0]) if not prediction.empty else ""
     backtest_version = _text(backtest.get("model_version"))
     meta_version = _text(model_meta.get("model_version"))
-    artifact_versions_match = bool(pred_version and pred_version == backtest_version == meta_version)
+    artifact_versions_match = bool(
+        pred_version
+        and pred_version == backtest_version == meta_version
+    )
+    pred_artifact = (
+        _text(
+            prediction.get(
+                "model_artifact_sha256",
+                pd.Series([""]),
+            ).iloc[0]
+        )
+        if not prediction.empty
+        else ""
+    )
+    backtest_artifact = _text(backtest.get("model_artifact_sha256"))
+    meta_artifact = _text(model_meta.get("model_artifact_sha256"))
+    artifact_fingerprints_match = bool(
+        pred_artifact
+        and pred_artifact == backtest_artifact == meta_artifact
+    )
+    artifacts_match = bool(
+        artifact_versions_match
+        and artifact_fingerprints_match
+    )
     prediction_ready = _integer(prediction.get("model_ready", pd.Series([0])).iloc[0]) == 1 if not prediction.empty else False
     prediction_promoted = _integer(prediction.get("model_promoted", pd.Series([0])).iloc[0]) == 1 if not prediction.empty else False
     promoted = bool(
@@ -505,7 +528,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
         and prediction_ready
         and prediction_promoted
         and prediction_matches
-        and artifact_versions_match
+        and artifacts_match
     )
 
     if evaluation.get("stop_trading") is True:
@@ -559,7 +582,9 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "ready": model_meta.get("ready") is True,
             "promoted": promoted,
             "prediction_matches_report": prediction_matches,
-            "artifact_versions_match": artifact_versions_match,
+            "artifact_versions_match": artifacts_match,
+            "artifact_fingerprints_match": artifact_fingerprints_match,
+            "artifact_sha256": meta_artifact,
             "promotion_failures": list(backtest.get("promotion_failures", []) or []),
             "return_model": _text((model_meta.get("return_selection", {}) or {}).get("selected")),
             "profit_model": _text(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -214,10 +215,62 @@ class AuctionV3Test(unittest.TestCase):
         second = engine.build_prediction(signal_date, candidates.iloc[::-1], bundle, metrics)
         self.assertEqual(before, dated.read_bytes())
         self.assertEqual(len(first), len(second))
-        legacy = second.copy()
+        self.assertEqual(
+            {bundle.model_artifact_sha256},
+            set(second["model_artifact_sha256"]),
+        )
+        retrained = replace(
+            bundle,
+            model_artifact_sha256="f" * 64,
+        )
+        with mock.patch.object(
+            engine,
+            "_prediction_revision_allowed",
+            return_value=True,
+        ):
+            revised = engine.build_prediction(
+                signal_date,
+                candidates,
+                retrained,
+                metrics,
+            )
+        self.assertEqual({"f" * 64}, set(revised["model_artifact_sha256"]))
+        self.assertTrue(
+            (
+                self.config.prediction_root
+                / (
+                    f"pred_{signal_date}_{self.config.model_version}_"
+                    f"{bundle.model_artifact_sha256[:12]}.csv"
+                )
+            ).exists()
+        )
+        after_revision = dated.read_bytes()
+        post_cutoff_bundle = replace(
+            bundle,
+            model_artifact_sha256="e" * 64,
+        )
+        with mock.patch.object(
+            engine,
+            "_prediction_revision_allowed",
+            return_value=False,
+        ):
+            post_cutoff = engine.build_prediction(
+                signal_date,
+                candidates,
+                post_cutoff_bundle,
+                metrics,
+            )
+        self.assertEqual(after_revision, dated.read_bytes())
+        self.assertEqual({"f" * 64}, set(post_cutoff["model_artifact_sha256"]))
+        legacy = revised.copy()
         legacy["model_version"] = "legacy_test"
         legacy.to_csv(dated, index=False)
-        migrated = engine.build_prediction(signal_date, candidates, bundle, metrics)
+        migrated = engine.build_prediction(
+            signal_date,
+            candidates,
+            retrained,
+            metrics,
+        )
         self.assertTrue((self.config.prediction_root / f"pred_{signal_date}_legacy_test.csv").exists())
         self.assertEqual({self.config.model_version}, set(migrated["model_version"]))
         ledger, _ = engine.settle_predictions()

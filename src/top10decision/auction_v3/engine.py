@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
@@ -299,6 +299,7 @@ class ModelBundle:
     continuation_stage_logit_adjustments: dict[int, float]
     continuation_features: tuple[str, ...]
     conformal_residual_quantiles: dict[str, dict[str, float]]
+    model_artifact_sha256: str
 
 
 def _utc_now() -> str:
@@ -424,6 +425,61 @@ def _time_to_minutes(value: Any) -> float:
 def _hash_frame(frame: pd.DataFrame) -> str:
     payload = frame.to_csv(index=False, lineterminator="\n").encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _model_artifact_sha256(
+    frame: pd.DataFrame,
+    config: AuctionV3Config,
+) -> str:
+    columns = list(
+        dict.fromkeys(
+            [
+                "signal_date",
+                "buy_date",
+                "target_exit_date",
+                "ts_code",
+                "net_return",
+                "profit_hit",
+                "big_loss_hit",
+                "continuation_limit_up_hit",
+                "exit_on_time",
+                "market_fill",
+                *MODEL_FEATURES,
+                *MARKET_SENTIMENT_FEATURES,
+            ]
+        )
+    )
+    available = [name for name in columns if name in frame.columns]
+    training = frame[available].copy()
+    sort_columns = [
+        name
+        for name in ("signal_date", "ts_code", "proposed_gap")
+        if name in training.columns
+    ]
+    if sort_columns:
+        training = training.sort_values(sort_columns, kind="stable")
+    source_hasher = hashlib.sha256()
+    for name in ("engine.py", "calibration.py", "config.py"):
+        source_hasher.update((Path(__file__).with_name(name)).read_bytes())
+    config_payload = {
+        key: value
+        for key, value in asdict(config).items()
+        if key != "root"
+    }
+    payload = {
+        "model_version": config.model_version,
+        "training_sha256": _hash_frame(training.reset_index(drop=True)),
+        "source_sha256": source_hasher.hexdigest(),
+        "config": config_payload,
+    }
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _probability(
@@ -3252,6 +3308,10 @@ class AuctionV3Engine:
             continuation_stage_logit_adjustments=continuation_stage_logit_adjustments,
             continuation_features=continuation_features,
             conformal_residual_quantiles=conformal_residual_quantiles,
+            model_artifact_sha256=_model_artifact_sha256(
+                all_clean,
+                self.config,
+            ),
         )
 
     def _score_candidate_at_gaps(self, row: pd.Series, bundle: ModelBundle) -> Optional[dict[str, Any]]:
@@ -3847,6 +3907,18 @@ class AuctionV3Engine:
         expected_buy = choose_exec_date(signal_date, expected_buy)
         return expected_buy, choose_exit_date(expected_buy)
 
+    def _prediction_revision_allowed(self, expected_buy: str) -> bool:
+        expected_buy = _normal_date(expected_buy)
+        if not expected_buy:
+            return False
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        today = now.strftime("%Y%m%d")
+        if today < expected_buy:
+            return True
+        if today > expected_buy:
+            return False
+        return (now.hour, now.minute, now.second) < (9, 25, 0)
+
     def build_prediction(
         self,
         signal_date: str,
@@ -3857,20 +3929,54 @@ class AuctionV3Engine:
         force: bool = False,
     ) -> pd.DataFrame:
         dated_path = self.config.prediction_root / f"pred_{signal_date}.csv"
+        expected_buy, expected_exit = self._prediction_dates(
+            signal_date,
+            candidates,
+        )
         if dated_path.exists() and not force:
             frozen = _read_csv(dated_path)
             if not frozen.empty:
                 frozen_version = str(frozen.get("model_version", pd.Series(["legacy"])).iloc[0])
-                if frozen_version == self.config.model_version:
+                frozen_artifact = str(
+                    frozen.get(
+                        "model_artifact_sha256",
+                        pd.Series([""]),
+                    ).iloc[0]
+                    or ""
+                ).strip()
+                current_artifact = (
+                    bundle.model_artifact_sha256
+                    if bundle is not None
+                    else ""
+                )
+                same_version = frozen_version == self.config.model_version
+                same_artifact = bool(
+                    current_artifact
+                    and frozen_artifact == current_artifact
+                )
+                if same_version and (bundle is None or same_artifact):
+                    _write_csv(frozen, self.config.prediction_root / "pred_latest.csv")
+                    return frozen
+                if (
+                    same_version
+                    and not self._prediction_revision_allowed(expected_buy)
+                ):
                     _write_csv(frozen, self.config.prediction_root / "pred_latest.csv")
                     return frozen
                 safe_version = re.sub(r"[^A-Za-z0-9_.-]+", "_", frozen_version).strip("._")[:80] or "legacy"
-                archive_path = self.config.prediction_root / f"pred_{signal_date}_{safe_version}.csv"
+                archive_suffix = (
+                    f"{safe_version}_{frozen_artifact[:12] or 'missing_artifact'}"
+                    if same_version
+                    else safe_version
+                )
+                archive_path = (
+                    self.config.prediction_root
+                    / f"pred_{signal_date}_{archive_suffix}.csv"
+                )
                 if not archive_path.exists():
                     _write_csv(frozen, archive_path)
         base = self._current_base(signal_date, candidates)
         scored = self.score_candidates(base, bundle)
-        expected_buy, expected_exit = self._prediction_dates(signal_date, candidates)
         promoted = backtest_metrics.get("promoted") is True
         scored["prediction_id"] = [f"{signal_date}-{code}-{self.config.model_version}" for code in scored["ts_code"]]
         scored["expected_buy_date"] = expected_buy
@@ -3940,6 +4046,11 @@ class AuctionV3Engine:
         scored["big_loss_threshold"] = float(self.config.big_loss_threshold)
         scored["min_return_lcb"] = float(self.config.min_return_lcb)
         scored["model_version"] = self.config.model_version
+        scored["model_artifact_sha256"] = (
+            bundle.model_artifact_sha256
+            if bundle is not None
+            else ""
+        )
         scored["model_ready"] = int(bundle is not None)
         scored["model_promoted"] = int(promoted)
         scored["action"] = np.where(
@@ -4052,6 +4163,7 @@ class AuctionV3Engine:
             "model_promoted",
             "model_reason",
             "model_version",
+            "model_artifact_sha256",
             "generated_at_utc",
             "source_snapshot_sha256",
             "feature_contract",
@@ -4941,10 +5053,15 @@ class AuctionV3Engine:
             )
             backtest_metrics["promotion_checks"] = checks
             backtest_metrics["promoted"] = False
-            _write_json(
-                backtest_metrics,
-                self.config.metrics_root / "backtest_latest.json",
-            )
+        backtest_metrics["model_artifact_sha256"] = (
+            bundle.model_artifact_sha256
+            if bundle is not None
+            else ""
+        )
+        _write_json(
+            backtest_metrics,
+            self.config.metrics_root / "backtest_latest.json",
+        )
         prediction = self.build_prediction(
             signal_date,
             candidates,
@@ -5040,6 +5157,11 @@ class AuctionV3Engine:
         model_meta = {
             "generated_at_utc": _utc_now(),
             "model_version": self.config.model_version,
+            "model_artifact_sha256": (
+                bundle.model_artifact_sha256
+                if bundle is not None
+                else ""
+            ),
             "ready": bundle is not None,
             "promoted": backtest_metrics.get("promoted") is True,
             "training_rows": bundle.train_rows if bundle else 0,

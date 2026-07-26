@@ -78,7 +78,7 @@ class AuctionV3Config:
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v8_calibrated_auction_truth_oos_1"
+    model_version: str = "auction_v8_calibrated_auction_truth_oos_2"
 
     @property
     def output_root(self) -> Path:

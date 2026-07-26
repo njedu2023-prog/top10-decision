@@ -970,7 +970,7 @@
             ${auditRow("训练就绪", model.ready === true ? "是" : "否")}
             ${auditRow("样本外晋级", model.promoted === true ? "通过" : "未通过")}
             ${auditRow("日期一致", model.prediction_matches_report === true ? "一致" : "未对齐")}
-            ${auditRow("模型版本一致", model.artifact_versions_match === true ? "一致" : "不一致或待生成")}
+            ${auditRow("版本与工件指纹", model.artifact_versions_match === true ? "一致" : "不一致或待生成")}
           </div>
         </div>
         <div class="audit-block">

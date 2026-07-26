@@ -412,7 +412,13 @@ class DecisionActionPlanTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def _write_model_artifacts(self, *, promoted: bool, version: str = "auction_v5_manual_guidance_2") -> None:
+    def _write_model_artifacts(
+        self,
+        *,
+        promoted: bool,
+        version: str = "auction_v5_manual_guidance_2",
+        artifact: str = "a" * 64,
+    ) -> None:
         pd.DataFrame(
             [
                 {
@@ -441,6 +447,7 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "model_ready": 1,
                     "model_promoted": int(promoted),
                     "model_version": version,
+                    "model_artifact_sha256": artifact,
                 },
                 {
                     "signal_date": "20260720",
@@ -453,16 +460,26 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "model_ready": 1,
                     "model_promoted": int(promoted),
                     "model_version": version,
+                    "model_artifact_sha256": artifact,
                 },
             ]
         ).to_csv(self.root / "outputs" / "auction_v3" / "predictions" / "pred_latest.csv", index=False)
         (self.root / "outputs" / "auction_v3" / "metrics" / "backtest_latest.json").write_text(
-            json.dumps({"model_version": version, "promoted": promoted, "promotion_failures": []}), encoding="utf-8"
+            json.dumps(
+                {
+                    "model_version": version,
+                    "model_artifact_sha256": artifact,
+                    "promoted": promoted,
+                    "promotion_failures": [],
+                }
+            ),
+            encoding="utf-8",
         )
         (self.root / "outputs" / "auction_v3" / "models" / "model_meta_latest.json").write_text(
             json.dumps(
                 {
                     "model_version": version,
+                    "model_artifact_sha256": artifact,
                     "ready": True,
                     "promoted": promoted,
                     "current_market_sentiment": {
@@ -541,6 +558,24 @@ class DecisionActionPlanTests(unittest.TestCase):
         plan = build_action_plan(self.root)
         self.assertFalse(plan["model"]["promoted"])
         self.assertFalse(plan["model"]["artifact_versions_match"])
+        self.assertEqual(plan["formal_buy_count"], 0)
+
+    def test_artifact_fingerprint_mismatch_fails_closed(self) -> None:
+        self._write_model_artifacts(promoted=True)
+        meta_path = (
+            self.root
+            / "outputs"
+            / "auction_v3"
+            / "models"
+            / "model_meta_latest.json"
+        )
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta["model_artifact_sha256"] = "b" * 64
+        meta_path.write_text(json.dumps(meta), encoding="utf-8")
+        plan = build_action_plan(self.root)
+        self.assertFalse(plan["model"]["promoted"])
+        self.assertFalse(plan["model"]["artifact_versions_match"])
+        self.assertFalse(plan["model"]["artifact_fingerprints_match"])
         self.assertEqual(plan["formal_buy_count"], 0)
 
 
