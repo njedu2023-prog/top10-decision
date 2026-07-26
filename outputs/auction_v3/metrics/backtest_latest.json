@@ -1,15 +1,15 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-26T14:07:21+00:00",
+  "generated_at_utc": "2026-07-26T15:30:52+00:00",
   "model_version": "auction_v8_calibrated_auction_truth_oos_1",
-  "history_dates": 578,
-  "oos_dates": 430,
+  "history_dates": 698,
+  "oos_dates": 530,
   "walkforward_refits": 10,
-  "walkforward_block_dates": 43,
+  "walkforward_block_dates": 53,
   "signals": 0,
   "signal_dates": 0,
   "signal_date_ratio": 0.0,
-  "max_no_signal_streak": 430,
+  "max_no_signal_streak": 530,
   "average_signals_per_signal_date": null,
   "filled_trades": 0,
   "fill_rate": null,
@@ -28,7 +28,7 @@
   "mean_daily_return": 0.0,
   "stress_1_5x_cost_mean_daily_return": 0.0,
   "stress_2x_cost_mean_daily_return": 0.0,
-  "benchmark_mean_daily_return": -0.0181917255,
+  "benchmark_mean_daily_return": -0.0174064113,
   "uncapped_model_mean_daily_return": 0.0,
   "cumulative_return": 0.0,
   "max_drawdown": 0.0,
@@ -94,106 +94,6 @@
   "promoted": false,
   "path_oos": {},
   "daily_equity": [
-    {
-      "signal_date": "20230814",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230815",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230816",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230817",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230818",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230821",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230822",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230823",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230824",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230825",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230828",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230829",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230830",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230831",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230901",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230904",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230905",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230906",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230907",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230908",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
     {
       "signal_date": "20230911",
       "daily_return": 0.0,
@@ -1751,6 +1651,606 @@
     },
     {
       "signal_date": "20241225",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241226",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241227",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241230",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241231",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250102",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250103",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250106",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250107",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250108",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250109",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250110",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250113",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250114",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250115",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250116",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250117",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250120",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250121",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250122",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250123",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250124",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250127",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250205",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250206",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250207",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250210",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250211",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250212",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250213",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250214",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250217",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250218",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250219",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250220",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250221",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250224",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250225",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250226",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250227",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250228",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250303",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250304",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250305",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250306",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250307",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250310",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250311",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250312",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250313",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250314",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250317",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250318",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250319",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250320",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250321",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250324",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250325",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250326",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250327",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250328",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250331",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250401",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250402",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250403",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250407",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250408",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250409",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250410",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250411",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250414",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250415",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250416",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250417",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250418",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250421",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250422",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250423",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250424",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250425",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250428",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250429",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250430",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250506",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250507",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250508",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250509",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250512",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250513",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250514",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250515",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250516",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250519",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250520",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250521",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250522",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250523",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250526",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250527",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250528",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250529",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250530",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250603",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250604",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250605",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250606",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250609",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250610",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250611",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250612",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250613",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250616",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250617",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250618",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250619",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250620",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250623",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250624",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250625",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250626",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20250627",
       "daily_return": 0.0,
       "nav": 1.0
     },
