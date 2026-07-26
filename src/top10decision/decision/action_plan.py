@@ -418,13 +418,13 @@ def _attach_observation_validation(
     statuses = [_text(row.get("validation_status")) for row in watchlist]
     plan.update(
         {
-            "schema_version": "decision_action_plan_v9_market_sentiment_industries",
+            "schema_version": "decision_action_plan_v10_calibrated_auction_truth",
             "stage_watchlist": watchlist,
             "stage_watch_count": len(watchlist),
             "stage_watch_eligible_count": watch_total,
             "stage_watch_display_limit": OBSERVATION_TOP_N,
             "observation_validation": {
-                "schema_version": "decision_observation_validation_v3_market_open_proxy",
+                "schema_version": "decision_observation_validation_v4_auction_truth",
                 "exec_date": exec_date,
                 "rows": len(watchlist),
                 "t_validated_rows": sum(status not in {"", "PENDING_T"} for status in statuses),
@@ -536,7 +536,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
     stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)
     plan = {
-        "schema_version": "decision_action_plan_v9_market_sentiment_industries",
+        "schema_version": "decision_action_plan_v10_calibrated_auction_truth",
         "generated_at_utc": _utc_now(),
         "report_date": chosen_date,
         "report_file": f"decision_report_{chosen_date}.md",
@@ -571,6 +571,42 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "continuation_model": _text(
                 ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("selected")
             ),
+            "fill_model": _text(
+                (
+                    (
+                        model_meta.get(
+                            "classifier_selection",
+                            {},
+                        )
+                        or {}
+                    ).get("fill", {})
+                    or {}
+                ).get("selected")
+            ),
+            "exit_model": _text(
+                (
+                    (
+                        model_meta.get(
+                            "classifier_selection",
+                            {},
+                        )
+                        or {}
+                    ).get("exit_on_time", {})
+                    or {}
+                ).get("selected")
+            ),
+            "return_selection": model_meta.get("return_selection") or {},
+            "probability_models": model_meta.get("classifier_selection") or {},
+            "probability_quality_gate": model_meta.get(
+                "probability_quality_gate"
+            )
+            or {},
+            "conformal_residual_quantiles": model_meta.get(
+                "conformal_residual_quantiles"
+            )
+            or {},
+            "data_coverage": model_meta.get("data_coverage") or {},
+            "truth_ledgers": model_meta.get("truth_ledgers") or {},
             "continuation_feature_set": _text(
                 ((model_meta.get("classifier_selection", {}) or {}).get("continuation_limit_up", {}) or {}).get("feature_set")
             ),
@@ -730,14 +766,16 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
             "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
             "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
-            "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top5、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在留出期Brier和逐日一致性门槛同时改善时进入连板模型，否则自动回退",
+            "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top5、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
             "observation_ranking": "先按正式安全门槛和大跌风险分层，再比较保守收益、晋级概率与收益下界",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
             "exit": "T+1按实际成交价计算3%止盈、2.5%止损，首次触发即人工退出；均未触发则14:50退出；一字跌停顺延",
-            "return_target": "T日开盘集合竞价代理成交价到T+1止盈/止损/14:50时间退出价的保守可执行收益",
-            "validation": "公开行情只生成模拟验证；人工实际成交需手工回填，二者分开累计",
-            "risk_veto": "预测大跌概率超过15%、保守收益下界不为正、竞价成交或T+1退出概率不足，任一项触发即否决",
+            "return_target": "优先使用Tushare stk_auction_o真实9:30集合竞价成交价，到T+1止盈/止损/14:50时间退出价的保守可执行收益；缺失时明确标注代理源",
+            "validation": "正式限价代理、开盘市价观察、人工实际成交三套账独立累计，互不覆盖",
+            "probability_calibration": "盈利、大跌、晋级、P_fill和退出概率按交易日隔离校准；必须在Brier Skill Score和逐日一致性上战胜日期等权常数基线，否则回退常数并禁止晋级",
+            "return_uncertainty": "保守下界使用样本外残差的分阶段/分情绪保形分位数，不再使用均值标准误授权交易",
+            "risk_veto": "校准后大跌概率超过15%、保形收益下界不为正、竞价成交或T+1退出概率不足，任一项触发即否决",
             "guidance_only": True,
             "broker_connected": False,
             "no_trade_is_valid": True,

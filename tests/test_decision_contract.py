@@ -472,7 +472,7 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
         self.assertEqual(
             plan["schema_version"],
-            "decision_action_plan_v9_market_sentiment_industries",
+            "decision_action_plan_v10_calibrated_auction_truth",
         )
         self.assertEqual(plan["stage_watchlist"][0]["observation_max_price"], 10.5)
         self.assertIn("observation_statistics", plan)

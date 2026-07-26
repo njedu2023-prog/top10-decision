@@ -576,6 +576,7 @@
 
     function modelDisplayName(value) {
       const text = String(value || "");
+      if (text.startsWith("auction_v8_")) return "V8 · 严格校准与竞价真值";
       if (text.startsWith("auction_v7_")) return "V7 · 市场情绪消融";
       if (text.startsWith("auction_v6_")) return "V6 · 连板路径";
       return text || "-";
@@ -787,10 +788,15 @@
       const top3 = stats.top3_continuation || {};
       const allTruth = stats.all_truth_summary || {};
       const pathPerformance = stats.path_performance || {};
+      const truthRows = Number(stats.t_validated_rows || 0);
+      const officialAuctionRows = Number(stats.official_auction_truth_rows || 0);
       const rows = [
         metric("累计观察交易日", String(stats.observation_dates ?? "-")),
         metric("T日已验证", `${stats.t_validated_rows ?? 0}/${stats.observation_rows ?? 0}`),
         metric("9:25前时序合格", String(stats.premarket_validated_rows ?? 0), "good"),
+        metric("真实竞价真值", String(officialAuctionRows), officialAuctionRows ? "good" : "warn"),
+        metric("真实竞价覆盖率", truthRows ? pct(officialAuctionRows / truthRows) : "-", officialAuctionRows === truthRows && truthRows ? "good" : "warn"),
+        metric("分钟 / 日开盘代理", `${stats.minute_proxy_truth_rows ?? 0} / ${stats.daily_open_proxy_truth_rows ?? 0}`),
         metric("市价成交验证率", pct(stats.observation_fill_rate)),
         metric("开盘不超限率", pct(stats.display_limit_met_rate)),
         metric("开盘超限样本", String(stats.above_display_limit_rows ?? 0)),
@@ -825,7 +831,7 @@
       els.observationUpdate.textContent = `${dateText(current.exec_date)} · ${current.final_rows || 0} 条最终${retrospective ? ` · ${retrospective} 条回溯` : ""}`;
       const window20 = stats?.trading_date_windows?.["20"] || {};
       const window60 = stats?.trading_date_windows?.["60"] || {};
-      els.observationNote.textContent = `数据更新时间：${generated}。全部真值从 ${dateText(stats.validation_start_exec_date || "20260721")} 起回补；核心命中率和收益只统计T日9:25前已冻结样本，未成交按空仓0收益计入等权槽位组合。20日累计 ${signedPct(window20.equal_slot_cumulative_return)}，60日累计 ${signedPct(window60.equal_slot_cumulative_return)}。公开行情代理与人工实际成交分开，不把未成交票虚构为交易收益。`;
+      els.observationNote.textContent = `数据更新时间：${generated}。全部真值从 ${dateText(stats.validation_start_exec_date || "20260721")} 起回补；核心命中率和收益只统计T日9:25前已冻结样本，未成交按空仓0收益计入等权槽位组合。真实竞价真值优先使用 Tushare stk_auction_o，缺失时才标记分钟或日开盘代理。20日累计 ${signedPct(window20.equal_slot_cumulative_return)}，60日累计 ${signedPct(window60.equal_slot_cumulative_return)}。公开行情代理与人工实际成交分开，不把人工回填混入模型晋级。`;
     }
 
     function renderActions(plan) {
@@ -876,12 +882,39 @@
       return `<div class="audit-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value == null || value === "" ? "-" : value)}</strong></div>`;
     }
 
+    function probabilityAudit(label, selection) {
+      const item = selection || {};
+      const selected = item.selected || "constant";
+      const method = item.calibration_method || "constant";
+      const bss = finiteNumber(item.brier_skill_score);
+      const ece = finiteNumber(item.expected_calibration_error);
+      const daily = finiteNumber(item.daily_baseline_win_rate);
+      const gain = item.model_has_information_gain === true ? "通过" : "回退";
+      return auditRow(
+        label,
+        `${gain} · ${selected}/${method} · BSS ${bss == null ? "-" : bss.toFixed(4)} · ECE ${ece == null ? "-" : ece.toFixed(4)} · 逐日胜率 ${daily == null ? "-" : pct(daily)}`
+      );
+    }
+
     function renderAudit(plan) {
       const model = plan?.model || {};
       const universe = plan?.universe_eligibility || {};
       const failures = Array.isArray(model.promotion_failures) ? model.promotion_failures : [];
       const contract = plan?.execution_contract || {};
       const ablation = model?.continuation_path_ablation || {};
+      const probabilityModels = model?.probability_models || {};
+      const probabilityGate = model?.probability_quality_gate || {};
+      const returnSelection = model?.return_selection || {};
+      const conformal = model?.conformal_residual_quantiles || {};
+      const globalConformal = conformal.global || {};
+      const coverage = model?.data_coverage || {};
+      const truthLedgers = model?.truth_ledgers || {};
+      const formalLedger = truthLedgers.formal_limit_proxy || {};
+      const observationLedger = truthLedgers.market_open_observation || {};
+      const manualLedger = truthLedgers.manual_actual || {};
+      const officialCoverage = finiteNumber(coverage.official_auction_truth_coverage);
+      const returnImprovement = finiteNumber(returnSelection.relative_rmse_improvement);
+      const returnDailyWin = finiteNumber(returnSelection.daily_baseline_win_rate);
       const pathAblation = typeof ablation.path_selected !== "boolean"
         ? "等待新模型生成"
         : ablation.path_selected === true
@@ -928,6 +961,8 @@
             ${auditRow("盈利模型", model.profit_model || "-")}
             ${auditRow("大跌模型", model.big_loss_model || "-")}
             ${auditRow("连板模型", model.continuation_model || "-")}
+            ${auditRow("成交模型", model.fill_model || "-")}
+            ${auditRow("退出模型", model.exit_model || "-")}
             ${auditRow("连板特征集", model.continuation_feature_set || "-")}
             ${auditRow("连板训练范围", model.continuation_training_scope === "stage_2_to_3_and_3_to_4" ? "仅2进3、3进4" : (model.continuation_training_scope || "-"))}
             ${auditRow("路径消融", pathAblation)}
@@ -936,6 +971,32 @@
             ${auditRow("样本外晋级", model.promoted === true ? "通过" : "未通过")}
             ${auditRow("日期一致", model.prediction_matches_report === true ? "一致" : "未对齐")}
             ${auditRow("模型版本一致", model.artifact_versions_match === true ? "一致" : "不一致或待生成")}
+          </div>
+        </div>
+        <div class="audit-block">
+          <h3>V8 概率与收益质量</h3>
+          <div class="audit-list">
+            ${auditRow("概率总门槛", probabilityGate.passed === true ? "通过：必需概率均优于逐日常数基线" : "未通过：正式交易关闭，观察名单继续累计")}
+            ${auditRow("收益模型门槛", `${returnSelection.model_has_information_gain === true ? "通过" : "回退"} · ${returnSelection.selected || "constant"} · RMSE改善 ${returnImprovement == null ? "-" : pct(returnImprovement)} · 逐日胜率 ${returnDailyWin == null ? "-" : pct(returnDailyWin)}`)}
+            ${probabilityAudit("盈利概率", probabilityModels.profit)}
+            ${probabilityAudit("大跌概率", probabilityModels.big_loss)}
+            ${probabilityAudit("晋级概率", probabilityModels.continuation_limit_up)}
+            ${probabilityAudit("成交概率", probabilityModels.fill)}
+            ${probabilityAudit("按时退出概率", probabilityModels.exit_on_time)}
+            ${auditRow("收益分布下界", `全局残差 Q10 ${number(globalConformal.q10, 4)} · Q90 ${number(globalConformal.q90, 4)} · ${globalConformal.samples ?? 0} 样本`)}
+          </div>
+        </div>
+        <div class="audit-block">
+          <h3>独立样本与竞价真值</h3>
+          <div class="audit-list">
+            ${auditRow("独立交易日", `${coverage.history_dates ?? 0} / ${coverage.target_independent_dates ?? 500}`)}
+            ${auditRow("样本日期范围", coverage.history_start && coverage.history_end ? `${dateText(coverage.history_start)} 至 ${dateText(coverage.history_end)}` : "-")}
+            ${auditRow("候选级历史样本", coverage.history_rows ?? 0)}
+            ${auditRow("真实竞价样本", `${coverage.official_auction_truth_rows ?? 0} · 覆盖 ${officialCoverage == null ? "-" : pct(officialCoverage)}`)}
+            ${auditRow("交易日历", coverage.calendar === "SSE_strict_exchange_calendar" ? "上交所严格A股交易日历" : (coverage.calendar || "-"))}
+            ${auditRow("正式限价代理账本", formalLedger.path || "-")}
+            ${auditRow("市价开盘观察账本", observationLedger.path || "-")}
+            ${auditRow("人工实际成交账本", manualLedger.path || "-")}
           </div>
         </div>
         <div class="audit-block">

@@ -49,25 +49,36 @@ class AuctionV3Config:
     latest_exit_time: str = EXIT_LATEST_TIME
     exit_policy_version: str = EXIT_POLICY_VERSION
     max_mechanism_limit_pct: float = 10.0
-    min_train_dates: int = 20
-    min_train_rows: int = 300
+    min_train_dates: int = 60
+    min_train_rows: int = 1_000
     calibration_fraction: float = 0.20
-    calibration_min_dates: int = 4
+    calibration_min_dates: int = 16
     calibration_embargo_dates: int = 1
-    promotion_min_dates: int = 60
-    promotion_min_oos_dates: int = 40
-    promotion_min_filled_trades: int = 30
-    promotion_min_stage_focus_filled_trades: int = 5
+    calibration_fit_fraction: float = 0.60
+    probability_min_brier_skill: float = 0.002
+    probability_min_daily_win_rate: float = 0.52
+    probability_max_ece: float = 0.08
+    probability_min_eval_dates: int = 5
+    return_min_relative_rmse_improvement: float = 0.01
+    return_min_daily_win_rate: float = 0.52
+    conformal_min_cohort_rows: int = 30
+    promotion_min_dates: int = 500
+    promotion_min_oos_dates: int = 120
+    promotion_min_filled_trades: int = 200
+    promotion_min_stage_focus_filled_trades: int = 60
+    promotion_min_market_regimes: int = 3
     min_oos_signal_date_ratio: float = 0.05
     max_oos_no_signal_streak: int = 30
     embargo_dates: int = 2
     backtest_block_dates: int = 10
+    backtest_max_refits: int = 12
+    fill_max_training_rows: int = 60_000
     gap_grid_min: float = -0.05
     gap_grid_max: float = 0.08
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v7_market_sentiment_oos_1"
+    model_version: str = "auction_v8_calibrated_auction_truth_oos_1"
 
     @property
     def output_root(self) -> Path:
@@ -80,6 +91,10 @@ class AuctionV3Config:
     @property
     def truth_root(self) -> Path:
         return self.output_root / "truth"
+
+    @property
+    def historical_training_root(self) -> Path:
+        return self.root / "data" / "auction_v3" / "history"
 
     @property
     def verification_root(self) -> Path:
@@ -109,6 +124,7 @@ class AuctionV3Config:
         for path in (
             self.prediction_root,
             self.truth_root,
+            self.historical_training_root,
             self.verification_root,
             self.metrics_root,
             self.model_root,

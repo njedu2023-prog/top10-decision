@@ -1,4 +1,4 @@
-"""Decision manual auction-guidance V7 (keeps the v3 import path for compatibility)."""
+"""Decision V8 calibrated auction guidance (keeps the v3 import path)."""
 
 from .config import AuctionV3Config
 from .engine import AuctionV3Engine, RunResult

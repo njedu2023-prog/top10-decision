@@ -38,6 +38,12 @@ from top10decision.writers.io_contract import (
 )
 
 from .config import AuctionV3Config
+from .calibration import (
+    ProbabilityCalibrator,
+    chronological_calibration_split,
+    fit_probability_calibrator,
+    probability_metrics,
+)
 
 
 DATE_RE = re.compile(r"(?<!\d)(20\d{6})(?!\d)")
@@ -258,12 +264,18 @@ class RunResult:
 
 @dataclass
 class ModelBundle:
-    return_model: Pipeline
+    return_model: Optional[Pipeline]
+    return_constant: float
     profit_model: Optional[Pipeline]
     loss_model: Optional[Pipeline]
     continuation_model: Optional[Pipeline]
     fill_model: Optional[Pipeline]
     exit_model: Optional[Pipeline]
+    profit_calibrator: ProbabilityCalibrator
+    loss_calibrator: ProbabilityCalibrator
+    continuation_calibrator: ProbabilityCalibrator
+    fill_calibrator: ProbabilityCalibrator
+    exit_calibrator: ProbabilityCalibrator
     profit_constant: float
     loss_constant: float
     continuation_constant: float
@@ -281,10 +293,12 @@ class ModelBundle:
     calibration_dates: int
     return_selection: dict[str, Any]
     classifier_selection: dict[str, dict[str, Any]]
+    probability_quality_gate: dict[str, Any]
     stage_recent_rates: dict[int, float]
     stage_recent_samples: dict[int, int]
     continuation_stage_logit_adjustments: dict[int, float]
     continuation_features: tuple[str, ...]
+    conformal_residual_quantiles: dict[str, dict[str, float]]
 
 
 def _utc_now() -> str:
@@ -417,10 +431,16 @@ def _probability(
     frame: pd.DataFrame,
     constant: float,
     features: Sequence[str] = MODEL_FEATURES,
+    calibrator: Optional[ProbabilityCalibrator] = None,
 ) -> np.ndarray:
     if model is None:
         return np.repeat(float(np.clip(constant, 0.0, 1.0)), len(frame))
-    return np.clip(model.predict_proba(frame[list(features)])[:, 1], 0.0, 1.0)
+    raw = np.clip(
+        model.predict_proba(frame[list(features)])[:, 1],
+        0.0,
+        1.0,
+    )
+    return calibrator.transform(raw) if calibrator is not None else raw
 
 
 def _date_balanced_weights(frame: pd.DataFrame) -> np.ndarray:
@@ -430,6 +450,32 @@ def _date_balanced_weights(frame: pd.DataFrame) -> np.ndarray:
     counts = date_key.groupby(date_key).transform("count").clip(lower=1)
     weights = 1.0 / counts.astype(float)
     return (weights / weights.mean()).to_numpy(dtype=float)
+
+
+def _weighted_quantile(
+    values: Sequence[float] | np.ndarray,
+    quantile: float,
+    weights: Optional[Sequence[float] | np.ndarray] = None,
+) -> float:
+    sample = np.asarray(values, dtype=float)
+    finite = np.isfinite(sample)
+    if not finite.any():
+        return float("nan")
+    sample = sample[finite]
+    if weights is None:
+        return float(np.quantile(sample, quantile))
+    weight = np.asarray(weights, dtype=float)[finite]
+    valid = np.isfinite(weight) & (weight > 0)
+    if not valid.any():
+        return float(np.quantile(sample, quantile))
+    sample = sample[valid]
+    weight = weight[valid]
+    order = np.argsort(sample)
+    sample = sample[order]
+    weight = weight[order]
+    cumulative = np.cumsum(weight) - 0.5 * weight
+    cumulative /= weight.sum()
+    return float(np.interp(float(quantile), cumulative, sample))
 
 
 class AuctionV3Engine:
@@ -1673,17 +1719,49 @@ class AuctionV3Engine:
             return False
         return all(_is_close(daily_row.get(name), limit_price) for name in ("open", "high", "low", "close"))
 
+    def _auction_row(
+        self,
+        trade_date: str,
+        code: str,
+    ) -> tuple[Optional[pd.Series], str]:
+        official = self._row(
+            self.market_table(trade_date, "stk_auction_o"),
+            code,
+        )
+        if official is not None:
+            return official, "tushare_stk_auction_o"
+        legacy = self._row(
+            self.market_table(trade_date, "stk_auction"),
+            code,
+        )
+        if legacy is not None:
+            return legacy, "market_repo_auction"
+        return None, ""
+
     def _auction_amount(self, trade_date: str, code: str) -> float:
-        row = self._row(self.market_table(trade_date, "stk_auction"), code)
+        row, _ = self._auction_row(trade_date, code)
         if row is None:
             return float("nan")
         return _numeric_from(row, ("amount", "auction_amount"))
 
     def _auction_price(self, trade_date: str, code: str) -> float:
-        row = self._row(self.market_table(trade_date, "stk_auction"), code)
+        row, _ = self._auction_row(trade_date, code)
         if row is None:
             return float("nan")
-        return _numeric_from(row, ("price", "auction_price"))
+        return _numeric_from(
+            row,
+            ("close", "price", "auction_price", "vwap", "open"),
+        )
+
+    def _execution_open_source(self, trade_date: str, code: str) -> str:
+        _, source = self._auction_row(trade_date, code)
+        if source:
+            return source
+        if not self.minute_table(trade_date, code).empty:
+            return "tushare_minute_0930_proxy"
+        if self._row(self.market_table(trade_date, "daily"), code) is not None:
+            return "official_daily_open_proxy"
+        return "missing"
 
     def _market_buyable(self, trade_date: str, code: str) -> tuple[int, str]:
         daily = self._row(self.market_table(trade_date, "daily"), code)
@@ -1878,6 +1956,73 @@ class AuctionV3Engine:
         out["proposed_gap"] = np.nan
         return out
 
+    def _historical_training_rows(self) -> pd.DataFrame:
+        required = {
+            "signal_date",
+            "buy_date",
+            "target_exit_date",
+            "ts_code",
+            "net_return",
+            "profit_hit",
+            "big_loss_hit",
+            "continuation_limit_up_hit",
+            "exit_on_time",
+            "market_fill",
+            "proposed_gap",
+            *MODEL_FEATURES,
+            *MARKET_SENTIMENT_FEATURES,
+        }
+        parts: list[pd.DataFrame] = []
+        for path in sorted(
+            self.config.historical_training_root.glob(
+                "training_*.csv"
+            )
+        ):
+            frame = _read_csv(path)
+            if frame.empty or not required.issubset(frame.columns):
+                continue
+            frame = frame.copy()
+            for column in (
+                "signal_date",
+                "buy_date",
+                "target_exit_date",
+            ):
+                frame[column] = frame[column].map(_normal_date)
+            frame["ts_code"] = frame["ts_code"].map(_normal_code)
+            valid_rows: list[bool] = []
+            for _, row in frame.iterrows():
+                signal_date = str(row["signal_date"])
+                buy_date = str(row["buy_date"])
+                exit_date = str(row["target_exit_date"])
+                try:
+                    valid = bool(
+                        is_a_share_trading_day(signal_date)
+                        and buy_date
+                        == next_a_share_trading_day(signal_date)
+                        and exit_date
+                        == next_a_share_trading_day(buy_date)
+                    )
+                except RuntimeError:
+                    valid = False
+                valid_rows.append(valid)
+            frame = frame[np.asarray(valid_rows, dtype=bool)]
+            if frame.empty:
+                continue
+            frame["history_source"] = frame.get(
+                "history_source",
+                "tushare_compact_backfill",
+            )
+            frame["history_contract_version"] = frame.get(
+                "history_contract_version",
+                "decision_v8_strict_calendar_no_future",
+            )
+            parts.append(frame)
+        return (
+            pd.concat(parts, ignore_index=True)
+            if parts
+            else pd.DataFrame()
+        )
+
     def build_history(self) -> pd.DataFrame:
         dates = self.market_dates()
         date_index = {date: idx for idx, date in enumerate(dates)}
@@ -1921,6 +2066,15 @@ class AuctionV3Engine:
                 buy_up_limit = _numeric_from(buy_limit, ("up_limit",)) if buy_limit is not None else float("nan")
                 continuation_hit = int(math.isfinite(buy_up_limit) and _is_close(buy_daily.get("close"), buy_up_limit))
                 market_fill, fill_reason = self._market_buyable(buy_date, code)
+                auction_row, auction_truth_source = self._auction_row(
+                    buy_date,
+                    code,
+                )
+                if not auction_truth_source:
+                    auction_truth_source = self._execution_open_source(
+                        buy_date,
+                        code,
+                    )
                 exit_date, exit_price, delay_days, exit_reason = self._resolve_exit(
                     code,
                     idx + 2,
@@ -1977,6 +2131,20 @@ class AuctionV3Engine:
                         "source_rank": features["source_rank"],
                         "d_close": d_close,
                         "buy_open": buy_open,
+                        "auction_vwap": (
+                            _numeric_from(auction_row, ("vwap",))
+                            if auction_row is not None
+                            else np.nan
+                        ),
+                        "auction_amount": (
+                            _numeric_from(
+                                auction_row,
+                                ("amount", "auction_amount"),
+                            )
+                            if auction_row is not None
+                            else np.nan
+                        ),
+                        "auction_truth_source": auction_truth_source,
                         "exit_open": exit_price,
                         "actual_buy_gap": features["proposed_gap"],
                         "gross_return": gross_return,
@@ -1989,12 +2157,27 @@ class AuctionV3Engine:
                         "mechanism_limit_pct": mechanism_limit_pct,
                         "fill_reason": fill_reason,
                         "exit_reason": exit_reason,
+                        "history_source": "repository_market_raw",
+                        "history_contract_version": (
+                            "decision_v8_strict_calendar_no_future"
+                        ),
                         **features,
                     }
                 )
         frame = pd.DataFrame(records)
+        external = self._historical_training_rows()
+        if not external.empty:
+            frame = pd.concat(
+                [external, frame],
+                ignore_index=True,
+                sort=False,
+            )
         if frame.empty:
             return frame
+        frame = frame.drop_duplicates(
+            ["signal_date", "ts_code"],
+            keep="last",
+        )
         frame = self._attach_cohort_features(frame)
         frame = self._attach_point_in_time_stage_rates(frame)
         frame = frame.sort_values(["signal_date", "source_rank", "ts_code"]).reset_index(drop=True)
@@ -2112,18 +2295,40 @@ class AuctionV3Engine:
         if len(fit) < max(100, self.config.min_train_rows // 2) or calibration.empty:
             return None
 
-        regression_candidates: list[tuple[float, float, str, Pipeline, float]] = []
+        fit_weights = _date_balanced_weights(fit)
+        calibration_weights = _date_balanced_weights(calibration)
+        return_constant = float(
+            np.average(fit["net_return"].to_numpy(dtype=float), weights=fit_weights)
+        )
+        constant_error = (
+            calibration["net_return"].to_numpy(dtype=float) - return_constant
+        )
+        constant_rmse = float(
+            math.sqrt(np.average(constant_error**2, weights=calibration_weights))
+        )
+        constant_daily_mse = (
+            pd.DataFrame(
+                {
+                    "signal_date": calibration["signal_date"].astype(str).to_numpy(),
+                    "squared_error": constant_error**2,
+                }
+            )
+            .groupby("signal_date")["squared_error"]
+            .mean()
+        )
+        regression_candidates: list[
+            tuple[float, float, str, Pipeline, float, float]
+        ] = []
         regression_audit: dict[str, Any] = {}
         for kind in ("hgb", "extra_trees"):
             provisional = self._regression_pipeline(kind)
             provisional.fit(
                 fit[MODEL_FEATURES],
                 fit["net_return"],
-                model__sample_weight=_date_balanced_weights(fit),
+                model__sample_weight=fit_weights,
             )
             prediction = provisional.predict(calibration[MODEL_FEATURES])
             error = calibration["net_return"].to_numpy(dtype=float) - prediction
-            calibration_weights = _date_balanced_weights(calibration)
             rmse = float(math.sqrt(np.average(error**2, weights=calibration_weights)))
             rank_frame = calibration[["signal_date", "net_return"]].copy()
             rank_frame["prediction"] = prediction
@@ -2135,18 +2340,82 @@ class AuctionV3Engine:
                     float(group[["prediction", "net_return"]].corr(method="spearman").iloc[0, 1])
                 )
             mean_rank_ic = float(np.nanmean(daily_rank_ic)) if daily_rank_ic else 0.0
+            candidate_daily_mse = (
+                pd.DataFrame(
+                    {
+                        "signal_date": calibration["signal_date"].astype(str).to_numpy(),
+                        "squared_error": error**2,
+                    }
+                )
+                .groupby("signal_date")["squared_error"]
+                .mean()
+            )
+            common_dates = constant_daily_mse.index.intersection(
+                candidate_daily_mse.index
+            )
+            daily_win_rate = (
+                float(
+                    (
+                        candidate_daily_mse.loc[common_dates]
+                        < constant_daily_mse.loc[common_dates]
+                    ).mean()
+                )
+                if len(common_dates)
+                else float("nan")
+            )
+            relative_improvement = (
+                (constant_rmse - rmse) / constant_rmse
+                if constant_rmse > 0
+                else float("nan")
+            )
             objective = rmse - 0.01 * float(np.clip(mean_rank_ic, -0.5, 0.5))
-            regression_candidates.append((objective, rmse, kind, provisional, mean_rank_ic))
+            regression_candidates.append(
+                (
+                    objective,
+                    rmse,
+                    kind,
+                    provisional,
+                    mean_rank_ic,
+                    daily_win_rate,
+                )
+            )
             regression_audit[kind] = {
                 "calibration_rmse": _safe_metric(rmse),
                 "daily_spearman": _safe_metric(mean_rank_ic),
+                "constant_baseline_rmse": _safe_metric(constant_rmse),
+                "relative_rmse_improvement": _safe_metric(relative_improvement),
+                "daily_baseline_win_rate": _safe_metric(daily_win_rate),
                 "selection_objective": _safe_metric(objective),
             }
-        _, best_return_rmse, best_return_kind, provisional, best_return_rank_ic = min(
+        (
+            _,
+            best_return_rmse,
+            best_return_kind,
+            provisional,
+            best_return_rank_ic,
+            best_return_daily_win_rate,
+        ) = min(
             regression_candidates,
             key=lambda item: (item[0], item[1], item[2]),
         )
-        calibration_prediction = provisional.predict(calibration[MODEL_FEATURES])
+        best_return_relative_improvement = (
+            (constant_rmse - best_return_rmse) / constant_rmse
+            if constant_rmse > 0
+            else float("nan")
+        )
+        return_model_pass = bool(
+            math.isfinite(best_return_relative_improvement)
+            and best_return_relative_improvement
+            >= self.config.return_min_relative_rmse_improvement
+            and math.isfinite(best_return_daily_win_rate)
+            and best_return_daily_win_rate >= self.config.return_min_daily_win_rate
+        )
+        return_model: Optional[Pipeline] = provisional if return_model_pass else None
+        calibration_prediction = (
+            provisional.predict(calibration[MODEL_FEATURES])
+            if return_model_pass
+            else np.repeat(return_constant, len(calibration))
+        )
         raw_residual = calibration["net_return"].to_numpy(dtype=float) - calibration_prediction
         calibration_bias = float(np.clip(np.median(raw_residual), -0.05, 0.05))
         residual = raw_residual - calibration_bias
@@ -2175,14 +2444,62 @@ class AuctionV3Engine:
                 0.05,
             )
         )
-
-        X = clean[MODEL_FEATURES]
-        return_model = self._regression_pipeline(best_return_kind)
-        return_model.fit(
-            X,
-            clean["net_return"],
-            model__sample_weight=_date_balanced_weights(clean),
-        )
+        conformal_frame = calibration[
+            ["signal_date", "limit_times", "market_sentiment_regime_code"]
+        ].copy()
+        conformal_frame["residual"] = residual
+        conformal_frame["weight"] = calibration_weights
+        conformal_residual_quantiles: dict[str, dict[str, float]] = {
+            "global": {
+                "samples": int(len(conformal_frame)),
+                "q10": _weighted_quantile(
+                    conformal_frame["residual"],
+                    self.config.lower_confidence_quantile,
+                    conformal_frame["weight"],
+                ),
+                "q90": _weighted_quantile(
+                    conformal_frame["residual"],
+                    self.config.prediction_interval_upper_quantile,
+                    conformal_frame["weight"],
+                ),
+            }
+        }
+        stage_values = pd.to_numeric(
+            conformal_frame["limit_times"], errors="coerce"
+        ).round()
+        regime_values = conformal_frame[
+            "market_sentiment_regime_code"
+        ].astype(str)
+        for key, mask in (
+            *(
+                (f"stage:{stage}", stage_values.eq(float(stage)))
+                for stage in (2, 3)
+            ),
+            *(
+                (f"regime:{regime}", regime_values.eq(regime))
+                for regime in sorted(
+                    value
+                    for value in regime_values.unique()
+                    if value and value.lower() not in {"nan", "none"}
+                )
+            ),
+        ):
+            cohort = conformal_frame[mask]
+            if len(cohort) < self.config.conformal_min_cohort_rows:
+                continue
+            conformal_residual_quantiles[key] = {
+                "samples": int(len(cohort)),
+                "q10": _weighted_quantile(
+                    cohort["residual"],
+                    self.config.lower_confidence_quantile,
+                    cohort["weight"],
+                ),
+                "q90": _weighted_quantile(
+                    cohort["residual"],
+                    self.config.prediction_interval_upper_quantile,
+                    cohort["weight"],
+                ),
+            }
 
         def fit_classifier(
             target: str,
@@ -2191,7 +2508,13 @@ class AuctionV3Engine:
             model_clean: Optional[pd.DataFrame] = None,
             model_fit: Optional[pd.DataFrame] = None,
             model_calibration: Optional[pd.DataFrame] = None,
-        ) -> tuple[Optional[Pipeline], float, dict[str, Any]]:
+            model_kinds: Sequence[str] = ("hgb", "lr", "extra_trees"),
+        ) -> tuple[
+            Optional[Pipeline],
+            float,
+            dict[str, Any],
+            ProbabilityCalibrator,
+        ]:
             clean_slice = model_clean if model_clean is not None else clean
             fit_slice = model_fit if model_fit is not None else fit
             calibration_slice = (
@@ -2200,34 +2523,38 @@ class AuctionV3Engine:
                 else calibration
             )
             values = clean_slice[target].astype(int)
-            constant = float(values.mean())
-            counts = values.value_counts()
             fit_values = fit_slice[target].astype(int)
+            fit_weights = _date_balanced_weights(fit_slice)
+            constant = float(
+                np.average(fit_values.to_numpy(dtype=float), weights=fit_weights)
+            )
+            counts = values.value_counts()
             calibration_values = calibration_slice[target].astype(int)
+            constant_calibrator = ProbabilityCalibrator("constant", constant)
 
-            def calibration_audit(
+            def daily_brier(
                 probability: np.ndarray,
-            ) -> tuple[Optional[float], dict[str, float]]:
-                if calibration_slice.empty or len(probability) != len(calibration_slice):
-                    return None, {}
-                truth = calibration_values.to_numpy(dtype=float)
-                squared_error = (np.asarray(probability, dtype=float) - truth) ** 2
-                weights = _date_balanced_weights(calibration_slice)
-                brier = float(np.average(squared_error, weights=weights))
-                daily_frame = pd.DataFrame(
+                mask: np.ndarray,
+            ) -> dict[str, float]:
+                if not mask.any():
+                    return {}
+                squared = (
+                    probability[mask]
+                    - calibration_values.to_numpy(dtype=float)[mask]
+                ) ** 2
+                frame = pd.DataFrame(
                     {
                         "signal_date": calibration_slice["signal_date"]
                         .astype(str)
-                        .to_numpy(),
-                        "squared_error": squared_error,
+                        .to_numpy()[mask],
+                        "squared_error": squared,
                     }
                 )
-                daily = daily_frame.groupby("signal_date")[
-                    "squared_error"
-                ].mean()
-                return brier, {
+                return {
                     str(date): float(value)
-                    for date, value in daily.items()
+                    for date, value in frame.groupby("signal_date")[
+                        "squared_error"
+                    ].mean().items()
                 }
 
             if (
@@ -2236,26 +2563,72 @@ class AuctionV3Engine:
                 or fit_values.nunique() < 2
                 or calibration_slice.empty
             ):
-                constant_probability = np.repeat(constant, len(calibration_slice))
-                constant_brier, daily_brier = calibration_audit(
-                    constant_probability
+                probability = constant_calibrator.transform(
+                    np.zeros(len(calibration_slice))
+                )
+                metrics = probability_metrics(
+                    probability,
+                    calibration_values,
+                    sample_weight=_date_balanced_weights(calibration_slice),
                 )
                 return None, constant, {
                     "selected": "constant",
-                    "calibration_brier": _safe_metric(constant_brier),
-                    "calibration_daily_brier": {
-                        date: _safe_metric(value)
-                        for date, value in daily_brier.items()
-                    },
+                    "base_model": "constant",
+                    "calibration_method": "constant",
+                    "calibration_brier": _safe_metric(metrics.get("brier")),
+                    "constant_baseline_brier": _safe_metric(metrics.get("brier")),
+                    "brier_skill_score": 0.0,
+                    "expected_calibration_error": _safe_metric(metrics.get("ece")),
+                    "reliability": metrics.get("reliability") or [],
+                    "calibration_daily_brier": daily_brier(
+                        probability,
+                        np.ones(len(calibration_slice), dtype=bool),
+                    ),
                     "base_rate": _safe_metric(constant),
                     "features": list(features),
                     "training_rows": int(len(clean_slice)),
                     "training_dates": int(
                         clean_slice["signal_date"].astype(str).nunique()
                     ),
-                }
-            candidates: list[tuple[float, str, np.ndarray, dict[str, float]]] = []
-            for kind in ("hgb", "lr", "extra_trees"):
+                    "model_has_information_gain": False,
+                    "fallback_reason": "insufficient_class_or_calibration_support",
+                }, constant_calibrator
+
+            cal_fit_mask, cal_eval_mask = chronological_calibration_split(
+                calibration_slice["signal_date"].astype(str).to_numpy(),
+                fit_fraction=self.config.calibration_fit_fraction,
+                embargo_dates=self.config.calibration_embargo_dates,
+            )
+            eval_dates = int(
+                calibration_slice.loc[
+                    cal_eval_mask, "signal_date"
+                ].astype(str).nunique()
+            )
+            truth = calibration_values.to_numpy(dtype=int)
+            calibration_weights = _date_balanced_weights(calibration_slice)
+            baseline_probability = np.repeat(constant, len(calibration_slice))
+            baseline_metrics = probability_metrics(
+                baseline_probability[cal_eval_mask],
+                truth[cal_eval_mask],
+                sample_weight=calibration_weights[cal_eval_mask],
+            )
+            baseline_daily = daily_brier(
+                baseline_probability,
+                cal_eval_mask,
+            )
+            candidates: list[
+                tuple[
+                    float,
+                    str,
+                    str,
+                    Pipeline,
+                    ProbabilityCalibrator,
+                    dict[str, Any],
+                    dict[str, float],
+                ]
+            ] = []
+            candidate_audit: dict[str, Any] = {}
+            for kind in model_kinds:
                 provisional_classifier = self._classifier_pipeline(kind)
                 provisional_classifier.fit(
                     fit_slice[list(features)],
@@ -2265,28 +2638,179 @@ class AuctionV3Engine:
                 probability = provisional_classifier.predict_proba(
                     calibration_slice[list(features)]
                 )[:, 1]
-                brier, daily_brier = calibration_audit(probability)
-                candidates.append(
-                    (
-                        _finite(brier, float("inf")),
-                        kind,
-                        probability,
-                        daily_brier,
+                for method in ("identity", "platt", "beta", "isotonic"):
+                    calibrator = fit_probability_calibrator(
+                        method,
+                        probability[cal_fit_mask],
+                        truth[cal_fit_mask],
+                        sample_weight=calibration_weights[cal_fit_mask],
+                        constant=constant,
                     )
-                )
-            best_brier, best_kind, _, best_daily_brier = min(
-                candidates,
-                key=lambda item: (item[0], item[1]),
+                    if calibrator is None:
+                        continue
+                    calibrated = calibrator.transform(probability)
+                    metrics = probability_metrics(
+                        calibrated[cal_eval_mask],
+                        truth[cal_eval_mask],
+                        sample_weight=calibration_weights[cal_eval_mask],
+                    )
+                    candidate_daily = daily_brier(calibrated, cal_eval_mask)
+                    common_dates = sorted(
+                        set(candidate_daily).intersection(baseline_daily)
+                    )
+                    daily_win_rate = (
+                        float(
+                            np.mean(
+                                [
+                                    candidate_daily[date]
+                                    < baseline_daily[date]
+                                    for date in common_dates
+                                ]
+                            )
+                        )
+                        if common_dates
+                        else float("nan")
+                    )
+                    brier = _finite(metrics.get("brier"), float("inf"))
+                    baseline_brier = _finite(
+                        baseline_metrics.get("brier"), float("inf")
+                    )
+                    skill = (
+                        (baseline_brier - brier) / baseline_brier
+                        if baseline_brier > 0
+                        else float("nan")
+                    )
+                    accepted = bool(
+                        eval_dates >= self.config.probability_min_eval_dates
+                        and math.isfinite(skill)
+                        and skill >= self.config.probability_min_brier_skill
+                        and math.isfinite(
+                            _finite(metrics.get("ece"))
+                        )
+                        and _finite(metrics.get("ece"))
+                        <= self.config.probability_max_ece
+                        and math.isfinite(daily_win_rate)
+                        and daily_win_rate
+                        >= self.config.probability_min_daily_win_rate
+                    )
+                    key = f"{kind}+{method}"
+                    candidate_audit[key] = {
+                        "brier": _safe_metric(brier),
+                        "brier_skill_score": _safe_metric(skill),
+                        "log_loss": _safe_metric(metrics.get("log_loss")),
+                        "expected_calibration_error": _safe_metric(
+                            metrics.get("ece")
+                        ),
+                        "daily_baseline_win_rate": _safe_metric(daily_win_rate),
+                        "evaluation_dates": eval_dates,
+                        "accepted": accepted,
+                    }
+                    if accepted:
+                        candidates.append(
+                            (
+                                brier,
+                                kind,
+                                method,
+                                provisional_classifier,
+                                calibrator,
+                                metrics,
+                                candidate_daily,
+                            )
+                        )
+            if not candidates:
+                return None, constant, {
+                    "selected": "constant",
+                    "base_model": "constant",
+                    "calibration_method": "constant",
+                    "calibration_brier": _safe_metric(
+                        baseline_metrics.get("brier")
+                    ),
+                    "constant_baseline_brier": _safe_metric(
+                        baseline_metrics.get("brier")
+                    ),
+                    "brier_skill_score": 0.0,
+                    "expected_calibration_error": _safe_metric(
+                        baseline_metrics.get("ece")
+                    ),
+                    "reliability": baseline_metrics.get("reliability") or [],
+                    "calibration_daily_brier": {
+                        date: _safe_metric(value)
+                        for date, value in baseline_daily.items()
+                    },
+                    "base_rate": _safe_metric(constant),
+                    "features": list(features),
+                    "training_rows": int(len(clean_slice)),
+                    "training_dates": int(
+                        clean_slice["signal_date"].astype(str).nunique()
+                    ),
+                    "calibration_rows": int(len(calibration_slice)),
+                    "calibration_dates": int(
+                        calibration_slice["signal_date"].astype(str).nunique()
+                    ),
+                    "evaluation_dates": eval_dates,
+                    "model_has_information_gain": False,
+                    "fallback_reason": "no_candidate_beat_date_balanced_constant",
+                    "candidates": candidate_audit,
+                }, constant_calibrator
+
+            (
+                best_brier,
+                best_kind,
+                best_method,
+                model,
+                _,
+                best_metrics,
+                best_daily_brier,
+            ) = min(candidates, key=lambda item: (item[0], item[1], item[2]))
+            raw_all_calibration = model.predict_proba(
+                calibration_slice[list(features)]
+            )[:, 1]
+            production_calibrator = fit_probability_calibrator(
+                best_method,
+                raw_all_calibration,
+                truth,
+                sample_weight=calibration_weights,
+                constant=constant,
             )
-            model = self._classifier_pipeline(best_kind)
-            model.fit(
-                clean_slice[list(features)],
-                values,
-                model__sample_weight=_date_balanced_weights(clean_slice),
+            if production_calibrator is None:
+                production_calibrator = ProbabilityCalibrator(
+                    "identity", constant
+                )
+            baseline_brier = _finite(
+                baseline_metrics.get("brier"), float("nan")
+            )
+            skill = (
+                (baseline_brier - best_brier) / baseline_brier
+                if baseline_brier > 0
+                else float("nan")
             )
             return model, constant, {
-                "selected": best_kind,
+                "selected": f"{best_kind}+{best_method}",
+                "base_model": best_kind,
+                "calibration_method": best_method,
                 "calibration_brier": _safe_metric(best_brier),
+                "constant_baseline_brier": _safe_metric(baseline_brier),
+                "brier_skill_score": _safe_metric(skill),
+                "daily_baseline_win_rate": _safe_metric(
+                    np.mean(
+                        [
+                            best_daily_brier[date]
+                            < baseline_daily[date]
+                            for date in sorted(
+                                set(best_daily_brier).intersection(
+                                    baseline_daily
+                                )
+                            )
+                        ]
+                    )
+                    if set(best_daily_brier).intersection(baseline_daily)
+                    else np.nan
+                ),
+                "expected_calibration_error": _safe_metric(
+                    best_metrics.get("ece")
+                ),
+                "log_loss": _safe_metric(best_metrics.get("log_loss")),
+                "reliability": best_metrics.get("reliability") or [],
                 "calibration_daily_brier": {
                     date: _safe_metric(value)
                     for date, value in best_daily_brier.items()
@@ -2295,10 +2819,27 @@ class AuctionV3Engine:
                 "features": list(features),
                 "training_rows": int(len(clean_slice)),
                 "training_dates": int(clean_slice["signal_date"].astype(str).nunique()),
-            }
+                "calibration_rows": int(len(calibration_slice)),
+                "calibration_dates": int(
+                    calibration_slice["signal_date"].astype(str).nunique()
+                ),
+                "evaluation_dates": eval_dates,
+                "model_has_information_gain": True,
+                "candidates": candidate_audit,
+            }, production_calibrator
 
-        profit_model, profit_constant, profit_selection = fit_classifier("profit_hit")
-        loss_model, loss_constant, loss_selection = fit_classifier("big_loss_hit")
+        (
+            profit_model,
+            profit_constant,
+            profit_selection,
+            profit_calibrator,
+        ) = fit_classifier("profit_hit")
+        (
+            loss_model,
+            loss_constant,
+            loss_selection,
+            loss_calibrator,
+        ) = fit_classifier("big_loss_hit")
         focus_clean = clean[
             pd.to_numeric(clean.get("limit_times"), errors="coerce").round().isin((2.0, 3.0))
         ].copy()
@@ -2434,6 +2975,7 @@ class AuctionV3Engine:
                 continuation_model,
                 continuation_constant,
                 continuation_selection,
+                continuation_calibrator,
             ) = sentiment_continuation
             continuation_features = tuple(CONTINUATION_FEATURES)
             feature_set = "streak_path_cohort_and_market_sentiment"
@@ -2445,6 +2987,7 @@ class AuctionV3Engine:
                 continuation_model,
                 continuation_constant,
                 continuation_selection,
+                continuation_calibrator,
             ) = legacy_continuation
             continuation_features = legacy_features
             feature_set = legacy_feature_set
@@ -2486,44 +3029,15 @@ class AuctionV3Engine:
                 ),
             },
         }
-        continuation_stage_logit_adjustments: dict[int, float] = {}
-        continuation_kind = str(continuation_selection.get("selected") or "")
-        if continuation_kind in {"hgb", "lr", "extra_trees"}:
-            provisional_continuation = self._classifier_pipeline(continuation_kind)
-            provisional_continuation.fit(
-                continuation_fit[list(continuation_features)],
-                continuation_fit["continuation_limit_up_hit"].astype(int),
-                model__sample_weight=_date_balanced_weights(continuation_fit),
-            )
-            calibration_probability = provisional_continuation.predict_proba(
-                continuation_calibration[list(continuation_features)]
-            )[:, 1]
-            calibration_stage = pd.to_numeric(
-                continuation_calibration.get("limit_times"),
-                errors="coerce",
-            ).round()
-            calibration_truth = (
-                continuation_calibration["continuation_limit_up_hit"]
-                .astype(int)
-                .to_numpy()
-            )
-            for stage in (2, 3):
-                mask = calibration_stage.eq(stage).to_numpy()
-                samples = int(mask.sum())
-                if samples < 10:
-                    continuation_stage_logit_adjustments[stage] = 0.0
-                    continue
-                predicted_rate = float(np.clip(calibration_probability[mask].mean(), 0.02, 0.98))
-                hits = int(calibration_truth[mask].sum())
-                actual_rate = float(np.clip((hits + 2.0) / (samples + 4.0), 0.02, 0.98))
-                raw_offset = math.log(actual_rate / (1.0 - actual_rate)) - math.log(
-                    predicted_rate / (1.0 - predicted_rate)
-                )
-                shrinkage = samples / (samples + 30.0)
-                continuation_stage_logit_adjustments[stage] = float(
-                    np.clip(raw_offset * shrinkage, -1.0, 1.0)
-                )
-        exit_model, exit_constant, exit_selection = fit_classifier("exit_on_time")
+        # V8 removes the former in-sample stage-logit patch. Stage effects must
+        # now earn their way through the held-out feature model and calibrator.
+        continuation_stage_logit_adjustments: dict[int, float] = {2: 0.0, 3: 0.0}
+        (
+            exit_model,
+            exit_constant,
+            exit_selection,
+            exit_calibrator,
+        ) = fit_classifier("exit_on_time")
         fill_parts: list[pd.DataFrame] = []
         proposal_grid = np.arange(
             self.config.gap_grid_min,
@@ -2543,17 +3057,121 @@ class AuctionV3Engine:
             ).astype(int)
             fill_parts.append(expanded)
         fill_train = pd.concat(fill_parts, ignore_index=True) if fill_parts else pd.DataFrame()
-        fill_values = fill_train.get("fill_at_cap", pd.Series(dtype=int)).astype(int)
-        fill_constant = float(fill_values.mean()) if len(fill_values) else 0.0
-        fill_model: Optional[Pipeline] = None
-        fill_counts = fill_values.value_counts()
-        if len(fill_counts) >= 2 and int(fill_counts.min()) >= 10:
-            fill_model = self._classifier_pipeline()
-            fill_model.fit(
-                fill_train[MODEL_FEATURES],
-                fill_values,
-                model__sample_weight=_date_balanced_weights(fill_train),
+        fill_rows_before_sampling = int(len(fill_train))
+        if len(fill_train) > self.config.fill_max_training_rows:
+            fill_train = fill_train.copy()
+            fill_train["_sample_hash"] = pd.util.hash_pandas_object(
+                fill_train[
+                    [
+                        "signal_date",
+                        "ts_code",
+                        "proposed_gap",
+                    ]
+                ],
+                index=False,
+            ).astype("uint64")
+            date_count_for_fill = max(
+                1,
+                fill_train["signal_date"].astype(str).nunique(),
             )
+            rows_per_date = max(
+                20,
+                int(
+                    math.ceil(
+                        self.config.fill_max_training_rows
+                        / date_count_for_fill
+                    )
+                ),
+            )
+            fill_train = (
+                fill_train.sort_values(
+                    ["signal_date", "_sample_hash"],
+                    kind="stable",
+                )
+                .groupby("signal_date", sort=False, group_keys=False)
+                .head(rows_per_date)
+                .sort_values("_sample_hash", kind="stable")
+                .head(self.config.fill_max_training_rows)
+                .drop(columns=["_sample_hash"])
+                .reset_index(drop=True)
+            )
+        if fill_train.empty:
+            fill_model = None
+            fill_constant = 0.0
+            fill_calibrator = ProbabilityCalibrator("constant", 0.0)
+            fill_selection = {
+                "selected": "constant",
+                "base_model": "constant",
+                "calibration_method": "constant",
+                "base_rate": 0.0,
+                "rows_before_sampling": fill_rows_before_sampling,
+                "rows_after_sampling": 0,
+                "model_has_information_gain": False,
+                "fallback_reason": "no_fill_training_grid",
+            }
+        else:
+            fill_fit = fill_train[
+                fill_train["signal_date"].astype(str).isin(fit_dates)
+            ].copy()
+            fill_calibration = fill_train[
+                fill_train["signal_date"].astype(str).isin(calibration_dates)
+            ].copy()
+            (
+                fill_model,
+                fill_constant,
+                fill_selection,
+                fill_calibrator,
+            ) = fit_classifier(
+                "fill_at_cap",
+                MODEL_FEATURES,
+                model_clean=fill_train,
+                model_fit=fill_fit,
+                model_calibration=fill_calibration,
+                model_kinds=("hgb", "lr"),
+            )
+            fill_selection = {
+                **fill_selection,
+                "rows_before_sampling": fill_rows_before_sampling,
+                "rows_after_sampling": int(len(fill_train)),
+            }
+        probability_quality_gate = {
+            "required_models": [
+                "profit",
+                "big_loss",
+                "continuation_limit_up",
+                "fill",
+            ],
+            "minimum_brier_skill_score": (
+                self.config.probability_min_brier_skill
+            ),
+            "minimum_daily_baseline_win_rate": (
+                self.config.probability_min_daily_win_rate
+            ),
+            "maximum_expected_calibration_error": (
+                self.config.probability_max_ece
+            ),
+            "models": {
+                "profit": bool(
+                    profit_selection.get("model_has_information_gain")
+                ),
+                "big_loss": bool(
+                    loss_selection.get("model_has_information_gain")
+                ),
+                "continuation_limit_up": bool(
+                    continuation_selection.get("model_has_information_gain")
+                ),
+                "fill": bool(
+                    fill_selection.get("model_has_information_gain")
+                ),
+                "exit_on_time": bool(
+                    exit_selection.get("model_has_information_gain")
+                ),
+            },
+        }
+        probability_quality_gate["passed"] = all(
+            probability_quality_gate["models"].get(name) is True
+            for name in probability_quality_gate["required_models"]
+        )
         recent_dates = set(dates[-20:])
         recent = clean[clean["signal_date"].astype(str).isin(recent_dates)].copy()
         recent_stage = pd.to_numeric(recent.get("limit_times"), errors="coerce").round()
@@ -2569,11 +3187,17 @@ class AuctionV3Engine:
             stage_recent_samples[stage] = int(len(values))
         return ModelBundle(
             return_model=return_model,
+            return_constant=return_constant,
             profit_model=profit_model,
             loss_model=loss_model,
             continuation_model=continuation_model,
             fill_model=fill_model,
             exit_model=exit_model,
+            profit_calibrator=profit_calibrator,
+            loss_calibrator=loss_calibrator,
+            continuation_calibrator=continuation_calibrator,
+            fill_calibrator=fill_calibrator,
+            exit_calibrator=exit_calibrator,
             profit_constant=profit_constant,
             loss_constant=loss_constant,
             continuation_constant=continuation_constant,
@@ -2581,8 +3205,12 @@ class AuctionV3Engine:
             exit_constant=exit_constant,
             calibration_bias=calibration_bias,
             expected_return_margin=expected_return_margin,
-            residual_q10=float(np.quantile(residual, self.config.lower_confidence_quantile)),
-            residual_q90=float(np.quantile(residual, self.config.prediction_interval_upper_quantile)),
+            residual_q10=float(
+                conformal_residual_quantiles["global"]["q10"]
+            ),
+            residual_q90=float(
+                conformal_residual_quantiles["global"]["q90"]
+            ),
             gap_min=float(clean["proposed_gap"].quantile(0.01)),
             gap_max=float(clean["proposed_gap"].quantile(0.99)),
             train_rows=len(clean),
@@ -2590,21 +3218,40 @@ class AuctionV3Engine:
             calibration_rows=len(calibration),
             calibration_dates=len(calibration_dates),
             return_selection={
-                "selected": best_return_kind,
+                "selected": (
+                    best_return_kind if return_model_pass else "constant"
+                ),
                 "calibration_rmse": _safe_metric(best_return_rmse),
+                "constant_baseline_rmse": _safe_metric(constant_rmse),
+                "relative_rmse_improvement": _safe_metric(
+                    best_return_relative_improvement
+                ),
+                "daily_baseline_win_rate": _safe_metric(
+                    best_return_daily_win_rate
+                ),
                 "daily_spearman": _safe_metric(best_return_rank_ic),
+                "model_has_information_gain": return_model_pass,
+                "minimum_relative_rmse_improvement": (
+                    self.config.return_min_relative_rmse_improvement
+                ),
+                "minimum_daily_baseline_win_rate": (
+                    self.config.return_min_daily_win_rate
+                ),
                 "candidates": regression_audit,
             },
             classifier_selection={
                 "profit": profit_selection,
                 "big_loss": loss_selection,
                 "continuation_limit_up": continuation_selection,
+                "fill": fill_selection,
                 "exit_on_time": exit_selection,
             },
+            probability_quality_gate=probability_quality_gate,
             stage_recent_rates=stage_recent_rates,
             stage_recent_samples=stage_recent_samples,
             continuation_stage_logit_adjustments=continuation_stage_logit_adjustments,
             continuation_features=continuation_features,
+            conformal_residual_quantiles=conformal_residual_quantiles,
         )
 
     def _score_candidate_at_gaps(self, row: pd.Series, bundle: ModelBundle) -> Optional[dict[str, Any]]:
@@ -2629,27 +3276,86 @@ class AuctionV3Engine:
             grid["stage_recent_promotion_samples"] = float(
                 bundle.stage_recent_samples.get(stage_key, 0)
             )
-        pred = bundle.return_model.predict(grid[MODEL_FEATURES]) + bundle.calibration_bias
-        p_profit = _probability(bundle.profit_model, grid, bundle.profit_constant)
-        p_loss = _probability(bundle.loss_model, grid, bundle.loss_constant)
+        raw_return = (
+            bundle.return_model.predict(grid[MODEL_FEATURES])
+            if bundle.return_model is not None
+            else np.repeat(bundle.return_constant, len(grid))
+        )
+        pred = raw_return + bundle.calibration_bias
+        p_profit = _probability(
+            bundle.profit_model,
+            grid,
+            bundle.profit_constant,
+            calibrator=bundle.profit_calibrator,
+        )
+        p_loss = _probability(
+            bundle.loss_model,
+            grid,
+            bundle.loss_constant,
+            calibrator=bundle.loss_calibrator,
+        )
         p_continuation = _probability(
             bundle.continuation_model,
             grid,
             bundle.continuation_constant,
             bundle.continuation_features,
+            bundle.continuation_calibrator,
         )
         stage_logit_offset = bundle.continuation_stage_logit_adjustments.get(stage_key, 0.0)
         if abs(stage_logit_offset) > EPS:
             clipped = np.clip(p_continuation, 1e-6, 1.0 - 1e-6)
             logits = np.log(clipped / (1.0 - clipped)) + stage_logit_offset
             p_continuation = 1.0 / (1.0 + np.exp(-logits))
-        p_exit = _probability(bundle.exit_model, grid, bundle.exit_constant)
+        p_exit = _probability(
+            bundle.exit_model,
+            grid,
+            bundle.exit_constant,
+            calibrator=bundle.exit_calibrator,
+        )
         # A less aggressive limit price cannot have a higher execution chance.
-        p_fill = np.maximum.accumulate(_probability(bundle.fill_model, grid, bundle.fill_constant))
-        lower = pred - bundle.expected_return_margin
-        upper = pred + bundle.expected_return_margin
-        outcome_q10 = pred + bundle.residual_q10
-        outcome_q90 = pred + bundle.residual_q90
+        p_fill = np.maximum.accumulate(
+            _probability(
+                bundle.fill_model,
+                grid,
+                bundle.fill_constant,
+                calibrator=bundle.fill_calibrator,
+            )
+        )
+        mean_lower = pred - bundle.expected_return_margin
+        mean_upper = pred + bundle.expected_return_margin
+        quantile_candidates = [
+            bundle.conformal_residual_quantiles.get("global", {})
+        ]
+        stage_quantile = bundle.conformal_residual_quantiles.get(
+            f"stage:{stage_key}"
+        )
+        if stage_quantile:
+            quantile_candidates.append(stage_quantile)
+        regime_code = str(row.get("market_sentiment_regime_code") or "")
+        regime_quantile = bundle.conformal_residual_quantiles.get(
+            f"regime:{regime_code}"
+        )
+        if regime_quantile:
+            quantile_candidates.append(regime_quantile)
+        q10_values = [
+            _finite(item.get("q10"))
+            for item in quantile_candidates
+            if math.isfinite(_finite(item.get("q10")))
+        ]
+        q90_values = [
+            _finite(item.get("q90"))
+            for item in quantile_candidates
+            if math.isfinite(_finite(item.get("q90")))
+        ]
+        residual_q10 = min(q10_values) if q10_values else bundle.residual_q10
+        residual_q90 = max(q90_values) if q90_values else bundle.residual_q90
+        outcome_q10 = pred + residual_q10
+        outcome_q90 = pred + residual_q90
+        # The hard gate uses the predictive outcome quantile. A confidence
+        # interval around the mean is reported separately and cannot authorize
+        # a trade with a negative tail.
+        lower = outcome_q10
+        upper = outcome_q90
         risk_adjusted_return = pred - (
             self.config.tail_risk_aversion * p_loss * abs(self.config.big_loss_threshold)
         ) - ((1.0 - p_exit) * self.config.blocked_exit_loss)
@@ -2703,6 +3409,8 @@ class AuctionV3Engine:
             "predicted_net_return": float(pred[chosen]),
             "predicted_return_lcb": float(lower[chosen]),
             "predicted_return_ucb": float(upper[chosen]),
+            "predicted_mean_return_lcb": float(mean_lower[chosen]),
+            "predicted_mean_return_ucb": float(mean_upper[chosen]),
             "predicted_outcome_q10": float(outcome_q10[chosen]),
             "predicted_outcome_q90": float(outcome_q90[chosen]),
             "predicted_profit_probability": float(p_profit[chosen]),
@@ -2725,6 +3433,8 @@ class AuctionV3Engine:
             "predicted_net_return",
             "predicted_return_lcb",
             "predicted_return_ucb",
+            "predicted_mean_return_lcb",
+            "predicted_mean_return_ucb",
             "predicted_outcome_q10",
             "predicted_outcome_q90",
             "predicted_profit_probability",
@@ -2828,8 +3538,23 @@ class AuctionV3Engine:
         dates = sorted(history["signal_date"].unique())
         output: list[pd.DataFrame] = []
         start = self.config.min_train_dates + self.config.embargo_dates
-        for block_start in range(start, len(dates), self.config.backtest_block_dates):
-            test_dates = dates[block_start : block_start + self.config.backtest_block_dates]
+        remaining_dates = max(0, len(dates) - start)
+        bounded_block_dates = max(
+            self.config.backtest_block_dates,
+            int(
+                math.ceil(
+                    remaining_dates
+                    / max(1, self.config.backtest_max_refits)
+                )
+            ),
+        )
+        for refit_index, block_start in enumerate(
+            range(start, len(dates), bounded_block_dates),
+            start=1,
+        ):
+            test_dates = dates[
+                block_start : block_start + bounded_block_dates
+            ]
             train_end = block_start - self.config.embargo_dates
             train_dates = dates[:train_end]
             if len(train_dates) < self.config.min_train_dates:
@@ -2844,6 +3569,8 @@ class AuctionV3Engine:
                 scored = self.score_candidates(group, bundle)
                 scored["oos_train_end"] = train_dates[-1]
                 scored["oos_train_dates"] = len(train_dates)
+                scored["oos_refit_index"] = refit_index
+                scored["oos_block_dates"] = bounded_block_dates
                 scored_parts.append(scored)
             if scored_parts:
                 output.append(pd.concat(scored_parts, ignore_index=True))
@@ -2943,6 +3670,17 @@ class AuctionV3Engine:
         rank_pair = filled[["predicted_net_return", "strategy_net_return"]].dropna()
         rank_ic = float(rank_pair.corr(method="spearman").iloc[0, 1]) if len(rank_pair) >= 5 else float("nan")
         exit_on_time_rate = float(pd.to_numeric(filled.get("exit_on_time"), errors="coerce").mean()) if len(filled) else float("nan")
+        market_regimes = sorted(
+            {
+                str(value)
+                for value in oos.get(
+                    "market_sentiment_regime_code",
+                    pd.Series(dtype=str),
+                ).dropna()
+                if str(value).strip()
+                and str(value).lower() not in {"nan", "none", "insufficient"}
+            }
+        )
         calibration: list[dict[str, Any]] = []
         if len(rank_pair) >= 20:
             try:
@@ -2965,6 +3703,18 @@ class AuctionV3Engine:
             "model_version": self.config.model_version,
             "history_dates": history_dates,
             "oos_dates": len(dates),
+            "walkforward_refits": int(
+                pd.to_numeric(
+                    oos.get("oos_refit_index"),
+                    errors="coerce",
+                ).nunique()
+            ),
+            "walkforward_block_dates": int(
+                pd.to_numeric(
+                    oos.get("oos_block_dates"),
+                    errors="coerce",
+                ).max()
+            ),
             "signals": int(len(selected)),
             "signal_dates": int(signal_dates),
             "signal_date_ratio": _safe_metric(signal_date_ratio),
@@ -3006,11 +3756,17 @@ class AuctionV3Engine:
             "prediction_interval_coverage": _safe_metric(pd.to_numeric(filled["within_prediction_interval"], errors="coerce").mean()),
             "return_rank_ic": _safe_metric(rank_ic),
             "return_calibration": calibration,
+            "market_regimes": market_regimes,
+            "market_regime_count": len(market_regimes),
         }
         failures: list[str] = []
         checks = {
             "history_dates": history_dates >= self.config.promotion_min_dates,
             "oos_dates": len(dates) >= self.config.promotion_min_oos_dates,
+            "market_regime_coverage": (
+                len(market_regimes)
+                >= self.config.promotion_min_market_regimes
+            ),
             "filled_trades": len(filled) >= self.config.promotion_min_filled_trades,
             "stage_focus_filled_trades": (
                 len(stage_focus_filled) >= self.config.promotion_min_stage_focus_filled_trades
@@ -3195,7 +3951,7 @@ class AuctionV3Engine:
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
         scored["feature_contract"] = (
-            "D_CLOSE_PLUS_STREAK_PATH_AND_COHORT_AND_MARKET_SENTIMENT_V7_NO_T_LEAKAGE"
+            "D_CLOSE_STREAK_PATH_SENTIMENT_V8_CALIBRATED_NO_T_LEAKAGE"
         )
         ordered = [
             "prediction_id",
@@ -3260,6 +4016,8 @@ class AuctionV3Engine:
             "predicted_net_return",
             "predicted_return_lcb",
             "predicted_return_ucb",
+            "predicted_mean_return_lcb",
+            "predicted_mean_return_ucb",
             "predicted_outcome_q10",
             "predicted_outcome_q90",
             "predicted_fill_probability",
@@ -3373,7 +4131,10 @@ class AuctionV3Engine:
                     "actual_fill": actual_fill,
                     "actual_fill_reason": "filled_market_proxy" if actual_fill else ("price_above_cap" if not cap_accept else fill_reason),
                     "price_guidance_success": int((actual_fill == 1 and cap_accept) or (actual_fill == 0 and not cap_accept)),
-                    "truth_source": "tushare_minute_proxy" if not self.minute_table(buy_date, code).empty else "market_proxy",
+                    "truth_source": self._execution_open_source(
+                        buy_date,
+                        code,
+                    ),
                     "verification_status": "PENDING_EXIT" if actual_fill else "NO_FILL",
                 }
             )
@@ -3401,20 +4162,6 @@ class AuctionV3Engine:
                 exit_price=exit_price,
             )
             net = gross - self.config.cost_rate if math.isfinite(gross) else np.nan
-            feedback_row = self._manual_feedback_row(feedback, signal_date, code)
-            if feedback_row is not None:
-                feedback_buy = _numeric_from(feedback_row, ("buy_price", "actual_buy_price"))
-                feedback_sell = _numeric_from(feedback_row, ("sell_price", "actual_exit_price"))
-                feedback_fees = _numeric_from(feedback_row, ("fees", "total_fees"), 0.0)
-                quantity = _numeric_from(feedback_row, ("quantity", "qty"), 0.0)
-                if feedback_buy > 0 and feedback_sell > 0:
-                    gross = feedback_sell / feedback_buy - 1.0
-                    fee_rate = feedback_fees / (feedback_buy * quantity) if quantity > 0 else self.config.cost_rate
-                    net = gross - fee_rate
-                    buy_price, exit_price = feedback_buy, feedback_sell
-                    base["truth_source"] = "manual_actual"
-                    base["actual_fill"] = 1
-                    base["actual_fill_reason"] = "manual_fill_feedback"
             predicted = _finite(row.get("predicted_net_return"))
             predicted_loss = _finite(row.get("predicted_big_loss_probability"))
             base.update(
@@ -3569,10 +4316,9 @@ class AuctionV3Engine:
                     "observation_t_return": t_return,
                     "continuation_limit_up_hit": continuation_hit,
                     "validation_status": "T_VERIFIED_FILLED" if observation_fill else "T_VERIFIED_NO_FILL",
-                    "truth_source": (
-                        "tushare_minute_proxy"
-                        if not self.minute_table(buy_date, code).empty
-                        else "official_daily_open_proxy"
+                    "truth_source": self._execution_open_source(
+                        buy_date,
+                        code,
                     ),
                 }
             )
@@ -3666,7 +4412,7 @@ class AuctionV3Engine:
     def _observation_metrics(self, ledger: pd.DataFrame) -> dict[str, Any]:
         if ledger.empty:
             return {
-                "schema_version": "decision_observation_validation_v3_market_open_proxy",
+                "schema_version": "decision_observation_validation_v4_auction_truth",
                 "status": "no_observation_predictions",
                 "generated_at_utc": _utc_now(),
                 "validation_start_exec_date": self.config.observation_validation_start_date,
@@ -3756,7 +4502,7 @@ class AuctionV3Engine:
             int(len(continuation)),
         )
         payload: dict[str, Any] = {
-            "schema_version": "decision_observation_validation_v3_market_open_proxy",
+            "schema_version": "decision_observation_validation_v4_auction_truth",
             "status": "ok",
             "generated_at_utc": _utc_now(),
             "validation_start_exec_date": self.config.observation_validation_start_date,
@@ -3774,6 +4520,24 @@ class AuctionV3Engine:
             "premarket_validated_rows": int(len(t_validated)),
             "retrospective_truth_rows": int(len(retrospective_truth)),
             "unknown_timing_truth_rows": int(len(unknown_timing_truth)),
+            "official_auction_truth_rows": int(
+                all_t_validated.get(
+                    "truth_source",
+                    pd.Series(dtype=str),
+                ).eq("tushare_stk_auction_o").sum()
+            ),
+            "minute_proxy_truth_rows": int(
+                all_t_validated.get(
+                    "truth_source",
+                    pd.Series(dtype=str),
+                ).eq("tushare_minute_0930_proxy").sum()
+            ),
+            "daily_open_proxy_truth_rows": int(
+                all_t_validated.get(
+                    "truth_source",
+                    pd.Series(dtype=str),
+                ).eq("official_daily_open_proxy").sum()
+            ),
             "market_positive_rate": _safe_metric((market_returns > 0).mean()),
             "mean_market_daily_return": _safe_metric(market_returns.mean()),
             "median_market_daily_return": _safe_metric(market_returns.median()),
@@ -3964,7 +4728,94 @@ class AuctionV3Engine:
         _write_csv(ledger, self.config.verification_root / "verify_latest.csv")
         metrics = self._verification_metrics(ledger)
         _write_json(metrics, self.config.metrics_root / "cumulative_latest.json")
+        self.settle_manual_actuals()
         self.settle_observations()
+        return ledger, metrics
+
+    def settle_manual_actuals(
+        self,
+    ) -> tuple[pd.DataFrame, dict[str, Any]]:
+        feedback = self._manual_feedback()
+        records: list[dict[str, Any]] = []
+        for _, row in feedback.iterrows():
+            buy_price = _numeric_from(
+                row,
+                ("buy_price", "actual_buy_price"),
+            )
+            sell_price = _numeric_from(
+                row,
+                ("sell_price", "actual_exit_price"),
+            )
+            quantity = _numeric_from(row, ("quantity", "qty"), 0.0)
+            fees = _numeric_from(row, ("fees", "total_fees"), 0.0)
+            if buy_price <= 0 or sell_price <= 0:
+                continue
+            gross_return = sell_price / buy_price - 1.0
+            fee_rate = (
+                fees / (buy_price * quantity)
+                if quantity > 0 and fees >= 0
+                else self.config.cost_rate
+            )
+            net_return = gross_return - fee_rate
+            records.append(
+                {
+                    **row.to_dict(),
+                    "signal_date": _normal_date(row.get("signal_date")),
+                    "ts_code": _normal_code(row.get("ts_code")),
+                    "actual_buy_date": _normal_date(
+                        row.get("buy_date")
+                        or row.get("actual_buy_date")
+                    ),
+                    "actual_buy_price": buy_price,
+                    "actual_exit_date": _normal_date(
+                        row.get("sell_date")
+                        or row.get("actual_exit_date")
+                    ),
+                    "actual_exit_price": sell_price,
+                    "actual_gross_return": gross_return,
+                    "actual_net_return": net_return,
+                    "actual_fee_rate": fee_rate,
+                    "truth_source": "manual_actual",
+                    "verification_status": "VERIFIED",
+                }
+            )
+        ledger = pd.DataFrame(records)
+        if not ledger.empty:
+            ledger = ledger.sort_values(
+                ["signal_date", "ts_code"],
+                kind="stable",
+            ).reset_index(drop=True)
+        _write_csv(
+            ledger,
+            self.config.verification_root / "manual_actual_latest.csv",
+        )
+        returns = pd.to_numeric(
+            ledger.get("actual_net_return", pd.Series(dtype=float)),
+            errors="coerce",
+        ).dropna()
+        positive = returns[returns > 0].sum()
+        negative = -returns[returns < 0].sum()
+        metrics = {
+            "schema_version": "decision_manual_actual_v1",
+            "generated_at_utc": _utc_now(),
+            "truth_source": "manual_actual",
+            "trades": int(len(returns)),
+            "win_rate": _safe_metric((returns > 0).mean()),
+            "mean_net_return": _safe_metric(returns.mean()),
+            "cumulative_return": _safe_metric(
+                (1.0 + returns).prod() - 1.0
+                if len(returns)
+                else np.nan
+            ),
+            "profit_factor": _safe_metric(
+                positive / negative if negative > 0 else np.nan
+            ),
+        }
+        _write_json(
+            metrics,
+            self.config.metrics_root
+            / "manual_actual_cumulative_latest.json",
+        )
         return ledger, metrics
 
     def _verification_metrics(self, ledger: pd.DataFrame) -> dict[str, Any]:
@@ -3982,9 +4833,33 @@ class AuctionV3Engine:
             "selected_predictions": int(len(selected)),
             "verified_trades": int(len(verified)),
             "pending_or_no_fill": int(len(selected) - len(verified)),
-            "manual_actual_trades": int((verified.get("truth_source", pd.Series(dtype=str)) == "manual_actual").sum()),
-            "tushare_minute_proxy_trades": int((verified.get("truth_source", pd.Series(dtype=str)) == "tushare_minute_proxy").sum()),
-            "market_proxy_trades": int((verified.get("truth_source", pd.Series(dtype=str)) == "market_proxy").sum()),
+            "official_auction_truth_trades": int(
+                (
+                    verified.get(
+                        "truth_source",
+                        pd.Series(dtype=str),
+                    )
+                    == "tushare_stk_auction_o"
+                ).sum()
+            ),
+            "minute_proxy_trades": int(
+                (
+                    verified.get(
+                        "truth_source",
+                        pd.Series(dtype=str),
+                    )
+                    == "tushare_minute_0930_proxy"
+                ).sum()
+            ),
+            "daily_open_proxy_trades": int(
+                (
+                    verified.get(
+                        "truth_source",
+                        pd.Series(dtype=str),
+                    )
+                    == "official_daily_open_proxy"
+                ).sum()
+            ),
             "fill_rate": _safe_metric(pd.to_numeric(selected.get("actual_fill"), errors="coerce").mean()),
             "price_guidance_accuracy": _safe_metric(pd.to_numeric(selected.get("price_guidance_success"), errors="coerce").mean()),
             "win_rate": _safe_metric((returns > 0).mean()),
@@ -4030,6 +4905,42 @@ class AuctionV3Engine:
         history = self.build_history()
         oos, backtest_metrics = self.run_backtest(history)
         bundle = self.fit_models(history)
+        model_quality_failures: list[str] = []
+        if bundle is None:
+            model_quality_failures.append("model_bundle_not_ready")
+        else:
+            if not bool(
+                bundle.return_selection.get("model_has_information_gain")
+            ):
+                model_quality_failures.append(
+                    "return_model_did_not_beat_constant_baseline"
+                )
+            if bundle.probability_quality_gate.get("passed") is not True:
+                model_quality_failures.append(
+                    "probability_models_did_not_pass_brier_skill_gate"
+                )
+        if model_quality_failures:
+            existing_failures = list(
+                backtest_metrics.get("promotion_failures", []) or []
+            )
+            backtest_metrics["promotion_failures"] = list(
+                dict.fromkeys(existing_failures + model_quality_failures)
+            )
+            checks = dict(backtest_metrics.get("promotion_checks") or {})
+            checks["return_model_information_gain"] = (
+                "return_model_did_not_beat_constant_baseline"
+                not in model_quality_failures
+            )
+            checks["probability_brier_skill"] = (
+                "probability_models_did_not_pass_brier_skill_gate"
+                not in model_quality_failures
+            )
+            backtest_metrics["promotion_checks"] = checks
+            backtest_metrics["promoted"] = False
+            _write_json(
+                backtest_metrics,
+                self.config.metrics_root / "backtest_latest.json",
+            )
         prediction = self.build_prediction(
             signal_date,
             candidates,
@@ -4064,6 +4975,64 @@ class AuctionV3Engine:
             )
             or []
         )
+        history_dates = (
+            sorted(history["signal_date"].astype(str).unique())
+            if not history.empty
+            else []
+        )
+        auction_sources = (
+            history.get(
+                "auction_truth_source",
+                pd.Series(dtype=str),
+            )
+            .fillna("missing")
+            .astype(str)
+            .value_counts()
+            .to_dict()
+        )
+        official_auction_rows = int(
+            auction_sources.get("tushare_stk_auction_o", 0)
+        )
+        history_sources = (
+            history.get(
+                "history_source",
+                pd.Series(dtype=str),
+            )
+            .fillna("unknown")
+            .astype(str)
+            .value_counts()
+            .to_dict()
+        )
+        backfill_manifest_path = (
+            self.config.historical_training_root
+            / "manifest_latest.json"
+        )
+        try:
+            backfill_manifest = json.loads(
+                backfill_manifest_path.read_text(encoding="utf-8")
+            )
+        except Exception:
+            backfill_manifest = {}
+        manual_metrics_path = (
+            self.config.metrics_root
+            / "manual_actual_cumulative_latest.json"
+        )
+        observation_metrics_path = (
+            self.config.metrics_root
+            / "observation_cumulative_latest.json"
+        )
+        try:
+            manual_metrics = json.loads(
+                manual_metrics_path.read_text(encoding="utf-8")
+            )
+        except Exception:
+            manual_metrics = {}
+        try:
+            observation_metrics = json.loads(
+                observation_metrics_path.read_text(encoding="utf-8")
+            )
+        except Exception:
+            observation_metrics = {}
         model_meta = {
             "generated_at_utc": _utc_now(),
             "model_version": self.config.model_version,
@@ -4079,6 +5048,49 @@ class AuctionV3Engine:
             ),
             "return_selection": bundle.return_selection if bundle else {},
             "classifier_selection": bundle.classifier_selection if bundle else {},
+            "probability_quality_gate": (
+                bundle.probability_quality_gate if bundle else {}
+            ),
+            "conformal_residual_quantiles": (
+                bundle.conformal_residual_quantiles if bundle else {}
+            ),
+            "data_coverage": {
+                "target_independent_dates": 500,
+                "history_rows": int(len(history)),
+                "history_dates": len(history_dates),
+                "history_start": history_dates[0] if history_dates else "",
+                "history_end": history_dates[-1] if history_dates else "",
+                "calendar": "SSE_strict_exchange_calendar",
+                "history_sources": {
+                    str(key): int(value)
+                    for key, value in history_sources.items()
+                },
+                "auction_truth_sources": {
+                    str(key): int(value)
+                    for key, value in auction_sources.items()
+                },
+                "official_auction_truth_rows": official_auction_rows,
+                "official_auction_truth_coverage": _safe_metric(
+                    official_auction_rows / len(history)
+                    if len(history)
+                    else np.nan
+                ),
+                "backfill_manifest": backfill_manifest,
+            },
+            "truth_ledgers": {
+                "formal_limit_proxy": {
+                    "path": "outputs/auction_v3/verification/verify_latest.csv",
+                    "metrics": cumulative_metrics,
+                },
+                "market_open_observation": {
+                    "path": "outputs/auction_v3/verification/observation_latest.csv",
+                    "metrics": observation_metrics,
+                },
+                "manual_actual": {
+                    "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
+                    "metrics": manual_metrics,
+                },
+            },
             "current_market_sentiment": current_sentiment,
             "stage_recent_promotion_rate": (
                 {
@@ -4136,7 +5148,10 @@ class AuctionV3Engine:
                 "maximum_big_loss_probability": self.config.max_big_loss_probability,
                 "big_loss_threshold": self.config.big_loss_threshold,
                 "minimum_return_lcb": self.config.min_return_lcb,
-                "minute_data": "Tushare 1-minute data supports D-day features and public-market simulation; actual fills require manual feedback",
+                "auction_truth": "Tushare stk_auction_o 9:30 opening-auction close/volume/amount/VWAP is authoritative when available; 09:30 minute and official daily open are labeled fallback proxies",
+                "probability_calibration": "chronological calibration with embargo; model probabilities must beat a date-balanced constant baseline on Brier Skill Score and daily consistency or fall back to the constant",
+                "return_uncertainty": "the hard return gate uses an out-of-sample conformal residual lower quantile, not a confidence interval around the mean",
+                "truth_ledgers": "formal limit-order proxy, market-at-open observation, and manual actual fills are stored and accumulated separately",
                 "future_features_forbidden": True,
             },
         }

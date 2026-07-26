@@ -20,7 +20,9 @@ if str(SRC) not in sys.path:
 
 from top10decision.data.tushare_minute import (  # noqa: E402
     TushareClient,
+    auction_open_output_path,
     normalize_code,
+    write_auction_open_snapshot,
     write_calendar,
     write_minute_snapshot,
 )
@@ -85,6 +87,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=8)
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--calendar-only", action="store_true", help="Sync the strict SSE calendar without minute requests")
+    parser.add_argument(
+        "--auction-only",
+        action="store_true",
+        help="Sync official 9:30 opening-auction truth without minute requests",
+    )
     parser.add_argument("--optional", action="store_true", help="Exit successfully when the secret or minute data is unavailable")
     return parser.parse_args()
 
@@ -120,10 +127,49 @@ def main() -> int:
 
     # rt_min_daily is a same-day feed. Refuse to label it as historical data.
     today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
-    codes = [] if args.calendar_only else _collect_codes(root, trade_date, signal_date, max(1, int(args.max_codes)))
+    codes = (
+        []
+        if args.calendar_only
+        else _collect_codes(
+            root,
+            trade_date,
+            signal_date,
+            max(1, int(args.max_codes)),
+        )
+    )
+    auction_rows = 0
+    auction_status = "calendar_only"
+    auction_path = auction_open_output_path(root, trade_date)
+    if not args.calendar_only and open_map.get(trade_date, 0) == 1 and codes:
+        if auction_path.exists() and auction_path.stat().st_size > 0:
+            auction_rows = int(len(_read_csv(auction_path)))
+            auction_status = "existing_immutable_partition"
+        else:
+            try:
+                auction = client.opening_auction(trade_date)
+                if auction.empty:
+                    auction_status = "source_pending_or_empty"
+                else:
+                    path, _ = write_auction_open_snapshot(
+                        auction,
+                        root,
+                        trade_date,
+                        selected_codes=codes,
+                    )
+                    auction_rows = int(len(_read_csv(path)))
+                    auction_status = "written"
+            except Exception as exc:
+                auction_status = f"unavailable:{type(exc).__name__}"
+                if not args.optional:
+                    raise
     written = 0
     failures: list[dict[str, str]] = []
-    if trade_date == today and open_map.get(trade_date, 0) == 1 and codes:
+    if (
+        not args.auction_only
+        and trade_date == today
+        and open_map.get(trade_date, 0) == 1
+        and codes
+    ):
         def fetch_one(code: str) -> tuple[str, bool, str]:
             try:
                 minute = client.current_minute(code)
@@ -155,6 +201,14 @@ def main() -> int:
         "workers": min(max(1, int(args.workers)), max(1, len(codes))),
         "minute_files_written": int(written),
         "minute_sync_skipped_non_current_date": trade_date != today,
+        "auction_truth_source": "tushare:stk_auction_o",
+        "auction_truth_status": auction_status,
+        "auction_truth_rows": auction_rows,
+        "auction_truth_path": (
+            str(auction_path.relative_to(root))
+            if auction_path.exists()
+            else ""
+        ),
         "failures": failures[:20],
         "token_persisted": False,
     }

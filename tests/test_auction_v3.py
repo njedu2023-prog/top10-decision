@@ -33,6 +33,9 @@ class AuctionV3Test(unittest.TestCase):
             promotion_min_dates=12,
             promotion_min_oos_dates=5,
             backtest_block_dates=4,
+            calibration_min_dates=4,
+            probability_min_eval_dates=2,
+            promotion_min_market_regimes=1,
             order_amount_cny=10_000,
             max_auction_participation=0.02,
             observation_validation_start_date=self.dates[0],
@@ -131,7 +134,16 @@ class AuctionV3Test(unittest.TestCase):
         _, metrics = engine.run_backtest(history)
         bundle = engine.fit_models(history)
         self.assertIsNotNone(bundle)
-        self.assertIsNotNone(bundle.fill_model)
+        self.assertIsNotNone(bundle.fill_calibrator)
+        self.assertIn("fill", bundle.classifier_selection)
+        if bundle.fill_model is None:
+            self.assertEqual(
+                bundle.classifier_selection["fill"]["selected"],
+                "constant",
+            )
+            self.assertFalse(
+                bundle.classifier_selection["fill"]["model_has_information_gain"]
+            )
         signal_date = self.dates[1]
         candidates = engine.load_candidates(signal_date)
         first = engine.build_prediction(signal_date, candidates, bundle, metrics)
@@ -139,6 +151,8 @@ class AuctionV3Test(unittest.TestCase):
         self.assertIn("observation_max_price", first.columns)
         self.assertIn("observation_rank", first.columns)
         self.assertIn("predicted_continuation_limit_up_probability", first.columns)
+        self.assertIn("predicted_mean_return_lcb", first.columns)
+        self.assertIn("predicted_mean_return_ucb", first.columns)
         self.assertIn("market_order_allowed", first.columns)
         self.assertIn("feature_contract", first.columns)
         self.assertIn("path_label", first.columns)
@@ -154,13 +168,13 @@ class AuctionV3Test(unittest.TestCase):
         self.assertTrue(
             first["feature_contract"]
             .astype(str)
-            .str.contains("STREAK_PATH_AND_COHORT")
+            .str.contains("STREAK_PATH_SENTIMENT")
             .all()
         )
         self.assertTrue(
             first["feature_contract"]
             .astype(str)
-            .str.contains("MARKET_SENTIMENT")
+            .str.contains("CALIBRATED_NO_T_LEAKAGE")
             .all()
         )
         selected = first[first["selected"].eq(1)]
@@ -229,6 +243,37 @@ class AuctionV3Test(unittest.TestCase):
             "market_prev_limit_up_mean_return",
         ):
             self.assertAlmostEqual(context[field], recomputed[field])
+
+    def test_official_opening_auction_truth_precedes_legacy_proxy(self) -> None:
+        trade_date = self.dates[1]
+        code = self.codes[0]
+        market_root = (
+            self.root
+            / "data"
+            / "market"
+            / "raw"
+            / trade_date[:4]
+            / trade_date
+        )
+        pd.DataFrame(
+            [
+                {
+                    "ts_code": code,
+                    "trade_date": trade_date,
+                    "close": 12.34,
+                    "open": 12.30,
+                    "high": 12.35,
+                    "low": 12.29,
+                    "vol": 100_000,
+                    "amount": 1_234_000,
+                    "vwap": 12.33,
+                }
+            ]
+        ).to_csv(market_root / "stk_auction_o.csv", index=False)
+        engine = AuctionV3Engine(self.config)
+        _, source = engine._auction_row(trade_date, code)
+        self.assertEqual(source, "tushare_stk_auction_o")
+        self.assertAlmostEqual(engine._auction_price(trade_date, code), 12.34)
 
     def test_market_sentiment_derives_missing_pre_close_per_stock(self) -> None:
         signal_date = self.dates[2]

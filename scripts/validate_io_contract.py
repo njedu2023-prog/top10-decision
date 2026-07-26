@@ -33,6 +33,11 @@ from typing import Iterable, List, Optional
 
 import pandas as pd
 
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
 try:
     from top10decision.writers.io_contract import is_a_share_trading_day
 except Exception:

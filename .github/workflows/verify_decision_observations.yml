@@ -141,9 +141,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add outputs/auction_v3/verification/observation_*.csv
+          git add outputs/auction_v3/verification/manual_actual_latest.csv
           git add outputs/auction_v3/metrics/observation_cumulative_latest.json
+          git add outputs/auction_v3/metrics/manual_actual_cumulative_latest.json
           git add outputs/decision/action_plan_20*.json
           git add outputs/decision/action_plan_latest.json
+          git add data/market/trade_cal_sse.csv
+          find data/market/raw -type f \
+            \( -name 'stk_auction_o.csv' -o -name 'stk_auction_o.meta.json' \) \
+            -print0 | xargs -0 -r git add --
           if git diff --cached --quiet; then
             echo "Decision observation truth is already current"
             exit 0

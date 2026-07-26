@@ -1,4 +1,4 @@
-name: Run Decision Manual Auction Guidance V7
+name: Run Decision Manual Auction Guidance V8
 
 on:
   push:
@@ -10,10 +10,12 @@ on:
       - "src/top10decision/data/**"
       - "scripts/run_auction_v3.py"
       - "scripts/sync_tushare_minute.py"
+      - "scripts/backfill_decision_v8_history.py"
       - "scripts/publish_decision_action.py"
       - "scripts/verify_decision_observations.py"
       - "tests/test_auction_v3.py"
       - "tests/test_decision_contract.py"
+      - "tests/test_decision_v8_calibration.py"
   workflow_run:
     workflows: ["Run Top10 Decision (Auto Daily)"]
     types: [completed]
@@ -37,11 +39,11 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  group: decision-auction-guidance-v7
+  group: decision-auction-guidance-v8
   cancel-in-progress: true
 
 jobs:
-  auction_guidance_v7:
+  auction_guidance_v8:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -65,10 +67,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=${GITHUB_WORKSPACE}/src" >> "$GITHUB_ENV"
+
       - name: Run Decision execution tests
         run: |
           set -e
           python -m unittest discover -s tests -p 'test_auction_v3.py' -v
+          python -m unittest discover -s tests -p 'test_decision_v8_calibration.py' -v
           python -m unittest discover -s tests -p 'test_decision_contract.py' -v
 
       - name: Sync strict calendar and Tushare minute truth
@@ -83,7 +89,7 @@ jobs:
           fi
           python scripts/sync_tushare_minute.py "${args[@]}"
 
-      - name: Run Decision manual auction guidance V7
+      - name: Run Decision manual auction guidance V8
         env:
           SIGNAL_DATE: ${{ inputs.signal_date }}
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
@@ -132,12 +138,15 @@ jobs:
           git add outputs/decision/action_plan_*.json outputs/decision/report_index.json
           git add data/market/trade_cal_sse.csv || true
           git add -A data/market/minute_1m || true
+          find data/market/raw -type f \
+            \( -name 'stk_auction_o.csv' -o -name 'stk_auction_o.meta.json' \) \
+            -print0 | xargs -0 -r git add --
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision guidance V7 has no changed artifacts"
+            echo "Decision guidance V8 has no changed artifacts"
             exit 0
           fi
-          git commit -m "auto: update Decision V7 guidance and validation"
+          git commit -m "auto: update Decision V8 guidance and validation"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main
