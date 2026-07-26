@@ -1,15 +1,15 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-26T13:14:43+00:00",
+  "generated_at_utc": "2026-07-26T14:07:21+00:00",
   "model_version": "auction_v8_calibrated_auction_truth_oos_1",
-  "history_dates": 458,
-  "oos_dates": 330,
+  "history_dates": 578,
+  "oos_dates": 430,
   "walkforward_refits": 10,
-  "walkforward_block_dates": 33,
+  "walkforward_block_dates": 43,
   "signals": 0,
   "signal_dates": 0,
   "signal_date_ratio": 0.0,
-  "max_no_signal_streak": 330,
+  "max_no_signal_streak": 430,
   "average_signals_per_signal_date": null,
   "filled_trades": 0,
   "fill_rate": null,
@@ -28,7 +28,7 @@
   "mean_daily_return": 0.0,
   "stress_1_5x_cost_mean_daily_return": 0.0,
   "stress_2x_cost_mean_daily_return": 0.0,
-  "benchmark_mean_daily_return": -0.0188198765,
+  "benchmark_mean_daily_return": -0.0181917255,
   "uncapped_model_mean_daily_return": 0.0,
   "cumulative_return": 0.0,
   "max_drawdown": 0.0,
@@ -45,14 +45,16 @@
   "return_calibration": [],
   "market_regimes": [
     "EBB",
+    "EUPHORIA",
     "EXPANSION",
+    "HIGH_DIVERGENCE",
     "ICE",
     "NEUTRAL",
     "REPAIR"
   ],
-  "market_regime_count": 5,
+  "market_regime_count": 7,
   "promotion_checks": {
-    "history_dates": false,
+    "history_dates": true,
     "oos_dates": true,
     "market_regime_coverage": true,
     "filled_trades": false,
@@ -70,11 +72,10 @@
     "exit_on_time_90pct": false,
     "big_loss_rate_cap": false,
     "tail_loss_floor": false,
-    "return_model_information_gain": false,
+    "return_model_information_gain": true,
     "probability_brier_skill": false
   },
   "promotion_failures": [
-    "history_dates",
     "filled_trades",
     "stage_focus_filled_trades",
     "signal_date_ratio",
@@ -88,112 +89,11 @@
     "exit_on_time_90pct",
     "big_loss_rate_cap",
     "tail_loss_floor",
-    "return_model_did_not_beat_constant_baseline",
     "probability_models_did_not_pass_brier_skill_gate"
   ],
   "promoted": false,
   "path_oos": {},
   "daily_equity": [
-    {
-      "signal_date": "20230717",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230718",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230719",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230720",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230721",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230724",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230725",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230726",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230727",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230728",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230731",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230801",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230802",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230803",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230804",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230807",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230808",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230809",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230810",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
-    {
-      "signal_date": "20230811",
-      "daily_return": 0.0,
-      "nav": 1.0
-    },
     {
       "signal_date": "20230814",
       "daily_return": 0.0,
@@ -1251,6 +1151,606 @@
     },
     {
       "signal_date": "20240701",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240702",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240703",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240704",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240705",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240708",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240709",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240710",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240711",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240712",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240715",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240716",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240717",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240718",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240719",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240722",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240723",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240724",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240725",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240726",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240729",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240730",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240731",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240801",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240802",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240805",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240806",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240807",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240808",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240809",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240812",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240813",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240814",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240815",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240816",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240819",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240820",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240821",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240822",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240823",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240826",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240827",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240828",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240829",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240830",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240902",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240903",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240904",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240905",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240906",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240909",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240910",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240911",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240912",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240913",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240918",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240919",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240920",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240923",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240924",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240925",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240926",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240927",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20240930",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241008",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241009",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241010",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241011",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241014",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241015",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241016",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241017",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241018",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241021",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241022",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241023",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241024",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241025",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241028",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241029",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241030",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241031",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241101",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241104",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241105",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241106",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241107",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241108",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241111",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241112",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241113",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241114",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241115",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241118",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241119",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241120",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241121",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241122",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241125",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241126",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241127",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241128",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241129",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241202",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241203",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241204",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241205",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241206",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241209",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241210",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241211",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241212",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241213",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241216",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241217",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241218",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241219",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241220",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241223",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241224",
+      "daily_return": 0.0,
+      "nav": 1.0
+    },
+    {
+      "signal_date": "20241225",
       "daily_return": 0.0,
       "nav": 1.0
     },
