@@ -39,8 +39,8 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  group: decision-auction-guidance-v8
-  cancel-in-progress: true
+  group: decision-v8-main-writer
+  cancel-in-progress: false
 
 jobs:
   auction_guidance_v8:

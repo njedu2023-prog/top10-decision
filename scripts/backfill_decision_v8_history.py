@@ -273,7 +273,7 @@ def main() -> int:
         prefix="decision-v8-backfill-"
     ) as temp_name:
         temp_root = Path(temp_name)
-        for trade_date in fetch_dates:
+        for index, trade_date in enumerate(fetch_dates, start=1):
             market_root = (
                 temp_root
                 / "data"
@@ -344,6 +344,13 @@ def main() -> int:
                 endpoint_rows["daily_basic"] += len(daily_basic)
                 endpoint_rows["limit_list_d"] += len(detail)
                 endpoint_rows["stk_auction_o"] += len(auction)
+                if index == 1 or index % 10 == 0 or index == len(fetch_dates):
+                    print(
+                        "[decision-v8-backfill] "
+                        f"fetched {index}/{len(fetch_dates)} dependency dates; "
+                        f"current={trade_date}",
+                        flush=True,
+                    )
             except Exception as exc:
                 failures.append(
                     {

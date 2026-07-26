@@ -29,7 +29,7 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  group: decision-v8-history-backfill
+  group: decision-v8-main-writer
   cancel-in-progress: false
 
 jobs:
@@ -98,6 +98,30 @@ jobs:
           done
           test "${completed}" = "1"
 
+      - name: Persist immutable history before model rebuild
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/auction_v3/history
+          git add data/market/trade_cal_sse.csv
+          if git diff --cached --quiet; then
+            echo "Decision V8 compact history is already current"
+            exit 0
+          fi
+          git commit -m "auto: extend Decision V8 independent history"
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            git rebase --abort || true
+            sleep 3
+          done
+          test "${pushed}" = "1"
+
       - name: Run Decision V8 calibration tests
         run: |
           set -e
@@ -117,8 +141,6 @@ jobs:
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/auction_v3/history
-          git add data/market/trade_cal_sse.csv
           git add -A outputs/auction_v3
           git add outputs/decision/action_plan_*.json
           git add outputs/decision/report_index.json
