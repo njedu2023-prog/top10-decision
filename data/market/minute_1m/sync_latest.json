@@ -9,6 +9,10 @@
   "workers": 6,
   "minute_files_written": 0,
   "minute_sync_skipped_non_current_date": false,
+  "auction_truth_source": "tushare:stk_auction_o",
+  "auction_truth_status": "calendar_only",
+  "auction_truth_rows": 0,
+  "auction_truth_path": "",
   "failures": [],
   "token_persisted": false
 }
