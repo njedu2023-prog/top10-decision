@@ -1,7 +1,7 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-26T17:08:17+00:00",
-  "model_version": "auction_v8_calibrated_auction_truth_oos_1",
+  "generated_at_utc": "2026-07-26T23:14:22+00:00",
+  "model_version": "auction_v8_calibrated_auction_truth_oos_2",
   "history_dates": 698,
   "oos_dates": 530,
   "walkforward_refits": 10,
@@ -2744,5 +2744,6 @@
       "daily_return": 0.0,
       "nav": 1.0
     }
-  ]
+  ],
+  "model_artifact_sha256": "f7d0b942e6a602c7ad76ca25db6cdc8dcb01aef7b4b824368843cf50350c4c27"
 }

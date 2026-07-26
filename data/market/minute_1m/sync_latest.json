@@ -15,23 +15,7 @@
   "auction_truth_path": "",
   "failures": [
     {
-      "ts_code": "002412.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603221.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "000595.SZ",
-      "reason": "empty"
-    },
-    {
       "ts_code": "000603.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002197.SZ",
       "reason": "empty"
     },
     {
@@ -39,11 +23,23 @@
       "reason": "empty"
     },
     {
-      "ts_code": "600722.SH",
+      "ts_code": "603221.SH",
       "reason": "empty"
     },
     {
-      "ts_code": "002900.SZ",
+      "ts_code": "002412.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002197.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "000595.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600722.SH",
       "reason": "empty"
     },
     {
@@ -51,7 +47,7 @@
       "reason": "empty"
     },
     {
-      "ts_code": "603619.SH",
+      "ts_code": "002900.SZ",
       "reason": "empty"
     },
     {
@@ -63,23 +59,7 @@
       "reason": "empty"
     },
     {
-      "ts_code": "001382.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002298.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "600379.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "000533.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002353.SZ",
+      "ts_code": "603619.SH",
       "reason": "empty"
     },
     {
@@ -87,11 +67,31 @@
       "reason": "empty"
     },
     {
+      "ts_code": "002298.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001382.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "000533.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600379.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002353.SZ",
+      "reason": "empty"
+    },
+    {
       "ts_code": "001258.SZ",
       "reason": "empty"
     },
     {
-      "ts_code": "002300.SZ",
+      "ts_code": "001208.SZ",
       "reason": "empty"
     }
   ],
