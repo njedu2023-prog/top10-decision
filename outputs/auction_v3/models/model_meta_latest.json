@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-26T10:52:46+00:00",
+  "generated_at_utc": "2026-07-26T11:03:47+00:00",
   "model_version": "auction_v8_calibrated_auction_truth_oos_1",
   "ready": true,
   "promoted": false,
@@ -1169,7 +1169,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-07-26T10:52:45+00:00",
+        "generated_at_utc": "2026-07-26T11:03:46+00:00",
         "frozen_predictions": 436,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -1214,7 +1214,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-07-26T10:52:45+00:00",
+        "generated_at_utc": "2026-07-26T11:03:46+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -1346,7 +1346,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-07-26T10:52:45+00:00",
+        "generated_at_utc": "2026-07-26T11:03:46+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -1452,7 +1452,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-26T10:51:43+00:00",
+    "generated_at_utc": "2026-07-26T11:02:45+00:00",
     "model_version": "auction_v8_calibrated_auction_truth_oos_1",
     "history_dates": 98,
     "oos_dates": 36,
