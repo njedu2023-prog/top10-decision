@@ -3826,7 +3826,11 @@ class AuctionV3Engine:
         oos = self._walkforward_predictions(history)
         metrics = self._portfolio_metrics(oos, history["signal_date"].nunique() if not history.empty else 0)
         _write_csv(history, self.config.metrics_root / "training_history_latest.csv")
-        _write_csv(oos, self.config.metrics_root / "backtest_trades_latest.csv")
+        trade_audit = oos.copy()
+        if "selected" in trade_audit.columns:
+            selected = pd.to_numeric(trade_audit["selected"], errors="coerce").fillna(0).eq(1)
+            trade_audit = trade_audit.loc[selected].copy()
+        _write_csv(trade_audit, self.config.metrics_root / "backtest_trades_latest.csv")
         _write_json(metrics, self.config.metrics_root / "backtest_latest.json")
         return oos, metrics
 

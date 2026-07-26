@@ -128,6 +128,26 @@ class AuctionV3Test(unittest.TestCase):
         self.assertTrue((oos["oos_train_end"] < oos["signal_date"]).all())
         self.assertGreater(metrics["oos_dates"], 0)
 
+    def test_backtest_trade_audit_only_persists_selected_rows(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        history = pd.DataFrame({"signal_date": [self.dates[0], self.dates[1]]})
+        oos = pd.DataFrame(
+            [
+                {"signal_date": self.dates[0], "ts_code": self.codes[0], "selected": 0},
+                {"signal_date": self.dates[1], "ts_code": self.codes[1], "selected": 1},
+            ]
+        )
+        with (
+            mock.patch.object(engine, "_walkforward_predictions", return_value=oos),
+            mock.patch.object(engine, "_portfolio_metrics", return_value={"promoted": False}),
+        ):
+            returned, metrics = engine.run_backtest(history)
+
+        persisted = pd.read_csv(self.config.metrics_root / "backtest_trades_latest.csv")
+        self.assertEqual(len(returned), 2)
+        self.assertEqual(metrics, {"promoted": False})
+        self.assertEqual(persisted["ts_code"].tolist(), [self.codes[1]])
+
     def test_prediction_is_frozen_and_has_actionable_price(self) -> None:
         engine = AuctionV3Engine(self.config)
         history = engine.build_history()
