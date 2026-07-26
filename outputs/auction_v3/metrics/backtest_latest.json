@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-26T15:30:52+00:00",
+  "generated_at_utc": "2026-07-26T17:08:17+00:00",
   "model_version": "auction_v8_calibrated_auction_truth_oos_1",
   "history_dates": 698,
   "oos_dates": 530,

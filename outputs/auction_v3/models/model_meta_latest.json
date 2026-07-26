@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-26T15:33:58+00:00",
+  "generated_at_utc": "2026-07-26T17:10:25+00:00",
   "model_version": "auction_v8_calibrated_auction_truth_oos_1",
   "ready": true,
   "promoted": false,
@@ -261,10 +261,10 @@
           "accepted": false
         },
         "lr+isotonic": {
-          "brier": 0.2420441514,
-          "brier_skill_score": -0.0178225538,
-          "log_loss": 0.6871381502,
-          "expected_calibration_error": 0.0552226883,
+          "brier": 0.2420441513,
+          "brier_skill_score": -0.0178225535,
+          "log_loss": 0.68713815,
+          "expected_calibration_error": 0.0552226884,
           "daily_baseline_win_rate": 0.4,
           "evaluation_dates": 55,
           "accepted": false
@@ -1684,7 +1684,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-07-26T15:33:56+00:00",
+        "generated_at_utc": "2026-07-26T17:10:24+00:00",
         "frozen_predictions": 436,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -1729,7 +1729,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-07-26T15:33:57+00:00",
+        "generated_at_utc": "2026-07-26T17:10:24+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -1861,7 +1861,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-07-26T15:33:56+00:00",
+        "generated_at_utc": "2026-07-26T17:10:24+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -1967,7 +1967,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-26T15:30:52+00:00",
+    "generated_at_utc": "2026-07-26T17:08:17+00:00",
     "model_version": "auction_v8_calibrated_auction_truth_oos_1",
     "history_dates": 698,
     "oos_dates": 530,
