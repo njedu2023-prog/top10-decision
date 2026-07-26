@@ -165,6 +165,20 @@ def _mean_numeric_col(df: pd.DataFrame, col: str) -> float:
     return float(s.fillna(0.0).mean()) if len(s) else 0.0
 
 
+def _allows_unpromoted_no_trade(
+    action_plan: dict,
+    *,
+    picked: int,
+) -> bool:
+    model = action_plan.get("model") or {}
+    return bool(
+        action_plan.get("status_code") == "NO_TRADE_MODEL_NOT_PROMOTED"
+        and action_plan.get("formal_buy_count") == 0
+        and model.get("promoted") is False
+        and picked <= 0
+    )
+
+
 def _validate_semantic_health(
     *,
     exec_date: str,
@@ -178,13 +192,22 @@ def _validate_semantic_health(
         _fail(f"exec_date={exec_date} 不是严格 A 股交易日")
     _ok(f"exec_date={exec_date} 通过严格 A 股交易日历校验")
 
+    picked = int(pd.to_numeric(pd.Series([payload.get("picked", 0)]), errors="coerce").fillna(0).iloc[0])
     learning_path = Path("outputs/learning/learning_acceptance_latest.json")
     learning = _read_json_any(learning_path)
     if not learning:
         _fail(f"严格语义校验需要学习验收产物：{learning_path.as_posix()}")
     if learning.get("overall_pass") is not True:
-        _fail(f"learning_acceptance overall_pass != true: {learning.get('overall_pass')}")
-    _ok("learning_acceptance overall_pass=true")
+        action_plan = _read_json_any(Path("outputs/decision/action_plan_latest.json"))
+        if _allows_unpromoted_no_trade(action_plan, picked=picked):
+            _warn(
+                "learning_acceptance overall_pass=false；"
+                "V8 模型未晋级且正式买入/picked 均为0，按严格 NO_TRADE 放行"
+            )
+        else:
+            _fail(f"learning_acceptance overall_pass != true: {learning.get('overall_pass')}")
+    else:
+        _ok("learning_acceptance overall_pass=true")
 
     for prefix in ("pfill", "eret"):
         missing_col = f"{prefix}_model_missing_feature_count"
@@ -196,7 +219,6 @@ def _validate_semantic_health(
     if eret_missing_ratio > 0.05:
         _fail(f"eret_model_feature_missing_cell_ratio mean={eret_missing_ratio:.6f} > 0.05")
 
-    picked = int(pd.to_numeric(pd.Series([payload.get("picked", 0)]), errors="coerce").fillna(0).iloc[0])
     if picked <= 0:
         _warn("picked=0：严格语义校验允许 NO_TRADE，但已显式告警")
 

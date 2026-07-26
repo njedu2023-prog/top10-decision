@@ -23,6 +23,7 @@ from scripts.resolve_sample_maturity import (  # noqa: E402
     resolve_trade_calendar,
 )
 from scripts.sync_tushare_minute import _collect_codes  # noqa: E402
+from scripts.validate_io_contract import _allows_unpromoted_no_trade  # noqa: E402
 from top10decision.data.tushare_minute import opening_auction_price_from_snapshot  # noqa: E402
 from top10decision.decision.action_plan import build_action_plan  # noqa: E402
 from top10decision.decision.eligibility import filter_standard_limit_universe  # noqa: E402
@@ -119,6 +120,29 @@ class DecisionCalendarContractTests(unittest.TestCase):
                 current_run_date="20260507",
                 trade_calendar_file=calendar_path,
             )
+
+
+class DecisionStrictSemanticContractTests(unittest.TestCase):
+    def test_unpromoted_v8_no_trade_accepts_failed_legacy_learning_gate(self) -> None:
+        plan = {
+            "status_code": "NO_TRADE_MODEL_NOT_PROMOTED",
+            "formal_buy_count": 0,
+            "model": {"promoted": False},
+        }
+        self.assertTrue(_allows_unpromoted_no_trade(plan, picked=0))
+
+    def test_no_trade_exception_fails_closed_when_any_guard_is_missing(self) -> None:
+        plan = {
+            "status_code": "NO_TRADE_MODEL_NOT_PROMOTED",
+            "formal_buy_count": 1,
+            "model": {"promoted": False},
+        }
+        self.assertFalse(_allows_unpromoted_no_trade(plan, picked=0))
+        plan["formal_buy_count"] = 0
+        plan["model"]["promoted"] = True
+        self.assertFalse(_allows_unpromoted_no_trade(plan, picked=0))
+        plan["model"]["promoted"] = False
+        self.assertFalse(_allows_unpromoted_no_trade(plan, picked=1))
 
 
 class DecisionExecutionTruthTests(unittest.TestCase):
