@@ -191,6 +191,34 @@
     .metric strong.bad { color: var(--bad); }
     .metric strong.warn { color: var(--warn); }
 
+    .metrics-disclosure {
+      margin-bottom: 14px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .metrics-disclosure summary {
+      min-height: 46px;
+      padding: 11px 16px;
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 680;
+    }
+    .metrics-disclosure summary::-webkit-details-marker { display: none; }
+    .metrics-disclosure summary::before {
+      content: "＋";
+      width: 20px;
+      color: var(--brand);
+      flex: 0 0 auto;
+    }
+    .metrics-disclosure[open] summary::before { content: "−"; }
+    .metrics-disclosure-title { margin-right: auto; }
+    .metrics-disclosure .metrics { margin: 0; padding: 0 16px 14px; }
+
     .panel {
       margin-bottom: 14px;
       border-top: 1px solid var(--line);
@@ -332,6 +360,8 @@
       .status-title { font-size: 18px; }
       .date-contract { grid-template-columns: 1fr; }
       .metrics { grid-template-columns: repeat(2, minmax(120px, 1fr)); padding: 0 12px; }
+      .metrics-disclosure summary { padding: 11px 12px; }
+      .metrics-disclosure .metrics { padding: 0 12px 12px; }
       .metric { min-height: 76px; }
       .metric strong { font-size: 17px; }
       .panel-head { padding: 11px 12px; }
@@ -378,7 +408,13 @@
       </div>
     </section>
 
-    <section id="metrics" class="metrics" aria-label="核心指标"></section>
+    <details class="metrics-disclosure">
+      <summary>
+        <span class="metrics-disclosure-title">核心指标</span>
+        <span id="metricsCount" class="count">0 项</span>
+      </summary>
+      <section id="metrics" class="metrics" aria-label="核心指标"></section>
+    </details>
 
     <section class="panel">
       <div class="panel-head">
@@ -453,7 +489,7 @@
     const CACHE_KEY = "decision-dashboard-v9-industry-sentiment-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
-      "signalDate", "execDate", "exitDate", "metrics", "sentimentState", "sentimentMetrics", "sentimentIndustries", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "signalDate", "execDate", "exitDate", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -641,6 +677,7 @@
         metric("模型版本", modelDisplayName(plan?.model?.version))
       ];
       els.metrics.innerHTML = rows.join("");
+      els.metricsCount.textContent = `${rows.length} 项`;
     }
 
     function renderSentiment(plan) {
