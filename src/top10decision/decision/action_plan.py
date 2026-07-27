@@ -152,12 +152,19 @@ def _rejection_reason(value: Any) -> str:
     reason = _text(value)
     return {
         "no_safe_price": "没有通过成本、成交、退出和尾部风险约束的安全竞价价格",
-        "big_loss_probability_exceeds_cap": "预测大跌概率超过15%硬上限，禁止建议买入",
+        "selection_policy_not_ready": "独立策略留出期没有找到同时满足频率、收益、成本压力与尾部风险的可执行策略",
+        "big_loss_probability_exceeds_cap": "预测大跌概率超过独立留出期确定的风险上限，禁止建议买入",
+        "big_loss_probability_exceeds_policy_cap": "预测大跌概率超过独立留出期确定的风险上限，禁止建议买入",
         "return_lcb_not_positive": "保守收益下界不为正，禁止建议买入",
+        "mean_return_lcb_below_policy_floor": "预测均值的保守下界低于独立留出期确定的最低要求",
         "exit_probability_below_floor": "T+1可退出概率不足，禁止建议买入",
+        "exit_probability_below_policy_floor": "T+1可退出概率低于策略门槛，禁止建议买入",
         "fill_probability_below_floor": "竞价可成交概率不足，放弃",
+        "fill_probability_below_policy_floor": "竞价可成交概率低于策略门槛，放弃",
         "profit_probability_below_floor": "盈利概率不足，放弃",
         "conservative_edge_below_floor": "扣除尾部风险与不可退出风险后没有正优势",
+        "conservative_ev_below_policy_floor": "扣除尾部风险与不可退出风险后的保守期望不足",
+        "selection_score_below_policy_cutoff": "综合排序分低于独立留出期确定的入选分位",
         "insufficient_independent_history": "独立交易日样本不足，模型尚未达到可用条件",
     }.get(reason, reason or "没有满足风险约束的安全竞价价格")
 
@@ -212,13 +219,25 @@ def _merge_auction_candidates(
         old = lookup.get(code, pd.Series(dtype=object))
         universe_eligible = _integer(row.get("decision_universe_eligible")) == 1
         selected = _integer(row.get("selected")) == 1 and universe_eligible
-        action = "BUY" if promoted and selected else "SHADOW_ONLY" if selected else _text(row.get("action")) or "REJECT"
+        shadow_selected = (
+            _integer(row.get("shadow_selected")) == 1
+            and universe_eligible
+        )
+        action = (
+            "BUY"
+            if promoted and selected
+            else "SHADOW_ONLY"
+            if selected or shadow_selected
+            else _text(row.get("action")) or "REJECT"
+        )
         reason = ""
         if not universe_eligible:
             action = "REJECT"
             reason = _text(row.get("decision_universe_reason")) or "涨跌幅机制不符合不超过10%的交易范围"
         elif not promoted and selected:
             reason = "严格样本外晋级门槛未全部通过，禁止正式买入"
+        elif shadow_selected and not selected:
+            reason = "Top1/Top2影子策略样本，仅用于按真实竞价与T+1规则累计验证，不构成买入建议"
         elif action != "BUY":
             reason = _rejection_reason(row.get("model_reason"))
         rows.append(
@@ -230,6 +249,8 @@ def _merge_auction_candidates(
                 "industry": _text(row.get("industry")) or _industry(old),
                 "stage_transition": _text(row.get("stage_transition")) or _text(row.get("stage")),
                 "stage_focus": _integer(row.get("stage_focus")),
+                "shadow_rank": _integer(row.get("shadow_rank")),
+                "shadow_selected": _integer(row.get("shadow_selected")),
                 "path_label_code": _text(row.get("path_label_code")),
                 "path_label": _text(row.get("path_label")) or "路径数据不足",
                 "path_explanation": _text(row.get("path_explanation")),
@@ -296,6 +317,25 @@ def _merge_auction_candidates(
                 "order_type": _text(row.get("order_type")),
                 "market_order_allowed": _integer(row.get("market_order_allowed")),
                 "risk_gate_pass": _integer(row.get("risk_gate_pass")),
+                "gate_policy_ready": _integer(row.get("gate_policy_ready")),
+                "gate_exit_probability": _integer(
+                    row.get("gate_exit_probability")
+                ),
+                "gate_fill_probability": _integer(
+                    row.get("gate_fill_probability")
+                ),
+                "gate_big_loss_probability": _integer(
+                    row.get("gate_big_loss_probability")
+                ),
+                "gate_mean_return_lcb": _integer(
+                    row.get("gate_mean_return_lcb")
+                ),
+                "gate_conservative_ev": _integer(
+                    row.get("gate_conservative_ev")
+                ),
+                "gate_selection_score": _integer(
+                    row.get("gate_selection_score")
+                ),
                 "rejection_reason": reason,
             }
         )
@@ -418,7 +458,7 @@ def _attach_observation_validation(
     statuses = [_text(row.get("validation_status")) for row in watchlist]
     plan.update(
         {
-            "schema_version": "decision_action_plan_v10_calibrated_auction_truth",
+            "schema_version": "decision_action_plan_v11_nested_policy_shadow",
             "stage_watchlist": watchlist,
             "stage_watch_count": len(watchlist),
             "stage_watch_eligible_count": watch_total,
@@ -559,7 +599,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
     stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)
     plan = {
-        "schema_version": "decision_action_plan_v10_calibrated_auction_truth",
+        "schema_version": "decision_action_plan_v11_nested_policy_shadow",
         "generated_at_utc": _utc_now(),
         "report_date": chosen_date,
         "report_file": f"decision_report_{chosen_date}.md",
@@ -626,6 +666,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
                 "probability_quality_gate"
             )
             or {},
+            "selection_policy": model_meta.get("selection_policy") or {},
             "conformal_residual_quantiles": model_meta.get(
                 "conformal_residual_quantiles"
             )
@@ -783,6 +824,8 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
                 "bootstrap_probability_mean_positive",
                 "exit_on_time_rate",
                 "path_oos",
+                "gate_funnel",
+                "shadow_policies",
             )
         },
         "universe_eligibility": model_meta.get("universe_eligibility") or evaluation.get("universe_eligibility") or {},
@@ -792,15 +835,16 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
             "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
             "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top5、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
-            "observation_ranking": "先按正式安全门槛和大跌风险分层，再比较保守收益、晋级概率与收益下界",
+            "observation_ranking": "2进3和3进4候选先按保守效用形成Top1/Top2影子序列持续记账；正式买入另须通过独立策略留出期",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
             "exit": "T+1按实际成交价计算3%止盈、2.5%止损，首次触发即人工退出；均未触发则14:50退出；一字跌停顺延",
             "return_target": "优先使用Tushare stk_auction_o真实9:30集合竞价成交价，到T+1止盈/止损/14:50时间退出价的保守可执行收益；缺失时明确标注代理源",
-            "validation": "正式限价代理、开盘市价观察、人工实际成交三套账独立累计，互不覆盖",
-            "probability_calibration": "盈利、大跌、晋级、P_fill和退出概率按交易日隔离校准；必须在Brier Skill Score和逐日一致性上战胜日期等权常数基线，否则回退常数并禁止晋级",
-            "return_uncertainty": "保守下界使用样本外残差的分阶段/分情绪保形分位数，不再使用均值标准误授权交易",
-            "risk_veto": "校准后大跌概率超过15%、保形收益下界不为正、竞价成交或T+1退出概率不足，任一项触发即否决",
+            "validation": "正式限价代理、Top1/Top2开盘市价影子、参考限价影子、人工实际成交分账累计，互不覆盖",
+            "probability_calibration": "全部概率按交易日隔离校准并接受Brier技能审计；大跌与P_fill必须有信息增益，盈利、晋级和近乎单一标签的退出模型可安全回退常数，不得成为全局否决器",
+            "policy_selection": "模型拟合、概率校准、策略阈值选择使用三个依次向后的交易日窗口并设置禁运间隔；策略留出期必须同时满足交易频率、费用压力、收益和尾部风险",
+            "return_uncertainty": "保形q10/q90用于尾部诊断；正式授权使用独立策略留出期确定的均值保守下界和保守期望，不把极端分位机械设为必须大于零",
+            "risk_veto": "大跌、均值保守下界、P_fill、T+1退出、保守期望和综合分位均使用独立策略留出期阈值；无可行策略则正式不交易，但Top1/Top2影子账继续验证",
             "guidance_only": True,
             "broker_connected": False,
             "no_trade_is_valid": True,
