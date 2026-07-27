@@ -294,6 +294,7 @@ class ModelBundle:
     return_selection: dict[str, Any]
     classifier_selection: dict[str, dict[str, Any]]
     probability_quality_gate: dict[str, Any]
+    selection_policy: dict[str, Any]
     stage_recent_rates: dict[int, float]
     stage_recent_samples: dict[int, int]
     continuation_stage_logit_adjustments: dict[int, float]
@@ -2326,7 +2327,123 @@ class AuctionV3Engine:
             ]
         )
 
-    def fit_models(self, history: pd.DataFrame) -> Optional[ModelBundle]:
+    def _fill_training_grid(
+        self,
+        all_clean: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, int]:
+        if all_clean.empty:
+            return pd.DataFrame(), 0
+        proposal_grid = np.arange(
+            self.config.gap_grid_min,
+            self.config.gap_grid_max
+            + self.config.gap_grid_step / 2.0,
+            self.config.gap_grid_step,
+        )
+        max_gaps = np.minimum(
+            self.config.gap_grid_max,
+            pd.to_numeric(
+                all_clean.get("limit_ratio"),
+                errors="coerce",
+            )
+            .fillna(0.10)
+            .to_numpy(dtype=float),
+        )
+        candidate_positions, gap_positions = np.nonzero(
+            proposal_grid[None, :]
+            <= max_gaps[:, None] + EPS
+        )
+        rows_before_sampling = int(len(candidate_positions))
+        if rows_before_sampling == 0:
+            return pd.DataFrame(), 0
+        key = pd.DataFrame(
+            {
+                "_row_position": candidate_positions,
+                "signal_date": (
+                    all_clean["signal_date"]
+                    .astype(str)
+                    .to_numpy()[candidate_positions]
+                ),
+                "ts_code": (
+                    all_clean["ts_code"]
+                    .astype(str)
+                    .to_numpy()[candidate_positions]
+                ),
+                "proposed_gap": proposal_grid[gap_positions],
+            }
+        )
+        if len(key) > self.config.fill_max_training_rows:
+            key["_sample_hash"] = pd.util.hash_pandas_object(
+                key[
+                    [
+                        "signal_date",
+                        "ts_code",
+                        "proposed_gap",
+                    ]
+                ],
+                index=False,
+            ).astype("uint64")
+            date_count_for_fill = max(
+                1,
+                key["signal_date"].nunique(),
+            )
+            rows_per_date = max(
+                20,
+                int(
+                    math.ceil(
+                        self.config.fill_max_training_rows
+                        / date_count_for_fill
+                    )
+                ),
+            )
+            key = (
+                key.sort_values(
+                    ["signal_date", "_sample_hash"],
+                    kind="stable",
+                )
+                .groupby(
+                    "signal_date",
+                    sort=False,
+                    group_keys=False,
+                )
+                .head(rows_per_date)
+                .sort_values("_sample_hash", kind="stable")
+                .head(self.config.fill_max_training_rows)
+                .drop(columns=["_sample_hash"])
+                .reset_index(drop=True)
+            )
+        expanded = (
+            all_clean.iloc[
+                key["_row_position"].to_numpy(dtype=int)
+            ]
+            .copy()
+            .reset_index(drop=True)
+        )
+        expanded["proposed_gap"] = key[
+            "proposed_gap"
+        ].to_numpy(dtype=float)
+        expanded["fill_at_cap"] = (
+            pd.to_numeric(
+                expanded["market_fill"],
+                errors="coerce",
+            )
+            .fillna(0)
+            .eq(1)
+            & (
+                pd.to_numeric(
+                    expanded["actual_buy_gap"],
+                    errors="coerce",
+                )
+                <= expanded["proposed_gap"] + EPS
+            )
+        ).astype(int)
+        return expanded, rows_before_sampling
+
+    def fit_models(
+        self,
+        history: pd.DataFrame,
+        *,
+        fast_backtest: bool = False,
+    ) -> Optional[ModelBundle]:
         if history.empty:
             return None
         all_clean = history.dropna(subset=["net_return", "proposed_gap", "market_fill"]).copy()
@@ -2340,15 +2457,36 @@ class AuctionV3Engine:
             self.config.calibration_min_dates,
             int(math.ceil(date_count * self.config.calibration_fraction)),
         )
-        n_calibration_dates = min(n_calibration_dates, max(1, date_count // 3))
-        split_at = date_count - n_calibration_dates - self.config.calibration_embargo_dates
-        if split_at < max(8, self.config.min_train_dates // 2):
+        n_policy_dates = max(
+            self.config.policy_tuning_min_dates,
+            int(math.ceil(date_count * self.config.policy_tuning_fraction)),
+        )
+        minimum_fit_dates = max(8, self.config.min_train_dates // 2)
+        embargo = self.config.calibration_embargo_dates
+        holdout_budget = date_count - minimum_fit_dates - 2 * embargo
+        if holdout_budget < 4:
             return None
-        fit_dates = set(dates[:split_at])
-        calibration_dates = set(dates[-n_calibration_dates:])
+        if n_calibration_dates + n_policy_dates > holdout_budget:
+            n_policy_dates = max(2, min(n_policy_dates, holdout_budget // 3))
+            n_calibration_dates = max(2, holdout_budget - n_policy_dates)
+        policy_start = date_count - n_policy_dates
+        calibration_end = policy_start - embargo
+        calibration_start = calibration_end - n_calibration_dates
+        fit_end = calibration_start - embargo
+        if fit_end < minimum_fit_dates:
+            return None
+        fit_dates = set(dates[:fit_end])
+        calibration_dates = set(dates[calibration_start:calibration_end])
+        policy_dates = set(dates[policy_start:])
         fit = clean[clean["signal_date"].astype(str).isin(fit_dates)].copy()
         calibration = clean[clean["signal_date"].astype(str).isin(calibration_dates)].copy()
-        if len(fit) < max(100, self.config.min_train_rows // 2) or calibration.empty:
+        policy_tuning = clean[
+            clean["signal_date"].astype(str).isin(policy_dates)
+        ].copy()
+        if (
+            len(fit) < max(20, self.config.min_train_rows // 2)
+            or calibration.empty
+        ):
             return None
 
         fit_weights = _date_balanced_weights(fit)
@@ -2564,7 +2702,7 @@ class AuctionV3Engine:
             model_clean: Optional[pd.DataFrame] = None,
             model_fit: Optional[pd.DataFrame] = None,
             model_calibration: Optional[pd.DataFrame] = None,
-            model_kinds: Sequence[str] = ("hgb", "lr", "extra_trees"),
+            model_kinds: Sequence[str] = ("hgb", "lr"),
         ) -> tuple[
             Optional[Pipeline],
             float,
@@ -2884,18 +3022,26 @@ class AuctionV3Engine:
                 "candidates": candidate_audit,
             }, production_calibrator
 
+        critical_model_kinds = ("hgb",)
+        continuation_model_kinds = ("lr",)
         (
             profit_model,
             profit_constant,
             profit_selection,
             profit_calibrator,
-        ) = fit_classifier("profit_hit")
+        ) = fit_classifier(
+            "profit_hit",
+            model_kinds=(),
+        )
         (
             loss_model,
             loss_constant,
             loss_selection,
             loss_calibrator,
-        ) = fit_classifier("big_loss_hit")
+        ) = fit_classifier(
+            "big_loss_hit",
+            model_kinds=critical_model_kinds,
+        )
         focus_clean = clean[
             pd.to_numeric(clean.get("limit_times"), errors="coerce").round().isin((2.0, 3.0))
         ].copy()
@@ -2938,6 +3084,7 @@ class AuctionV3Engine:
             model_clean=continuation_clean,
             model_fit=continuation_fit,
             model_calibration=continuation_calibration,
+            model_kinds=continuation_model_kinds,
         )
         sentiment_continuation = fit_classifier(
             "continuation_limit_up_hit",
@@ -2945,6 +3092,7 @@ class AuctionV3Engine:
             model_clean=continuation_clean,
             model_fit=continuation_fit,
             model_calibration=continuation_calibration,
+            model_kinds=continuation_model_kinds,
         )
         baseline_continuation = fit_classifier(
             "continuation_limit_up_hit",
@@ -2952,6 +3100,7 @@ class AuctionV3Engine:
             model_clean=continuation_clean,
             model_fit=continuation_fit,
             model_calibration=continuation_calibration,
+            model_kinds=continuation_model_kinds,
         )
         path_brier = _finite(path_continuation[2].get("calibration_brier"), float("inf"))
         baseline_brier = _finite(
@@ -3093,64 +3242,14 @@ class AuctionV3Engine:
             exit_constant,
             exit_selection,
             exit_calibrator,
-        ) = fit_classifier("exit_on_time")
-        fill_parts: list[pd.DataFrame] = []
-        proposal_grid = np.arange(
-            self.config.gap_grid_min,
-            self.config.gap_grid_max + self.config.gap_grid_step / 2.0,
-            self.config.gap_grid_step,
+        ) = fit_classifier(
+            "exit_on_time",
+            model_kinds=critical_model_kinds,
         )
-        for _, row in all_clean.iterrows():
-            max_gap = min(self.config.gap_grid_max, _finite(row.get("limit_ratio"), 0.10))
-            gaps = proposal_grid[proposal_grid <= max_gap + EPS]
-            if not len(gaps):
-                continue
-            expanded = pd.DataFrame([row.to_dict()] * len(gaps))
-            expanded["proposed_gap"] = gaps
-            expanded["fill_at_cap"] = (
-                (int(row["market_fill"]) == 1)
-                & (float(row["actual_buy_gap"]) <= gaps + EPS)
-            ).astype(int)
-            fill_parts.append(expanded)
-        fill_train = pd.concat(fill_parts, ignore_index=True) if fill_parts else pd.DataFrame()
-        fill_rows_before_sampling = int(len(fill_train))
-        if len(fill_train) > self.config.fill_max_training_rows:
-            fill_train = fill_train.copy()
-            fill_train["_sample_hash"] = pd.util.hash_pandas_object(
-                fill_train[
-                    [
-                        "signal_date",
-                        "ts_code",
-                        "proposed_gap",
-                    ]
-                ],
-                index=False,
-            ).astype("uint64")
-            date_count_for_fill = max(
-                1,
-                fill_train["signal_date"].astype(str).nunique(),
-            )
-            rows_per_date = max(
-                20,
-                int(
-                    math.ceil(
-                        self.config.fill_max_training_rows
-                        / date_count_for_fill
-                    )
-                ),
-            )
-            fill_train = (
-                fill_train.sort_values(
-                    ["signal_date", "_sample_hash"],
-                    kind="stable",
-                )
-                .groupby("signal_date", sort=False, group_keys=False)
-                .head(rows_per_date)
-                .sort_values("_sample_hash", kind="stable")
-                .head(self.config.fill_max_training_rows)
-                .drop(columns=["_sample_hash"])
-                .reset_index(drop=True)
-            )
+        (
+            fill_train,
+            fill_rows_before_sampling,
+        ) = self._fill_training_grid(all_clean)
         if fill_train.empty:
             fill_model = None
             fill_constant = 0.0
@@ -3183,7 +3282,7 @@ class AuctionV3Engine:
                 model_clean=fill_train,
                 model_fit=fill_fit,
                 model_calibration=fill_calibration,
-                model_kinds=("hgb", "lr"),
+                model_kinds=critical_model_kinds,
             )
             fill_selection = {
                 **fill_selection,
@@ -3192,10 +3291,13 @@ class AuctionV3Engine:
             }
         probability_quality_gate = {
             "required_models": [
-                "profit",
                 "big_loss",
-                "continuation_limit_up",
                 "fill",
+            ],
+            "optional_models": [
+                "profit",
+                "continuation_limit_up",
+                "exit_on_time",
             ],
             "minimum_brier_skill_score": (
                 self.config.probability_min_brier_skill
@@ -3241,7 +3343,7 @@ class AuctionV3Engine:
             ).dropna()
             stage_recent_rates[stage] = float(values.mean()) if len(values) else float("nan")
             stage_recent_samples[stage] = int(len(values))
-        return ModelBundle(
+        bundle = ModelBundle(
             return_model=return_model,
             return_constant=return_constant,
             profit_model=profit_model,
@@ -3303,6 +3405,7 @@ class AuctionV3Engine:
                 "exit_on_time": exit_selection,
             },
             probability_quality_gate=probability_quality_gate,
+            selection_policy={},
             stage_recent_rates=stage_recent_rates,
             stage_recent_samples=stage_recent_samples,
             continuation_stage_logit_adjustments=continuation_stage_logit_adjustments,
@@ -3313,8 +3416,19 @@ class AuctionV3Engine:
                 self.config,
             ),
         )
+        bundle.selection_policy = self._fit_selection_policy(
+            policy_tuning,
+            bundle,
+        )
+        return bundle
 
-    def _score_candidate_at_gaps(self, row: pd.Series, bundle: ModelBundle) -> Optional[dict[str, Any]]:
+    def _score_candidate_at_gaps(
+        self,
+        row: pd.Series,
+        bundle: ModelBundle,
+        *,
+        apply_policy: bool = True,
+    ) -> Optional[dict[str, Any]]:
         limit_ratio = _finite(row.get("limit_ratio"), 0.10)
         low = max(self.config.gap_grid_min, bundle.gap_min)
         high = min(self.config.gap_grid_max, bundle.gap_max, limit_ratio)
@@ -3325,10 +3439,13 @@ class AuctionV3Engine:
         grid["proposed_gap"] = gaps
         limit_times = _finite(row.get("limit_times"), 0.0)
         stage_key = int(round(limit_times))
-        if pd.to_numeric(
-            grid.get("stage_recent_promotion_rate"),
-            errors="coerce",
-        ).isna().all():
+        if (
+            int(_finite(row.get("_policy_tuning"), 0.0)) != 1
+            and pd.to_numeric(
+                grid.get("stage_recent_promotion_rate"),
+                errors="coerce",
+            ).isna().all()
+        ):
             grid["stage_recent_promotion_rate"] = bundle.stage_recent_rates.get(
                 stage_key,
                 np.nan,
@@ -3411,9 +3528,6 @@ class AuctionV3Engine:
         residual_q90 = max(q90_values) if q90_values else bundle.residual_q90
         outcome_q10 = pred + residual_q10
         outcome_q90 = pred + residual_q90
-        # The hard gate uses the predictive outcome quantile. A confidence
-        # interval around the mean is reported separately and cannot authorize
-        # a trade with a negative tail.
         lower = outcome_q10
         upper = outcome_q90
         risk_adjusted_return = pred - (
@@ -3421,48 +3535,82 @@ class AuctionV3Engine:
         ) - ((1.0 - p_exit) * self.config.blocked_exit_loss)
         conservative_ev = p_fill * risk_adjusted_return
         stage_focus = 1.0 if int(round(limit_times)) in (2, 3) else 0.0
-        selection_score = conservative_ev + (
+        selection_score = risk_adjusted_return + (
             self.config.continuation_score_weight * stage_focus * p_continuation
+        ) + (self.config.fill_score_weight * p_fill)
+        policy = bundle.selection_policy or {}
+        thresholds = policy.get("thresholds") or {}
+        policy_ready = bool(policy.get("ready"))
+        max_big_loss = _finite(
+            thresholds.get("max_big_loss_probability"),
+            self.config.policy_big_loss_probability_grid[-1],
         )
-        big_loss_ok = p_loss <= self.config.max_big_loss_probability
-        lower_bound_ok = lower >= self.config.min_return_lcb
-        profit_ok = p_profit >= self.config.min_profit_probability
-        fill_ok = p_fill >= self.config.min_fill_probability
-        exit_ok = p_exit >= self.config.min_exit_probability
-        edge_ok = conservative_ev >= self.config.min_edge
+        min_mean_lcb = _finite(
+            thresholds.get("min_mean_return_lcb"),
+            self.config.policy_mean_return_lcb_grid[0],
+        )
+        min_fill = _finite(
+            thresholds.get("min_fill_probability"),
+            self.config.policy_fill_probability_grid[0],
+        )
+        min_exit = _finite(
+            thresholds.get("min_exit_probability"),
+            self.config.policy_min_exit_probability,
+        )
+        min_ev = _finite(
+            thresholds.get("min_conservative_ev"),
+            self.config.policy_conservative_ev_grid[0],
+        )
+        min_score = _finite(
+            thresholds.get("min_selection_score"),
+            float("inf"),
+        )
+        big_loss_ok = p_loss <= max_big_loss
+        mean_lcb_ok = mean_lower >= min_mean_lcb
+        fill_ok = p_fill >= min_fill
+        exit_ok = p_exit >= min_exit
+        edge_ok = conservative_ev >= min_ev
+        score_ok = selection_score >= min_score
         supported = (
             big_loss_ok
-            & lower_bound_ok
-            & profit_ok
+            & mean_lcb_ok
             & fill_ok
             & exit_ok
             & edge_ok
+            & score_ok
             & bool(stage_focus)
+            & bool(policy_ready)
+            & bool(apply_policy)
         )
         if supported.any():
             supported_indices = np.where(supported)[0]
             chosen = int(supported_indices[np.argmax(selection_score[supported_indices])])
             model_reason = "ok"
         else:
-            finite = np.where(np.isfinite(conservative_ev))[0]
+            finite = np.where(np.isfinite(selection_score))[0]
             if not len(finite):
                 return None
-            chosen = int(finite[np.argmax(conservative_ev[finite])])
-            progressive = big_loss_ok
+            chosen = int(finite[np.argmax(selection_score[finite])])
             if not stage_focus:
                 model_reason = "outside_stage_2_to_3_3_to_4_focus"
-            elif not progressive.any():
+            elif apply_policy and not policy_ready:
+                model_reason = "selection_policy_not_ready"
+            elif not exit_ok[chosen]:
+                model_reason = "exit_probability_below_policy_floor"
+            elif not fill_ok[chosen]:
+                model_reason = "fill_probability_below_policy_floor"
+            elif not big_loss_ok[chosen]:
                 model_reason = "big_loss_probability_exceeds_cap"
-            elif not (progressive & lower_bound_ok).any():
-                model_reason = "return_lcb_not_positive"
-            elif not (progressive & lower_bound_ok & exit_ok).any():
-                model_reason = "exit_probability_below_floor"
-            elif not (progressive & lower_bound_ok & exit_ok & fill_ok).any():
-                model_reason = "fill_probability_below_floor"
-            elif not (progressive & lower_bound_ok & exit_ok & fill_ok & profit_ok).any():
-                model_reason = "profit_probability_below_floor"
+            elif not mean_lcb_ok[chosen]:
+                model_reason = "mean_return_lcb_below_policy_floor"
+            elif not edge_ok[chosen]:
+                model_reason = "conservative_ev_below_policy_floor"
+            elif not score_ok[chosen]:
+                model_reason = "selection_score_below_policy_cutoff"
+            elif not apply_policy:
+                model_reason = "policy_tuning_candidate"
             else:
-                model_reason = "conservative_edge_below_floor"
+                model_reason = "selection_policy_rejected"
         return {
             "recommended_max_gap": float(gaps[chosen]) if supported[chosen] else np.nan,
             "diagnostic_gap": float(gaps[chosen]),
@@ -3481,11 +3629,43 @@ class AuctionV3Engine:
             "conservative_ev": float(conservative_ev[chosen]),
             "selection_score": float(selection_score[chosen]),
             "stage_focus": int(stage_focus),
+            "gate_policy_ready": int(policy_ready),
+            "gate_stage_focus": int(stage_focus),
+            "gate_exit_probability": int(exit_ok[chosen]),
+            "gate_fill_probability": int(fill_ok[chosen]),
+            "gate_big_loss_probability": int(big_loss_ok[chosen]),
+            "gate_mean_return_lcb": int(mean_lcb_ok[chosen]),
+            "gate_conservative_ev": int(edge_ok[chosen]),
+            "gate_selection_score": int(score_ok[chosen]),
             "risk_gate_pass": int(supported[chosen]),
             "model_reason": model_reason,
+            "selection_policy_version": str(
+                policy.get("version") or "nested_temporal_utility_v1"
+            ),
+            "policy_max_big_loss_probability": max_big_loss,
+            "policy_min_mean_return_lcb": min_mean_lcb,
+            "policy_min_fill_probability": min_fill,
+            "policy_min_exit_probability": min_exit,
+            "policy_min_conservative_ev": min_ev,
+            "policy_min_selection_score": min_score,
+            "policy_max_positions": int(
+                max(
+                    1,
+                    _finite(
+                        policy.get("max_positions"),
+                        self.config.max_positions,
+                    ),
+                )
+            ),
         }
 
-    def score_candidates(self, base: pd.DataFrame, bundle: Optional[ModelBundle]) -> pd.DataFrame:
+    def score_candidates(
+        self,
+        base: pd.DataFrame,
+        bundle: Optional[ModelBundle],
+        *,
+        apply_policy: bool = True,
+    ) -> pd.DataFrame:
         out = base.copy().reset_index(drop=True)
         score_columns = [
             "recommended_max_gap",
@@ -3505,33 +3685,1109 @@ class AuctionV3Engine:
             "conservative_ev",
             "selection_score",
             "stage_focus",
+            "gate_policy_ready",
+            "gate_stage_focus",
+            "gate_exit_probability",
+            "gate_fill_probability",
+            "gate_big_loss_probability",
+            "gate_mean_return_lcb",
+            "gate_conservative_ev",
+            "gate_selection_score",
             "risk_gate_pass",
+            "policy_max_big_loss_probability",
+            "policy_min_mean_return_lcb",
+            "policy_min_fill_probability",
+            "policy_min_exit_probability",
+            "policy_min_conservative_ev",
+            "policy_min_selection_score",
+            "policy_max_positions",
         ]
         for name in score_columns:
             out[name] = np.nan
         if bundle is None:
             out["model_reason"] = "insufficient_independent_history"
             out["risk_gate_pass"] = 0
+            out["shadow_rank"] = np.nan
+            out["shadow_selected"] = 0
             out["selected"] = 0
             return out
-        out["model_reason"] = "no_safe_price"
-        for index, row in out.iterrows():
-            score = self._score_candidate_at_gaps(row, bundle)
-            if score is None:
+        return self._score_candidates_batch(
+            base,
+            bundle,
+            apply_policy=apply_policy,
+        )
+
+    def _score_candidates_batch(
+        self,
+        base: pd.DataFrame,
+        bundle: ModelBundle,
+        *,
+        apply_policy: bool,
+    ) -> pd.DataFrame:
+        candidates = base.copy().reset_index(drop=True)
+        if candidates.empty:
+            return candidates
+        candidates["_batch_candidate_index"] = np.arange(
+            len(candidates),
+            dtype=int,
+        )
+        candidates["_original_proposed_gap"] = pd.to_numeric(
+            candidates.get(
+                "proposed_gap",
+                pd.Series(np.nan, index=candidates.index),
+            ),
+            errors="coerce",
+        )
+        tuning_marker = pd.to_numeric(
+            candidates.get(
+                "_policy_tuning",
+                pd.Series(0, index=candidates.index),
+            ),
+            errors="coerce",
+        ).fillna(0)
+        recent_rate = pd.to_numeric(
+            candidates.get(
+                "stage_recent_promotion_rate",
+                pd.Series(np.nan, index=candidates.index),
+            ),
+            errors="coerce",
+        )
+        stages_base = (
+            pd.to_numeric(
+                candidates.get("limit_times"),
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .round()
+            .astype(int)
+        )
+        fill_recent = tuning_marker.ne(1) & recent_rate.isna()
+        if fill_recent.any():
+            candidates.loc[
+                fill_recent,
+                "stage_recent_promotion_rate",
+            ] = stages_base.loc[fill_recent].map(
+                bundle.stage_recent_rates
+            )
+            candidates.loc[
+                fill_recent,
+                "stage_recent_promotion_samples",
+            ] = stages_base.loc[fill_recent].map(
+                bundle.stage_recent_samples
+            ).fillna(0)
+
+        low = max(self.config.gap_grid_min, bundle.gap_min)
+        global_high = min(
+            self.config.gap_grid_max,
+            bundle.gap_max,
+        )
+        if global_high < low:
+            fallback = candidates.copy()
+            fallback["model_reason"] = "no_safe_price"
+            fallback["risk_gate_pass"] = 0
+            fallback["shadow_rank"] = np.nan
+            fallback["shadow_selected"] = 0
+            fallback["selected"] = 0
+            return fallback.drop(
+                columns=[
+                    "_batch_candidate_index",
+                    "_original_proposed_gap",
+                ],
+                errors="ignore",
+            )
+        gap_grid = np.arange(
+            low,
+            global_high + self.config.gap_grid_step / 2.0,
+            self.config.gap_grid_step,
+        )
+        row_high = np.minimum(
+            global_high,
+            pd.to_numeric(
+                candidates.get("limit_ratio"),
+                errors="coerce",
+            )
+            .fillna(0.10)
+            .to_numpy(dtype=float),
+        )
+        candidate_positions, gap_positions = np.nonzero(
+            gap_grid[None, :] <= row_high[:, None] + EPS
+        )
+        if len(candidate_positions) == 0:
+            fallback = candidates.copy()
+            fallback["model_reason"] = "no_safe_price"
+            fallback["risk_gate_pass"] = 0
+            fallback["shadow_rank"] = np.nan
+            fallback["shadow_selected"] = 0
+            fallback["selected"] = 0
+            return fallback.drop(
+                columns=[
+                    "_batch_candidate_index",
+                    "_original_proposed_gap",
+                ],
+                errors="ignore",
+            )
+        grid = (
+            candidates.iloc[candidate_positions]
+            .copy()
+            .reset_index(drop=True)
+        )
+        grid["proposed_gap"] = gap_grid[gap_positions]
+        candidate_ids = grid[
+            "_batch_candidate_index"
+        ].to_numpy(dtype=int)
+
+        raw_return = (
+            bundle.return_model.predict(grid[MODEL_FEATURES])
+            if bundle.return_model is not None
+            else np.repeat(bundle.return_constant, len(grid))
+        )
+        predicted_return = raw_return + bundle.calibration_bias
+        p_profit = _probability(
+            bundle.profit_model,
+            grid,
+            bundle.profit_constant,
+            calibrator=bundle.profit_calibrator,
+        )
+        p_loss = _probability(
+            bundle.loss_model,
+            grid,
+            bundle.loss_constant,
+            calibrator=bundle.loss_calibrator,
+        )
+        p_continuation = _probability(
+            bundle.continuation_model,
+            grid,
+            bundle.continuation_constant,
+            bundle.continuation_features,
+            bundle.continuation_calibrator,
+        )
+        stages = (
+            pd.to_numeric(
+                grid.get("limit_times"),
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .round()
+            .astype(int)
+        )
+        offsets = stages.map(
+            bundle.continuation_stage_logit_adjustments
+        ).fillna(0.0).to_numpy(dtype=float)
+        if np.any(np.abs(offsets) > EPS):
+            clipped = np.clip(
+                p_continuation,
+                1e-6,
+                1.0 - 1e-6,
+            )
+            logits = np.log(clipped / (1.0 - clipped)) + offsets
+            p_continuation = 1.0 / (1.0 + np.exp(-logits))
+        p_exit = _probability(
+            bundle.exit_model,
+            grid,
+            bundle.exit_constant,
+            calibrator=bundle.exit_calibrator,
+        )
+        grid["_raw_fill_probability"] = _probability(
+            bundle.fill_model,
+            grid,
+            bundle.fill_constant,
+            calibrator=bundle.fill_calibrator,
+        )
+        p_fill = (
+            grid.groupby(
+                "_batch_candidate_index",
+                sort=False,
+            )["_raw_fill_probability"]
+            .cummax()
+            .to_numpy(dtype=float)
+        )
+
+        mean_lower = predicted_return - bundle.expected_return_margin
+        mean_upper = predicted_return + bundle.expected_return_margin
+        global_quantile = bundle.conformal_residual_quantiles.get(
+            "global",
+            {},
+        )
+        residual_q10 = np.repeat(
+            _finite(
+                global_quantile.get("q10"),
+                bundle.residual_q10,
+            ),
+            len(grid),
+        )
+        residual_q90 = np.repeat(
+            _finite(
+                global_quantile.get("q90"),
+                bundle.residual_q90,
+            ),
+            len(grid),
+        )
+        for stage in stages.unique():
+            quantile = bundle.conformal_residual_quantiles.get(
+                f"stage:{int(stage)}"
+            )
+            if not quantile:
                 continue
-            for name, value in score.items():
-                out.loc[index, name] = value
-        out = out.sort_values(
-            ["selection_score", "predicted_return_lcb", "source_rank"],
-            ascending=[False, False, True],
-            na_position="last",
-        ).reset_index(drop=True)
-        out["selected"] = 0
-        eligible = out.index[pd.to_numeric(out["risk_gate_pass"], errors="coerce").fillna(0).eq(1)][
-            : self.config.max_positions
+            mask = stages.eq(int(stage)).to_numpy()
+            residual_q10[mask] = np.minimum(
+                residual_q10[mask],
+                _finite(
+                    quantile.get("q10"),
+                    bundle.residual_q10,
+                ),
+            )
+            residual_q90[mask] = np.maximum(
+                residual_q90[mask],
+                _finite(
+                    quantile.get("q90"),
+                    bundle.residual_q90,
+                ),
+            )
+        regimes = grid.get(
+            "market_sentiment_regime_code",
+            pd.Series("", index=grid.index),
+        ).fillna("").astype(str)
+        for regime in regimes.unique():
+            quantile = bundle.conformal_residual_quantiles.get(
+                f"regime:{regime}"
+            )
+            if not quantile:
+                continue
+            mask = regimes.eq(regime).to_numpy()
+            residual_q10[mask] = np.minimum(
+                residual_q10[mask],
+                _finite(
+                    quantile.get("q10"),
+                    bundle.residual_q10,
+                ),
+            )
+            residual_q90[mask] = np.maximum(
+                residual_q90[mask],
+                _finite(
+                    quantile.get("q90"),
+                    bundle.residual_q90,
+                ),
+            )
+        outcome_q10 = predicted_return + residual_q10
+        outcome_q90 = predicted_return + residual_q90
+        risk_adjusted_return = predicted_return - (
+            self.config.tail_risk_aversion
+            * p_loss
+            * abs(self.config.big_loss_threshold)
+        ) - ((1.0 - p_exit) * self.config.blocked_exit_loss)
+        conservative_ev = p_fill * risk_adjusted_return
+        stage_focus = stages.isin((2, 3)).astype(int).to_numpy()
+        selection_score = risk_adjusted_return + (
+            self.config.continuation_score_weight
+            * stage_focus
+            * p_continuation
+        ) + (self.config.fill_score_weight * p_fill)
+
+        policy = bundle.selection_policy or {}
+        thresholds = policy.get("thresholds") or {}
+        policy_ready = bool(policy.get("ready"))
+        max_big_loss = _finite(
+            thresholds.get("max_big_loss_probability"),
+            self.config.policy_big_loss_probability_grid[-1],
+        )
+        min_mean_lcb = _finite(
+            thresholds.get("min_mean_return_lcb"),
+            self.config.policy_mean_return_lcb_grid[0],
+        )
+        min_fill = _finite(
+            thresholds.get("min_fill_probability"),
+            self.config.policy_fill_probability_grid[0],
+        )
+        min_exit = _finite(
+            thresholds.get("min_exit_probability"),
+            self.config.policy_min_exit_probability,
+        )
+        min_ev = _finite(
+            thresholds.get("min_conservative_ev"),
+            self.config.policy_conservative_ev_grid[0],
+        )
+        min_score = _finite(
+            thresholds.get("min_selection_score"),
+            float("inf"),
+        )
+        gate_exit = p_exit >= min_exit
+        gate_fill = p_fill >= min_fill
+        gate_loss = p_loss <= max_big_loss
+        gate_mean = mean_lower >= min_mean_lcb
+        gate_ev = conservative_ev >= min_ev
+        gate_score = selection_score >= min_score
+        supported = (
+            gate_exit
+            & gate_fill
+            & gate_loss
+            & gate_mean
+            & gate_ev
+            & gate_score
+            & stage_focus.astype(bool)
+            & bool(policy_ready)
+            & bool(apply_policy)
+        )
+        finite_score = np.isfinite(selection_score)
+        grid["_supported"] = supported
+        grid["_finite_score"] = finite_score
+        grid["_selection_score"] = selection_score
+        has_supported = (
+            grid.groupby(
+                "_batch_candidate_index",
+                sort=False,
+            )["_supported"]
+            .transform("any")
+            .to_numpy(dtype=bool)
+        )
+        choice_pool = finite_score & (
+            supported | ~has_supported
+        )
+        ranked = grid.loc[choice_pool].copy()
+        if ranked.empty:
+            fallback = candidates.copy()
+            fallback["model_reason"] = "no_safe_price"
+            fallback["risk_gate_pass"] = 0
+            fallback["shadow_rank"] = np.nan
+            fallback["shadow_selected"] = 0
+            fallback["selected"] = 0
+            return fallback.drop(
+                columns=[
+                    "_batch_candidate_index",
+                    "_original_proposed_gap",
+                ],
+                errors="ignore",
+            )
+        chosen_indices = (
+            ranked.groupby(
+                "_batch_candidate_index",
+                sort=False,
+            )["_selection_score"]
+            .idxmax()
+            .to_numpy()
+        )
+        chosen = grid.loc[chosen_indices].copy()
+        positions = chosen.index.to_numpy(dtype=int)
+        chosen["diagnostic_gap"] = chosen["proposed_gap"]
+        chosen["proposed_gap"] = chosen[
+            "_original_proposed_gap"
         ]
-        out.loc[eligible, "selected"] = 1
+        chosen["predicted_net_return"] = predicted_return[positions]
+        chosen["predicted_return_lcb"] = outcome_q10[positions]
+        chosen["predicted_return_ucb"] = outcome_q90[positions]
+        chosen["predicted_mean_return_lcb"] = mean_lower[positions]
+        chosen["predicted_mean_return_ucb"] = mean_upper[positions]
+        chosen["predicted_outcome_q10"] = outcome_q10[positions]
+        chosen["predicted_outcome_q90"] = outcome_q90[positions]
+        chosen["predicted_profit_probability"] = p_profit[positions]
+        chosen["predicted_big_loss_probability"] = p_loss[positions]
+        chosen[
+            "predicted_continuation_limit_up_probability"
+        ] = p_continuation[positions]
+        chosen["predicted_fill_probability"] = p_fill[positions]
+        chosen["predicted_exit_probability"] = p_exit[positions]
+        chosen["conservative_ev"] = conservative_ev[positions]
+        chosen["selection_score"] = selection_score[positions]
+        chosen["stage_focus"] = stage_focus[positions]
+        chosen["gate_policy_ready"] = int(policy_ready)
+        chosen["gate_stage_focus"] = stage_focus[positions]
+        chosen["gate_exit_probability"] = gate_exit[positions].astype(int)
+        chosen["gate_fill_probability"] = gate_fill[positions].astype(int)
+        chosen["gate_big_loss_probability"] = gate_loss[positions].astype(int)
+        chosen["gate_mean_return_lcb"] = gate_mean[positions].astype(int)
+        chosen["gate_conservative_ev"] = gate_ev[positions].astype(int)
+        chosen["gate_selection_score"] = gate_score[positions].astype(int)
+        chosen["risk_gate_pass"] = supported[positions].astype(int)
+        chosen["recommended_max_gap"] = np.where(
+            supported[positions],
+            chosen["diagnostic_gap"],
+            np.nan,
+        )
+        chosen["selection_policy_version"] = str(
+            policy.get("version") or "nested_temporal_utility_v1"
+        )
+        chosen["policy_max_big_loss_probability"] = max_big_loss
+        chosen["policy_min_mean_return_lcb"] = min_mean_lcb
+        chosen["policy_min_fill_probability"] = min_fill
+        chosen["policy_min_exit_probability"] = min_exit
+        chosen["policy_min_conservative_ev"] = min_ev
+        chosen["policy_min_selection_score"] = min_score
+        policy_positions = int(
+            max(
+                1,
+                _finite(
+                    policy.get("max_positions"),
+                    self.config.max_positions,
+                ),
+            )
+        )
+        chosen["policy_max_positions"] = policy_positions
+
+        def rejection_reason(row: pd.Series) -> str:
+            if int(row["stage_focus"]) != 1:
+                return "outside_stage_2_to_3_3_to_4_focus"
+            if apply_policy and not policy_ready:
+                return "selection_policy_not_ready"
+            if int(row["gate_exit_probability"]) != 1:
+                return "exit_probability_below_policy_floor"
+            if int(row["gate_fill_probability"]) != 1:
+                return "fill_probability_below_policy_floor"
+            if int(row["gate_big_loss_probability"]) != 1:
+                return "big_loss_probability_exceeds_cap"
+            if int(row["gate_mean_return_lcb"]) != 1:
+                return "mean_return_lcb_below_policy_floor"
+            if int(row["gate_conservative_ev"]) != 1:
+                return "conservative_ev_below_policy_floor"
+            if int(row["gate_selection_score"]) != 1:
+                return "selection_score_below_policy_cutoff"
+            if not apply_policy:
+                return "policy_tuning_candidate"
+            return "ok" if int(row["risk_gate_pass"]) == 1 else (
+                "selection_policy_rejected"
+            )
+
+        chosen["model_reason"] = chosen.apply(
+            rejection_reason,
+            axis=1,
+        )
+        missing_ids = sorted(
+            set(candidates["_batch_candidate_index"])
+            - set(chosen["_batch_candidate_index"])
+        )
+        if missing_ids:
+            missing = candidates[
+                candidates["_batch_candidate_index"].isin(missing_ids)
+            ].copy()
+            missing["model_reason"] = "no_safe_price"
+            missing["risk_gate_pass"] = 0
+            chosen = pd.concat([chosen, missing], ignore_index=True)
+
+        internal = [
+            column
+            for column in chosen.columns
+            if column.startswith("_")
+        ]
+        out = chosen.drop(columns=internal, errors="ignore")
+        sort_columns = []
+        ascending = []
+        if "signal_date" in out.columns:
+            sort_columns.append("signal_date")
+            ascending.append(True)
+        sort_columns.extend(
+            [
+                "selection_score",
+                "predicted_return_lcb",
+                "source_rank",
+            ]
+        )
+        ascending.extend([False, False, True])
+        out = out.sort_values(
+            sort_columns,
+            ascending=ascending,
+            na_position="last",
+            kind="stable",
+        ).reset_index(drop=True)
+        out["shadow_rank"] = np.nan
+        focus = pd.to_numeric(
+            out.get("stage_focus"),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        if focus.any():
+            if "signal_date" in out.columns:
+                out.loc[focus, "shadow_rank"] = (
+                    out.loc[focus]
+                    .groupby("signal_date", sort=False)
+                    .cumcount()
+                    .add(1)
+                    .to_numpy()
+                )
+            else:
+                out.loc[focus, "shadow_rank"] = np.arange(
+                    1,
+                    int(focus.sum()) + 1,
+                )
+        out["shadow_selected"] = (
+            pd.to_numeric(
+                out["shadow_rank"],
+                errors="coerce",
+            )
+            .le(2)
+            .fillna(False)
+            .astype(int)
+        )
+        out["selected"] = 0
+        if apply_policy:
+            eligible = out[
+                pd.to_numeric(
+                    out.get("risk_gate_pass"),
+                    errors="coerce",
+                ).fillna(0).eq(1)
+            ]
+            if "signal_date" in out.columns:
+                selected_indices = (
+                    eligible.groupby(
+                        "signal_date",
+                        sort=False,
+                        group_keys=False,
+                    )
+                    .head(policy_positions)
+                    .index
+                )
+            else:
+                selected_indices = eligible.head(
+                    policy_positions
+                ).index
+            out.loc[selected_indices, "selected"] = 1
         return out
+
+    def _score_policy_tuning_candidates(
+        self,
+        policy_tuning: pd.DataFrame,
+        bundle: ModelBundle,
+    ) -> pd.DataFrame:
+        """Batch-score the embargoed policy window without changing its math."""
+        base = policy_tuning.copy().reset_index(drop=True)
+        if base.empty:
+            return base
+        expanded: list[pd.DataFrame] = []
+        for candidate_index, row in base.iterrows():
+            limit_ratio = _finite(row.get("limit_ratio"), 0.10)
+            low = max(self.config.gap_grid_min, bundle.gap_min)
+            high = min(
+                self.config.gap_grid_max,
+                bundle.gap_max,
+                limit_ratio,
+            )
+            if high < low:
+                continue
+            gaps = np.arange(
+                low,
+                high + self.config.gap_grid_step / 2.0,
+                self.config.gap_grid_step,
+            )
+            part = pd.DataFrame([row.to_dict()] * len(gaps))
+            part["proposed_gap"] = gaps
+            part["_policy_candidate_index"] = candidate_index
+            expanded.append(part)
+        if not expanded:
+            return pd.DataFrame()
+
+        grid = pd.concat(expanded, ignore_index=True)
+        raw_return = (
+            bundle.return_model.predict(grid[MODEL_FEATURES])
+            if bundle.return_model is not None
+            else np.repeat(bundle.return_constant, len(grid))
+        )
+        predicted_return = raw_return + bundle.calibration_bias
+        p_loss = _probability(
+            bundle.loss_model,
+            grid,
+            bundle.loss_constant,
+            calibrator=bundle.loss_calibrator,
+        )
+        p_continuation = _probability(
+            bundle.continuation_model,
+            grid,
+            bundle.continuation_constant,
+            bundle.continuation_features,
+            bundle.continuation_calibrator,
+        )
+        stages = (
+            pd.to_numeric(
+                grid.get("limit_times"),
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .round()
+            .astype(int)
+        )
+        offsets = stages.map(
+            bundle.continuation_stage_logit_adjustments
+        ).fillna(0.0).to_numpy(dtype=float)
+        if np.any(np.abs(offsets) > EPS):
+            clipped = np.clip(p_continuation, 1e-6, 1.0 - 1e-6)
+            logits = np.log(clipped / (1.0 - clipped)) + offsets
+            p_continuation = 1.0 / (1.0 + np.exp(-logits))
+        p_exit = _probability(
+            bundle.exit_model,
+            grid,
+            bundle.exit_constant,
+            calibrator=bundle.exit_calibrator,
+        )
+        grid["_raw_fill_probability"] = _probability(
+            bundle.fill_model,
+            grid,
+            bundle.fill_constant,
+            calibrator=bundle.fill_calibrator,
+        )
+        p_fill = (
+            grid.groupby(
+                "_policy_candidate_index",
+                sort=False,
+            )["_raw_fill_probability"]
+            .cummax()
+            .to_numpy(dtype=float)
+        )
+        mean_lower = predicted_return - bundle.expected_return_margin
+        risk_adjusted_return = predicted_return - (
+            self.config.tail_risk_aversion
+            * p_loss
+            * abs(self.config.big_loss_threshold)
+        ) - ((1.0 - p_exit) * self.config.blocked_exit_loss)
+        conservative_ev = p_fill * risk_adjusted_return
+        stage_focus = stages.isin((2, 3)).astype(float).to_numpy()
+        selection_score = risk_adjusted_return + (
+            self.config.continuation_score_weight
+            * stage_focus
+            * p_continuation
+        ) + (self.config.fill_score_weight * p_fill)
+        grid["_predicted_net_return"] = predicted_return
+        grid["_predicted_mean_return_lcb"] = mean_lower
+        grid["_predicted_big_loss_probability"] = p_loss
+        grid["_predicted_continuation_probability"] = p_continuation
+        grid["_predicted_fill_probability"] = p_fill
+        grid["_predicted_exit_probability"] = p_exit
+        grid["_conservative_ev"] = conservative_ev
+        grid["_selection_score"] = selection_score
+        finite_score = np.isfinite(selection_score)
+        ranked = grid.loc[finite_score].copy()
+        if ranked.empty:
+            return pd.DataFrame()
+        chosen_indices = (
+            ranked.groupby(
+                "_policy_candidate_index",
+                sort=False,
+            )["_selection_score"]
+            .idxmax()
+            .to_numpy()
+        )
+        chosen = grid.loc[chosen_indices].copy()
+        chosen = chosen.rename(
+            columns={
+                "proposed_gap": "diagnostic_gap",
+                "_predicted_net_return": "predicted_net_return",
+                "_predicted_mean_return_lcb": "predicted_mean_return_lcb",
+                "_predicted_big_loss_probability": (
+                    "predicted_big_loss_probability"
+                ),
+                "_predicted_continuation_probability": (
+                    "predicted_continuation_limit_up_probability"
+                ),
+                "_predicted_fill_probability": (
+                    "predicted_fill_probability"
+                ),
+                "_predicted_exit_probability": (
+                    "predicted_exit_probability"
+                ),
+                "_conservative_ev": "conservative_ev",
+                "_selection_score": "selection_score",
+            }
+        )
+        chosen["stage_focus"] = (
+            pd.to_numeric(
+                chosen.get("limit_times"),
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .round()
+            .isin((2.0, 3.0))
+            .astype(int)
+        )
+        chosen["model_reason"] = "policy_tuning_candidate"
+        internal = [
+            column
+            for column in chosen.columns
+            if column.startswith("_")
+        ]
+        return chosen.drop(
+            columns=[
+                *internal,
+                "recommended_max_gap",
+            ],
+            errors="ignore",
+        )
+
+    def _fit_selection_policy(
+        self,
+        policy_tuning: pd.DataFrame,
+        bundle: ModelBundle,
+    ) -> dict[str, Any]:
+        version = "nested_temporal_utility_v1"
+        base_payload: dict[str, Any] = {
+            "version": version,
+            "ready": False,
+            "reason": "insufficient_policy_tuning_history",
+            "tuning_rows": int(len(policy_tuning)),
+            "tuning_dates": int(
+                policy_tuning.get(
+                    "signal_date",
+                    pd.Series(dtype=str),
+                ).astype(str).nunique()
+            ),
+            "profit_probability_gate_enabled": False,
+            "profit_probability_gate_reason": (
+                "profit probability is diagnostic only; an uninformative "
+                "constant model cannot veto every candidate"
+            ),
+            "thresholds": {},
+            "max_positions": 0,
+            "diagnostics": {},
+        }
+        tuning_dates = sorted(
+            policy_tuning.get(
+                "signal_date",
+                pd.Series(dtype=str),
+            ).astype(str).unique()
+        )
+        if (
+            policy_tuning.empty
+            or len(tuning_dates) < self.config.policy_tuning_min_dates
+        ):
+            return base_payload
+
+        scored = self._score_policy_tuning_candidates(
+            policy_tuning,
+            bundle,
+        )
+        if scored.empty:
+            base_payload["reason"] = "no_finite_policy_score"
+            return base_payload
+        focus = scored[
+            pd.to_numeric(
+                scored.get("stage_focus"),
+                errors="coerce",
+            ).fillna(0).eq(1)
+        ].copy()
+        focus = focus[
+            pd.to_numeric(
+                focus.get("selection_score"),
+                errors="coerce",
+            ).notna()
+        ]
+        if focus.empty:
+            base_payload["reason"] = "no_stage_2_to_3_or_3_to_4_policy_rows"
+            return base_payload
+
+        score_values = pd.to_numeric(
+            focus["selection_score"],
+            errors="coerce",
+        ).dropna()
+        score_cutoffs = sorted(
+            {
+                float(score_values.quantile(quantile))
+                for quantile in self.config.policy_score_quantiles
+                if len(score_values)
+            }
+        )
+        if not score_cutoffs:
+            base_payload["reason"] = "no_finite_policy_selection_score"
+            return base_payload
+
+        all_dates = sorted(scored["signal_date"].astype(str).unique())
+        candidates: list[dict[str, Any]] = []
+        for max_positions in self.config.policy_position_grid:
+            positions = max(1, int(max_positions))
+            for min_fill in self.config.policy_fill_probability_grid:
+                for max_big_loss in self.config.policy_big_loss_probability_grid:
+                    for min_mean_lcb in self.config.policy_mean_return_lcb_grid:
+                        for min_ev in self.config.policy_conservative_ev_grid:
+                            for min_score in score_cutoffs:
+                                eligible = focus[
+                                    pd.to_numeric(
+                                        focus["predicted_exit_probability"],
+                                        errors="coerce",
+                                    ).ge(self.config.policy_min_exit_probability)
+                                    & pd.to_numeric(
+                                        focus["predicted_fill_probability"],
+                                        errors="coerce",
+                                    ).ge(min_fill)
+                                    & pd.to_numeric(
+                                        focus["predicted_big_loss_probability"],
+                                        errors="coerce",
+                                    ).le(max_big_loss)
+                                    & pd.to_numeric(
+                                        focus["predicted_mean_return_lcb"],
+                                        errors="coerce",
+                                    ).ge(min_mean_lcb)
+                                    & pd.to_numeric(
+                                        focus["conservative_ev"],
+                                        errors="coerce",
+                                    ).ge(min_ev)
+                                    & pd.to_numeric(
+                                        focus["selection_score"],
+                                        errors="coerce",
+                                    ).ge(min_score)
+                                ].copy()
+                                selected = (
+                                    eligible.sort_values(
+                                        [
+                                            "signal_date",
+                                            "selection_score",
+                                            "predicted_mean_return_lcb",
+                                            "source_rank",
+                                        ],
+                                        ascending=[True, False, False, True],
+                                        kind="stable",
+                                    )
+                                    .groupby(
+                                        "signal_date",
+                                        sort=False,
+                                        group_keys=False,
+                                    )
+                                    .head(positions)
+                                )
+                                signal_date_set = set(
+                                    selected["signal_date"].astype(str)
+                                )
+                                no_signal_streak = 0
+                                current_streak = 0
+                                for signal_date in all_dates:
+                                    if signal_date in signal_date_set:
+                                        current_streak = 0
+                                    else:
+                                        current_streak += 1
+                                        no_signal_streak = max(
+                                            no_signal_streak,
+                                            current_streak,
+                                        )
+                                cap_accepted = (
+                                    pd.to_numeric(
+                                        selected.get("actual_buy_gap"),
+                                        errors="coerce",
+                                    )
+                                    <= pd.to_numeric(
+                                        selected.get("diagnostic_gap"),
+                                        errors="coerce",
+                                    )
+                                    + EPS
+                                )
+                                market_fill = pd.to_numeric(
+                                    selected.get("market_fill"),
+                                    errors="coerce",
+                                ).fillna(0).eq(1)
+                                filled = selected[
+                                    cap_accepted.fillna(False) & market_fill
+                                ].copy()
+                                daily = (
+                                    pd.to_numeric(
+                                        filled.get("net_return"),
+                                        errors="coerce",
+                                    )
+                                    .groupby(filled["signal_date"].astype(str))
+                                    .sum()
+                                    .reindex(all_dates, fill_value=0.0)
+                                    / float(positions)
+                                )
+                                stress_daily = (
+                                    (
+                                        pd.to_numeric(
+                                            filled.get("gross_return"),
+                                            errors="coerce",
+                                        )
+                                        - 2.0 * self.config.cost_rate
+                                    )
+                                    .groupby(filled["signal_date"].astype(str))
+                                    .sum()
+                                    .reindex(all_dates, fill_value=0.0)
+                                    / float(positions)
+                                )
+                                nav = (1.0 + daily).cumprod()
+                                drawdown = nav / nav.cummax() - 1.0
+                                realized = pd.to_numeric(
+                                    filled.get("net_return"),
+                                    errors="coerce",
+                                ).dropna()
+                                tail_count = (
+                                    max(1, int(math.ceil(len(realized) * 0.10)))
+                                    if len(realized)
+                                    else 0
+                                )
+                                tail_mean = (
+                                    float(realized.nsmallest(tail_count).mean())
+                                    if tail_count
+                                    else float("nan")
+                                )
+                                big_loss_rate = (
+                                    float(
+                                        (
+                                            realized
+                                            <= self.config.big_loss_threshold
+                                        ).mean()
+                                    )
+                                    if len(realized)
+                                    else float("nan")
+                                )
+                                signal_dates = len(signal_date_set)
+                                signal_ratio = (
+                                    signal_dates / len(all_dates)
+                                    if all_dates
+                                    else float("nan")
+                                )
+                                mean_daily = (
+                                    float(daily.mean())
+                                    if len(daily)
+                                    else float("nan")
+                                )
+                                stress_mean = (
+                                    float(stress_daily.mean())
+                                    if len(stress_daily)
+                                    else float("nan")
+                                )
+                                max_drawdown = (
+                                    float(drawdown.min())
+                                    if len(drawdown)
+                                    else float("nan")
+                                )
+                                checks = {
+                                    "minimum_signal_dates": (
+                                        signal_dates
+                                        >= self.config.policy_min_signal_dates
+                                    ),
+                                    "minimum_filled_trades": (
+                                        len(filled)
+                                        >= self.config.policy_min_filled_trades
+                                    ),
+                                    "minimum_signal_date_ratio": (
+                                        math.isfinite(signal_ratio)
+                                        and signal_ratio
+                                        >= self.config.policy_min_signal_date_ratio
+                                    ),
+                                    "maximum_no_signal_streak": (
+                                        no_signal_streak
+                                        <= self.config.policy_max_no_signal_streak
+                                    ),
+                                    "positive_mean_daily_return": (
+                                        math.isfinite(mean_daily)
+                                        and mean_daily > 0.0
+                                    ),
+                                    "positive_2x_cost_stress": (
+                                        math.isfinite(stress_mean)
+                                        and stress_mean > 0.0
+                                    ),
+                                    "realized_big_loss_cap": (
+                                        math.isfinite(big_loss_rate)
+                                        and big_loss_rate
+                                        <= self.config.policy_max_realized_big_loss_rate
+                                    ),
+                                    "tail_mean_floor": (
+                                        math.isfinite(tail_mean)
+                                        and tail_mean
+                                        >= self.config.policy_min_tail_mean_return
+                                    ),
+                                }
+                                feasible = all(checks.values())
+                                objective = (
+                                    stress_mean
+                                    + 0.10 * min(tail_mean, 0.0)
+                                    + 0.02 * min(max_drawdown, 0.0)
+                                    if all(
+                                        math.isfinite(value)
+                                        for value in (
+                                            stress_mean,
+                                            tail_mean,
+                                            max_drawdown,
+                                        )
+                                    )
+                                    else float("-inf")
+                                )
+                                candidates.append(
+                                    {
+                                        "feasible": feasible,
+                                        "objective": objective,
+                                        "max_positions": positions,
+                                        "thresholds": {
+                                            "min_fill_probability": float(
+                                                min_fill
+                                            ),
+                                            "min_exit_probability": float(
+                                                self.config.policy_min_exit_probability
+                                            ),
+                                            "max_big_loss_probability": float(
+                                                max_big_loss
+                                            ),
+                                            "min_mean_return_lcb": float(
+                                                min_mean_lcb
+                                            ),
+                                            "min_conservative_ev": float(
+                                                min_ev
+                                            ),
+                                            "min_selection_score": float(
+                                                min_score
+                                            ),
+                                        },
+                                        "diagnostics": {
+                                            "signals": int(len(selected)),
+                                            "signal_dates": int(signal_dates),
+                                            "signal_date_ratio": _safe_metric(
+                                                signal_ratio
+                                            ),
+                                            "max_no_signal_streak": int(
+                                                no_signal_streak
+                                            ),
+                                            "filled_trades": int(len(filled)),
+                                            "fill_rate": _safe_metric(
+                                                len(filled) / len(selected)
+                                                if len(selected)
+                                                else np.nan
+                                            ),
+                                            "mean_trade_net_return": _safe_metric(
+                                                realized.mean()
+                                            ),
+                                            "mean_daily_return": _safe_metric(
+                                                mean_daily
+                                            ),
+                                            "stress_2x_cost_mean_daily_return": _safe_metric(
+                                                stress_mean
+                                            ),
+                                            "realized_big_loss_rate": _safe_metric(
+                                                big_loss_rate
+                                            ),
+                                            "tail_10pct_mean_return": _safe_metric(
+                                                tail_mean
+                                            ),
+                                            "max_drawdown": _safe_metric(
+                                                max_drawdown
+                                            ),
+                                            "checks": checks,
+                                        },
+                                    }
+                                )
+
+        feasible_candidates = [
+            candidate for candidate in candidates if candidate["feasible"]
+        ]
+        pool = feasible_candidates or candidates
+        if not pool:
+            base_payload["reason"] = "no_policy_candidate_evaluated"
+            return base_payload
+        best = max(
+            pool,
+            key=lambda candidate: (
+                _finite(candidate.get("objective"), float("-inf")),
+                _finite(
+                    candidate["diagnostics"].get(
+                        "stress_2x_cost_mean_daily_return"
+                    ),
+                    float("-inf"),
+                ),
+                -int(candidate["max_positions"]),
+            ),
+        )
+        return {
+            **base_payload,
+            "ready": bool(best["feasible"]),
+            "reason": (
+                "passed_independent_policy_holdout"
+                if best["feasible"]
+                else "no_policy_passed_independent_holdout"
+            ),
+            "tuning_start": tuning_dates[0],
+            "tuning_end": tuning_dates[-1],
+            "candidate_policies_evaluated": int(len(candidates)),
+            "feasible_policy_count": int(len(feasible_candidates)),
+            "thresholds": best["thresholds"],
+            "max_positions": int(best["max_positions"]),
+            "diagnostics": best["diagnostics"],
+        }
 
     def _current_base(self, signal_date: str, candidates: pd.DataFrame) -> pd.DataFrame:
         dates = self.market_dates()
@@ -3620,20 +4876,19 @@ class AuctionV3Engine:
             if len(train_dates) < self.config.min_train_dates:
                 continue
             train = history[history["signal_date"].isin(train_dates)].copy()
-            bundle = self.fit_models(train)
+            bundle = self.fit_models(
+                train,
+                fast_backtest=True,
+            )
             if bundle is None:
                 continue
             test = history[history["signal_date"].isin(test_dates)].copy()
-            scored_parts: list[pd.DataFrame] = []
-            for signal_date, group in test.groupby("signal_date", sort=True):
-                scored = self.score_candidates(group, bundle)
-                scored["oos_train_end"] = train_dates[-1]
-                scored["oos_train_dates"] = len(train_dates)
-                scored["oos_refit_index"] = refit_index
-                scored["oos_block_dates"] = bounded_block_dates
-                scored_parts.append(scored)
-            if scored_parts:
-                output.append(pd.concat(scored_parts, ignore_index=True))
+            scored = self.score_candidates(test, bundle)
+            scored["oos_train_end"] = train_dates[-1]
+            scored["oos_train_dates"] = len(train_dates)
+            scored["oos_refit_index"] = refit_index
+            scored["oos_block_dates"] = bounded_block_dates
+            output.append(scored)
         if not output:
             return pd.DataFrame()
         out = pd.concat(output, ignore_index=True)
@@ -3641,7 +4896,48 @@ class AuctionV3Engine:
         out["strategy_filled"] = (
             out["selected"].eq(1) & out["cap_accepted"].eq(1) & out["market_fill"].eq(1)
         ).astype(int)
+        policy_positions = (
+            pd.to_numeric(
+                out.get("policy_max_positions"),
+                errors="coerce",
+            )
+            .fillna(self.config.max_positions)
+            .clip(lower=1.0)
+        )
+        out["strategy_weight"] = np.where(
+            out["selected"].eq(1),
+            1.0 / policy_positions,
+            0.0,
+        )
+        out["shadow_cap_accepted"] = (
+            pd.to_numeric(out["actual_buy_gap"], errors="coerce")
+            <= pd.to_numeric(out["diagnostic_gap"], errors="coerce") + EPS
+        ).fillna(False).astype(int)
+        out["shadow_market_filled"] = (
+            out["shadow_selected"].eq(1) & out["market_fill"].eq(1)
+        ).astype(int)
+        out["shadow_limit_filled"] = (
+            out["shadow_selected"].eq(1)
+            & out["shadow_cap_accepted"].eq(1)
+            & out["market_fill"].eq(1)
+        ).astype(int)
         out["strategy_net_return"] = np.where(out["strategy_filled"].eq(1), out["net_return"], np.nan)
+        out["strategy_portfolio_return"] = np.where(
+            out["strategy_filled"].eq(1),
+            pd.to_numeric(out["net_return"], errors="coerce")
+            * pd.to_numeric(out["strategy_weight"], errors="coerce"),
+            0.0,
+        )
+        out["shadow_market_net_return"] = np.where(
+            out["shadow_market_filled"].eq(1),
+            out["net_return"],
+            np.nan,
+        )
+        out["shadow_limit_net_return"] = np.where(
+            out["shadow_limit_filled"].eq(1),
+            out["net_return"],
+            np.nan,
+        )
         out["forecast_error"] = np.where(
             out["strategy_filled"].eq(1), out["net_return"] - out["predicted_net_return"], np.nan
         )
@@ -3673,6 +4969,215 @@ class AuctionV3Engine:
             means.append(float(np.mean(sample)))
         return float(np.mean(np.asarray(means) > 0.0))
 
+    def _shadow_policy_metrics(
+        self,
+        oos: pd.DataFrame,
+        *,
+        top_n: int,
+        respect_limit: bool,
+    ) -> dict[str, Any]:
+        dates = sorted(oos["signal_date"].astype(str).unique())
+        rank = pd.to_numeric(
+            oos.get(
+                "shadow_rank",
+                pd.Series(np.nan, index=oos.index),
+            ),
+            errors="coerce",
+        )
+        selected = oos[rank.le(float(top_n)).fillna(False)].copy()
+        signal_dates = set(selected["signal_date"].astype(str))
+        if respect_limit:
+            filled = selected[
+                pd.to_numeric(
+                    selected.get(
+                        "shadow_cap_accepted",
+                        pd.Series(0, index=selected.index),
+                    ),
+                    errors="coerce",
+                ).fillna(0).eq(1)
+                & pd.to_numeric(
+                    selected.get(
+                        "market_fill",
+                        pd.Series(0, index=selected.index),
+                    ),
+                    errors="coerce",
+                ).fillna(0).eq(1)
+            ].copy()
+            execution_mode = "diagnostic_limit_cap"
+        else:
+            filled = selected[
+                pd.to_numeric(
+                    selected.get(
+                        "market_fill",
+                        pd.Series(0, index=selected.index),
+                    ),
+                    errors="coerce",
+                ).fillna(0).eq(1)
+            ].copy()
+            execution_mode = "market_at_open_proxy"
+        realized = pd.to_numeric(
+            filled.get(
+                "net_return",
+                pd.Series(np.nan, index=filled.index),
+            ),
+            errors="coerce",
+        ).dropna()
+        daily = (
+            pd.to_numeric(
+                filled.get(
+                    "net_return",
+                    pd.Series(np.nan, index=filled.index),
+                ),
+                errors="coerce",
+            )
+            .groupby(filled["signal_date"].astype(str))
+            .sum()
+            .reindex(dates, fill_value=0.0)
+            / float(max(1, top_n))
+        )
+        nav = (1.0 + daily).cumprod()
+        drawdown = nav / nav.cummax() - 1.0
+        positives = realized[realized > 0].sum()
+        negatives = -realized[realized < 0].sum()
+        tail_count = (
+            max(1, int(math.ceil(len(realized) * 0.10)))
+            if len(realized)
+            else 0
+        )
+        no_signal_streak = 0
+        current_streak = 0
+        for signal_date in dates:
+            if signal_date in signal_dates:
+                current_streak = 0
+            else:
+                current_streak += 1
+                no_signal_streak = max(no_signal_streak, current_streak)
+        return {
+            "top_n": int(top_n),
+            "execution_mode": execution_mode,
+            "signals": int(len(selected)),
+            "signal_dates": int(len(signal_dates)),
+            "signal_date_ratio": _safe_metric(
+                len(signal_dates) / len(dates) if dates else np.nan
+            ),
+            "max_no_signal_streak": int(no_signal_streak),
+            "filled_trades": int(len(realized)),
+            "fill_rate": _safe_metric(
+                len(realized) / len(selected) if len(selected) else np.nan
+            ),
+            "mean_trade_net_return": _safe_metric(realized.mean()),
+            "median_trade_net_return": _safe_metric(realized.median()),
+            "win_rate": _safe_metric((realized > 0).mean()),
+            "realized_big_loss_rate": _safe_metric(
+                (realized <= self.config.big_loss_threshold).mean()
+            ),
+            "tail_10pct_mean_return": _safe_metric(
+                realized.nsmallest(tail_count).mean()
+                if tail_count
+                else np.nan
+            ),
+            "worst_trade_net_return": _safe_metric(realized.min()),
+            "profit_factor": _safe_metric(
+                positives / negatives if negatives > 0 else np.nan
+            ),
+            "mean_daily_return": _safe_metric(daily.mean()),
+            "cumulative_return": _safe_metric(
+                nav.iloc[-1] - 1.0 if len(nav) else np.nan
+            ),
+            "max_drawdown": _safe_metric(
+                drawdown.min() if len(drawdown) else np.nan
+            ),
+            "bootstrap_probability_mean_positive": _safe_metric(
+                self._block_bootstrap_positive_probability(daily)
+            ),
+            "continuation_hit_rate": _safe_metric(
+                pd.to_numeric(
+                    filled.get(
+                        "continuation_limit_up_hit",
+                        pd.Series(np.nan, index=filled.index),
+                    ),
+                    errors="coerce",
+                ).mean()
+            ),
+        }
+
+    def _gate_funnel(self, oos: pd.DataFrame) -> dict[str, Any]:
+        ordered_gates = (
+            ("stage_focus", "gate_stage_focus"),
+            ("policy_ready", "gate_policy_ready"),
+            ("exit_probability", "gate_exit_probability"),
+            ("fill_probability", "gate_fill_probability"),
+            ("big_loss_probability", "gate_big_loss_probability"),
+            ("mean_return_lcb", "gate_mean_return_lcb"),
+            ("conservative_ev", "gate_conservative_ev"),
+            ("selection_score", "gate_selection_score"),
+            ("combined_risk_gate", "risk_gate_pass"),
+        )
+        total_rows = int(len(oos))
+        total_dates = int(
+            oos.get(
+                "signal_date",
+                pd.Series(dtype=str),
+            ).astype(str).nunique()
+        )
+        marginal: dict[str, Any] = {}
+        sequential: dict[str, Any] = {}
+        active = pd.Series(True, index=oos.index)
+        for label, column in ordered_gates:
+            source = (
+                oos[column]
+                if column in oos.columns
+                else pd.Series(0, index=oos.index, dtype=int)
+            )
+            passed = pd.to_numeric(
+                source,
+                errors="coerce",
+            ).fillna(0).eq(1)
+            marginal_rows = int(passed.sum())
+            marginal[label] = {
+                "rows": marginal_rows,
+                "row_rate": _safe_metric(
+                    marginal_rows / total_rows if total_rows else np.nan
+                ),
+                "dates": int(
+                    oos.loc[passed, "signal_date"].astype(str).nunique()
+                )
+                if "signal_date" in oos.columns
+                else 0,
+            }
+            active &= passed
+            active_rows = int(active.sum())
+            sequential[label] = {
+                "rows": active_rows,
+                "row_rate": _safe_metric(
+                    active_rows / total_rows if total_rows else np.nan
+                ),
+                "dates": int(
+                    oos.loc[active, "signal_date"].astype(str).nunique()
+                )
+                if "signal_date" in oos.columns
+                else 0,
+            }
+        reason_counts = (
+            oos.get(
+                "model_reason",
+                pd.Series(dtype=str),
+            )
+            .fillna("unknown")
+            .astype(str)
+            .value_counts()
+        )
+        return {
+            "rows_total": total_rows,
+            "dates_total": total_dates,
+            "marginal": marginal,
+            "sequential": sequential,
+            "rejection_reason_counts": {
+                str(reason): int(count)
+                for reason, count in reason_counts.items()
+            },
+        }
+
     def _portfolio_metrics(self, oos: pd.DataFrame, history_dates: int) -> dict[str, Any]:
         if oos.empty:
             return {
@@ -3684,6 +5189,21 @@ class AuctionV3Engine:
             }
         selected = oos[oos["selected"].eq(1)].copy()
         filled = selected[selected["strategy_filled"].eq(1)].copy()
+        if "strategy_weight" not in filled.columns:
+            filled["strategy_weight"] = 1.0 / float(
+                max(1, self.config.max_positions)
+            )
+        if "strategy_portfolio_return" not in filled.columns:
+            filled["strategy_portfolio_return"] = (
+                pd.to_numeric(
+                    filled.get("strategy_net_return"),
+                    errors="coerce",
+                )
+                * pd.to_numeric(
+                    filled["strategy_weight"],
+                    errors="coerce",
+                )
+            )
         stage_focus_filled = filled[pd.to_numeric(filled.get("stage_focus"), errors="coerce").fillna(0).eq(1)]
         dates = sorted(oos["signal_date"].unique())
         signal_date_set = set(selected["signal_date"].astype(str))
@@ -3697,21 +5217,52 @@ class AuctionV3Engine:
             else:
                 current_no_signal_streak += 1
                 max_no_signal_streak = max(max_no_signal_streak, current_no_signal_streak)
-        daily = filled.groupby("signal_date")["strategy_net_return"].sum().reindex(dates, fill_value=0.0)
-        daily = daily / float(self.config.max_positions)
+        daily = (
+            filled.groupby("signal_date")["strategy_portfolio_return"]
+            .sum()
+            .reindex(dates, fill_value=0.0)
+        )
         benchmark_rows = oos[pd.to_numeric(oos["source_rank"], errors="coerce") <= self.config.max_positions].copy()
         benchmark_rows = benchmark_rows[benchmark_rows["market_fill"].eq(1)]
         benchmark = benchmark_rows.groupby("signal_date")["net_return"].sum().reindex(dates, fill_value=0.0)
         benchmark = benchmark / float(self.config.max_positions)
         uncapped_rows = selected[selected["market_fill"].eq(1)].copy()
-        uncapped = uncapped_rows.groupby("signal_date")["net_return"].sum().reindex(dates, fill_value=0.0)
-        uncapped = uncapped / float(self.config.max_positions)
+        uncapped_rows["uncapped_portfolio_return"] = (
+            pd.to_numeric(
+                uncapped_rows["net_return"],
+                errors="coerce",
+            )
+            * pd.to_numeric(
+                uncapped_rows.get(
+                    "strategy_weight",
+                    pd.Series(0.0, index=uncapped_rows.index),
+                ),
+                errors="coerce",
+            ).fillna(0.0)
+        )
+        uncapped = (
+            uncapped_rows.groupby("signal_date")["uncapped_portfolio_return"]
+            .sum()
+            .reindex(dates, fill_value=0.0)
+        )
         nav = (1.0 + daily).cumprod()
         drawdown = nav / nav.cummax() - 1.0
-        stress_15_trade = filled["gross_return"] - 1.5 * self.config.cost_rate
-        stress_15_daily = stress_15_trade.groupby(filled["signal_date"]).sum().reindex(dates, fill_value=0.0) / float(self.config.max_positions)
-        stress_trade = filled["gross_return"] - 2.0 * self.config.cost_rate
-        stress_daily = stress_trade.groupby(filled["signal_date"]).sum().reindex(dates, fill_value=0.0) / float(self.config.max_positions)
+        stress_15_trade = (
+            filled["gross_return"] - 1.5 * self.config.cost_rate
+        ) * pd.to_numeric(filled["strategy_weight"], errors="coerce")
+        stress_15_daily = (
+            stress_15_trade.groupby(filled["signal_date"])
+            .sum()
+            .reindex(dates, fill_value=0.0)
+        )
+        stress_trade = (
+            filled["gross_return"] - 2.0 * self.config.cost_rate
+        ) * pd.to_numeric(filled["strategy_weight"], errors="coerce")
+        stress_daily = (
+            stress_trade.groupby(filled["signal_date"])
+            .sum()
+            .reindex(dates, fill_value=0.0)
+        )
         positives = filled.loc[filled["strategy_net_return"] > 0, "strategy_net_return"].sum()
         negatives = -filled.loc[filled["strategy_net_return"] < 0, "strategy_net_return"].sum()
         big_loss_rate = float((filled["strategy_net_return"] <= self.config.big_loss_threshold).mean()) if len(filled) else float("nan")
@@ -3876,6 +5427,29 @@ class AuctionV3Engine:
                     "continuation_hit_rate": _safe_metric(path_hits.mean()),
                 }
         metrics["path_oos"] = path_oos
+        metrics["gate_funnel"] = self._gate_funnel(oos)
+        metrics["shadow_policies"] = {
+            "top1_market_at_open": self._shadow_policy_metrics(
+                oos,
+                top_n=1,
+                respect_limit=False,
+            ),
+            "top2_market_at_open": self._shadow_policy_metrics(
+                oos,
+                top_n=2,
+                respect_limit=False,
+            ),
+            "top1_diagnostic_limit": self._shadow_policy_metrics(
+                oos,
+                top_n=1,
+                respect_limit=True,
+            ),
+            "top2_diagnostic_limit": self._shadow_policy_metrics(
+                oos,
+                top_n=2,
+                respect_limit=True,
+            ),
+        }
         metrics["daily_equity"] = [
             {"signal_date": date, "daily_return": _safe_metric(daily.loc[date]), "nav": _safe_metric(nav.loc[date])}
             for date in dates
@@ -3891,6 +5465,21 @@ class AuctionV3Engine:
             selected = pd.to_numeric(trade_audit["selected"], errors="coerce").fillna(0).eq(1)
             trade_audit = trade_audit.loc[selected].copy()
         _write_csv(trade_audit, self.config.metrics_root / "backtest_trades_latest.csv")
+        _write_csv(
+            oos,
+            self.config.metrics_root / "backtest_gate_audit_latest.csv",
+        )
+        shadow_audit = oos.copy()
+        if "shadow_selected" in shadow_audit.columns:
+            shadow_selected = pd.to_numeric(
+                shadow_audit["shadow_selected"],
+                errors="coerce",
+            ).fillna(0).eq(1)
+            shadow_audit = shadow_audit.loc[shadow_selected].copy()
+        _write_csv(
+            shadow_audit,
+            self.config.metrics_root / "backtest_shadow_latest.csv",
+        )
         _write_json(metrics, self.config.metrics_root / "backtest_latest.json")
         return oos, metrics
 
@@ -3929,10 +5518,36 @@ class AuctionV3Engine:
         force: bool = False,
     ) -> pd.DataFrame:
         dated_path = self.config.prediction_root / f"pred_{signal_date}.csv"
+        latest_path = self.config.prediction_root / "pred_latest.csv"
         expected_buy, expected_exit = self._prediction_dates(
             signal_date,
             candidates,
         )
+        if (
+            not dated_path.exists()
+            and latest_path.exists()
+            and not force
+        ):
+            latest = _read_csv(latest_path)
+            latest_signal = (
+                _normal_date(latest["signal_date"].iloc[0])
+                if not latest.empty
+                and "signal_date" in latest.columns
+                else ""
+            )
+            latest_buy = (
+                _normal_date(latest["expected_buy_date"].iloc[0])
+                if not latest.empty
+                and "expected_buy_date" in latest.columns
+                else ""
+            )
+            if (
+                latest_signal == _normal_date(signal_date)
+                and latest_buy == _normal_date(expected_buy)
+                and not self._prediction_revision_allowed(expected_buy)
+            ):
+                _write_csv(latest, dated_path)
+                return latest
         if dated_path.exists() and not force:
             frozen = _read_csv(dated_path)
             if not frozen.empty:
@@ -3957,10 +5572,7 @@ class AuctionV3Engine:
                 if same_version and (bundle is None or same_artifact):
                     _write_csv(frozen, self.config.prediction_root / "pred_latest.csv")
                     return frozen
-                if (
-                    same_version
-                    and not self._prediction_revision_allowed(expected_buy)
-                ):
+                if not self._prediction_revision_allowed(expected_buy):
                     _write_csv(frozen, self.config.prediction_root / "pred_latest.csv")
                     return frozen
                 safe_version = re.sub(r"[^A-Za-z0-9_.-]+", "_", frozen_version).strip("._")[:80] or "legacy"
@@ -4042,9 +5654,15 @@ class AuctionV3Engine:
         scored["broker_connected"] = 0
         scored["order_type"] = "LIMIT_ONLY_MANUAL"
         scored["market_order_allowed"] = 0
-        scored["max_big_loss_probability"] = float(self.config.max_big_loss_probability)
+        scored["max_big_loss_probability"] = pd.to_numeric(
+            scored.get("policy_max_big_loss_probability"),
+            errors="coerce",
+        ).fillna(self.config.max_big_loss_probability)
         scored["big_loss_threshold"] = float(self.config.big_loss_threshold)
-        scored["min_return_lcb"] = float(self.config.min_return_lcb)
+        scored["min_return_lcb"] = pd.to_numeric(
+            scored.get("policy_min_mean_return_lcb"),
+            errors="coerce",
+        ).fillna(self.config.min_return_lcb)
         scored["model_version"] = self.config.model_version
         scored["model_artifact_sha256"] = (
             bundle.model_artifact_sha256
@@ -4056,7 +5674,20 @@ class AuctionV3Engine:
         scored["action"] = np.where(
             scored["selected"].eq(1),
             "BUY" if promoted else "SHADOW_ONLY",
-            np.where(scored["model_reason"].eq("insufficient_independent_history"), "WATCH", "REJECT"),
+            np.where(
+                pd.to_numeric(
+                    scored.get("shadow_selected"),
+                    errors="coerce",
+                ).fillna(0).eq(1),
+                "SHADOW_ONLY",
+                np.where(
+                    scored["model_reason"].eq(
+                        "insufficient_independent_history"
+                    ),
+                    "WATCH",
+                    "REJECT",
+                ),
+            ),
         )
         scored["price_action"] = np.where(
             scored["recommended_max_price"].notna(),
@@ -4066,7 +5697,7 @@ class AuctionV3Engine:
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
         scored["feature_contract"] = (
-            "D_CLOSE_STREAK_PATH_SENTIMENT_V8_CALIBRATED_NO_T_LEAKAGE"
+            "D_CLOSE_STREAK_PATH_SENTIMENT_V9_NESTED_POLICY_NO_T_LEAKAGE"
         )
         ordered = [
             "prediction_id",
@@ -4145,6 +5776,24 @@ class AuctionV3Engine:
             "min_return_lcb",
             "conservative_ev",
             "selection_score",
+            "shadow_rank",
+            "shadow_selected",
+            "gate_policy_ready",
+            "gate_stage_focus",
+            "gate_exit_probability",
+            "gate_fill_probability",
+            "gate_big_loss_probability",
+            "gate_mean_return_lcb",
+            "gate_conservative_ev",
+            "gate_selection_score",
+            "selection_policy_version",
+            "policy_max_big_loss_probability",
+            "policy_min_mean_return_lcb",
+            "policy_min_fill_probability",
+            "policy_min_exit_probability",
+            "policy_min_conservative_ev",
+            "policy_min_selection_score",
+            "policy_max_positions",
             "risk_gate_pass",
             "selected",
             "action",
@@ -5025,12 +6674,6 @@ class AuctionV3Engine:
         if bundle is None:
             model_quality_failures.append("model_bundle_not_ready")
         else:
-            if not bool(
-                bundle.return_selection.get("model_has_information_gain")
-            ):
-                model_quality_failures.append(
-                    "return_model_did_not_beat_constant_baseline"
-                )
             if bundle.probability_quality_gate.get("passed") is not True:
                 model_quality_failures.append(
                     "probability_models_did_not_pass_brier_skill_gate"
@@ -5043,10 +6686,6 @@ class AuctionV3Engine:
                 dict.fromkeys(existing_failures + model_quality_failures)
             )
             checks = dict(backtest_metrics.get("promotion_checks") or {})
-            checks["return_model_information_gain"] = (
-                "return_model_did_not_beat_constant_baseline"
-                not in model_quality_failures
-            )
             checks["probability_brier_skill"] = (
                 "probability_models_did_not_pass_brier_skill_gate"
                 not in model_quality_failures
@@ -5177,6 +6816,9 @@ class AuctionV3Engine:
             "probability_quality_gate": (
                 bundle.probability_quality_gate if bundle else {}
             ),
+            "selection_policy": (
+                bundle.selection_policy if bundle else {}
+            ),
             "conformal_residual_quantiles": (
                 bundle.conformal_residual_quantiles if bundle else {}
             ),
@@ -5260,7 +6902,7 @@ class AuctionV3Engine:
                 "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path, cohort, and market-sentiment features",
                 "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
                 "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top5, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
-                "observation_ranking": "formal risk gate, tail-loss risk, conservative EV, continuation probability, return lower bound",
+                "observation_ranking": "stage-focused Top1/Top2 shadow ranking by conservative utility; formal selection separately requires a nested temporal policy holdout",
                 "guidance_only": True,
                 "broker_connected": False,
                 "entry": "manual limit order only before T 09:25 opening-auction cutoff with a frozen maximum price; market order forbidden",
@@ -5271,13 +6913,29 @@ class AuctionV3Engine:
                 "latest_exit_time": self.config.latest_exit_time,
                 "cost_rate": self.config.cost_rate,
                 "maximum_price_limit_mechanism_pct": self.config.max_mechanism_limit_pct,
-                "maximum_big_loss_probability": self.config.max_big_loss_probability,
+                "maximum_big_loss_probability": (
+                    (bundle.selection_policy.get("thresholds") or {}).get(
+                        "max_big_loss_probability",
+                        self.config.max_big_loss_probability,
+                    )
+                    if bundle
+                    else self.config.max_big_loss_probability
+                ),
                 "big_loss_threshold": self.config.big_loss_threshold,
-                "minimum_return_lcb": self.config.min_return_lcb,
+                "minimum_return_lcb": (
+                    (bundle.selection_policy.get("thresholds") or {}).get(
+                        "min_mean_return_lcb",
+                        self.config.min_return_lcb,
+                    )
+                    if bundle
+                    else self.config.min_return_lcb
+                ),
                 "auction_truth": "Tushare stk_auction_o 9:30 opening-auction close/volume/amount/VWAP is authoritative when available; 09:30 minute and official daily open are labeled fallback proxies",
-                "probability_calibration": "chronological calibration with embargo; model probabilities must beat a date-balanced constant baseline on Brier Skill Score and daily consistency or fall back to the constant",
-                "return_uncertainty": "the hard return gate uses an out-of-sample conformal residual lower quantile, not a confidence interval around the mean",
-                "truth_ledgers": "formal limit-order proxy, market-at-open observation, and manual actual fills are stored and accumulated separately",
+                "probability_calibration": "chronological calibration with embargo; big-loss and fill probabilities must beat a date-balanced constant baseline, while profit, continuation and near-degenerate exit labels may use an audited constant fallback",
+                "return_uncertainty": "outcome conformal q10/q90 remains a tail-risk diagnostic; formal authorization uses a separately tuned mean-return lower-confidence floor and conservative expected utility",
+                "selection_policy": "models are fit first, probabilities are calibrated on a later embargoed window, and thresholds/position count are selected on a still later policy holdout; no feasible policy means no formal trade",
+                "profit_probability": "diagnostic only because an uninformative constant classifier cannot veto the full universe",
+                "truth_ledgers": "formal limit-order proxy, Top1/Top2 market-at-open shadow, diagnostic-limit shadow, and manual actual fills are stored and accumulated separately",
                 "future_features_forbidden": True,
             },
         }
