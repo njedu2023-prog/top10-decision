@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-07-27T02:55:36+00:00",
+  "generated_at_utc": "2026-07-27T03:49:16+00:00",
   "model_version": "auction_v9_nested_policy_shadow_oos_1",
-  "model_artifact_sha256": "28700b771a1922869a039f10305f9892bf5cc3207d55e074368303f9f5c3c111",
+  "model_artifact_sha256": "18a908db19776d92958e4c3c1f791da779b4810413fc410eab8fd26a22414487",
   "ready": true,
   "promoted": false,
   "training_rows": 13216,
@@ -1095,7 +1095,7 @@
       "max_big_loss_probability": 0.35,
       "min_mean_return_lcb": -0.03,
       "min_conservative_ev": -0.02,
-      "min_selection_score": -0.03501034251942396
+      "min_selection_score": -0.03501034251942397
     },
     "max_positions": 1,
     "diagnostics": {
@@ -1336,7 +1336,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-07-27T02:55:34+00:00",
+        "generated_at_utc": "2026-07-27T03:49:14+00:00",
         "frozen_predictions": 436,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -1381,7 +1381,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-07-27T02:55:35+00:00",
+        "generated_at_utc": "2026-07-27T03:49:14+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -1513,7 +1513,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-07-27T02:55:34+00:00",
+        "generated_at_utc": "2026-07-27T03:49:14+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -1564,6 +1564,68 @@
     "market_3_to_4_promotion_samples": 4.0,
     "market_focus_promotion_samples": 12.0,
     "market_max_streak": 4.0,
+    "market_limit_up_industry_top10": [
+      {
+        "rank": 1,
+        "industry": "电网设备",
+        "limit_up_count": 5,
+        "share": 0.1388888888888889
+      },
+      {
+        "rank": 2,
+        "industry": "房地产开发",
+        "limit_up_count": 3,
+        "share": 0.08333333333333333
+      },
+      {
+        "rank": 3,
+        "industry": "汽车零部件",
+        "limit_up_count": 3,
+        "share": 0.08333333333333333
+      },
+      {
+        "rank": 4,
+        "industry": "其他电子",
+        "limit_up_count": 2,
+        "share": 0.05555555555555555
+      },
+      {
+        "rank": 5,
+        "industry": "包装印刷",
+        "limit_up_count": 2,
+        "share": 0.05555555555555555
+      },
+      {
+        "rank": 6,
+        "industry": "半导体",
+        "limit_up_count": 2,
+        "share": 0.05555555555555555
+      },
+      {
+        "rank": 7,
+        "industry": "电力",
+        "limit_up_count": 2,
+        "share": 0.05555555555555555
+      },
+      {
+        "rank": 8,
+        "industry": "一般零售",
+        "limit_up_count": 1,
+        "share": 0.027777777777777776
+      },
+      {
+        "rank": 9,
+        "industry": "专业工程",
+        "limit_up_count": 1,
+        "share": 0.027777777777777776
+      },
+      {
+        "rank": 10,
+        "industry": "专用设备",
+        "limit_up_count": 1,
+        "share": 0.027777777777777776
+      }
+    ],
     "market_limit_up_industry_top5": [
       {
         "rank": 1,
@@ -1619,7 +1681,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-27T02:54:49+00:00",
+    "generated_at_utc": "2026-07-27T03:48:24+00:00",
     "model_version": "auction_v9_nested_policy_shadow_oos_1",
     "history_dates": 698,
     "oos_dates": 530,
@@ -4563,7 +4625,7 @@
         "nav": 1.0
       }
     ],
-    "model_artifact_sha256": "28700b771a1922869a039f10305f9892bf5cc3207d55e074368303f9f5c3c111"
+    "model_artifact_sha256": "18a908db19776d92958e4c3c1f791da779b4810413fc410eab8fd26a22414487"
   },
   "universe_eligibility": {
     "rule": "a_share_price_limit_le_10_v2",
@@ -4582,7 +4644,7 @@
     "candidate_pool": "D-day confirmed limit-up candidates only",
     "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path, cohort, and market-sentiment features",
     "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
-    "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top5, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
+    "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top10, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
     "observation_ranking": "stage-focused Top1/Top2 shadow ranking by conservative utility; formal selection separately requires a nested temporal policy holdout",
     "guidance_only": true,
     "broker_connected": false,

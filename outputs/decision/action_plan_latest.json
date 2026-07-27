@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_action_plan_v11_nested_policy_shadow",
-  "generated_at_utc": "2026-07-27T02:55:36+00:00",
+  "generated_at_utc": "2026-07-27T03:49:17+00:00",
   "report_date": "20260727",
   "report_file": "decision_report_20260727.md",
   "signal_date": "20260724",
@@ -24,7 +24,7 @@
     "prediction_matches_report": true,
     "artifact_versions_match": false,
     "artifact_fingerprints_match": false,
-    "artifact_sha256": "28700b771a1922869a039f10305f9892bf5cc3207d55e074368303f9f5c3c111",
+    "artifact_sha256": "18a908db19776d92958e4c3c1f791da779b4810413fc410eab8fd26a22414487",
     "promotion_failures": [
       "filled_trades",
       "stage_focus_filled_trades",
@@ -1132,7 +1132,7 @@
         "max_big_loss_probability": 0.35,
         "min_mean_return_lcb": -0.03,
         "min_conservative_ev": -0.02,
-        "min_selection_score": -0.03501034251942396
+        "min_selection_score": -0.03501034251942397
       },
       "max_positions": 1,
       "diagnostics": {
@@ -1373,7 +1373,7 @@
         "path": "outputs/auction_v3/verification/verify_latest.csv",
         "metrics": {
           "status": "ok",
-          "generated_at_utc": "2026-07-27T02:55:34+00:00",
+          "generated_at_utc": "2026-07-27T03:49:14+00:00",
           "frozen_predictions": 436,
           "selected_predictions": 0,
           "verified_trades": 0,
@@ -1418,7 +1418,7 @@
         "metrics": {
           "schema_version": "decision_observation_validation_v4_auction_truth",
           "status": "ok",
-          "generated_at_utc": "2026-07-27T02:55:35+00:00",
+          "generated_at_utc": "2026-07-27T03:49:14+00:00",
           "validation_start_exec_date": "20260721",
           "validation_mode": "market_at_open_proxy",
           "market_open_fill_assumption": true,
@@ -1550,7 +1550,7 @@
         "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
         "metrics": {
           "schema_version": "decision_manual_actual_v1",
-          "generated_at_utc": "2026-07-27T02:55:34+00:00",
+          "generated_at_utc": "2026-07-27T03:49:14+00:00",
           "truth_source": "manual_actual",
           "trades": 0,
           "win_rate": null,
@@ -1631,6 +1631,68 @@
     "max_streak": 4,
     "industry_concentration": 0.0586419753,
     "limit_up_amount_top3_share": 0.2214311814,
+    "limit_up_industry_top10": [
+      {
+        "rank": 1,
+        "industry": "电网设备",
+        "limit_up_count": 5,
+        "share": 0.1388888889
+      },
+      {
+        "rank": 2,
+        "industry": "房地产开发",
+        "limit_up_count": 3,
+        "share": 0.0833333333
+      },
+      {
+        "rank": 3,
+        "industry": "汽车零部件",
+        "limit_up_count": 3,
+        "share": 0.0833333333
+      },
+      {
+        "rank": 4,
+        "industry": "其他电子",
+        "limit_up_count": 2,
+        "share": 0.0555555556
+      },
+      {
+        "rank": 5,
+        "industry": "包装印刷",
+        "limit_up_count": 2,
+        "share": 0.0555555556
+      },
+      {
+        "rank": 6,
+        "industry": "半导体",
+        "limit_up_count": 2,
+        "share": 0.0555555556
+      },
+      {
+        "rank": 7,
+        "industry": "电力",
+        "limit_up_count": 2,
+        "share": 0.0555555556
+      },
+      {
+        "rank": 8,
+        "industry": "一般零售",
+        "limit_up_count": 1,
+        "share": 0.0277777778
+      },
+      {
+        "rank": 9,
+        "industry": "专业工程",
+        "limit_up_count": 1,
+        "share": 0.0277777778
+      },
+      {
+        "rank": 10,
+        "industry": "专用设备",
+        "limit_up_count": 1,
+        "share": 0.0277777778
+      }
+    ],
     "limit_up_industry_top5": [
       {
         "rank": 1,
@@ -1911,7 +1973,7 @@
     "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
     "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
     "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
-    "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top5、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
+    "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top10、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
     "observation_ranking": "2进3和3进4候选先按保守效用形成Top1/Top2影子序列持续记账；正式买入另须通过独立策略留出期",
     "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
     "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
@@ -2024,7 +2086,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2124,7 +2186,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2224,7 +2286,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2324,7 +2386,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2424,7 +2486,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2524,7 +2586,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2624,7 +2686,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2724,7 +2786,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2824,7 +2886,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -2924,7 +2986,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-27T02:55:35+00:00",
+      "truth_generated_at_utc": "2026-07-27T03:49:14+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -5388,7 +5450,7 @@
     "premarket_valid_rows": 10,
     "retrospective_rows": 0,
     "pending_rows": 10,
-    "generated_at_utc": "2026-07-27T02:55:35+00:00",
+    "generated_at_utc": "2026-07-27T03:49:14+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -5398,7 +5460,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-07-27T02:55:35+00:00",
+    "generated_at_utc": "2026-07-27T03:49:14+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
