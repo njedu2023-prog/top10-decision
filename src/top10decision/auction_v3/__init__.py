@@ -1,4 +1,4 @@
-"""Decision V8 calibrated auction guidance (keeps the v3 import path)."""
+"""Decision V9 nested-policy auction guidance (keeps the v3 import path)."""
 
 from .config import AuctionV3Config
 from .engine import AuctionV3Engine, RunResult
