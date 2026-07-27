@@ -576,6 +576,7 @@
 
     function modelDisplayName(value) {
       const text = String(value || "");
+      if (text.startsWith("auction_v9_")) return "V9 · 嵌套时序策略与影子验证";
       if (text.startsWith("auction_v8_")) return "V8 · 严格校准与竞价真值";
       if (text.startsWith("auction_v7_")) return "V7 · 市场情绪消融";
       if (text.startsWith("auction_v6_")) return "V6 · 连板路径";
@@ -647,6 +648,11 @@
 
     function renderMetrics(plan) {
       const bt = plan?.backtest || {};
+      const shadows = bt?.shadow_policies || {};
+      const top1Shadow = shadows?.top1_market_at_open || {};
+      const top2Shadow = shadows?.top2_market_at_open || {};
+      const gateFunnel = bt?.gate_funnel || {};
+      const finalGateRows = gateFunnel?.sequential?.combined_risk_gate?.rows;
       const promoted = plan?.model?.promoted === true;
       const sentiment = plan?.market_sentiment || {};
       const sentimentScore = finiteNumber(sentiment.score);
@@ -666,6 +672,7 @@
         metric("样本外出手日占比", pct(bt.signal_date_ratio), Number(bt.signal_date_ratio) < 0.05 ? "warn" : ""),
         metric("最长连续空仓", bt.max_no_signal_streak == null ? "-" : `${bt.max_no_signal_streak} 日`, Number(bt.max_no_signal_streak) > 30 ? "warn" : ""),
         metric("样本外成交笔数", String(bt.filled_trades ?? "-")),
+        metric("全部门槛通过候选", finalGateRows == null ? "-" : `${finalGateRows} 行`, Number(finalGateRows) === 0 ? "warn" : "good"),
         metric("样本外平均单笔净收益", pct(bt.mean_trade_net_return), valueTone(bt.mean_trade_net_return)),
         metric("样本外胜率", pct(bt.win_rate)),
         metric("样本外大跌率", pct(bt.realized_big_loss_rate), Number(bt.realized_big_loss_rate) > 0.15 ? "bad" : "good"),
@@ -675,6 +682,12 @@
         metric("双倍成本日收益", pct(bt.stress_2x_cost_mean_daily_return, 3), valueTone(bt.stress_2x_cost_mean_daily_return)),
         metric("次日按时退出率", pct(bt.exit_on_time_rate)),
         metric("Bootstrap 正收益概率", pct(bt.bootstrap_probability_mean_positive)),
+        metric("Top1影子成交笔数", String(top1Shadow.filled_trades ?? "-")),
+        metric("Top1影子平均净收益", pct(top1Shadow.mean_trade_net_return), valueTone(top1Shadow.mean_trade_net_return)),
+        metric("Top1影子累计收益", pct(top1Shadow.cumulative_return), valueTone(top1Shadow.cumulative_return)),
+        metric("Top2影子成交笔数", String(top2Shadow.filled_trades ?? "-")),
+        metric("Top2影子平均净收益", pct(top2Shadow.mean_trade_net_return), valueTone(top2Shadow.mean_trade_net_return)),
+        metric("Top2影子累计收益", pct(top2Shadow.cumulative_return), valueTone(top2Shadow.cumulative_return)),
         metric("模型版本", modelDisplayName(plan?.model?.version))
       ];
       els.metrics.innerHTML = rows.join("");
@@ -904,6 +917,9 @@
       const ablation = model?.continuation_path_ablation || {};
       const probabilityModels = model?.probability_models || {};
       const probabilityGate = model?.probability_quality_gate || {};
+      const selectionPolicy = model?.selection_policy || {};
+      const policyThresholds = selectionPolicy?.thresholds || {};
+      const policyDiagnostics = selectionPolicy?.diagnostics || {};
       const returnSelection = model?.return_selection || {};
       const conformal = model?.conformal_residual_quantiles || {};
       const globalConformal = conformal.global || {};
@@ -974,9 +990,14 @@
           </div>
         </div>
         <div class="audit-block">
-          <h3>V8 概率与收益质量</h3>
+          <h3>V9 概率、策略与收益质量</h3>
           <div class="audit-list">
             ${auditRow("概率总门槛", probabilityGate.passed === true ? "通过：必需概率均优于逐日常数基线" : "未通过：正式交易关闭，观察名单继续累计")}
+            ${auditRow("策略留出期", selectionPolicy.ready === true ? `通过 · ${dateText(selectionPolicy.tuning_start)} 至 ${dateText(selectionPolicy.tuning_end)}` : `未通过 · ${selectionPolicy.reason || "等待模型生成"}`)}
+            ${auditRow("策略搜索", `${selectionPolicy.candidate_policies_evaluated ?? 0}组 · 可行 ${selectionPolicy.feasible_policy_count ?? 0}组 · 最多持有 ${selectionPolicy.max_positions ?? 0}只`)}
+            ${auditRow("策略门槛", `P_fill≥${pct(policyThresholds.min_fill_probability)} · 大跌概率≤${pct(policyThresholds.max_big_loss_probability)} · 均值下界≥${signedPct(policyThresholds.min_mean_return_lcb)} · 保守EV≥${signedPct(policyThresholds.min_conservative_ev)}`)}
+            ${auditRow("留出期表现", `${policyDiagnostics.filled_trades ?? 0}笔 · 日均 ${signedPct(policyDiagnostics.mean_daily_return, 3)} · 双倍成本 ${signedPct(policyDiagnostics.stress_2x_cost_mean_daily_return, 3)} · 尾部 ${signedPct(policyDiagnostics.tail_10pct_mean_return)}`)}
+            ${auditRow("盈利概率用途", selectionPolicy.profit_probability_gate_enabled === false ? "仅诊断，不参与硬否决" : "参与策略门槛")}
             ${auditRow("收益模型门槛", `${returnSelection.model_has_information_gain === true ? "通过" : "回退"} · ${returnSelection.selected || "constant"} · RMSE改善 ${returnImprovement == null ? "-" : pct(returnImprovement)} · 逐日胜率 ${returnDailyWin == null ? "-" : pct(returnDailyWin)}`)}
             ${probabilityAudit("盈利概率", probabilityModels.profit)}
             ${probabilityAudit("大跌概率", probabilityModels.big_loss)}
