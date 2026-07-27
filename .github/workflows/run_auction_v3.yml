@@ -40,7 +40,7 @@ env:
 
 concurrency:
   group: decision-auction-main-writer
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   auction_guidance_v10:
