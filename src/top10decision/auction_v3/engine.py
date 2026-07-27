@@ -644,6 +644,204 @@ class AuctionV3Engine:
             pct = pct.where(pct.notna(), derived)
         return pct.replace([np.inf, -np.inf], np.nan)
 
+    @staticmethod
+    def _empty_market_close_snapshot(
+        trade_date: str,
+        status: str,
+    ) -> dict[str, Any]:
+        return {
+            "trade_date": trade_date,
+            "available": False,
+            "status": status,
+            "scope": "all_a_share_daily_close",
+            "stock_count": 0,
+            "return_coverage": 0.0,
+            "up_count": 0,
+            "down_count": 0,
+            "flat_count": 0,
+            "limit_up_count": 0,
+            "classified_limit_up_count": 0,
+            "industry_top10": [],
+            "industry_counts": {},
+        }
+
+    def market_close_display_snapshot(
+        self,
+        trade_date: str,
+    ) -> dict[str, Any]:
+        """Build a full-market close snapshot for display, never model input."""
+        trade_date = str(trade_date or "").strip()
+        if not re.fullmatch(r"20\d{6}", trade_date):
+            return self._empty_market_close_snapshot(
+                trade_date,
+                "INVALID_TRADE_DATE",
+            )
+        try:
+            if not is_a_share_trading_day(trade_date):
+                return self._empty_market_close_snapshot(
+                    trade_date,
+                    "EXCHANGE_CLOSED",
+                )
+        except RuntimeError:
+            return self._empty_market_close_snapshot(
+                trade_date,
+                "TRADE_CALENDAR_UNAVAILABLE",
+            )
+
+        daily = self.market_table(trade_date, "daily")
+        if daily.empty:
+            return self._empty_market_close_snapshot(
+                trade_date,
+                "DAILY_CLOSE_UNAVAILABLE",
+            )
+
+        frame = daily.copy()
+        returns = self._daily_return_series(frame)
+        valid = returns.dropna()
+        stock_count = int(len(frame))
+        return_coverage = (
+            float(len(valid) / stock_count)
+            if stock_count
+            else 0.0
+        )
+        snapshot = self._empty_market_close_snapshot(
+            trade_date,
+            (
+                "FINAL_CLOSE"
+                if len(valid) and return_coverage >= 0.80
+                else "INCOMPLETE_DAILY_CLOSE"
+            ),
+        )
+        snapshot.update(
+            {
+                "available": bool(
+                    len(valid) and return_coverage >= 0.80
+                ),
+                "stock_count": stock_count,
+                "return_coverage": return_coverage,
+                "up_count": int((valid > 0.0).sum()),
+                "down_count": int((valid < 0.0).sum()),
+                "flat_count": int((valid == 0.0).sum()),
+            }
+        )
+        if not snapshot["available"]:
+            return snapshot
+
+        detail = self.market_table(trade_date, "limit_list_d")
+        detail_up = pd.DataFrame()
+        if not detail.empty and "ts_code" in detail.columns:
+            detail_up = detail.copy()
+            if "limit_type" in detail_up.columns:
+                limit_type = (
+                    detail_up["limit_type"]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                )
+                detail_up = detail_up[limit_type.eq("U")].copy()
+            detail_up = detail_up.drop_duplicates("ts_code", keep="last")
+
+        limit_up_codes: set[str] = set()
+        if not detail_up.empty:
+            limit_up_codes = set(
+                detail_up["ts_code"].map(_normal_code).astype(str)
+            )
+        else:
+            limits = self.market_table(trade_date, "stk_limit")
+            if not limits.empty and "up_limit" in limits.columns:
+                close = pd.to_numeric(
+                    frame.get("close"),
+                    errors="coerce",
+                )
+                up_limit = pd.to_numeric(
+                    limits["up_limit"].reindex(frame.index),
+                    errors="coerce",
+                )
+                tolerance = pd.Series(
+                    np.maximum(
+                        0.0051,
+                        up_limit.abs().fillna(0.0) * 0.00005,
+                    ),
+                    index=frame.index,
+                )
+                closed_up = (
+                    close.notna()
+                    & up_limit.notna()
+                    & close.sub(up_limit).abs().le(tolerance)
+                )
+                limit_up_codes = set(
+                    frame.loc[closed_up, "ts_code"]
+                    .map(_normal_code)
+                    .astype(str)
+                )
+
+        industry_counts: dict[str, int] = {}
+        if (
+            limit_up_codes
+            and not detail_up.empty
+            and "industry" in detail_up.columns
+        ):
+            industry_frame = detail_up[
+                detail_up["ts_code"].map(_normal_code).isin(limit_up_codes)
+            ].copy()
+            industries = (
+                industry_frame["industry"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+            industries = industries[
+                industries.ne("")
+                & ~industries.str.lower().isin(
+                    {"nan", "none", "null", "未分类"}
+                )
+            ]
+            if len(industries):
+                counts = (
+                    industries.value_counts()
+                    .rename_axis("industry")
+                    .reset_index(name="limit_up_count")
+                    .sort_values(
+                        ["limit_up_count", "industry"],
+                        ascending=[False, True],
+                        kind="mergesort",
+                    )
+                )
+                industry_counts = {
+                    str(row.industry): int(row.limit_up_count)
+                    for row in counts.itertuples(index=False)
+                }
+
+        limit_up_count = len(limit_up_codes)
+        industry_top10 = [
+            {
+                "rank": rank,
+                "industry": industry,
+                "limit_up_count": count,
+                "share": (
+                    float(count / limit_up_count)
+                    if limit_up_count
+                    else 0.0
+                ),
+            }
+            for rank, (industry, count) in enumerate(
+                list(industry_counts.items())[:10],
+                start=1,
+            )
+        ]
+        snapshot.update(
+            {
+                "limit_up_count": limit_up_count,
+                "classified_limit_up_count": int(
+                    sum(industry_counts.values())
+                ),
+                "industry_top10": industry_top10,
+                "industry_counts": industry_counts,
+            }
+        )
+        return snapshot
+
     def _eligible_market_daily(self, trade_date: str) -> pd.DataFrame:
         if trade_date in self._eligible_market_cache:
             return self._eligible_market_cache[trade_date]

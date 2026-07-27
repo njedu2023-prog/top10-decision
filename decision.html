@@ -209,13 +209,27 @@
       font-weight: 680;
     }
     .metrics-disclosure summary::-webkit-details-marker { display: none; }
-    .metrics-disclosure summary::before {
-      content: "＋";
+    .metrics-disclosure summary::before,
+    .industry-disclosure summary::before {
+      content: "+";
       width: 20px;
+      height: 20px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      background: var(--surface);
       color: var(--brand);
       flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 750;
+      line-height: 1;
     }
-    .metrics-disclosure[open] summary::before { content: "−"; }
+    .metrics-disclosure[open] summary::before,
+    .industry-disclosure[open] summary::before { content: "−"; }
+    .metrics-disclosure summary:hover::before,
+    .industry-disclosure summary:hover::before { background: var(--brand-soft); }
     .metrics-disclosure-title { margin-right: auto; }
     .metrics-disclosure .metrics { margin: 0; padding: 0 16px 14px; }
 
@@ -288,15 +302,79 @@
     .panel-metrics { padding: 0 16px; margin-bottom: 16px; }
     .sentiment-industries {
       margin: -2px 16px 14px;
-      padding: 12px 0;
       border-top: 1px solid var(--line);
       line-height: 1.5;
     }
-    .sentiment-industries > strong {
-      display: block;
-      margin-bottom: 8px;
+    .industry-disclosure summary {
+      min-height: 44px;
+      padding: 10px 0;
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 12px;
+      font-weight: 700;
       color: var(--ink);
+    }
+    .industry-disclosure summary::-webkit-details-marker { display: none; }
+    .industry-disclosure-title { margin-right: auto; }
+    .industry-summary-meta {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .industry-disclosure-body { padding-bottom: 2px; }
+    .market-breadth-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .market-breadth-day {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+      padding: 9px 11px;
+    }
+    .market-breadth-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    .market-breadth-head strong { font-size: 12px; }
+    .market-breadth-head span {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .market-breadth-stats {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      flex-wrap: wrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .market-breadth-stats b { font-size: 14px; }
+    .market-breadth-stats small {
+      color: var(--muted);
+      font-size: 10px;
+    }
+    .breadth-up { color: var(--up); }
+    .breadth-down { color: var(--down); }
+    .breadth-flat { color: var(--muted); }
+    .breadth-limit { color: var(--ink); }
+    .market-breadth-pending {
+      min-height: 25px;
+      display: flex;
+      align-items: center;
+      color: var(--warn);
+      font-size: 12px;
+      font-weight: 650;
     }
     .industry-table-wrap {
       width: 100%;
@@ -311,7 +389,30 @@
     table.industry-table td:first-child { width: 56px; text-align: center; }
     table.industry-table th:nth-child(2),
     table.industry-table td:nth-child(2) { text-align: left; }
+    table.industry-table th:nth-child(3),
+    table.industry-table th:nth-child(4),
+    table.industry-table td:nth-child(3),
+    table.industry-table td:nth-child(4) { text-align: center; }
     table.industry-table td:nth-child(3) { color: var(--up); font-weight: 700; }
+    table.industry-table td:nth-child(4) { font-weight: 700; }
+    .industry-table-date {
+      display: block;
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 550;
+    }
+    .industry-waiting {
+      color: var(--warn);
+      font-size: 10px;
+      font-weight: 650;
+    }
+    .industry-method-note {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.55;
+    }
     .stats-note { margin: 0 16px 16px; color: var(--muted); font-size: 12px; line-height: 1.65; }
     .reason { max-width: 300px; white-space: normal; line-height: 1.45; color: var(--muted); text-align: left; }
 
@@ -399,6 +500,7 @@
       .empty { margin: 0 12px 12px; }
       .panel-metrics { padding: 0 12px; }
       .sentiment-industries { margin: -2px 12px 12px; }
+      .market-breadth-grid { grid-template-columns: 1fr; }
       table.industry-table {
         min-width: 100%;
         table-layout: fixed;
@@ -409,9 +511,9 @@
       table.industry-table th:first-child,
       table.industry-table td:first-child { width: 40px; }
       table.industry-table th:nth-child(3),
-      table.industry-table td:nth-child(3) { width: 72px; }
+      table.industry-table td:nth-child(3) { width: 64px; }
       table.industry-table th:nth-child(4),
-      table.industry-table td:nth-child(4) { width: 84px; }
+      table.industry-table td:nth-child(4) { width: 64px; }
       .stats-note { margin: 0 12px 12px; }
       .audit-grid, .report-body { padding: 0 12px 12px; }
       .report-meta { grid-template-columns: 1fr 1fr; }
@@ -536,7 +638,7 @@
 
     const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
-    const CACHE_KEY = "decision-dashboard-v9-industry-top10-cache";
+    const CACHE_KEY = "decision-dashboard-v9-dt-market-close-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
       "signalDate", "execDate", "exitDate", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
@@ -624,6 +726,11 @@
       return digits.length === 8 ? `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}` : "-";
     }
 
+    function integerText(value) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "-" : Math.trunc(parsed).toLocaleString("zh-CN");
+    }
+
     function modelDisplayName(value) {
       const text = String(value || "");
       if (text.startsWith("auction_v9_")) return "V9 · 嵌套时序策略与影子验证";
@@ -635,6 +742,32 @@
 
     function metric(label, value, tone = "") {
       return `<div class="metric"><span>${escapeHtml(label)}</span><strong class="${tone}">${escapeHtml(value)}</strong></div>`;
+    }
+
+    function marketBreadthCard(day, snapshot) {
+      const available = snapshot?.available === true;
+      const date = dateText(snapshot?.trade_date);
+      if (!available) {
+        const pending = day === "T"
+          ? snapshot?.maturity_status === "INCOMPLETE_T_CLOSE"
+            ? "收盘数据校验中"
+            : "收盘后更新"
+          : "收盘数据暂缺";
+        return `<div class="market-breadth-day">
+          <div class="market-breadth-head"><strong>${day}日全A股</strong><span>${date}</span></div>
+          <div class="market-breadth-pending">${pending}</div>
+        </div>`;
+      }
+      return `<div class="market-breadth-day">
+        <div class="market-breadth-head"><strong>${day}日全A股</strong><span>${date}</span></div>
+        <div class="market-breadth-stats">
+          <b class="breadth-up">涨 ${integerText(snapshot.up_count)}</b>
+          <b class="breadth-down">跌 ${integerText(snapshot.down_count)}</b>
+          <b class="breadth-flat">平 ${integerText(snapshot.flat_count)}</b>
+          <b class="breadth-limit">涨停 ${integerText(snapshot.limit_up_count)}</b>
+          <small>覆盖 ${integerText(snapshot.stock_count)} 家</small>
+        </div>
+      </div>`;
     }
 
     function actionLabel(action) {
@@ -748,6 +881,9 @@
 
     function renderSentiment(plan) {
       const sentiment = plan?.market_sentiment || {};
+      const comparison = plan?.market_close_comparison || {};
+      const dClose = comparison?.d || {};
+      const tClose = comparison?.t || {};
       const model = plan?.model || {};
       const ablation = model?.continuation_sentiment_ablation || {};
       const score = finiteNumber(sentiment.score);
@@ -780,24 +916,59 @@
         metric("涨停成交额Top3占比", pct(sentiment.limit_up_amount_top3_share))
       ];
       els.sentimentMetrics.innerHTML = rows.join("");
-      const industrySource = Array.isArray(sentiment.limit_up_industry_top10)
+      const hasCloseComparison = comparison?.scope === "all_a_share_daily_close";
+      const fallbackIndustrySource = Array.isArray(sentiment.limit_up_industry_top10)
         ? sentiment.limit_up_industry_top10
         : Array.isArray(sentiment.limit_up_industry_top5)
           ? sentiment.limit_up_industry_top5
           : [];
+      const industrySource = hasCloseComparison
+        ? (Array.isArray(dClose.industry_top10) ? dClose.industry_top10 : [])
+        : fallbackIndustrySource;
       const industryLeaders = industrySource.slice(0, 10);
+      const tAvailable = tClose?.available === true;
+      const tIndustryCounts = tAvailable && tClose?.industry_counts && typeof tClose.industry_counts === "object"
+        ? tClose.industry_counts
+        : {};
       const industryRows = industryLeaders
         .map((item, index) => {
           const industry = String(item?.industry || "").trim();
           const count = Math.trunc(Number(item?.limit_up_count));
           if (!industry || !Number.isFinite(count) || count <= 0) return "";
-          return `<tr><td>${index + 1}</td><td>${escapeHtml(industry)}</td><td>${count}</td><td>${pct(item?.share)}</td></tr>`;
+          const tCount = finiteNumber(tIndustryCounts[industry]);
+          const tCell = tAvailable
+            ? integerText(tCount == null ? 0 : tCount)
+            : '<span class="industry-waiting">待收盘</span>';
+          return `<tr><td>${index + 1}</td><td>${escapeHtml(industry)}</td><td>${integerText(count)}</td><td>${tCell}</td></tr>`;
         })
         .filter(Boolean)
         .join("");
-      els.sentimentIndustries.innerHTML = `<strong>行业板块 · 涨停 Top10</strong>${industryRows
-        ? `<div class="industry-table-wrap"><table class="industry-table"><thead><tr><th>排名</th><th>行业板块</th><th>涨停家数</th><th>占全部涨停</th></tr></thead><tbody>${industryRows}</tbody></table></div>`
-        : '<div class="empty">暂无有效行业分类</div>'}`;
+      const dDate = dateText(dClose.trade_date || sentiment.signal_date || plan?.signal_date);
+      const tDate = dateText(tClose.trade_date || plan?.exec_date);
+      const dLimitTotal = finiteNumber(dClose.limit_up_count) ?? finiteNumber(sentiment.limit_up_count);
+      const tLimitTotal = tAvailable ? finiteNumber(tClose.limit_up_count) : null;
+      const summaryMeta = `D ${integerText(dLimitTotal)} · T ${tAvailable ? integerText(tLimitTotal) : "待收盘"}`;
+      els.sentimentIndustries.innerHTML = `<details class="industry-disclosure">
+        <summary>
+          <span class="industry-disclosure-title">行业板块 · 涨停 Top10</span>
+          <span class="industry-summary-meta">${summaryMeta}</span>
+        </summary>
+        <div class="industry-disclosure-body">
+          <div class="market-breadth-grid">
+            ${marketBreadthCard("D", dClose)}
+            ${marketBreadthCard("T", tClose)}
+          </div>
+          ${industryRows
+            ? `<div class="industry-table-wrap"><table class="industry-table"><thead><tr>
+                <th>排名</th>
+                <th>行业板块</th>
+                <th>D 涨停<span class="industry-table-date">${dDate}</span></th>
+                <th>T 涨停<span class="industry-table-date">${tDate}</span></th>
+              </tr></thead><tbody>${industryRows}</tbody></table></div>`
+            : '<div class="empty">暂无有效行业分类</div>'}
+          <p class="industry-method-note">全量口径为当日有收盘涨跌数据的A股；行业按D日涨停家数排序。T列仅在完整收盘快照达到D日股票覆盖的90%后更新，不参与D日模型。</p>
+        </div>
+      </details>`;
       const selected = ablation.sentiment_selected === true;
       const selectionText = selected
         ? `情绪因子通过留出期消融，已进入连板模型；Brier改善 ${number(ablation.sentiment_brier_improvement, 4)}，逐日胜率 ${pct(ablation.sentiment_daily_win_rate)}。`

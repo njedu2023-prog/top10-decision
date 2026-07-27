@@ -412,6 +412,62 @@ class DecisionActionPlanTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    def _write_market_close_snapshot(
+        self,
+        trade_date: str,
+        returns: list[float],
+        limit_up_industries: list[str],
+    ) -> None:
+        market_root = (
+            self.root
+            / "data"
+            / "market"
+            / "raw"
+            / trade_date[:4]
+            / trade_date
+        )
+        market_root.mkdir(parents=True, exist_ok=True)
+        codes = [f"600{100 + index:03d}.SH" for index in range(len(returns))]
+        pd.DataFrame(
+            [
+                {
+                    "ts_code": code,
+                    "trade_date": trade_date,
+                    "open": 10.0,
+                    "high": 11.0 if index < len(limit_up_industries) else 10.2,
+                    "low": 9.8,
+                    "close": 11.0 if index < len(limit_up_industries) else 10.0 * (1.0 + value),
+                    "pre_close": 10.0,
+                    "pct_chg": 10.0 if index < len(limit_up_industries) else value * 100.0,
+                    "vol": 1_000_000,
+                    "amount": 20_000_000,
+                }
+                for index, (code, value) in enumerate(zip(codes, returns))
+            ]
+        ).to_csv(market_root / "daily.csv", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "ts_code": code,
+                    "trade_date": trade_date,
+                    "up_limit": 11.0,
+                    "down_limit": 9.0,
+                }
+                for code in codes
+            ]
+        ).to_csv(market_root / "stk_limit.csv", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "ts_code": codes[index],
+                    "trade_date": trade_date,
+                    "limit_type": "U",
+                    "industry": industry,
+                }
+                for index, industry in enumerate(limit_up_industries)
+            ]
+        ).to_csv(market_root / "limit_list_d.csv", index=False)
+
     def _write_model_artifacts(
         self,
         *,
@@ -539,6 +595,44 @@ class DecisionActionPlanTests(unittest.TestCase):
             plan["market_sentiment"]["limit_up_industry_top5"],
             plan["market_sentiment"]["limit_up_industry_top10"][:5],
         )
+        self.assertIn("market_close_comparison", plan)
+        self.assertFalse(plan["market_close_comparison"]["model_input"])
+        self.assertFalse(plan["market_close_comparison"]["t"]["available"])
+
+    def test_market_close_comparison_waits_for_complete_t_snapshot(self) -> None:
+        self._write_model_artifacts(promoted=False)
+        self._write_market_close_snapshot(
+            "20260720",
+            [0.10, 0.10, 0.02, 0.01, 0.00, -0.01, -0.02, 0.03, -0.04, 0.01],
+            ["电力", "电网设备"],
+        )
+        self._write_market_close_snapshot(
+            "20260721",
+            [0.10, 0.02, 0.01, 0.00, -0.01, -0.02, 0.03, -0.04],
+            ["电力"],
+        )
+        incomplete = build_action_plan(self.root)["market_close_comparison"]
+        self.assertFalse(incomplete["t"]["available"])
+        self.assertEqual(
+            incomplete["t"]["maturity_status"],
+            "INCOMPLETE_T_CLOSE",
+        )
+
+        self._write_market_close_snapshot(
+            "20260721",
+            [0.10, 0.02, 0.01, 0.00, -0.01, -0.02, 0.03, -0.04, 0.01],
+            ["电力"],
+        )
+        complete = build_action_plan(self.root)["market_close_comparison"]
+        self.assertTrue(complete["d"]["available"])
+        self.assertTrue(complete["t"]["available"])
+        self.assertEqual(complete["t"]["maturity_status"], "FINAL_T_CLOSE")
+        self.assertAlmostEqual(complete["t"]["coverage_against_d"], 0.9)
+        self.assertEqual(complete["d"]["up_count"], 6)
+        self.assertEqual(complete["d"]["down_count"], 3)
+        self.assertEqual(complete["d"]["flat_count"], 1)
+        self.assertEqual(complete["d"]["industry_counts"]["电力"], 1)
+        self.assertEqual(complete["t"]["industry_counts"]["电力"], 1)
 
     def test_promoted_model_still_rejects_above_ten_percent_board(self) -> None:
         self._write_model_artifacts(promoted=True)

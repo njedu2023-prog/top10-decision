@@ -502,6 +502,89 @@ def _attach_observation_validation(
     return _json_safe(plan)
 
 
+def _attach_market_close_comparison(
+    root: Path,
+    plan: dict[str, Any],
+    *,
+    engine: Any = None,
+) -> dict[str, Any]:
+    """Attach deterministic D/T close diagnostics without changing decisions."""
+    plan = dict(plan)
+    signal_date = _date(plan.get("signal_date"))
+    exec_date = _date(plan.get("exec_date"))
+    try:
+        if engine is None:
+            from top10decision.auction_v3.config import AuctionV3Config
+            from top10decision.auction_v3.engine import AuctionV3Engine
+
+            engine = AuctionV3Engine(AuctionV3Config(root=root))
+        d_snapshot = engine.market_close_display_snapshot(signal_date)
+        t_snapshot = engine.market_close_display_snapshot(exec_date)
+    except Exception as exc:
+        plan["market_close_comparison"] = {
+            "scope": "all_a_share_daily_close",
+            "ranking_anchor": "D",
+            "d": {
+                "trade_date": signal_date,
+                "available": False,
+                "status": "SNAPSHOT_ERROR",
+            },
+            "t": {
+                "trade_date": exec_date,
+                "available": False,
+                "status": "SNAPSHOT_ERROR",
+                "maturity_status": "WAITING_T_CLOSE",
+            },
+            "error": type(exc).__name__,
+        }
+        return _json_safe(plan)
+
+    d_snapshot = dict(d_snapshot)
+    t_snapshot = dict(t_snapshot)
+    d_available = d_snapshot.get("available") is True
+    t_close_available = t_snapshot.get("available") is True
+    d_stock_count = _integer(d_snapshot.get("stock_count"))
+    t_stock_count = _integer(t_snapshot.get("stock_count"))
+    t_coverage_against_d = (
+        float(t_stock_count / d_stock_count)
+        if d_stock_count > 0
+        else None
+    )
+    t_mature = bool(
+        d_available
+        and t_close_available
+        and t_coverage_against_d is not None
+        and t_coverage_against_d >= 0.90
+    )
+
+    d_snapshot["maturity_status"] = (
+        "FINAL_D_CLOSE"
+        if d_available
+        else "D_CLOSE_UNAVAILABLE"
+    )
+    t_snapshot["raw_close_available"] = t_close_available
+    t_snapshot["coverage_against_d"] = t_coverage_against_d
+    t_snapshot["available"] = t_mature
+    t_snapshot["maturity_status"] = (
+        "FINAL_T_CLOSE"
+        if t_mature
+        else (
+            "INCOMPLETE_T_CLOSE"
+            if t_close_available
+            else "WAITING_T_CLOSE"
+        )
+    )
+    plan["market_close_comparison"] = {
+        "scope": "all_a_share_daily_close",
+        "ranking_anchor": "D",
+        "t_minimum_d_coverage": 0.90,
+        "model_input": False,
+        "d": d_snapshot,
+        "t": t_snapshot,
+    }
+    return _json_safe(plan)
+
+
 def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     root = root.resolve()
     dates = _report_dates(root)
@@ -861,6 +944,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
         "stage_watchlist": stage_watchlist,
         "candidates": action_rows,
     }
+    plan = _attach_market_close_comparison(root, plan)
     return _attach_observation_validation(root, plan)
 
 
@@ -910,18 +994,32 @@ def refresh_action_plan_observations(
     output = root / "outputs" / "decision"
     threshold = _date(from_exec_date) or OBSERVATION_START_EXEC_DATE
     changed: list[Path] = []
+    from top10decision.auction_v3.config import AuctionV3Config
+    from top10decision.auction_v3.engine import AuctionV3Engine
+
+    market_engine = AuctionV3Engine(AuctionV3Config(root=root))
     for path in sorted(output.glob("action_plan_20*.json")):
         if not re.fullmatch(r"action_plan_20\d{6}\.json", path.name):
             continue
         plan = _read_json(path)
         if not plan or _date(plan.get("exec_date")) < threshold:
             continue
+        plan = _attach_market_close_comparison(
+            root,
+            plan,
+            engine=market_engine,
+        )
         _write_json(path, _attach_observation_validation(root, plan))
         changed.append(path)
 
     latest_path = output / "action_plan_latest.json"
     latest = _read_json(latest_path)
     if latest and _date(latest.get("exec_date")) >= threshold:
+        latest = _attach_market_close_comparison(
+            root,
+            latest,
+            engine=market_engine,
+        )
         latest = _attach_observation_validation(root, latest)
         _write_json(latest_path, latest)
         changed.append(latest_path)

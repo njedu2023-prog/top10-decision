@@ -536,7 +536,8 @@ class AuctionV3Test(unittest.TestCase):
             }
         ).to_csv(market_root / "limit_list_d.csv", index=False)
 
-        raw = AuctionV3Engine(self.config)._market_sentiment_raw(signal_date)
+        engine = AuctionV3Engine(self.config)
+        raw = engine._market_sentiment_raw(signal_date)
         leaders = raw["_limit_up_industry_top10"]
         self.assertEqual(len(leaders), 10)
         self.assertEqual(
@@ -554,6 +555,13 @@ class AuctionV3Test(unittest.TestCase):
         )
         self.assertTrue(all(item["rank"] == index for index, item in enumerate(leaders, 1)))
         self.assertEqual(raw["_limit_up_industry_top5"], leaders[:5])
+        snapshot = engine.market_close_display_snapshot(signal_date)
+        self.assertTrue(snapshot["available"])
+        self.assertEqual(snapshot["scope"], "all_a_share_daily_close")
+        self.assertEqual(snapshot["stock_count"], 12)
+        self.assertEqual(snapshot["limit_up_count"], 12)
+        self.assertEqual(snapshot["industry_top10"], leaders)
+        self.assertEqual(snapshot["industry_counts"]["电力"], 2)
 
     def test_continuation_model_audits_sentiment_ablation(self) -> None:
         engine = AuctionV3Engine(self.config)
