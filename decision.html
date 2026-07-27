@@ -682,12 +682,14 @@
         metric("双倍成本日收益", pct(bt.stress_2x_cost_mean_daily_return, 3), valueTone(bt.stress_2x_cost_mean_daily_return)),
         metric("次日按时退出率", pct(bt.exit_on_time_rate)),
         metric("Bootstrap 正收益概率", pct(bt.bootstrap_probability_mean_positive)),
-        metric("Top1影子成交笔数", String(top1Shadow.filled_trades ?? "-")),
-        metric("Top1影子平均净收益", pct(top1Shadow.mean_trade_net_return), valueTone(top1Shadow.mean_trade_net_return)),
-        metric("Top1影子累计收益", pct(top1Shadow.cumulative_return), valueTone(top1Shadow.cumulative_return)),
-        metric("Top2影子成交笔数", String(top2Shadow.filled_trades ?? "-")),
-        metric("Top2影子平均净收益", pct(top2Shadow.mean_trade_net_return), valueTone(top2Shadow.mean_trade_net_return)),
-        metric("Top2影子累计收益", pct(top2Shadow.cumulative_return), valueTone(top2Shadow.cumulative_return)),
+        metric("Top1强制开盘真值笔数", String(top1Shadow.filled_trades ?? "-")),
+        metric("Top1实际可买率", pct(top1Shadow.market_buyable_rate)),
+        metric("Top1强制开盘平均净收益", pct(top1Shadow.mean_trade_net_return), valueTone(top1Shadow.mean_trade_net_return)),
+        metric("Top1强制开盘累计收益", pct(top1Shadow.cumulative_return), valueTone(top1Shadow.cumulative_return)),
+        metric("Top2强制开盘真值笔数", String(top2Shadow.filled_trades ?? "-")),
+        metric("Top2实际可买率", pct(top2Shadow.market_buyable_rate)),
+        metric("Top2强制开盘平均净收益", pct(top2Shadow.mean_trade_net_return), valueTone(top2Shadow.mean_trade_net_return)),
+        metric("Top2强制开盘累计收益", pct(top2Shadow.cumulative_return), valueTone(top2Shadow.cumulative_return)),
         metric("模型版本", modelDisplayName(plan?.model?.version))
       ];
       els.metrics.innerHTML = rows.join("");
