@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-07-27T07:16:41+00:00",
+  "generated_at_utc": "2026-07-27T10:04:01+00:00",
   "model_version": "auction_v9_nested_policy_shadow_oos_1",
-  "model_artifact_sha256": "16417db887ff7cb0e7f3d4e9fba989a5cf1c3b3c600848d81ab36da46b8dc870",
+  "model_artifact_sha256": "ef993667ac681e459cb3e8da8ea74607645195d15e490b1ab103af11799c4c9a",
   "ready": true,
   "promoted": false,
   "training_rows": 13216,
@@ -1336,7 +1336,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-07-27T07:16:40+00:00",
+        "generated_at_utc": "2026-07-27T10:03:59+00:00",
         "frozen_predictions": 436,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -1381,7 +1381,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-07-27T07:16:40+00:00",
+        "generated_at_utc": "2026-07-27T10:04:00+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -1513,7 +1513,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-07-27T07:16:40+00:00",
+        "generated_at_utc": "2026-07-27T10:03:59+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -1681,7 +1681,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-27T07:15:48+00:00",
+    "generated_at_utc": "2026-07-27T10:03:10+00:00",
     "model_version": "auction_v9_nested_policy_shadow_oos_1",
     "history_dates": 698,
     "oos_dates": 530,
@@ -4625,7 +4625,7 @@
         "nav": 1.0
       }
     ],
-    "model_artifact_sha256": "16417db887ff7cb0e7f3d4e9fba989a5cf1c3b3c600848d81ab36da46b8dc870"
+    "model_artifact_sha256": "ef993667ac681e459cb3e8da8ea74607645195d15e490b1ab103af11799c4c9a"
   },
   "universe_eligibility": {
     "rule": "a_share_price_limit_le_10_v2",
