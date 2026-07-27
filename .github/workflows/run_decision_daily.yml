@@ -18,7 +18,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: top10-decision-daily
+  group: decision-auction-main-writer
   cancel-in-progress: false
 
 jobs:
@@ -234,7 +234,7 @@ jobs:
     name: Train P_fill and E_ret
     needs: decision_initial
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     outputs:
       learning_gate_pass: ${{ steps.learning_gate.outputs.learning_gate_pass }}
 
@@ -850,7 +850,6 @@ jobs:
           grep -qxF "*.pyc" .git/info/exclude 2>/dev/null || echo "*.pyc" >> .git/info/exclude
 
           git add data/pred/pred_source_latest.csv || true
-          git add data/pred/_pred_source_meta.json || true
           git add data/pred/archive/*.csv || true
           git add -A data/pred/archive || true
           git add data/market/sample_maturity_candidates.csv || true

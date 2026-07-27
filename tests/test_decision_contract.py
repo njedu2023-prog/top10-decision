@@ -898,5 +898,32 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertEqual(plan["formal_buy_count"], 0)
 
 
+class DecisionWorkflowSerializationTests(unittest.TestCase):
+    def test_all_decision_main_writers_share_one_non_cancelling_lock(self) -> None:
+        workflow_root = ROOT / ".github" / "workflows"
+        for name in (
+            "run_decision_daily.yml",
+            "run_auction_v3.yml",
+            "backfill_decision_v8_history.yml",
+        ):
+            text = (workflow_root / name).read_text(encoding="utf-8")
+            self.assertIn("group: decision-auction-main-writer", text)
+            self.assertIn("cancel-in-progress: false", text)
+
+    def test_learning_migration_has_time_and_avoids_shared_pred_meta(self) -> None:
+        text = (
+            ROOT / ".github" / "workflows" / "run_decision_daily.yml"
+        ).read_text(encoding="utf-8")
+        learning = text.split("  pfill_learning:", 1)[1].split(
+            "  decision_refresh_after_learning:",
+            1,
+        )[0]
+        self.assertIn("timeout-minutes: 120", learning)
+        self.assertNotIn(
+            "git add data/pred/_pred_source_meta.json",
+            learning,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
