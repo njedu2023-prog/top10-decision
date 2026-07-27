@@ -263,7 +263,8 @@
 
     .table-wrap { width: 100%; overflow: auto; border-top: 1px solid var(--line); }
     table { border-collapse: collapse; width: 100%; min-width: 1380px; font-size: 12px; }
-    table.stage-table { min-width: 2200px; }
+    table.stage-table { min-width: 1720px; }
+    table.stage-table th, table.stage-table td { height: 38px; padding: 6px 7px; }
     th, td { height: 42px; padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
     th { position: sticky; top: 0; z-index: 4; background: #f2f5f4; color: #52605c; font-weight: 680; }
     th.left, td.left { text-align: left; }
@@ -973,7 +974,7 @@
         return;
       }
       const headers = [
-        "观察排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "风险层", "限价",
+        "观察排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "限价",
         "T开盘", "开盘较限价", "T收盘", "T观察收益", "T晋级结果", "T+1验证状态",
         "T+1净收益", "继续涨停概率", "大跌概率", "结论"
       ];
@@ -987,7 +988,6 @@
         <td>${escapeHtml(row.stage_transition || "-")}</td>
         <td class="left"><span class="truth-badge ${pathClass(row.path_label_code)}" title="${escapeHtml(row.path_explanation || "路径数据不足")}">${escapeHtml(row.path_label || "路径数据不足")}</span></td>
         <td class="${valueTone(row.path_strength_delta)}">${signedPct(row.path_strength_delta)}</td>
-        <td class="left">${escapeHtml(row.observation_risk_label || "待分层")}</td>
         <td title="${escapeHtml(row.observation_price_basis || "观察价格契约")}">${price(row.observation_max_price)}</td>
         <td>${price(row.actual_open_price)}</td>
         <td class="${valueTone(row.observation_price_vs_cap)}">${signedPct(row.observation_price_vs_cap)}</td>
@@ -1000,7 +1000,7 @@
         <td>${pct(row.predicted_big_loss_probability)}</td>
         <td class="reason">${row.action === "BUY" ? "允许买入" : "禁止买入"}</td>
       </tr>`).join("");
-      els.stageContent.innerHTML = `<div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,7,9,20].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.stageContent.innerHTML = `<div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[1,3,4,5,7,19].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function renderObservationStatistics(plan) {
