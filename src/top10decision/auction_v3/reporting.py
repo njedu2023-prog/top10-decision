@@ -242,7 +242,7 @@ def dashboard(backtest: dict[str, Any], cumulative: dict[str, Any]) -> str:
     body += _metric("正确放弃率", _pct(cumulative.get("correct_rejection_rate")))
     body += _metric("机会遗漏率", _pct(cumulative.get("missed_opportunity_rate")))
     body += "</div></section>"
-    return _page("Decision V9 回测与累计验证", "人工建议资格由嵌套交易日留出策略、真实竞价、成本压力和尾部风险共同决定；无正式交易时仍持续记录影子策略", body)
+    return _page("Decision V9 回测与累计验证", "人工建议资格由嵌套交易日留出策略、真实竞价、成本压力和尾部风险共同决定；无正式交易时仍持续记录Top1/Top2强制开盘价反事实真值，并单列实际可买率", body)
 
 
 def write_reports(
