@@ -733,7 +733,7 @@ def build_meta(
         "notes": [
             "本文件是 E_ret 训练前宽表，不是训练结果文件。",
             "训练集只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本。",
-            "主目标为T日开盘竞价买入到T+1预声明止盈、止损或14:50时间退出的可执行收益。",
+            "主目标为T日开盘竞价买入到T+1预声明止盈、止损或11:00时间退出的可执行收益。",
             "realized_ret_t1_to_t2 仅为Decision兼容别名；premium_ret_t1_to_t2继续保留原收盘口径，premium不受影响。",
             "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_eret.py 再做。",
             "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。",

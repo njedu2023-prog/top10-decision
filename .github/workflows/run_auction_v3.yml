@@ -1,4 +1,4 @@
-name: Run Decision Manual Auction Guidance V9
+name: Run Decision Manual Auction Guidance V10
 
 on:
   push:
@@ -43,7 +43,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  auction_guidance_v9:
+  auction_guidance_v10:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -145,10 +145,10 @@ jobs:
             -print0 | xargs -0 -r git add --
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision guidance V9 has no changed artifacts"
+            echo "Decision guidance V10 has no changed artifacts"
             exit 0
           fi
-          git commit -m "auto: update Decision V9 guidance and validation"
+          git commit -m "auto: update Decision V10 guidance and validation"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main

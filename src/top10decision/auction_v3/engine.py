@@ -24,6 +24,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from top10decision.data.tushare_minute import opening_auction_price_from_snapshot
+from top10decision.decision.contracts import HISTORY_CONTRACT_VERSION
 from top10decision.decision.eligibility import filter_standard_limit_universe
 from top10decision.decision.exit_policy import simulate_tplus1_exit
 from top10decision.decision.observation import (
@@ -2118,10 +2119,13 @@ class AuctionV3Engine:
                     take_profit_pct=self.config.take_profit_pct,
                     stop_loss_pct=self.config.stop_loss_pct,
                     latest_exit_time=self.config.latest_exit_time,
+                    require_intraday=self.config.require_intraday_exit_truth,
                 )
                 if timed.executable and timed.exit_price is not None and timed.exit_price > 0:
                     return trade_date, float(timed.exit_price), 0, timed.reason
-                continue
+                if timed.reason == "blocked_one_price_limit_down":
+                    continue
+                return "", float("nan"), -1, timed.reason or "exit_truth_pending"
             exit_price = self._execution_open_price(trade_date, code, daily)
             if exit_price > 0:
                 return trade_date, exit_price, offset, "delayed_first_tradable_open"
@@ -2231,6 +2235,7 @@ class AuctionV3Engine:
             "exit_on_time",
             "market_fill",
             "proposed_gap",
+            "exit_policy_version",
             *MODEL_FEATURES,
             *MARKET_SENTIMENT_FEATURES,
         }
@@ -2270,13 +2275,20 @@ class AuctionV3Engine:
             frame = frame[np.asarray(valid_rows, dtype=bool)]
             if frame.empty:
                 continue
+            frame = frame[
+                frame["exit_policy_version"].astype(str).eq(
+                    self.config.exit_policy_version
+                )
+            ].copy()
+            if frame.empty:
+                continue
             frame["history_source"] = frame.get(
                 "history_source",
                 "tushare_compact_backfill",
             )
             frame["history_contract_version"] = frame.get(
                 "history_contract_version",
-                "decision_v8_strict_calendar_no_future",
+                HISTORY_CONTRACT_VERSION,
             )
             parts.append(frame)
         return (
@@ -2419,10 +2431,12 @@ class AuctionV3Engine:
                         "mechanism_limit_pct": mechanism_limit_pct,
                         "fill_reason": fill_reason,
                         "exit_reason": exit_reason,
+                        "exit_policy_version": self.config.exit_policy_version,
+                        "take_profit_pct": self.config.take_profit_pct,
+                        "stop_loss_pct": self.config.stop_loss_pct,
+                        "latest_exit_time": self.config.latest_exit_time,
                         "history_source": "repository_market_raw",
-                        "history_contract_version": (
-                            "decision_v8_strict_calendar_no_future"
-                        ),
+                        "history_contract_version": HISTORY_CONTRACT_VERSION,
                         **features,
                     }
                 )
@@ -5866,7 +5880,7 @@ class AuctionV3Engine:
         scored["latest_exit_time"] = self.config.latest_exit_time
         scored["exit_policy_version"] = self.config.exit_policy_version
         scored["entry_rule"] = "系统仅供人工参考：T日9:25前仅用限价单参与集合竞价；不得使用无上限市价单，高于上限或未成交均放弃"
-        scored["exit_rule"] = "T+1按实际成交价计算止盈/止损，首次触发即人工退出；均未触发则14:50退出；一字跌停顺延"
+        scored["exit_rule"] = "T+1按实际成交价计算15%止盈、5%止损，首次触发即人工退出；均未触发则11:00退出；一字跌停顺延"
         scored["guidance_only"] = 1
         scored["broker_connected"] = 0
         scored["order_type"] = "LIMIT_ONLY_MANUAL"
@@ -7125,7 +7139,7 @@ class AuctionV3Engine:
                 "guidance_only": True,
                 "broker_connected": False,
                 "entry": "manual limit order only before T 09:25 opening-auction cutoff with a frozen maximum price; market order forbidden",
-                "exit": "manual T+1 first-touch take-profit/stop-loss, then 14:50 time exit; one-price limit-down delays exit",
+                "exit": "manual T+1 first-touch +15% take-profit / -5% stop-loss, then 11:00 time exit; one-price limit-down delays exit",
                 "exit_policy_version": self.config.exit_policy_version,
                 "take_profit_pct": self.config.take_profit_pct,
                 "stop_loss_pct": self.config.stop_loss_pct,

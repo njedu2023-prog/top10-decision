@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from top10decision.engines import eret_engine
+from top10decision.decision.contracts import ERET_HOLDING_MODE, ERET_TRUTH_VERSION
 
 
 def _load_train_module():
@@ -36,8 +37,8 @@ def _accepted_payload(anchor: str = "20260710") -> dict:
         "eret": {
             "anchor_trade_date": anchor,
             "status": "trained",
-            "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-            "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
+            "eret_truth_version": ERET_TRUTH_VERSION,
+            "return_holding_mode": ERET_HOLDING_MODE,
             "loaded_trade_dates": 20,
             "selected_model": "lr",
             "selected_model_pass": True,
@@ -55,8 +56,8 @@ def _model_meta(anchor: str = "20260710") -> dict:
         "anchor_trade_date": anchor,
         "status": "trained",
         "selected_model": "lr",
-        "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-        "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
+        "eret_truth_version": ERET_TRUTH_VERSION,
+        "return_holding_mode": ERET_HOLDING_MODE,
         "window": {"n_loaded_dates": 20},
         "features": {
             "feature_cols": ["stable_feature"],

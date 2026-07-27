@@ -19,7 +19,7 @@ from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run Decision V9 manual auction guidance with nested temporal "
+            "Run Decision V10 manual auction guidance with nested temporal "
             "policy selection, shadow validation and auction truth"
         )
     )

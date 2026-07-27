@@ -49,6 +49,7 @@ class AuctionV3Config:
     stop_loss_pct: float = EXIT_STOP_LOSS_PCT
     latest_exit_time: str = EXIT_LATEST_TIME
     exit_policy_version: str = EXIT_POLICY_VERSION
+    require_intraday_exit_truth: bool = True
     max_mechanism_limit_pct: float = 10.0
     min_train_dates: int = 60
     min_train_rows: int = 1_000
@@ -94,7 +95,7 @@ class AuctionV3Config:
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v9_nested_policy_shadow_oos_1"
+    model_version: str = "auction_v10_tp15_sl5_time1100_oos_1"
 
     @property
     def output_root(self) -> Path:
@@ -110,7 +111,13 @@ class AuctionV3Config:
 
     @property
     def historical_training_root(self) -> Path:
-        return self.root / "data" / "auction_v3" / "history"
+        return (
+            self.root
+            / "data"
+            / "auction_v3"
+            / "history"
+            / self.exit_policy_version
+        )
 
     @property
     def verification_root(self) -> Path:

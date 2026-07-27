@@ -1,4 +1,4 @@
-name: Backfill Decision V8 Independent History
+name: Backfill Decision V10 Independent History
 
 on:
   schedule:
@@ -106,10 +106,10 @@ jobs:
           git add data/auction_v3/history
           git add data/market/trade_cal_sse.csv
           if git diff --cached --quiet; then
-            echo "Decision V8 compact history is already current"
+            echo "Decision V10 compact history is already current"
             exit 0
           fi
-          git commit -m "auto: extend Decision V8 independent history"
+          git commit -m "auto: extend Decision V10 independent history"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main
@@ -122,14 +122,14 @@ jobs:
           done
           test "${pushed}" = "1"
 
-      - name: Run Decision V8 calibration tests
+      - name: Run Decision V10 calibration tests
         run: |
           set -e
           python -m unittest discover -s tests -p 'test_auction_v3.py' -v
           python -m unittest discover -s tests -p 'test_decision_v8_calibration.py' -v
           python -m unittest discover -s tests -p 'test_decision_contract.py' -v
 
-      - name: Rebuild Decision V8 evidence and page data
+      - name: Rebuild Decision V10 evidence and page data
         run: |
           set -e
           python scripts/run_auction_v3.py
@@ -146,10 +146,10 @@ jobs:
           git add outputs/decision/report_index.json
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision V8 history is already current"
+            echo "Decision V10 history is already current"
             exit 0
           fi
-          git commit -m "auto: extend Decision V8 independent history"
+          git commit -m "auto: extend Decision V10 independent history"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main

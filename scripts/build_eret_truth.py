@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
@@ -51,13 +52,20 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from top10decision.data.tushare_minute import opening_auction_price, read_minute_snapshot
+from top10decision.data.tushare_minute import (
+    TushareClient,
+    minute_output_path,
+    opening_auction_price,
+    read_minute_snapshot,
+    write_minute_snapshot,
+)
 from top10decision.decision.contracts import (
     DECISION_EXECUTION_CONTRACT,
     ERET_COMPAT_TARGET_COLUMN,
     ERET_HOLDING_MODE,
     ERET_TARGET_COLUMN,
     ERET_TRUTH_VERSION,
+    EXIT_LATEST_TIME,
 )
 from top10decision.decision.exit_policy import corporate_action_safe_return, simulate_tplus1_exit
 
@@ -423,6 +431,7 @@ def infer_eret_label(
         close_price=row.get("close_t2"),
         down_limit=row.get("down_limit_t2"),
         minute_frame=row.get("_minute_frame_t2"),
+        require_intraday=True,
     )
 
     if pd.isna(y_fill):
@@ -502,6 +511,7 @@ def build_eret_truth(
     label_ready_fill: int,
     label_ready_ret: int,
     paths: Paths,
+    sync_historical_minute: bool = False,
 ) -> Tuple[pd.DataFrame, str, str, str]:
     pred, pred_source_path = load_candidate_pool(paths, trade_date)
     fill_truth = load_fill_truth(paths.fill_truth, trade_date)
@@ -528,6 +538,45 @@ def build_eret_truth(
     # join prevents excluded 20%/30%/no-limit securities re-entering E_ret.
     out = out.merge(fill_truth, on=["trade_date", "ts_code"], how="inner")
     out = out.merge(t2, on="ts_code", how="left")
+    if sync_historical_minute:
+        client = TushareClient.from_env(timeout_seconds=20)
+        failures: list[str] = []
+        fetched = 0
+        filled = pd.to_numeric(out.get("y_fill"), errors="coerce").eq(1)
+        minute_codes = sorted(set(out.loc[filled, "ts_code"].astype(str)))
+        for code in minute_codes:
+            path = minute_output_path(paths.project_root, target_date, code)
+            if path.exists() and path.stat().st_size > 0:
+                continue
+            try:
+                minute = client.historical_minute(
+                    code,
+                    target_date,
+                    latest_time=EXIT_LATEST_TIME,
+                )
+                if minute.empty:
+                    failures.append(f"{code}:empty")
+                    continue
+                write_minute_snapshot(
+                    minute,
+                    paths.project_root,
+                    target_date,
+                    code,
+                    source="tushare:pro_bar:historical_1min",
+                )
+                fetched += 1
+            except Exception as exc:
+                failures.append(f"{code}:{type(exc).__name__}")
+            time.sleep(0.12)
+        print(
+            "[build_eret_truth] historical minute "
+            f"target={target_date} fetched={fetched} failures={len(failures)}"
+        )
+        if failures:
+            print(
+                "[build_eret_truth] historical minute failures="
+                + ",".join(failures[:20])
+            )
     out["minute_open_t2"] = out["ts_code"].map(
         lambda code: opening_auction_price(paths.project_root, target_date, code)
     )
@@ -710,6 +759,11 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="样本成熟度解析结果路径；留空默认 data/market/sample_maturity_latest.csv",
     )
+    ap.add_argument(
+        "--sync-historical-minute",
+        action="store_true",
+        help="用Tushare历史1分钟数据补齐T+1截至11:00的严格退出真值",
+    )
     return ap.parse_args()
 
 
@@ -737,6 +791,7 @@ def main() -> int:
         label_ready_fill=maturity_info.label_ready_fill,
         label_ready_ret=maturity_info.label_ready_ret,
         paths=paths,
+        sync_historical_minute=args.sync_historical_minute,
     )
 
     df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")

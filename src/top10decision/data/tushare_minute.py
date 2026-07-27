@@ -13,6 +13,16 @@ import requests
 
 API_URL = "https://api.tushare.pro"
 MINUTE_FIELDS = ("time", "open", "close", "high", "low", "vol", "amount")
+HISTORICAL_MINUTE_FIELDS = (
+    "ts_code",
+    "trade_time",
+    "open",
+    "close",
+    "high",
+    "low",
+    "vol",
+    "amount",
+)
 DAILY_CLOSE_FIELDS = (
     "ts_code",
     "trade_date",
@@ -303,6 +313,60 @@ class TushareClient:
         frame = frame.dropna(subset=["open", "close"]).drop_duplicates("time", keep="last")
         return frame.sort_values("time").reset_index(drop=True)
 
+    def historical_minute(
+        self,
+        ts_code: str,
+        trade_date: str,
+        *,
+        latest_time: str = "11:00",
+    ) -> pd.DataFrame:
+        """Fetch one A-share historical 1-minute session through Tushare pro_bar."""
+        code = normalize_code(ts_code)
+        date = "".join(ch for ch in str(trade_date or "") if ch.isdigit())[:8]
+        if not code or len(date) != 8:
+            raise ValueError(
+                f"Invalid historical minute request: {ts_code} {trade_date}"
+            )
+        frame = self.call(
+            "stk_mins",
+            {
+                "ts_code": code,
+                "start_date": (
+                    f"{date[:4]}-{date[4:6]}-{date[6:]} 09:15:00"
+                ),
+                "end_date": (
+                    f"{date[:4]}-{date[4:6]}-{date[6:]} "
+                    f"{latest_time}:59"
+                ),
+                "freq": "1min",
+            },
+            HISTORICAL_MINUTE_FIELDS,
+        )
+        if frame.empty:
+            return pd.DataFrame()
+        out = frame.copy()
+        if "trade_time" in out.columns and "time" not in out.columns:
+            out = out.rename(columns={"trade_time": "time"})
+        if "time" not in out.columns:
+            raise RuntimeError("Tushare historical minute response has no time column")
+        if "ts_code" not in out.columns:
+            out.insert(0, "ts_code", code)
+        else:
+            out["ts_code"] = out["ts_code"].map(normalize_code)
+        out["time"] = out["time"].astype(str).str.strip()
+        for column in ("open", "close", "high", "low", "vol", "amount"):
+            if column in out.columns:
+                out[column] = pd.to_numeric(out[column], errors="coerce")
+        required = {"open", "close", "high", "low"}
+        if not required.issubset(out.columns):
+            raise RuntimeError(
+                "Tushare historical minute response misses OHLC columns"
+            )
+        out = out.dropna(subset=list(required)).drop_duplicates(
+            "time", keep="last"
+        )
+        return out.sort_values("time").reset_index(drop=True)
+
     def opening_auction(
         self,
         trade_date: str,
@@ -480,13 +544,20 @@ def write_daily_close_snapshot(
     return paths, meta_path
 
 
-def write_minute_snapshot(frame: pd.DataFrame, root: Path, trade_date: str, ts_code: str) -> tuple[Path, Path]:
+def write_minute_snapshot(
+    frame: pd.DataFrame,
+    root: Path,
+    trade_date: str,
+    ts_code: str,
+    *,
+    source: str = "tushare:rt_min_daily",
+) -> tuple[Path, Path]:
     path = minute_output_path(root, trade_date, ts_code)
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(path, index=False, encoding="utf-8-sig")
     meta_path = path.with_suffix(".meta.json")
     meta = {
-        "source": "tushare:rt_min_daily",
+        "source": source,
         "trade_date": trade_date,
         "ts_code": normalize_code(ts_code),
         "frequency": "1MIN",

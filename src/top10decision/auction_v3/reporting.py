@@ -196,7 +196,7 @@ def verification_report(ledger: pd.DataFrame, cumulative: dict[str, Any]) -> str
     body += '<section><h2>每笔人工参考的累计验证</h2><p class="note">公开行情只生成模拟真值；人工实际买卖价格可通过手工反馈文件回填。未成交不计作零收益，一字跌停顺延到首次可交易日。</p>'
     latest = ledger.sort_values(["signal_date", "source_rank"], ascending=[False, True]).head(300) if not ledger.empty else ledger
     body += _verification_table(latest) + "</section>"
-    return _page("Decision V9 逐笔验证", "冻结竞价建议价、严格概率校准、Top1/Top2影子策略、真实竞价或明确代理来源分账追溯", body)
+    return _page("Decision V10 逐笔验证", "冻结竞价建议价、严格概率校准、Top1/Top2影子策略、真实竞价与11:00分钟退出真值分账追溯", body)
 
 
 def _equity_chart(points: Iterable[dict[str, Any]]) -> str:
@@ -242,7 +242,7 @@ def dashboard(backtest: dict[str, Any], cumulative: dict[str, Any]) -> str:
     body += _metric("正确放弃率", _pct(cumulative.get("correct_rejection_rate")))
     body += _metric("机会遗漏率", _pct(cumulative.get("missed_opportunity_rate")))
     body += "</div></section>"
-    return _page("Decision V9 回测与累计验证", "人工建议资格由嵌套交易日留出策略、真实竞价、成本压力和尾部风险共同决定；无正式交易时仍持续记录Top1/Top2强制开盘价反事实真值，并单列实际可买率", body)
+    return _page("Decision V10 回测与累计验证", "人工建议资格由嵌套交易日留出策略、真实竞价、11:00分钟退出、成本压力和尾部风险共同决定；无正式交易时仍持续记录Top1/Top2强制开盘价反事实真值，并单列实际可买率", body)
 
 
 def write_reports(

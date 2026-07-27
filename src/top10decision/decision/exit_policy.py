@@ -115,6 +115,7 @@ def simulate_tplus1_exit(
     take_profit_pct: float = EXIT_TAKE_PROFIT_PCT,
     stop_loss_pct: float = EXIT_STOP_LOSS_PCT,
     latest_exit_time: str = EXIT_LATEST_TIME,
+    require_intraday: bool = False,
 ) -> TimedExitResult:
     reference = adjusted_entry_reference(entry_price, buy_close, target_pre_close)
     if not math.isfinite(reference) or reference <= 0:
@@ -159,8 +160,29 @@ def simulate_tplus1_exit(
                 return TimedExitResult(stop_loss, True, reason, "minute_1m_first_touch", take_profit, stop_loss, latest_exit_time)
             if high_value >= take_profit:
                 return TimedExitResult(take_profit, True, "take_profit_first_touch", "minute_1m_first_touch", take_profit, stop_loss, latest_exit_time)
+        if str(minute.iloc[-1]["_hhmm"]) < latest_exit_time:
+            return TimedExitResult(
+                None,
+                False,
+                "minute_incomplete_before_latest_exit",
+                "minute_1m_incomplete",
+                take_profit,
+                stop_loss,
+                latest_exit_time,
+            )
         final_close = float(minute.iloc[-1]["close"])
         return TimedExitResult(final_close, True, "time_exit", "minute_1m_time_exit", take_profit, stop_loss, latest_exit_time)
+
+    if require_intraday:
+        return TimedExitResult(
+            None,
+            False,
+            "missing_intraday_exit_truth",
+            "",
+            take_profit,
+            stop_loss,
+            latest_exit_time,
+        )
 
     if not all(math.isfinite(value) and value > 0 for value in (daily_open, daily_high, daily_low, daily_close)):
         return TimedExitResult(None, False, "missing_tplus1_ohlc", "", take_profit, stop_loss, latest_exit_time)

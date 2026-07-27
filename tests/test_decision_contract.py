@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
@@ -24,8 +25,16 @@ from scripts.resolve_sample_maturity import (  # noqa: E402
 )
 from scripts.sync_tushare_minute import _collect_codes  # noqa: E402
 from scripts.validate_io_contract import _allows_unpromoted_no_trade  # noqa: E402
-from top10decision.data.tushare_minute import opening_auction_price_from_snapshot  # noqa: E402
+from top10decision.data.tushare_minute import (  # noqa: E402
+    TushareClient,
+    opening_auction_price_from_snapshot,
+)
 from top10decision.decision.action_plan import build_action_plan  # noqa: E402
+from top10decision.decision.contracts import (  # noqa: E402
+    EXIT_LATEST_TIME,
+    EXIT_STOP_LOSS_PCT,
+    EXIT_TAKE_PROFIT_PCT,
+)
 from top10decision.decision.eligibility import filter_standard_limit_universe  # noqa: E402
 from top10decision.decision.exit_policy import simulate_tplus1_exit  # noqa: E402
 from top10decision.decision.observation import rank_observation_rows  # noqa: E402
@@ -146,6 +155,59 @@ class DecisionStrictSemanticContractTests(unittest.TestCase):
 
 
 class DecisionExecutionTruthTests(unittest.TestCase):
+    def test_exit_contract_is_tp15_sl5_time1100(self) -> None:
+        self.assertEqual(EXIT_TAKE_PROFIT_PCT, 0.15)
+        self.assertEqual(EXIT_STOP_LOSS_PCT, -0.05)
+        self.assertEqual(EXIT_LATEST_TIME, "11:00")
+
+    def test_historical_minute_normalizes_tushare_pro_bar(self) -> None:
+        response = pd.DataFrame(
+                [
+                    {
+                        "ts_code": "600000.SH",
+                        "trade_time": "2026-07-22 11:00:00",
+                        "open": 10.2,
+                        "high": 10.3,
+                        "low": 10.1,
+                        "close": 10.25,
+                        "vol": 100,
+                        "amount": 1025,
+                    },
+                    {
+                        "ts_code": "600000.SH",
+                        "trade_time": "2026-07-22 09:30:00",
+                        "open": 10.0,
+                        "high": 10.1,
+                        "low": 9.9,
+                        "close": 10.05,
+                        "vol": 200,
+                        "amount": 2010,
+                    },
+                ]
+            )
+        client = TushareClient(token="secret")
+        with mock.patch.object(
+            TushareClient,
+            "call",
+            autospec=True,
+            return_value=response,
+        ) as call:
+            frame = client.historical_minute(
+                "600000.SH",
+                "20260722",
+                latest_time="11:00",
+            )
+
+        self.assertEqual(frame["time"].tolist(), [
+            "2026-07-22 09:30:00",
+            "2026-07-22 11:00:00",
+        ])
+        _, api_name, params, fields = call.call_args.args
+        self.assertEqual(api_name, "stk_mins")
+        self.assertEqual(params["freq"], "1min")
+        self.assertTrue(str(params["end_date"]).endswith("11:00:59"))
+        self.assertIn("trade_time", fields)
+
     def test_minute_sync_cap_prioritizes_formal_and_stage_watch_names(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -202,53 +264,122 @@ class DecisionExecutionTruthTests(unittest.TestCase):
         self.assertEqual(label[1], "strong_opening_auction_limit_up_unconfirmed")
 
     def test_eret_gap_up_uses_predeclared_take_profit_not_hindsight_close(self) -> None:
+        minute = pd.DataFrame(
+            [
+                {
+                    "time": "2026-07-22 09:30:00",
+                    "open": 12.0,
+                    "high": 12.0,
+                    "low": 12.0,
+                    "close": 12.0,
+                }
+            ]
+        )
         label = infer_eret_label(
             pd.Series(
                 {
                     "y_fill": 1,
                     "entry_price_proxy_t1": 10.0,
-                    "open_t2": 11.0,
+                    "open_t2": 12.0,
                     "high_t2": 20.0,
-                    "low_t2": 10.5,
+                    "low_t2": 12.0,
                     "close_t2": 20.0,
+                    "_minute_frame_t2": minute,
                 }
             )
         )
-        self.assertAlmostEqual(float(label[0]), 0.03)
+        self.assertAlmostEqual(float(label[0]), 0.15)
         self.assertEqual(label[2], 1)
-        self.assertEqual(label[3], 10.3)
+        self.assertEqual(label[3], 11.5)
         self.assertEqual(label[6], "take_profit_gap_conservative")
 
     def test_daily_bar_both_hits_are_counted_stop_first(self) -> None:
         result = simulate_tplus1_exit(
             entry_price=10.0,
             open_price=10.0,
-            high_price=10.5,
-            low_price=9.7,
+            high_price=11.6,
+            low_price=9.4,
             close_price=10.2,
         )
         self.assertTrue(result.executable)
-        self.assertEqual(result.exit_price, 9.75)
+        self.assertEqual(result.exit_price, 9.5)
         self.assertEqual(result.reason, "both_hit_stop_first_conservative")
 
     def test_minute_first_touch_can_confirm_take_profit_before_stop(self) -> None:
         minute = pd.DataFrame(
             [
-                {"time": "2026-07-22 09:30:00", "open": 10.0, "high": 10.2, "low": 9.9, "close": 10.1},
-                {"time": "2026-07-22 09:31:00", "open": 10.1, "high": 10.4, "low": 10.0, "close": 10.3},
-                {"time": "2026-07-22 09:32:00", "open": 10.3, "high": 10.3, "low": 9.7, "close": 9.8},
+                {"time": "2026-07-22 09:30:00", "open": 10.0, "high": 10.5, "low": 9.9, "close": 10.4},
+                {"time": "2026-07-22 09:31:00", "open": 10.4, "high": 11.6, "low": 10.3, "close": 11.5},
+                {"time": "2026-07-22 09:32:00", "open": 11.5, "high": 11.5, "low": 9.4, "close": 9.8},
             ]
         )
         result = simulate_tplus1_exit(
             entry_price=10.0,
             open_price=10.0,
-            high_price=10.4,
-            low_price=9.7,
+            high_price=11.6,
+            low_price=9.4,
             close_price=9.8,
             minute_frame=minute,
         )
-        self.assertEqual(result.exit_price, 10.3)
+        self.assertEqual(result.exit_price, 11.5)
         self.assertEqual(result.reason, "take_profit_first_touch")
+
+    def test_strict_exit_requires_complete_intraday_truth_through_1100(self) -> None:
+        incomplete = pd.DataFrame(
+            [
+                {
+                    "time": "2026-07-22 10:59:00",
+                    "open": 10.0,
+                    "high": 10.2,
+                    "low": 9.9,
+                    "close": 10.1,
+                }
+            ]
+        )
+        result = simulate_tplus1_exit(
+            entry_price=10.0,
+            open_price=10.0,
+            high_price=10.2,
+            low_price=9.9,
+            close_price=10.1,
+            minute_frame=incomplete,
+            require_intraday=True,
+        )
+        self.assertFalse(result.executable)
+        self.assertEqual(result.reason, "minute_incomplete_before_latest_exit")
+
+    def test_strict_exit_uses_1100_minute_close_when_no_threshold_hits(self) -> None:
+        minute = pd.DataFrame(
+            [
+                {
+                    "time": "2026-07-22 09:30:00",
+                    "open": 10.0,
+                    "high": 10.2,
+                    "low": 9.9,
+                    "close": 10.1,
+                },
+                {
+                    "time": "2026-07-22 11:00:00",
+                    "open": 10.2,
+                    "high": 10.3,
+                    "low": 10.1,
+                    "close": 10.25,
+                },
+            ]
+        )
+        result = simulate_tplus1_exit(
+            entry_price=10.0,
+            open_price=10.0,
+            high_price=10.3,
+            low_price=9.9,
+            close_price=10.25,
+            minute_frame=minute,
+            require_intraday=True,
+        )
+        self.assertTrue(result.executable)
+        self.assertEqual(result.exit_price, 10.25)
+        self.assertEqual(result.reason, "time_exit")
+        self.assertEqual(result.latest_exit_time, "11:00")
 
     def test_no_threshold_hit_uses_time_exit_proxy(self) -> None:
         result = simulate_tplus1_exit(

@@ -44,6 +44,7 @@ class AuctionV3Test(unittest.TestCase):
             order_amount_cny=10_000,
             max_auction_participation=0.02,
             observation_validation_start_date=self.dates[0],
+            require_intraday_exit_truth=False,
         )
 
     def tearDown(self) -> None:
@@ -125,7 +126,7 @@ class AuctionV3Test(unittest.TestCase):
         engine = AuctionV3Engine(self.config)
         history = engine.build_history()
         self.assertIn(self.dates[0], set(history["signal_date"]))
-        self.assertTrue((history["exit_reason"] == "take_profit_gap_conservative").all())
+        self.assertTrue((history["exit_reason"] == "take_profit_daily_proxy").all())
         self.assertTrue(np.allclose(history["gross_return"], self.config.take_profit_pct, atol=0.0015))
         self.assertGreaterEqual(history["signal_date"].nunique(), 30)
         oos, metrics = engine.run_backtest(history)

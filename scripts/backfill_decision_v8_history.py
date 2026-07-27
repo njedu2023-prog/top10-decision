@@ -25,7 +25,16 @@ from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E
 from top10decision.data.tushare_minute import (  # noqa: E402
     AUCTION_OPEN_FIELDS,
     TushareClient,
+    normalize_code,
     write_calendar,
+    write_minute_snapshot,
+)
+from top10decision.decision.contracts import (  # noqa: E402
+    EXIT_LATEST_TIME,
+    EXIT_POLICY_VERSION,
+    EXIT_STOP_LOSS_PCT,
+    EXIT_TAKE_PROFIT_PCT,
+    HISTORY_CONTRACT_VERSION,
 )
 
 
@@ -189,11 +198,35 @@ def _covered_dates(history_root: Path) -> set[str]:
     return covered
 
 
+def _candidate_exit_pairs(
+    engine: AuctionV3Engine,
+    signal_dates: Iterable[str],
+) -> list[tuple[str, str]]:
+    dates = engine.market_dates()
+    date_index = {date: index for index, date in enumerate(dates)}
+    snapshots = engine.candidate_snapshots()
+    pairs: set[tuple[str, str]] = set()
+    for signal_date in signal_dates:
+        index = date_index.get(signal_date)
+        if index is None or index + 2 >= len(dates):
+            continue
+        exit_date = dates[index + 2]
+        candidates = engine.load_candidates(
+            signal_date,
+            snapshots.get(signal_date),
+        )
+        for code in candidates.get("ts_code", pd.Series(dtype=str)):
+            normalized = normalize_code(code)
+            if normalized:
+                pairs.add((exit_date, normalized))
+    return sorted(pairs)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Build compact, strict-calendar Decision V8 history from "
-            "Tushare daily and opening-auction truth"
+            "Build compact, strict-calendar Decision V10 history from "
+            "Tushare daily, opening-auction and historical minute truth"
         )
     )
     parser.add_argument("--root", default=str(ROOT))
@@ -222,7 +255,7 @@ def main() -> int:
         raise ValueError("start/end date must be valid YYYYMMDD")
     if not str(os.environ.get("TUSHARE_TOKEN", "") or "").strip():
         if args.optional:
-            print("[decision-v8-backfill] TUSHARE_TOKEN unavailable; skipped")
+            print("[decision-v10-backfill] TUSHARE_TOKEN unavailable; skipped")
             return 0
         raise RuntimeError("TUSHARE_TOKEN is not configured")
 
@@ -234,7 +267,7 @@ def main() -> int:
     open_dates = calendar.loc[
         calendar["is_open"].eq(1), "cal_date"
     ].astype(str).tolist()
-    history_root = root / "data" / "auction_v3" / "history"
+    history_root = AuctionV3Config(root=root).historical_training_root
     history_root.mkdir(parents=True, exist_ok=True)
     covered = _covered_dates(history_root)
     eligible_targets = open_dates[:-8] if len(open_dates) > 8 else []
@@ -267,10 +300,11 @@ def main() -> int:
         "daily_basic": 0,
         "limit_list_d": 0,
         "stk_auction_o": 0,
+        "historical_minute_1m": 0,
     }
 
     with tempfile.TemporaryDirectory(
-        prefix="decision-v8-backfill-"
+        prefix="decision-v10-backfill-"
     ) as temp_name:
         temp_root = Path(temp_name)
         for index, trade_date in enumerate(fetch_dates, start=1):
@@ -346,7 +380,7 @@ def main() -> int:
                 endpoint_rows["stk_auction_o"] += len(auction)
                 if index == 1 or index % 10 == 0 or index == len(fetch_dates):
                     print(
-                        "[decision-v8-backfill] "
+                        "[decision-v10-backfill] "
                         f"fetched {index}/{len(fetch_dates)} dependency dates; "
                         f"current={trade_date}",
                         flush=True,
@@ -365,13 +399,60 @@ def main() -> int:
         temp_calendar = temp_root / "data" / "market" / "trade_cal_sse.csv"
         temp_calendar.parent.mkdir(parents=True, exist_ok=True)
         calendar.to_csv(temp_calendar, index=False, encoding="utf-8-sig")
-        history = AuctionV3Engine(
-            AuctionV3Config(
-                root=temp_root,
-                min_train_dates=2,
-                min_train_rows=10,
-            )
-        ).build_history()
+        config = AuctionV3Config(
+            root=temp_root,
+            min_train_dates=2,
+            min_train_rows=10,
+            require_intraday_exit_truth=True,
+        )
+        engine = AuctionV3Engine(config)
+        minute_pairs = _candidate_exit_pairs(engine, target_dates)
+        for index, (exit_date, code) in enumerate(minute_pairs, start=1):
+            try:
+                minute = client.historical_minute(
+                    code,
+                    exit_date,
+                    latest_time=EXIT_LATEST_TIME,
+                )
+                if minute.empty:
+                    failures.append(
+                        {
+                            "trade_date": exit_date,
+                            "endpoint": "historical_minute_1m",
+                            "reason": f"empty:{code}",
+                        }
+                    )
+                    continue
+                write_minute_snapshot(
+                    minute,
+                    temp_root,
+                    exit_date,
+                    code,
+                    source="tushare:pro_bar:historical_1min",
+                )
+                endpoint_rows["historical_minute_1m"] += len(minute)
+            except Exception as exc:
+                failures.append(
+                    {
+                        "trade_date": exit_date,
+                        "endpoint": "historical_minute_1m",
+                        "reason": f"{type(exc).__name__}:{code}",
+                    }
+                )
+            time.sleep(max(0.0, float(args.request_sleep)))
+            if (
+                index == 1
+                or index % 25 == 0
+                or index == len(minute_pairs)
+            ):
+                print(
+                    "[decision-v10-backfill] "
+                    f"minute {index}/{len(minute_pairs)}; "
+                    f"current={exit_date}:{code}",
+                    flush=True,
+                )
+
+        history = engine.build_history()
         if not history.empty:
             history = history[
                 history["signal_date"].astype(str).isin(target_dates)
@@ -388,9 +469,11 @@ def main() -> int:
         return 0 if args.optional else 1
 
     history["history_source"] = "tushare_compact_backfill"
-    history["history_contract_version"] = (
-        "decision_v8_strict_calendar_no_future"
-    )
+    history["history_contract_version"] = HISTORY_CONTRACT_VERSION
+    history["exit_policy_version"] = EXIT_POLICY_VERSION
+    history["take_profit_pct"] = EXIT_TAKE_PROFIT_PCT
+    history["stop_loss_pct"] = EXIT_STOP_LOSS_PCT
+    history["latest_exit_time"] = EXIT_LATEST_TIME
     history["backfill_generated_at_utc"] = (
         datetime.now(ZoneInfo("UTC"))
         .replace(microsecond=0)
@@ -420,7 +503,7 @@ def main() -> int:
         ).eq("tushare_stk_auction_o").sum()
     )
     manifest = {
-        "schema_version": "decision_v8_history_manifest_v1",
+        "schema_version": "decision_v10_history_manifest_v1",
         "generated_at_utc": datetime.now(ZoneInfo("UTC"))
         .replace(microsecond=0)
         .isoformat(),
@@ -442,6 +525,13 @@ def main() -> int:
         ),
         "total_compact_signal_dates": len(all_covered),
         "target_independent_dates": 500,
+        "exit_policy": {
+            "version": EXIT_POLICY_VERSION,
+            "take_profit_pct": EXIT_TAKE_PROFIT_PCT,
+            "stop_loss_pct": EXIT_STOP_LOSS_PCT,
+            "latest_exit_time": EXIT_LATEST_TIME,
+            "requires_intraday_truth": True,
+        },
         "output_file": str(output_path.relative_to(root)),
         "output_sha256": _sha256_frame(history),
         "endpoint_rows": endpoint_rows,

@@ -363,6 +363,8 @@ jobs:
 
       - name: Rebuild matured Decision learning trainsets
         if: steps.resolve_current_run_date.outputs.has_current_run_date == 'true'
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: |
           set -e
           python - <<'PY'
@@ -370,6 +372,10 @@ jobs:
           import csv
           import re
           import subprocess
+          from top10decision.decision.contracts import (
+              ERET_HOLDING_MODE,
+              ERET_TRUTH_VERSION,
+          )
 
           maturity = Path('data/market/sample_maturity_latest.csv')
           if not maturity.exists():
@@ -420,8 +426,8 @@ jobs:
               'bid_ask_proxy', 'spread_proxy',
           ]
 
-          eret_truth_version = 'eret_truth_v3_tplus1_first_touch_exit'
-          eret_holding_mode = 'manual_buy_t_0925_auction_to_tplus1_first_touch_exit'
+          eret_truth_version = ERET_TRUTH_VERSION
+          eret_holding_mode = ERET_HOLDING_MODE
 
           def eret_trainset_is_current(td):
               path = Path(f'data/market/eret_trainset_{td}.csv')
@@ -501,7 +507,16 @@ jobs:
 
               if needs_eret:
                   print(f'[learning-rebuild] rebuild E_ret trainset {td}')
-                  subprocess.run(['python', 'scripts/build_eret_truth.py', '--trade-date', td], check=True)
+                  subprocess.run(
+                      [
+                          'python',
+                          'scripts/build_eret_truth.py',
+                          '--trade-date',
+                          td,
+                          '--sync-historical-minute',
+                      ],
+                      check=True,
+                  )
                   subprocess.run(['python', 'scripts/build_eret_trainset.py', '--trade-date', td], check=True)
           PY
 
@@ -625,9 +640,13 @@ jobs:
 
       - name: Build E_ret truth
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: |
           set -e
-          python scripts/build_eret_truth.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
+          python scripts/build_eret_truth.py \
+            --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}" \
+            --sync-historical-minute
 
       - name: Build E_ret trainset
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
@@ -650,6 +669,10 @@ jobs:
           from pathlib import Path
           import json
           from datetime import datetime, timezone
+          from top10decision.decision.contracts import (
+              ERET_HOLDING_MODE,
+              ERET_TRUTH_VERSION,
+          )
 
           out_dir = Path('outputs/learning')
           models_dir = Path('models')
@@ -726,8 +749,8 @@ jobs:
           eret_selected_rmse_skill = metric_float(eret_selected_metrics, 'rmse_skill_vs_train_mean')
           eret_selected_model_pass = (
               eret_selected_model in ('lgbm', 'lr')
-              and eret.get('eret_truth_version') == 'eret_truth_v3_tplus1_first_touch_exit'
-              and eret.get('return_holding_mode') == 'manual_buy_t_0925_auction_to_tplus1_first_touch_exit'
+              and eret.get('eret_truth_version') == ERET_TRUTH_VERSION
+              and eret.get('return_holding_mode') == ERET_HOLDING_MODE
               and eret_selected_rmse is not None
               and eret_selected_rmse <= 0.15
               and eret_selected_directional is not None
@@ -838,6 +861,7 @@ jobs:
           git add data/market/eret_truth_*.meta.json || true
           git add data/market/eret_trainset_*.csv || true
           git add data/market/eret_trainset_*.meta.json || true
+          git add -A data/market/minute_1m || true
           git add outputs/learning/learning_acceptance_latest.md || true
           git add outputs/learning/learning_acceptance_latest.json || true
           git add models/pfill_*.joblib || true

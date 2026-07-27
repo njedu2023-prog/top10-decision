@@ -10,6 +10,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .contracts import (
+    EXIT_LATEST_TIME,
+    EXIT_STOP_LOSS_PCT,
+    EXIT_TAKE_PROFIT_PCT,
+)
 from .eligibility import annotate_standard_limit_universe, filter_standard_limit_universe
 from .observation import (
     OBSERVATION_START_EXEC_DATE,
@@ -929,8 +934,8 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "observation_ranking": "2进3和3进4候选先按保守效用形成Top1/Top2影子序列持续记账；正式买入另须通过独立策略留出期",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
-            "exit": "T+1按实际成交价计算3%止盈、2.5%止损，首次触发即人工退出；均未触发则14:50退出；一字跌停顺延",
-            "return_target": "优先使用Tushare stk_auction_o真实9:30集合竞价成交价，到T+1止盈/止损/14:50时间退出价的保守可执行收益；缺失时明确标注代理源",
+            "exit": f"T+1按实际成交价计算{EXIT_TAKE_PROFIT_PCT * 100:g}%止盈、{abs(EXIT_STOP_LOSS_PCT) * 100:g}%止损，首次触发即人工退出；均未触发则{EXIT_LATEST_TIME}退出；一字跌停顺延",
+            "return_target": f"优先使用Tushare stk_auction_o真实9:30集合竞价成交价，到T+1止盈/止损/{EXIT_LATEST_TIME}时间退出价的保守可执行收益；缺少截至退出时点的分钟真值则不纳入训练",
             "validation": "正式限价代理、Top1/Top2强制开盘价反事实真值、参考限价影子、人工实际成交分账累计，互不覆盖；强制真值不代表真实可成交，实际可买率另行披露",
             "probability_calibration": "全部概率按交易日隔离校准并接受Brier技能审计；大跌与P_fill必须有信息增益，盈利、晋级和近乎单一标签的退出模型可安全回退常数，不得成为全局否决器",
             "policy_selection": "模型拟合、概率校准、策略阈值选择使用三个依次向后的交易日窗口并设置禁运间隔；策略留出期必须同时满足交易频率、费用压力、收益和尾部风险",
