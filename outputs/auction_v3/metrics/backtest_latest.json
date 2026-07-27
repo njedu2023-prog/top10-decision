@@ -1,6 +1,6 @@
 {
   "status": "insufficient_oos_history",
-  "history_dates": 11,
+  "history_dates": 12,
   "oos_dates": 0,
   "promoted": false,
   "promotion_failures": [
