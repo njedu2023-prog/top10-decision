@@ -10,29 +10,28 @@
   "label_ready_fill": 89,
   "label_ready_ret": 89,
   "quality_counts": {
-    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 31,
-    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 16,
-    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 15,
-    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 13,
-    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 11,
-    "strong_daily_ohlc_conservative_proxy_time_exit_close_proxy": 3
+    "strong_minute_1m_time_exit_time_exit": 64,
+    "strong_minute_1m_first_touch_take_profit_first_touch": 11,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 7,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 7
   },
   "ret_stats": {
-    "mean": -0.000762895177731087,
-    "median": 0.02970297029702973,
+    "mean": 0.0295215129233754,
+    "median": 0.028352490421455823,
     "min": -0.14221014492753614,
-    "max": 0.0304347826086957,
-    "positive_rate": 0.550561797752809
+    "max": 0.15086206896551735,
+    "positive_rate": 0.6741573033707865
   },
   "target_column": "realized_ret_open_to_tplus1_timed_exit",
-  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
-  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_timed_exit",
+  "eret_truth_version": "eret_truth_v4_tplus1_tp15_sl5_time1100",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_tp15_sl5_time1100_exit",
+  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_tp15_sl5_time1100_exit",
   "exit_policy": {
-    "version": "tplus1_first_touch_tp3_sl2p5_time1450_v1",
-    "latest_exit_time": "14:50",
+    "version": "tplus1_first_touch_tp15_sl5_time1100_v2",
+    "latest_exit_time": "11:00",
     "source_counts": {
-      "daily_ohlc_conservative_proxy": 89
+      "minute_1m_time_exit": 64,
+      "minute_1m_first_touch": 25
     }
   },
   "source": {

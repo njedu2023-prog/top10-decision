@@ -10,30 +10,30 @@
   "label_ready_fill": 114,
   "label_ready_ret": 114,
   "quality_counts": {
-    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 43,
-    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 25,
-    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 16,
-    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 13,
-    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 11,
-    "strong_daily_ohlc_conservative_proxy_time_exit_close_proxy": 5,
+    "strong_minute_1m_time_exit_time_exit": 63,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 28,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 17,
+    "strong_minute_1m_first_touch_take_profit_first_touch": 3,
+    "strong_minute_1m_first_touch_take_profit_gap_conservative": 2,
     "not_filled_no_trade": 1
   },
   "ret_stats": {
-    "mean": -0.021878250423838022,
-    "median": -0.02499999999999991,
+    "mean": -0.0032654892603844305,
+    "median": -0.007135575942915473,
     "min": -0.1741538461538461,
-    "max": 0.031339031339031376,
-    "positive_rate": 0.3185840707964602
+    "max": 0.15102040816326512,
+    "positive_rate": 0.4690265486725664
   },
   "target_column": "realized_ret_open_to_tplus1_timed_exit",
-  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
-  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_timed_exit",
+  "eret_truth_version": "eret_truth_v4_tplus1_tp15_sl5_time1100",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_tp15_sl5_time1100_exit",
+  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_tp15_sl5_time1100_exit",
   "exit_policy": {
-    "version": "tplus1_first_touch_tp3_sl2p5_time1450_v1",
-    "latest_exit_time": "14:50",
+    "version": "tplus1_first_touch_tp15_sl5_time1100_v2",
+    "latest_exit_time": "11:00",
     "source_counts": {
-      "daily_ohlc_conservative_proxy": 113,
+      "minute_1m_time_exit": 63,
+      "minute_1m_first_touch": 50,
       "": 1
     }
   },

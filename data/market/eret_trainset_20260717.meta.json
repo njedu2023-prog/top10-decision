@@ -4,8 +4,8 @@
   "eret_truth_ready_only": true,
   "eret_sample_eligible_only": true,
   "target_column": "realized_ret_open_to_tplus1_timed_exit",
-  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
+  "eret_truth_version": "eret_truth_v4_tplus1_tp15_sl5_time1100",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_tp15_sl5_time1100_exit",
   "source": {
     "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260717.csv",
     "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260717.csv",
@@ -208,10 +208,9 @@
     "1": 24
   },
   "eret_quality_distribution": {
-    "strong_minute_1m_first_touch_take_profit_gap_conservative": 12,
-    "strong_minute_1m_first_touch_stop_gap_at_open": 6,
-    "strong_minute_1m_first_touch_stop_loss_first_touch": 5,
-    "strong_minute_1m_first_touch_take_profit_first_touch": 1
+    "strong_minute_1m_time_exit_time_exit": 18,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 5,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 1
   },
   "fill_quality_distribution": {
     "strong_official_opening_auction": 24
@@ -220,11 +219,11 @@
     "FULLY_READY": 24
   },
   "target_stats": {
-    "mean": -0.012974,
-    "median": 0.029541,
+    "mean": -0.009946,
+    "median": 0.001909,
     "min": -0.208537,
-    "max": 0.030543,
-    "positive_rate": 0.541667
+    "max": 0.132353,
+    "positive_rate": 0.583333
   },
   "column_groups": {
     "base_cols": [
@@ -400,7 +399,7 @@
   "notes": [
     "本文件是 E_ret 训练前宽表，不是训练结果文件。",
     "训练集只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本。",
-    "主目标为T日开盘竞价买入到T+1预声明止盈、止损或14:50时间退出的可执行收益。",
+    "主目标为T日开盘竞价买入到T+1预声明止盈、止损或11:00时间退出的可执行收益。",
     "realized_ret_t1_to_t2 仅为Decision兼容别名；premium_ret_t1_to_t2继续保留原收盘口径，premium不受影响。",
     "dataset_split 当前只标 raw_train_pool，正式 train/valid/test 时间切分在 train_eret.py 再做。",
     "prior 若缺失不会阻断样本拼装，但会在 meta 中记录 prior_mode=missing。",

@@ -10,30 +10,31 @@
   "label_ready_fill": 81,
   "label_ready_ret": 81,
   "quality_counts": {
-    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 50,
-    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 10,
-    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 9,
-    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 4,
-    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 4,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 34,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 26,
+    "strong_minute_1m_time_exit_time_exit": 14,
     "not_filled_no_trade": 3,
-    "blocked_one_price_limit_down": 1
+    "strong_minute_1m_first_touch_take_profit_first_touch": 2,
+    "blocked_one_price_limit_down": 1,
+    "strong_minute_1m_first_touch_take_profit_gap_conservative": 1
   },
   "ret_stats": {
-    "mean": -0.04822902277809823,
-    "median": -0.04100580270793042,
+    "mean": -0.0428196951825674,
+    "median": -0.050073637702503726,
     "min": -0.22154648132059074,
-    "max": 0.031339031339031376,
-    "positive_rate": 0.16883116883116883
+    "max": 0.15099715099715105,
+    "positive_rate": 0.18181818181818182
   },
   "target_column": "realized_ret_open_to_tplus1_timed_exit",
-  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
-  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_timed_exit",
+  "eret_truth_version": "eret_truth_v4_tplus1_tp15_sl5_time1100",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_tp15_sl5_time1100_exit",
+  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_tp15_sl5_time1100_exit",
   "exit_policy": {
-    "version": "tplus1_first_touch_tp3_sl2p5_time1450_v1",
-    "latest_exit_time": "14:50",
+    "version": "tplus1_first_touch_tp15_sl5_time1100_v2",
+    "latest_exit_time": "11:00",
     "source_counts": {
-      "daily_ohlc_conservative_proxy": 77,
+      "minute_1m_first_touch": 63,
+      "minute_1m_time_exit": 14,
       "": 3,
       "daily_limit_truth": 1
     }

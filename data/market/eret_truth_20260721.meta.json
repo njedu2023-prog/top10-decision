@@ -10,34 +10,31 @@
   "label_ready_fill": 83,
   "label_ready_ret": 83,
   "quality_counts": {
-    "strong_minute_1m_first_touch_take_profit_first_touch": 27,
-    "strong_minute_1m_first_touch_stop_loss_first_touch": 18,
-    "strong_minute_1m_first_touch_take_profit_gap_conservative": 16,
-    "strong_minute_1m_first_touch_stop_gap_at_open": 14,
-    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 3,
+    "strong_minute_1m_time_exit_time_exit": 59,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 14,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 4,
     "not_filled_no_trade": 3,
-    "strong_minute_1m_first_touch_both_hit_stop_first_conservative": 1,
-    "strong_minute_1m_time_exit_time_exit": 1
+    "strong_minute_1m_first_touch_take_profit_first_touch": 2,
+    "strong_minute_1m_first_touch_take_profit_gap_conservative": 1
   },
   "ret_stats": {
-    "mean": 0.0035953279670401196,
-    "median": 0.029810453086315136,
+    "mean": 0.0022437520401835205,
+    "median": -0.007848415483338589,
     "min": -0.0794621026894865,
-    "max": 0.03056768558951961,
-    "positive_rate": 0.5875
+    "max": 0.14990421455938696,
+    "positive_rate": 0.3875
   },
   "target_column": "realized_ret_open_to_tplus1_timed_exit",
-  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
-  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_timed_exit",
+  "eret_truth_version": "eret_truth_v4_tplus1_tp15_sl5_time1100",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_tp15_sl5_time1100_exit",
+  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_tp15_sl5_time1100_exit",
   "exit_policy": {
-    "version": "tplus1_first_touch_tp3_sl2p5_time1450_v1",
-    "latest_exit_time": "14:50",
+    "version": "tplus1_first_touch_tp15_sl5_time1100_v2",
+    "latest_exit_time": "11:00",
     "source_counts": {
-      "minute_1m_first_touch": 76,
-      "daily_ohlc_conservative_proxy": 3,
-      "": 3,
-      "minute_1m_time_exit": 1
+      "minute_1m_time_exit": 59,
+      "minute_1m_first_touch": 21,
+      "": 3
     }
   },
   "source": {

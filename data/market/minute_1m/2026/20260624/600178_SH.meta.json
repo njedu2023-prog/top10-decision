@@ -1,0 +1,18 @@
+{
+  "source": "tushare:stk_mins:historical_1min",
+  "trade_date": "20260624",
+  "ts_code": "600178.SH",
+  "frequency": "1MIN",
+  "rows": 91,
+  "fields": [
+    "ts_code",
+    "time",
+    "open",
+    "close",
+    "high",
+    "low",
+    "vol",
+    "amount"
+  ],
+  "credential_persisted": false
+}

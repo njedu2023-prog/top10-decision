@@ -8,11 +8,11 @@
   },
   "label_ready_fill": 63,
   "label_ready_ret": 63,
-  "y_fill_rate": 0.9365079365079365,
+  "y_fill_rate": 0.9523809523809523,
   "quality_counts": {
     "strong_official_opening_auction": 59,
     "strong_opening_auction_limit_up_unconfirmed": 3,
-    "weak_missing_opening_auction_truth": 1
+    "strong_minute_opening_proxy": 1
   },
   "execution_contract": "manual_guidance_0925_public_market_fillability_proxy",
   "guidance_only": true,

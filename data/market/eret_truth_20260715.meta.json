@@ -10,30 +10,30 @@
   "label_ready_fill": 65,
   "label_ready_ret": 65,
   "quality_counts": {
-    "strong_daily_ohlc_conservative_proxy_stop_loss_daily_proxy": 20,
-    "strong_daily_ohlc_conservative_proxy_stop_gap_at_open": 17,
-    "strong_daily_ohlc_conservative_proxy_take_profit_gap_conservative": 11,
-    "strong_daily_ohlc_conservative_proxy_take_profit_daily_proxy": 7,
-    "strong_daily_ohlc_conservative_proxy_both_hit_stop_first_conservative": 7,
+    "strong_minute_1m_time_exit_time_exit": 36,
+    "strong_minute_1m_first_touch_stop_loss_first_touch": 17,
+    "strong_minute_1m_first_touch_stop_gap_at_open": 8,
     "not_filled_no_trade": 2,
+    "strong_minute_1m_first_touch_take_profit_gap_conservative": 1,
     "blocked_one_price_limit_down": 1
   },
   "ret_stats": {
-    "mean": -0.01728954218514868,
-    "median": -0.025012062541226565,
+    "mean": -0.017813840523715756,
+    "median": -0.026591728881805166,
     "min": -0.1096989966555183,
-    "max": 0.03167420814479627,
-    "positive_rate": 0.2903225806451613
+    "max": 0.15044247787610598,
+    "positive_rate": 0.24193548387096775
   },
   "target_column": "realized_ret_open_to_tplus1_timed_exit",
-  "eret_truth_version": "eret_truth_v3_tplus1_first_touch_exit",
-  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_first_touch_exit",
-  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_timed_exit",
+  "eret_truth_version": "eret_truth_v4_tplus1_tp15_sl5_time1100",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_tp15_sl5_time1100_exit",
+  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_tp15_sl5_time1100_exit",
   "exit_policy": {
-    "version": "tplus1_first_touch_tp3_sl2p5_time1450_v1",
-    "latest_exit_time": "14:50",
+    "version": "tplus1_first_touch_tp15_sl5_time1100_v2",
+    "latest_exit_time": "11:00",
     "source_counts": {
-      "daily_ohlc_conservative_proxy": 62,
+      "minute_1m_time_exit": 36,
+      "minute_1m_first_touch": 26,
       "": 2,
       "daily_limit_truth": 1
     }
