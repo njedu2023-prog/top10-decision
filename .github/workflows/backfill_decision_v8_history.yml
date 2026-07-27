@@ -90,7 +90,8 @@ jobs:
             if python scripts/backfill_decision_v8_history.py \
               --start-date "${{ steps.request.outputs.start_date }}" \
               --end-date "${{ steps.request.outputs.end_date }}" \
-              --max-missing-dates "${{ steps.request.outputs.max_missing_dates }}"; then
+              --max-missing-dates "${{ steps.request.outputs.max_missing_dates }}" \
+              --minute-workers 6; then
               completed=1
               break
             fi

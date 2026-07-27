@@ -8,7 +8,9 @@ import os
 import sys
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
@@ -222,6 +224,58 @@ def _candidate_exit_pairs(
     return sorted(pairs)
 
 
+def _fetch_historical_minute_pair(
+    pair: tuple[str, str],
+    *,
+    client: TushareClient,
+    temp_root: Path,
+    latest_time: str,
+    request_sleep: float,
+    retry_attempts: int = 2,
+) -> dict[str, Any]:
+    exit_date, code = pair
+    last_reason = f"empty:{code}"
+    for attempt in range(max(0, int(retry_attempts)) + 1):
+        try:
+            minute = client.historical_minute(
+                code,
+                exit_date,
+                latest_time=latest_time,
+            )
+            if minute.empty:
+                return {
+                    "trade_date": exit_date,
+                    "code": code,
+                    "rows": 0,
+                    "reason": f"empty:{code}",
+                }
+            write_minute_snapshot(
+                minute,
+                temp_root,
+                exit_date,
+                code,
+                source="tushare:stk_mins:historical_1min",
+            )
+            return {
+                "trade_date": exit_date,
+                "code": code,
+                "rows": len(minute),
+                "reason": "",
+            }
+        except Exception as exc:
+            last_reason = f"{type(exc).__name__}:{code}"
+            if attempt < max(0, int(retry_attempts)):
+                time.sleep(1.5 * (attempt + 1))
+        finally:
+            time.sleep(max(0.0, float(request_sleep)))
+    return {
+        "trade_date": exit_date,
+        "code": code,
+        "rows": 0,
+        "reason": last_reason,
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -238,6 +292,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-missing-dates", type=int, default=40)
     parser.add_argument("--timeout-seconds", type=int, default=20)
     parser.add_argument("--request-sleep", type=float, default=0.08)
+    parser.add_argument(
+        "--minute-workers",
+        type=int,
+        default=6,
+        help="Bounded concurrent Tushare historical-minute requests (1-12)",
+    )
     parser.add_argument(
         "--optional",
         action="store_true",
@@ -407,50 +467,43 @@ def main() -> int:
         )
         engine = AuctionV3Engine(config)
         minute_pairs = _candidate_exit_pairs(engine, target_dates)
-        for index, (exit_date, code) in enumerate(minute_pairs, start=1):
-            try:
-                minute = client.historical_minute(
-                    code,
-                    exit_date,
-                    latest_time=EXIT_LATEST_TIME,
-                )
-                if minute.empty:
+        minute_worker = partial(
+            _fetch_historical_minute_pair,
+            client=client,
+            temp_root=temp_root,
+            latest_time=EXIT_LATEST_TIME,
+            request_sleep=max(0.0, float(args.request_sleep)),
+        )
+        minute_workers = max(1, min(12, int(args.minute_workers)))
+        with ThreadPoolExecutor(max_workers=minute_workers) as executor:
+            results = executor.map(minute_worker, minute_pairs)
+            for index, result in enumerate(results, start=1):
+                rows = int(result.get("rows", 0) or 0)
+                if rows > 0:
+                    endpoint_rows["historical_minute_1m"] += rows
+                else:
+                    exit_date = str(result.get("trade_date", "") or "")
+                    code = str(result.get("code", "") or "")
+                    reason = str(result.get("reason", "") or f"empty:{code}")
                     failures.append(
                         {
                             "trade_date": exit_date,
                             "endpoint": "historical_minute_1m",
-                            "reason": f"empty:{code}",
+                            "reason": reason,
                         }
                     )
-                    continue
-                write_minute_snapshot(
-                    minute,
-                    temp_root,
-                    exit_date,
-                    code,
-                    source="tushare:pro_bar:historical_1min",
-                )
-                endpoint_rows["historical_minute_1m"] += len(minute)
-            except Exception as exc:
-                failures.append(
-                    {
-                        "trade_date": exit_date,
-                        "endpoint": "historical_minute_1m",
-                        "reason": f"{type(exc).__name__}:{code}",
-                    }
-                )
-            time.sleep(max(0.0, float(args.request_sleep)))
-            if (
-                index == 1
-                or index % 25 == 0
-                or index == len(minute_pairs)
-            ):
-                print(
-                    "[decision-v10-backfill] "
-                    f"minute {index}/{len(minute_pairs)}; "
-                    f"current={exit_date}:{code}",
-                    flush=True,
-                )
+                if (
+                    index == 1
+                    or index % 25 == 0
+                    or index == len(minute_pairs)
+                ):
+                    print(
+                        "[decision-v10-backfill] "
+                        f"minute {index}/{len(minute_pairs)}; "
+                        f"workers={minute_workers}; "
+                        f"current={result.get('trade_date')}:{result.get('code')}",
+                        flush=True,
+                    )
 
         history = engine.build_history()
         if not history.empty:

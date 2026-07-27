@@ -17,6 +17,9 @@ for path in (ROOT, SRC):
         sys.path.insert(0, str(path))
 
 from scripts.run_v2 import _apply_ev_upgrade_v1  # noqa: E402
+from scripts.backfill_decision_v8_history import (  # noqa: E402
+    _fetch_historical_minute_pair,
+)
 from scripts.build_eret_truth import infer_eret_label  # noqa: E402
 from scripts.build_fill_truth import infer_fill_label  # noqa: E402
 from scripts.resolve_sample_maturity import (  # noqa: E402
@@ -207,6 +210,50 @@ class DecisionExecutionTruthTests(unittest.TestCase):
         self.assertEqual(params["freq"], "1min")
         self.assertTrue(str(params["end_date"]).endswith("11:00:59"))
         self.assertIn("trade_time", fields)
+
+    def test_historical_minute_backfill_worker_persists_strict_truth(self) -> None:
+        response = pd.DataFrame(
+            [
+                {
+                    "ts_code": "600000.SH",
+                    "time": "2026-07-22 09:30:00",
+                    "open": 10.0,
+                    "high": 10.1,
+                    "low": 9.9,
+                    "close": 10.05,
+                    "vol": 200,
+                    "amount": 2010,
+                }
+            ]
+        )
+        client = mock.Mock(spec=TushareClient)
+        client.historical_minute.return_value = response
+        with tempfile.TemporaryDirectory() as temp:
+            result = _fetch_historical_minute_pair(
+                ("20260722", "600000.SH"),
+                client=client,
+                temp_root=Path(temp),
+                latest_time="11:00",
+                request_sleep=0.0,
+            )
+            snapshot = (
+                Path(temp)
+                / "data"
+                / "market"
+                / "minute_1m"
+                / "2026"
+                / "20260722"
+                / "600000_SH.csv"
+            )
+            self.assertTrue(snapshot.exists())
+
+        self.assertEqual(result["rows"], 1)
+        self.assertEqual(result["reason"], "")
+        client.historical_minute.assert_called_once_with(
+            "600000.SH",
+            "20260722",
+            latest_time="11:00",
+        )
 
     def test_minute_sync_cap_prioritizes_formal_and_stage_watch_names(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
