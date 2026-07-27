@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-27T03:48:24+00:00",
+  "generated_at_utc": "2026-07-27T07:15:48+00:00",
   "model_version": "auction_v9_nested_policy_shadow_oos_1",
   "history_dates": 698,
   "oos_dates": 530,
@@ -2944,5 +2944,5 @@
       "nav": 1.0
     }
   ],
-  "model_artifact_sha256": "18a908db19776d92958e4c3c1f791da779b4810413fc410eab8fd26a22414487"
+  "model_artifact_sha256": "16417db887ff7cb0e7f3d4e9fba989a5cf1c3b3c600848d81ab36da46b8dc870"
 }
