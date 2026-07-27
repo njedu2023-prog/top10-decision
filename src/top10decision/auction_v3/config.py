@@ -33,6 +33,7 @@ class AuctionV3Config:
     min_exit_probability: float = 0.90
     min_profit_probability: float = 0.52
     continuation_score_weight: float = 0.005
+    fill_score_weight: float = 0.001
     sentiment_min_brier_improvement: float = 0.0005
     sentiment_min_relative_brier_improvement: float = 0.005
     sentiment_min_daily_win_rate: float = 0.55
@@ -62,6 +63,21 @@ class AuctionV3Config:
     return_min_relative_rmse_improvement: float = 0.01
     return_min_daily_win_rate: float = 0.52
     conformal_min_cohort_rows: int = 30
+    policy_tuning_fraction: float = 0.10
+    policy_tuning_min_dates: int = 12
+    policy_min_signal_dates: int = 8
+    policy_min_filled_trades: int = 20
+    policy_min_signal_date_ratio: float = 0.05
+    policy_max_no_signal_streak: int = 30
+    policy_min_exit_probability: float = 0.90
+    policy_fill_probability_grid: tuple[float, ...] = (0.05, 0.10, 0.20)
+    policy_big_loss_probability_grid: tuple[float, ...] = (0.35, 0.45, 0.55)
+    policy_mean_return_lcb_grid: tuple[float, ...] = (-0.05, -0.03, -0.01)
+    policy_conservative_ev_grid: tuple[float, ...] = (-0.02, -0.005, 0.0)
+    policy_score_quantiles: tuple[float, ...] = (0.50, 0.70, 0.85)
+    policy_position_grid: tuple[int, ...] = (1, 2, 3)
+    policy_max_realized_big_loss_rate: float = 0.25
+    policy_min_tail_mean_return: float = -0.05
     promotion_min_dates: int = 500
     promotion_min_oos_dates: int = 120
     promotion_min_filled_trades: int = 200
@@ -71,14 +87,14 @@ class AuctionV3Config:
     max_oos_no_signal_streak: int = 30
     embargo_dates: int = 2
     backtest_block_dates: int = 10
-    backtest_max_refits: int = 12
-    fill_max_training_rows: int = 60_000
+    backtest_max_refits: int = 6
+    fill_max_training_rows: int = 20_000
     gap_grid_min: float = -0.05
     gap_grid_max: float = 0.08
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v8_calibrated_auction_truth_oos_2"
+    model_version: str = "auction_v9_nested_policy_shadow_oos_1"
 
     @property
     def output_root(self) -> Path:
