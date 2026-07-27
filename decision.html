@@ -578,7 +578,6 @@
       </div>
       <div id="sentimentMetrics" class="metrics panel-metrics"></div>
       <div id="sentimentIndustries" class="sentiment-industries"></div>
-      <p id="sentimentNote" class="stats-note"></p>
     </section>
 
     <section class="panel">
@@ -641,7 +640,7 @@
     const CACHE_KEY = "decision-dashboard-v9-dt-market-close-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
-      "signalDate", "execDate", "exitDate", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "signalDate", "execDate", "exitDate", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -884,8 +883,6 @@
       const comparison = plan?.market_close_comparison || {};
       const dClose = comparison?.d || {};
       const tClose = comparison?.t || {};
-      const model = plan?.model || {};
-      const ablation = model?.continuation_sentiment_ablation || {};
       const score = finiteNumber(sentiment.score);
       const regime = sentiment.regime_label || "数据不足";
       const regimeCode = String(sentiment.regime_code || "INSUFFICIENT");
@@ -969,13 +966,6 @@
           <p class="industry-method-note">全量口径为当日有收盘涨跌数据的A股；行业按D日涨停家数排序。T列仅在完整收盘快照达到D日股票覆盖的90%后更新，不参与D日模型。</p>
         </div>
       </details>`;
-      const selected = ablation.sentiment_selected === true;
-      const selectionText = selected
-        ? `情绪因子通过留出期消融，已进入连板模型；Brier改善 ${number(ablation.sentiment_brier_improvement, 4)}，逐日胜率 ${pct(ablation.sentiment_daily_win_rate)}。`
-        : ablation.sentiment_selected === false
-          ? `情绪因子未同时达到留出期Brier改善与逐日一致性门槛，当前自动回退，仅作诊断展示；不会成为新的硬否决。`
-          : "等待新模型生成情绪消融结果。";
-      els.sentimentNote.textContent = `口径：只使用D日收盘及更早信息，不含T日竞价或T+1真值。综合分用于解释状态，交易概率只使用原始因子并接受严格样本外消融。${selectionText}`;
     }
 
     function renderStageWatchlist(plan) {
