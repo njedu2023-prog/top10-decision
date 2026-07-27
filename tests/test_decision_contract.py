@@ -20,7 +20,10 @@ from scripts.run_v2 import _apply_ev_upgrade_v1  # noqa: E402
 from scripts.backfill_decision_v8_history import (  # noqa: E402
     _fetch_historical_minute_pair,
 )
-from scripts.build_eret_truth import infer_eret_label  # noqa: E402
+from scripts.build_eret_truth import (  # noqa: E402
+    _sync_historical_minute_code,
+    infer_eret_label,
+)
 from scripts.build_fill_truth import infer_fill_label  # noqa: E402
 from scripts.resolve_sample_maturity import (  # noqa: E402
     resolve_sample_maturity_rows,
@@ -254,6 +257,46 @@ class DecisionExecutionTruthTests(unittest.TestCase):
             "20260722",
             latest_time="11:00",
         )
+
+    def test_eret_minute_worker_persists_strict_truth(self) -> None:
+        response = pd.DataFrame(
+            [
+                {
+                    "ts_code": "000001.SZ",
+                    "time": "2026-07-22 11:00:00",
+                    "open": 11.0,
+                    "high": 11.1,
+                    "low": 10.9,
+                    "close": 11.05,
+                    "vol": 100,
+                    "amount": 1105,
+                }
+            ]
+        )
+        client = mock.Mock(spec=TushareClient)
+        client.historical_minute.return_value = response
+        with tempfile.TemporaryDirectory() as temp:
+            code, rows, reason = _sync_historical_minute_code(
+                "000001.SZ",
+                client=client,
+                project_root=Path(temp),
+                target_date="20260722",
+                latest_time="11:00",
+            )
+            snapshot = (
+                Path(temp)
+                / "data"
+                / "market"
+                / "minute_1m"
+                / "2026"
+                / "20260722"
+                / "000001_SZ.csv"
+            )
+            self.assertTrue(snapshot.exists())
+
+        self.assertEqual(code, "000001.SZ")
+        self.assertEqual(rows, 1)
+        self.assertEqual(reason, "")
 
     def test_minute_sync_cap_prioritizes_formal_and_stage_watch_names(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

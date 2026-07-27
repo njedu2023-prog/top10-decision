@@ -514,6 +514,8 @@ jobs:
                           '--trade-date',
                           td,
                           '--sync-historical-minute',
+                          '--minute-workers',
+                          '6',
                       ],
                       check=True,
                   )
@@ -646,7 +648,8 @@ jobs:
           set -e
           python scripts/build_eret_truth.py \
             --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}" \
-            --sync-historical-minute
+            --sync-historical-minute \
+            --minute-workers 6
 
       - name: Build E_ret trainset
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'

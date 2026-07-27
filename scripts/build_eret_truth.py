@@ -41,7 +41,9 @@ import argparse
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
@@ -499,6 +501,43 @@ def _compat_close_return(row: pd.Series) -> Optional[float]:
     return float(value) if pd.notna(value) else None
 
 
+def _sync_historical_minute_code(
+    code: str,
+    *,
+    client: TushareClient,
+    project_root: Path,
+    target_date: str,
+    latest_time: str,
+    retry_attempts: int = 2,
+) -> tuple[str, int, str]:
+    path = minute_output_path(project_root, target_date, code)
+    if path.exists() and path.stat().st_size > 0:
+        return code, 0, ""
+    last_reason = f"{code}:empty"
+    for attempt in range(max(0, int(retry_attempts)) + 1):
+        try:
+            minute = client.historical_minute(
+                code,
+                target_date,
+                latest_time=latest_time,
+            )
+            if minute.empty:
+                return code, 0, f"{code}:empty"
+            write_minute_snapshot(
+                minute,
+                project_root,
+                target_date,
+                code,
+                source="tushare:stk_mins:historical_1min",
+            )
+            return code, len(minute), ""
+        except Exception as exc:
+            last_reason = f"{code}:{type(exc).__name__}"
+            if attempt < max(0, int(retry_attempts)):
+                time.sleep(1.5 * (attempt + 1))
+    return code, 0, last_reason
+
+
 # =========================
 # 主流程
 # =========================
@@ -512,6 +551,7 @@ def build_eret_truth(
     label_ready_ret: int,
     paths: Paths,
     sync_historical_minute: bool = False,
+    minute_workers: int = 6,
 ) -> Tuple[pd.DataFrame, str, str, str]:
     pred, pred_source_path = load_candidate_pool(paths, trade_date)
     fill_truth = load_fill_truth(paths.fill_truth, trade_date)
@@ -544,33 +584,27 @@ def build_eret_truth(
         fetched = 0
         filled = pd.to_numeric(out.get("y_fill"), errors="coerce").eq(1)
         minute_codes = sorted(set(out.loc[filled, "ts_code"].astype(str)))
-        for code in minute_codes:
-            path = minute_output_path(paths.project_root, target_date, code)
-            if path.exists() and path.stat().st_size > 0:
-                continue
-            try:
-                minute = client.historical_minute(
-                    code,
-                    target_date,
-                    latest_time=EXIT_LATEST_TIME,
-                )
-                if minute.empty:
-                    failures.append(f"{code}:empty")
-                    continue
-                write_minute_snapshot(
-                    minute,
-                    paths.project_root,
-                    target_date,
-                    code,
-                    source="tushare:pro_bar:historical_1min",
-                )
-                fetched += 1
-            except Exception as exc:
-                failures.append(f"{code}:{type(exc).__name__}")
-            time.sleep(0.12)
+        workers = max(1, min(12, int(minute_workers)))
+        minute_worker = partial(
+            _sync_historical_minute_code,
+            client=client,
+            project_root=paths.project_root,
+            target_date=target_date,
+            latest_time=EXIT_LATEST_TIME,
+        )
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            for _code, rows, reason in executor.map(
+                minute_worker,
+                minute_codes,
+            ):
+                if rows > 0:
+                    fetched += 1
+                elif reason:
+                    failures.append(reason)
         print(
             "[build_eret_truth] historical minute "
-            f"target={target_date} fetched={fetched} failures={len(failures)}"
+            f"target={target_date} fetched={fetched} failures={len(failures)} "
+            f"workers={workers}"
         )
         if failures:
             print(
@@ -764,6 +798,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="用Tushare历史1分钟数据补齐T+1截至11:00的严格退出真值",
     )
+    ap.add_argument(
+        "--minute-workers",
+        type=int,
+        default=6,
+        help="历史分钟真值并发请求数（1-12）",
+    )
     return ap.parse_args()
 
 
@@ -792,6 +832,7 @@ def main() -> int:
         label_ready_ret=maturity_info.label_ready_ret,
         paths=paths,
         sync_historical_minute=args.sync_historical_minute,
+        minute_workers=args.minute_workers,
     )
 
     df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")
