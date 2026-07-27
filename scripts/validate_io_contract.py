@@ -202,7 +202,7 @@ def _validate_semantic_health(
         if _allows_unpromoted_no_trade(action_plan, picked=picked):
             _warn(
                 "learning_acceptance overall_pass=false；"
-                "V8 模型未晋级且正式买入/picked 均为0，按严格 NO_TRADE 放行"
+                "V9模型未晋级且正式买入/picked均为0，Top1/Top2影子验证继续累计，按严格NO_TRADE放行"
             )
         else:
             _fail(f"learning_acceptance overall_pass != true: {learning.get('overall_pass')}")
