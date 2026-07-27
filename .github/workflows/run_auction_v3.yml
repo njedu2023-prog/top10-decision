@@ -89,7 +89,7 @@ jobs:
           fi
           python scripts/sync_tushare_minute.py "${args[@]}"
 
-      - name: Run Decision manual auction guidance V9
+      - name: Run Decision manual auction guidance V10
         env:
           SIGNAL_DATE: ${{ inputs.signal_date }}
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}

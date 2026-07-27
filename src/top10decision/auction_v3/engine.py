@@ -5928,7 +5928,7 @@ class AuctionV3Engine:
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
         scored["feature_contract"] = (
-            "D_CLOSE_STREAK_PATH_SENTIMENT_V9_NESTED_POLICY_NO_T_LEAKAGE"
+            "D_CLOSE_STREAK_PATH_SENTIMENT_V10_NESTED_POLICY_NO_T_LEAKAGE"
         )
         ordered = [
             "prediction_id",

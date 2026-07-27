@@ -149,7 +149,7 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     body += "</section>"
     body += '<section><h2>候选复核记录（非买入名单）</h2><p class="note">下表只来自D日已涨停候选池，2进3、3进4在全部风险门禁通过后优先。模型未晋级时，SHADOW_ONLY只用于验证。当前未通过项目：' + _esc(fail_text) + "。</p>"
     body += _current_table(prediction.head(20)) + "</section>"
-    return _page("Decision 竞价人工指导 V9", "D日涨停池，嵌套时序策略与Top1/Top2影子验证；T日人工限价，T+1预声明规则退出", body)
+    return _page("Decision 竞价人工指导 V10", "D日涨停池，嵌套时序策略与Top1/Top2影子验证；T日人工限价，T+1执行15%止盈、5%止损或11:00退出", body)
 
 
 def _verification_table(frame: pd.DataFrame) -> str:
