@@ -290,16 +290,28 @@
       margin: -2px 16px 14px;
       padding: 12px 0;
       border-top: 1px solid var(--line);
-      display: flex;
-      align-items: baseline;
-      flex-wrap: wrap;
-      gap: 8px 18px;
       line-height: 1.5;
     }
-    .sentiment-industries > strong { font-size: 12px; color: var(--ink); }
-    .industry-leaders { display: flex; flex-wrap: wrap; gap: 7px 18px; }
-    .industry-leader { color: var(--muted); white-space: nowrap; }
-    .industry-leader b { margin-left: 4px; color: var(--up); font-variant-numeric: tabular-nums; }
+    .sentiment-industries > strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--ink);
+    }
+    .industry-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    table.industry-table { min-width: 520px; font-size: 12px; }
+    table.industry-table th,
+    table.industry-table td { height: 34px; padding: 6px 10px; }
+    table.industry-table th:first-child,
+    table.industry-table td:first-child { width: 56px; text-align: center; }
+    table.industry-table th:nth-child(2),
+    table.industry-table td:nth-child(2) { text-align: left; }
+    table.industry-table td:nth-child(3) { color: var(--up); font-weight: 700; }
     .stats-note { margin: 0 16px 16px; color: var(--muted); font-size: 12px; line-height: 1.65; }
     .reason { max-width: 300px; white-space: normal; line-height: 1.45; color: var(--muted); text-align: left; }
 
@@ -511,7 +523,7 @@
 
     const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
-    const CACHE_KEY = "decision-dashboard-v9-industry-sentiment-cache";
+    const CACHE_KEY = "decision-dashboard-v9-industry-top10-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
       "signalDate", "execDate", "exitDate", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "sentimentNote", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
@@ -755,19 +767,24 @@
         metric("涨停成交额Top3占比", pct(sentiment.limit_up_amount_top3_share))
       ];
       els.sentimentMetrics.innerHTML = rows.join("");
-      const industryLeaders = Array.isArray(sentiment.limit_up_industry_top5)
-        ? sentiment.limit_up_industry_top5.slice(0, 5)
-        : [];
-      const industryHtml = industryLeaders
+      const industrySource = Array.isArray(sentiment.limit_up_industry_top10)
+        ? sentiment.limit_up_industry_top10
+        : Array.isArray(sentiment.limit_up_industry_top5)
+          ? sentiment.limit_up_industry_top5
+          : [];
+      const industryLeaders = industrySource.slice(0, 10);
+      const industryRows = industryLeaders
         .map((item, index) => {
           const industry = String(item?.industry || "").trim();
           const count = Math.trunc(Number(item?.limit_up_count));
           if (!industry || !Number.isFinite(count) || count <= 0) return "";
-          return `<span class="industry-leader">${index + 1}. ${escapeHtml(industry)}<b>涨停 ${count}</b></span>`;
+          return `<tr><td>${index + 1}</td><td>${escapeHtml(industry)}</td><td>${count}</td><td>${pct(item?.share)}</td></tr>`;
         })
         .filter(Boolean)
         .join("");
-      els.sentimentIndustries.innerHTML = `<strong>行业板块 · 涨停 Top5</strong><div class="industry-leaders">${industryHtml || '<span class="industry-leader">暂无有效行业分类</span>'}</div>`;
+      els.sentimentIndustries.innerHTML = `<strong>行业板块 · 涨停 Top10</strong>${industryRows
+        ? `<div class="industry-table-wrap"><table class="industry-table"><thead><tr><th>排名</th><th>行业板块</th><th>涨停家数</th><th>占全部涨停</th></tr></thead><tbody>${industryRows}</tbody></table></div>`
+        : '<div class="empty">暂无有效行业分类</div>'}`;
       const selected = ablation.sentiment_selected === true;
       const selectionText = selected
         ? `情绪因子通过留出期消融，已进入连板模型；Brier改善 ${number(ablation.sentiment_brier_improvement, 4)}，逐日胜率 ${pct(ablation.sentiment_daily_win_rate)}。`

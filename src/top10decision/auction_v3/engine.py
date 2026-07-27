@@ -742,6 +742,7 @@ class AuctionV3Engine:
             "market_focus_promotion_samples": 0.0,
             "market_max_streak": np.nan,
             "_closed_up_codes": frozenset(),
+            "_limit_up_industry_top10": [],
             "_limit_up_industry_top5": [],
             "_total_amount": np.nan,
         }
@@ -816,7 +817,7 @@ class AuctionV3Engine:
         )
 
         industry_concentration = float("nan")
-        industry_top5: list[dict[str, Any]] = []
+        industry_top10: list[dict[str, Any]] = []
         if not detail_up.empty and "industry" in detail_up.columns:
             industry = (
                 detail_up["industry"]
@@ -842,7 +843,7 @@ class AuctionV3Engine:
                 industry_total = int(industry_counts["limit_up_count"].sum())
                 shares = industry_counts["limit_up_count"] / industry_total
                 industry_concentration = float((shares**2).sum())
-                industry_top5 = [
+                industry_top10 = [
                     {
                         "rank": rank,
                         "industry": str(row.industry),
@@ -850,7 +851,7 @@ class AuctionV3Engine:
                         "share": float(row.limit_up_count / industry_total),
                     }
                     for rank, row in enumerate(
-                        industry_counts.head(5).itertuples(index=False),
+                        industry_counts.head(10).itertuples(index=False),
                         start=1,
                     )
                 ]
@@ -1015,7 +1016,8 @@ class AuctionV3Engine:
                 float(max(streaks)) if streaks else float("nan")
             ),
             "_closed_up_codes": closed_up_codes,
-            "_limit_up_industry_top5": industry_top5,
+            "_limit_up_industry_top10": industry_top10,
+            "_limit_up_industry_top5": industry_top10[:5],
             "_total_amount": total_amount,
         }
         self._sentiment_raw_cache[trade_date] = result
@@ -6741,12 +6743,14 @@ class AuctionV3Engine:
                     current_sentiment[name] = str(value or "")
                 else:
                     current_sentiment[name] = _safe_metric(value)
-        current_sentiment["market_limit_up_industry_top5"] = list(
-            self._market_sentiment_raw(signal_date).get(
-                "_limit_up_industry_top5"
-            )
+        sentiment_raw = self._market_sentiment_raw(signal_date)
+        industry_top10 = list(
+            sentiment_raw.get("_limit_up_industry_top10")
+            or sentiment_raw.get("_limit_up_industry_top5")
             or []
         )
+        current_sentiment["market_limit_up_industry_top10"] = industry_top10
+        current_sentiment["market_limit_up_industry_top5"] = industry_top10[:5]
         history_dates = (
             sorted(history["signal_date"].astype(str).unique())
             if not history.empty
@@ -6913,7 +6917,7 @@ class AuctionV3Engine:
                 "candidate_pool": "D-day confirmed limit-up candidates only",
                 "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path, cohort, and market-sentiment features",
                 "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
-                "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top5, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
+                "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top10, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
                 "observation_ranking": "stage-focused Top1/Top2 shadow ranking by conservative utility; formal selection separately requires a nested temporal policy holdout",
                 "guidance_only": True,
                 "broker_connected": False,

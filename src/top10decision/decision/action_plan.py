@@ -123,7 +123,11 @@ def _industry(row: pd.Series) -> str:
     return "未分类"
 
 
-def _limit_up_industry_top5(value: Any) -> list[dict[str, Any]]:
+def _limit_up_industry_leaders(
+    value: Any,
+    *,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     leaders: list[dict[str, Any]] = []
@@ -143,7 +147,7 @@ def _limit_up_industry_top5(value: Any) -> list[dict[str, Any]]:
         if share is not None:
             item["share"] = share
         leaders.append(item)
-        if len(leaders) == 5:
+        if len(leaders) == limit:
             break
     return leaders
 
@@ -598,6 +602,11 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     formal_count = sum(row["action"] == "BUY" for row in action_rows)
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
     stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)
+    industry_leaders = _limit_up_industry_leaders(
+        sentiment_value("market_limit_up_industry_top10")
+        or sentiment_value("market_limit_up_industry_top5"),
+        limit=10,
+    )
     plan = {
         "schema_version": "decision_action_plan_v11_nested_policy_shadow",
         "generated_at_utc": _utc_now(),
@@ -777,9 +786,8 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "limit_up_amount_top3_share": _number(
                 sentiment_value("market_limit_up_amount_top3_share")
             ),
-            "limit_up_industry_top5": _limit_up_industry_top5(
-                sentiment_value("market_limit_up_industry_top5")
-            ),
+            "limit_up_industry_top10": industry_leaders,
+            "limit_up_industry_top5": industry_leaders[:5],
             "amount_ratio_5d": _number(
                 sentiment_value("market_amount_ratio_5d")
             ),
@@ -834,7 +842,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
             "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
             "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
-            "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top5、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
+            "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top10、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
             "observation_ranking": "2进3和3进4候选先按保守效用形成Top1/Top2影子序列持续记账；正式买入另须通过独立策略留出期",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",

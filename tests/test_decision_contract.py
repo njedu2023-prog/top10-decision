@@ -483,7 +483,7 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "ready": True,
                     "promoted": promoted,
                     "current_market_sentiment": {
-                        "market_limit_up_industry_top5": [
+                        "market_limit_up_industry_top10": [
                             {
                                 "rank": 1,
                                 "industry": "银行",
@@ -519,7 +519,7 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertIn("observation_statistics", plan)
         self.assertIn("market_sentiment", plan)
         self.assertEqual(
-            plan["market_sentiment"]["limit_up_industry_top5"],
+            plan["market_sentiment"]["limit_up_industry_top10"],
             [
                 {
                     "rank": 1,
@@ -534,6 +534,10 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "share": 0.2,
                 },
             ],
+        )
+        self.assertEqual(
+            plan["market_sentiment"]["limit_up_industry_top5"],
+            plan["market_sentiment"]["limit_up_industry_top10"][:5],
         )
 
     def test_promoted_model_still_rejects_above_ten_percent_board(self) -> None:
