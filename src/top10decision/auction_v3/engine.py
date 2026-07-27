@@ -4914,7 +4914,8 @@ class AuctionV3Engine:
             <= pd.to_numeric(out["diagnostic_gap"], errors="coerce") + EPS
         ).fillna(False).astype(int)
         out["shadow_market_filled"] = (
-            out["shadow_selected"].eq(1) & out["market_fill"].eq(1)
+            out["shadow_selected"].eq(1)
+            & pd.to_numeric(out["net_return"], errors="coerce").notna()
         ).astype(int)
         out["shadow_limit_filled"] = (
             out["shadow_selected"].eq(1)
@@ -4986,6 +4987,13 @@ class AuctionV3Engine:
         )
         selected = oos[rank.le(float(top_n)).fillna(False)].copy()
         signal_dates = set(selected["signal_date"].astype(str))
+        market_buyable = pd.to_numeric(
+            selected.get(
+                "market_fill",
+                pd.Series(0, index=selected.index),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
         if respect_limit:
             filled = selected[
                 pd.to_numeric(
@@ -5008,13 +5016,13 @@ class AuctionV3Engine:
             filled = selected[
                 pd.to_numeric(
                     selected.get(
-                        "market_fill",
-                        pd.Series(0, index=selected.index),
+                        "net_return",
+                        pd.Series(np.nan, index=selected.index),
                     ),
                     errors="coerce",
-                ).fillna(0).eq(1)
+                ).notna()
             ].copy()
-            execution_mode = "market_at_open_proxy"
+            execution_mode = "forced_market_open_truth"
         realized = pd.to_numeric(
             filled.get(
                 "net_return",
@@ -5064,6 +5072,10 @@ class AuctionV3Engine:
             "filled_trades": int(len(realized)),
             "fill_rate": _safe_metric(
                 len(realized) / len(selected) if len(selected) else np.nan
+            ),
+            "market_buyable_trades": int(market_buyable.sum()),
+            "market_buyable_rate": _safe_metric(
+                market_buyable.mean() if len(selected) else np.nan
             ),
             "mean_trade_net_return": _safe_metric(realized.mean()),
             "median_trade_net_return": _safe_metric(realized.median()),
