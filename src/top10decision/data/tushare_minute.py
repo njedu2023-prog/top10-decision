@@ -13,6 +13,44 @@ import requests
 
 API_URL = "https://api.tushare.pro"
 MINUTE_FIELDS = ("time", "open", "close", "high", "low", "vol", "amount")
+DAILY_CLOSE_FIELDS = (
+    "ts_code",
+    "trade_date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "pre_close",
+    "vol",
+    "amount",
+    "pct_chg",
+)
+DAILY_LIMIT_FIELDS = (
+    "trade_date",
+    "ts_code",
+    "up_limit",
+    "down_limit",
+)
+DAILY_LIMIT_LIST_FIELDS = (
+    "trade_date",
+    "ts_code",
+    "name",
+    "limit_type",
+    "close",
+    "up_limit",
+    "down_limit",
+    "open_times",
+    "fd_amount",
+    "first_time",
+    "last_time",
+    "limit_times",
+    "up_stat",
+    "industry",
+    "turnover_ratio",
+    "amount",
+    "float_mv",
+    "total_mv",
+)
 AUCTION_OPEN_FIELDS = (
     "ts_code",
     "trade_date",
@@ -24,6 +62,47 @@ AUCTION_OPEN_FIELDS = (
     "amount",
     "vwap",
 )
+
+
+def _normalize_trade_date_partition(
+    frame: pd.DataFrame,
+    trade_date: str,
+    *,
+    numeric_columns: Iterable[str] = (),
+) -> pd.DataFrame:
+    if frame.empty:
+        return frame.copy()
+    if "trade_date" not in frame.columns:
+        raise RuntimeError("Tushare snapshot has no trade_date column")
+    out = frame.copy()
+    out["trade_date"] = (
+        out["trade_date"]
+        .astype(str)
+        .str.replace(r"\D", "", regex=True)
+        .str[:8]
+    )
+    source_dates = set(
+        out.loc[
+            out["trade_date"].str.fullmatch(r"\d{8}", na=False),
+            "trade_date",
+        ]
+    )
+    if source_dates != {trade_date}:
+        raise RuntimeError(
+            "Tushare snapshot trade_date mismatch: "
+            f"requested={trade_date}, actual={sorted(source_dates)}"
+        )
+    if "ts_code" in out.columns:
+        out["ts_code"] = out["ts_code"].map(normalize_code)
+        out = out[out["ts_code"].ne("")]
+    for column in numeric_columns:
+        if column in out.columns:
+            out[column] = pd.to_numeric(out[column], errors="coerce")
+    if "ts_code" in out.columns:
+        out = out.drop_duplicates("ts_code", keep="last").sort_values(
+            "ts_code"
+        )
+    return out.reset_index(drop=True)
 
 
 def normalize_code(value: Any) -> str:
@@ -153,6 +232,62 @@ class TushareClient:
         frame["is_open"] = pd.to_numeric(frame["is_open"], errors="coerce").fillna(0).astype(int)
         return frame.sort_values("cal_date").drop_duplicates("cal_date", keep="last")
 
+    def daily_close(self, trade_date: str) -> pd.DataFrame:
+        frame = self.call(
+            "daily",
+            {"trade_date": str(trade_date)},
+            DAILY_CLOSE_FIELDS,
+        )
+        return _normalize_trade_date_partition(
+            frame,
+            str(trade_date),
+            numeric_columns=(
+                "open",
+                "high",
+                "low",
+                "close",
+                "pre_close",
+                "vol",
+                "amount",
+                "pct_chg",
+            ),
+        )
+
+    def daily_limits(self, trade_date: str) -> pd.DataFrame:
+        frame = self.call(
+            "stk_limit",
+            {"trade_date": str(trade_date)},
+            DAILY_LIMIT_FIELDS,
+        )
+        return _normalize_trade_date_partition(
+            frame,
+            str(trade_date),
+            numeric_columns=("up_limit", "down_limit"),
+        )
+
+    def daily_limit_list(self, trade_date: str) -> pd.DataFrame:
+        frame = self.call(
+            "limit_list_d",
+            {"trade_date": str(trade_date)},
+            DAILY_LIMIT_LIST_FIELDS,
+        )
+        return _normalize_trade_date_partition(
+            frame,
+            str(trade_date),
+            numeric_columns=(
+                "close",
+                "up_limit",
+                "down_limit",
+                "open_times",
+                "fd_amount",
+                "limit_times",
+                "turnover_ratio",
+                "amount",
+                "float_mv",
+                "total_mv",
+            ),
+        )
+
     def current_minute(self, ts_code: str, freq: str = "1MIN") -> pd.DataFrame:
         code = normalize_code(ts_code)
         if not code:
@@ -242,6 +377,109 @@ def write_calendar(frame: pd.DataFrame, root: Path) -> Path:
     return path
 
 
+def write_daily_close_snapshot(
+    daily: pd.DataFrame,
+    limits: pd.DataFrame,
+    limit_list: pd.DataFrame,
+    root: Path,
+    trade_date: str,
+) -> tuple[dict[str, Path], Path]:
+    """Persist a complete, date-verified close partition for Decision truth."""
+    daily = _normalize_trade_date_partition(
+        daily,
+        trade_date,
+        numeric_columns=(
+            "open",
+            "high",
+            "low",
+            "close",
+            "pre_close",
+            "vol",
+            "amount",
+            "pct_chg",
+        ),
+    )
+    limits = _normalize_trade_date_partition(
+        limits,
+        trade_date,
+        numeric_columns=("up_limit", "down_limit"),
+    )
+    limit_list = _normalize_trade_date_partition(
+        limit_list,
+        trade_date,
+        numeric_columns=(
+            "close",
+            "up_limit",
+            "down_limit",
+            "open_times",
+            "fd_amount",
+            "limit_times",
+            "turnover_ratio",
+            "amount",
+            "float_mv",
+            "total_mv",
+        ),
+    )
+    if len(daily) < 3000:
+        raise RuntimeError(
+            f"incomplete Tushare daily close: rows={len(daily)}"
+        )
+    if len(limits) < 3000:
+        raise RuntimeError(
+            f"incomplete Tushare daily limit table: rows={len(limits)}"
+        )
+
+    target = (
+        root
+        / "data"
+        / "market"
+        / "raw"
+        / trade_date[:4]
+        / trade_date
+    )
+    target.mkdir(parents=True, exist_ok=True)
+    frames = {
+        "daily.csv": daily,
+        "stk_limit.csv": limits,
+        "limit_list_d.csv": limit_list,
+    }
+    paths: dict[str, Path] = {}
+    digests: dict[str, str] = {}
+    for filename, frame in frames.items():
+        payload = frame.to_csv(index=False, lineterminator="\n")
+        path = target / filename
+        temporary = path.with_name(f".{path.name}.tmp")
+        temporary.write_text(payload, encoding="utf-8-sig")
+        temporary.replace(path)
+        paths[filename] = path
+        digests[filename] = hashlib.sha256(
+            payload.encode("utf-8")
+        ).hexdigest()
+
+    meta_path = target / "_tushare_close_meta.json"
+    meta = {
+        "schema_version": "decision_tushare_close_truth_v1",
+        "source": "tushare",
+        "trade_date": trade_date,
+        "daily_rows": int(len(daily)),
+        "limit_rows": int(len(limits)),
+        "limit_list_rows": int(len(limit_list)),
+        "files": {
+            filename: {
+                "path": str(path.relative_to(root)),
+                "sha256": digests[filename],
+            }
+            for filename, path in paths.items()
+        },
+        "credential_persisted": False,
+    }
+    meta_path.write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return paths, meta_path
+
+
 def write_minute_snapshot(frame: pd.DataFrame, root: Path, trade_date: str, ts_code: str) -> tuple[Path, Path]:
     path = minute_output_path(root, trade_date, ts_code)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -324,6 +562,9 @@ def write_auction_open_snapshot(
 __all__ = [
     "API_URL",
     "AUCTION_OPEN_FIELDS",
+    "DAILY_CLOSE_FIELDS",
+    "DAILY_LIMIT_FIELDS",
+    "DAILY_LIMIT_LIST_FIELDS",
     "MINUTE_FIELDS",
     "TushareClient",
     "auction_open_output_path",
@@ -333,6 +574,7 @@ __all__ = [
     "opening_auction_price_from_snapshot",
     "read_minute_snapshot",
     "write_calendar",
+    "write_daily_close_snapshot",
     "write_auction_open_snapshot",
     "write_minute_snapshot",
 ]

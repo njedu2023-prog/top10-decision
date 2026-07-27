@@ -592,6 +592,11 @@ class AuctionV3Engine:
             return self._market_cache[key]
         path = self._market_path(trade_date, name)
         frame = _read_csv(path) if path else pd.DataFrame()
+        if not frame.empty and "trade_date" in frame.columns:
+            source_dates = frame["trade_date"].map(_normal_date)
+            frame = frame[source_dates.eq(trade_date)].copy()
+            if not frame.empty:
+                frame["trade_date"] = trade_date
         if not frame.empty and "ts_code" in frame.columns:
             frame = frame.copy()
             frame["ts_code"] = frame["ts_code"].map(_normal_code)

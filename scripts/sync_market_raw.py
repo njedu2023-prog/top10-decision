@@ -52,6 +52,7 @@ class SourceSpec:
     local_stem: str
     upstream_name: str
     required: bool = False
+    date_scoped: bool = True
 
 
 SOURCE_SPECS: list[SourceSpec] = [
@@ -63,10 +64,10 @@ SOURCE_SPECS: list[SourceSpec] = [
     SourceSpec("limit_list_d", "limit_list_d.csv", required=False),
     SourceSpec("limit_up_tags", "limit_up_tags.csv", required=False),
     SourceSpec("moneyflow_hsgt", "moneyflow_hsgt.csv", required=False),
-    SourceSpec("namechange", "namechange.csv", required=False),
+    SourceSpec("namechange", "namechange.csv", required=False, date_scoped=False),
     SourceSpec("stk_auction", "stk_auction.csv", required=False),
     SourceSpec("stk_limit", "stk_limit.csv", required=True),
-    SourceSpec("stock_basic", "stock_basic.csv", required=True),
+    SourceSpec("stock_basic", "stock_basic.csv", required=True, date_scoped=False),
     SourceSpec("top_list", "top_list.csv", required=False),
 ]
 
@@ -169,7 +170,7 @@ def _infer_trade_date_from_csv_text(text: str) -> str | None:
         return None
 
     try:
-        reader = csv.DictReader(io.StringIO(text))
+        reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
         first_row = next(reader, None)
         if not first_row:
             return None
@@ -183,6 +184,38 @@ def _infer_trade_date_from_csv_text(text: str) -> str | None:
         return None
 
     return None
+
+
+def _fetch_first_matching_trade_date(
+    urls: list[str],
+    *,
+    expected_trade_date: str | None,
+    date_scoped: bool,
+    token: str | None = None,
+) -> tuple[str | None, str | None, int | None, str | None, str]:
+    last_code: int | None = None
+    rejected_dates: list[str] = []
+    for url in urls:
+        ok, text, code = _http_get_text(url, token=token)
+        last_code = code
+        if not ok or not text:
+            continue
+        source_trade_date = _infer_trade_date_from_csv_text(text)
+        if expected_trade_date and date_scoped:
+            if source_trade_date != expected_trade_date:
+                rejected_dates.append(source_trade_date or "missing")
+                continue
+        return url, text, code, source_trade_date, ""
+
+    if rejected_dates:
+        actual = ",".join(dict.fromkeys(rejected_dates))
+        error = (
+            "trade_date_mismatch:"
+            f"requested={expected_trade_date},actual={actual}"
+        )
+    else:
+        error = "not_found_in_candidate_urls"
+    return None, None, last_code, None, error
 
 
 def _infer_trade_date_from_meta(meta: dict[str, Any]) -> str | None:
@@ -302,9 +335,7 @@ def main() -> int:
 
     results: list[dict[str, Any]] = []
     required_failures: list[str] = []
-
-    daily_cache_text: str | None = None
-    daily_cache_url: str | None = None
+    downloaded_texts: dict[str, str] = {}
 
     for spec in SOURCE_SPECS:
         urls = _build_candidate_urls(
@@ -315,30 +346,29 @@ def main() -> int:
             trade_date=trade_date,
         )
 
-        hit_url: str | None = None
-        text: str | None = None
-        last_code: int | None = None
-
-        if spec.local_stem == "daily" and daily_cache_text is not None:
-            hit_url = daily_cache_url
-            text = daily_cache_text
-            last_code = 200
-        else:
-            hit_url, text, last_code = _fetch_first_available(urls, token=github_token)
-            if spec.local_stem == "daily" and hit_url and text:
-                daily_cache_url = hit_url
-                daily_cache_text = text
+        hit_url, text, last_code, source_trade_date, error = (
+            _fetch_first_matching_trade_date(
+                urls,
+                expected_trade_date=trade_date,
+                date_scoped=spec.date_scoped,
+                token=github_token,
+            )
+        )
 
         if hit_url and text:
             if resolved_trade_date is None and spec.local_stem == "daily":
-                resolved_trade_date = _infer_trade_date_from_csv_text(text)
+                resolved_trade_date = source_trade_date
+
+            downloaded_texts[spec.local_stem] = text
 
             results.append({
                 "name": spec.local_stem,
                 "upstream_name": spec.upstream_name,
                 "required": spec.required,
+                "date_scoped": spec.date_scoped,
                 "success": True,
                 "source_url": hit_url,
+                "source_trade_date": source_trade_date,
                 "status_code": last_code,
                 "error": "",
             })
@@ -347,16 +377,51 @@ def main() -> int:
                 "name": spec.local_stem,
                 "upstream_name": spec.upstream_name,
                 "required": spec.required,
+                "date_scoped": spec.date_scoped,
                 "success": False,
                 "source_url": "",
+                "source_trade_date": None,
                 "status_code": last_code,
-                "error": "not_found_in_candidate_urls",
+                "error": error,
             })
             if spec.required:
                 required_failures.append(spec.local_stem)
 
     if resolved_trade_date is None:
         print("[sync_market_raw] ERROR: 无法解析 trade_date（既未显式传入，也无法从上游 meta/daily 推断）")
+        return 2
+
+    for item in results:
+        if not item["success"] or not item["date_scoped"]:
+            continue
+        source_trade_date = item.get("source_trade_date")
+        if source_trade_date == resolved_trade_date:
+            continue
+        item["success"] = False
+        item["error"] = (
+            "trade_date_mismatch:"
+            f"requested={resolved_trade_date},"
+            f"actual={source_trade_date or 'missing'}"
+        )
+        downloaded_texts.pop(str(item["name"]), None)
+        if item["required"]:
+            required_failures.append(str(item["name"]))
+
+    if required_failures:
+        print(f"[sync_market_raw] resolved_trade_date={resolved_trade_date}")
+        print(f"[sync_market_raw] source_repo={owner}/{repo}@{branch}")
+        for item in results:
+            status = "OK" if item.get("success") else "FAIL"
+            print(
+                f"[sync_market_raw] {status} {item['name']} "
+                f"url={item.get('source_url', '')} "
+                f"source_trade_date={item.get('source_trade_date') or ''} "
+                f"error={item.get('error', '')}"
+            )
+        print(
+            "[sync_market_raw] ERROR: required files unavailable for the "
+            f"requested session -> {sorted(set(required_failures))}"
+        )
         return 2
 
     write_failures: list[str] = []
@@ -374,16 +439,7 @@ def main() -> int:
             enriched_results.append(item)
             continue
 
-        hit_url = item["source_url"]
-        ok, text, code = _http_get_text(hit_url, token=github_token)
-        if not ok or not text:
-            item["success"] = False
-            item["status_code"] = code
-            item["error"] = "download_failed_on_write_phase"
-            if spec.required:
-                required_failures.append(spec.local_stem)
-            enriched_results.append(item)
-            continue
+        text = downloaded_texts[spec.local_stem]
 
         dated_path = _build_dated_path(spec.upstream_name, resolved_trade_date)
         latest_path = _build_latest_path(spec.upstream_name)
@@ -450,6 +506,8 @@ def main() -> int:
         print(
             f"[sync_market_raw] {status} {item['name']} "
             f"url={item.get('source_url', '')} "
+            f"source_trade_date={item.get('source_trade_date') or ''} "
+            f"error={item.get('error', '')} "
             f"dated={item.get('dated_path', '')} "
             f"latest={item.get('latest_path', '')}"
         )

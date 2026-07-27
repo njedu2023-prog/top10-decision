@@ -2,9 +2,8 @@ name: Verify Decision Top10 Observations
 
 on:
   schedule:
-    # A-share close truth: 16:10 Beijing, then one conditional retry at 16:40.
-    - cron: "10 8 * * 1-5"
-    - cron: "40 8 * * 1-5"
+    # A-share close truth: 16:15 Beijing, with three staggered retries.
+    - cron: "15,45 8-9 * * 1-5"
   workflow_dispatch:
     inputs:
       as_of_date:
@@ -104,6 +103,17 @@ jobs:
         run: |
           set -e
           python scripts/sync_market_raw.py --trade-date "${AS_OF_DATE}"
+
+      - name: Sync strict same-date Tushare close truth
+        if: ${{ steps.session.outputs.is_open == 'true' }}
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          AS_OF_DATE: ${{ steps.session.outputs.as_of_date }}
+        run: |
+          set -e
+          python scripts/sync_tushare_daily_close.py \
+            --trade-date "${AS_OF_DATE}" \
+            --optional
 
       - name: Sync current Decision minute truth
         if: ${{ steps.session.outputs.is_open == 'true' }}

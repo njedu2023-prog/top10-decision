@@ -654,6 +654,27 @@ class AuctionV3Test(unittest.TestCase):
             {"market_at_open_proxy"},
         )
 
+    def test_market_table_rejects_mislabeled_trade_date_partition(self) -> None:
+        trade_date = self.dates[-1]
+        daily_path = (
+            self.root
+            / "data"
+            / "market"
+            / "raw"
+            / trade_date[:4]
+            / trade_date
+            / "daily.csv"
+        )
+        stale = pd.read_csv(daily_path)
+        stale["trade_date"] = self.dates[-2]
+        stale.to_csv(daily_path, index=False)
+
+        engine = AuctionV3Engine(self.config)
+        self.assertTrue(engine.market_table(trade_date, "daily").empty)
+        snapshot = engine.market_close_display_snapshot(trade_date)
+        self.assertFalse(snapshot["available"])
+        self.assertEqual(snapshot["status"], "DAILY_CLOSE_UNAVAILABLE")
+
     def test_big_loss_probability_is_a_hard_veto(self) -> None:
         engine = AuctionV3Engine(self.config)
         history = engine.build_history()
