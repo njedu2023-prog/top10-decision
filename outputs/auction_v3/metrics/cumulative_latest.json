@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-27T16:59:08+00:00",
+  "generated_at_utc": "2026-07-27T17:49:06+00:00",
   "frozen_predictions": 536,
   "selected_predictions": 0,
   "verified_trades": 0,
@@ -19,8 +19,8 @@
   "forecast_mae": null,
   "direction_accuracy": null,
   "risk_prediction_accuracy": null,
-  "correct_rejection_rate": 0.6523297491,
-  "missed_opportunity_rate": 0.3476702509,
+  "correct_rejection_rate": 0.6762402089,
+  "missed_opportunity_rate": 0.3237597911,
   "rolling_trade_windows": {
     "20": {
       "trades": 0,
