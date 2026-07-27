@@ -35,6 +35,10 @@ class AuctionV3Test(unittest.TestCase):
             promotion_min_oos_dates=5,
             backtest_block_dates=4,
             calibration_min_dates=4,
+            policy_tuning_min_dates=4,
+            policy_min_signal_dates=2,
+            policy_min_filled_trades=2,
+            policy_max_no_signal_streak=20,
             probability_min_eval_dates=2,
             promotion_min_market_regimes=1,
             order_amount_cny=10_000,
@@ -129,13 +133,23 @@ class AuctionV3Test(unittest.TestCase):
         self.assertTrue((oos["oos_train_end"] < oos["signal_date"]).all())
         self.assertGreater(metrics["oos_dates"], 0)
 
-    def test_backtest_trade_audit_only_persists_selected_rows(self) -> None:
+    def test_backtest_persists_formal_gate_and_shadow_audits(self) -> None:
         engine = AuctionV3Engine(self.config)
         history = pd.DataFrame({"signal_date": [self.dates[0], self.dates[1]]})
         oos = pd.DataFrame(
             [
-                {"signal_date": self.dates[0], "ts_code": self.codes[0], "selected": 0},
-                {"signal_date": self.dates[1], "ts_code": self.codes[1], "selected": 1},
+                {
+                    "signal_date": self.dates[0],
+                    "ts_code": self.codes[0],
+                    "selected": 0,
+                    "shadow_selected": 1,
+                },
+                {
+                    "signal_date": self.dates[1],
+                    "ts_code": self.codes[1],
+                    "selected": 1,
+                    "shadow_selected": 1,
+                },
             ]
         )
         with (
@@ -145,9 +159,17 @@ class AuctionV3Test(unittest.TestCase):
             returned, metrics = engine.run_backtest(history)
 
         persisted = pd.read_csv(self.config.metrics_root / "backtest_trades_latest.csv")
+        gate_audit = pd.read_csv(
+            self.config.metrics_root / "backtest_gate_audit_latest.csv"
+        )
+        shadow_audit = pd.read_csv(
+            self.config.metrics_root / "backtest_shadow_latest.csv"
+        )
         self.assertEqual(len(returned), 2)
         self.assertEqual(metrics, {"promoted": False})
         self.assertEqual(persisted["ts_code"].tolist(), [self.codes[1]])
+        self.assertEqual(len(gate_audit), 2)
+        self.assertEqual(len(shadow_audit), 2)
 
     def test_prediction_is_frozen_and_has_actionable_price(self) -> None:
         engine = AuctionV3Engine(self.config)
@@ -195,7 +217,7 @@ class AuctionV3Test(unittest.TestCase):
         self.assertTrue(
             first["feature_contract"]
             .astype(str)
-            .str.contains("CALIBRATED_NO_T_LEAKAGE")
+            .str.contains("NESTED_POLICY_NO_T_LEAKAGE")
             .all()
         )
         selected = first[first["selected"].eq(1)]
@@ -265,16 +287,44 @@ class AuctionV3Test(unittest.TestCase):
         legacy = revised.copy()
         legacy["model_version"] = "legacy_test"
         legacy.to_csv(dated, index=False)
-        migrated = engine.build_prediction(
-            signal_date,
-            candidates,
-            retrained,
-            metrics,
-        )
+        with mock.patch.object(
+            engine,
+            "_prediction_revision_allowed",
+            return_value=True,
+        ):
+            migrated = engine.build_prediction(
+                signal_date,
+                candidates,
+                retrained,
+                metrics,
+            )
         self.assertTrue((self.config.prediction_root / f"pred_{signal_date}_legacy_test.csv").exists())
         self.assertEqual({self.config.model_version}, set(migrated["model_version"]))
+        latest_fallback = migrated.copy()
+        latest_fallback["model_version"] = "latest_only_frozen"
+        latest_fallback.to_csv(
+            self.config.prediction_root / "pred_latest.csv",
+            index=False,
+        )
+        dated.unlink()
+        with mock.patch.object(
+            engine,
+            "_prediction_revision_allowed",
+            return_value=False,
+        ):
+            recovered = engine.build_prediction(
+                signal_date,
+                candidates,
+                retrained,
+                metrics,
+            )
+        self.assertTrue(dated.exists())
+        self.assertEqual(
+            {"latest_only_frozen"},
+            set(recovered["model_version"]),
+        )
         ledger, _ = engine.settle_predictions()
-        self.assertEqual(len(migrated), len(ledger))
+        self.assertEqual(len(recovered), len(ledger))
 
     def test_market_sentiment_uses_only_d_and_prior_trading_days(self) -> None:
         signal_date = self.dates[2]
@@ -552,8 +602,21 @@ class AuctionV3Test(unittest.TestCase):
         history = engine.build_history()
         bundle = engine.fit_models(history)
         self.assertIsNotNone(bundle)
+        bundle.selection_policy = {
+            "version": "test_nested_policy",
+            "ready": True,
+            "max_positions": 1,
+            "thresholds": {
+                "min_fill_probability": 0.0,
+                "min_exit_probability": 0.0,
+                "max_big_loss_probability": 0.15,
+                "min_mean_return_lcb": -1.0,
+                "min_conservative_ev": -1.0,
+                "min_selection_score": -1.0,
+            },
+        }
         bundle.loss_model = None
-        bundle.loss_constant = self.config.max_big_loss_probability + 0.01
+        bundle.loss_constant = 0.16
         focus_row = history[
             pd.to_numeric(history["limit_times"], errors="coerce").round().isin((2.0, 3.0))
         ].iloc[-1]
@@ -562,6 +625,140 @@ class AuctionV3Test(unittest.TestCase):
         self.assertEqual(score["risk_gate_pass"], 0)
         self.assertEqual(score["model_reason"], "big_loss_probability_exceeds_cap")
         self.assertTrue(np.isnan(score["recommended_max_gap"]))
+
+    def test_uninformative_profit_probability_cannot_veto_shadow_policy(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        history = engine.build_history()
+        bundle = engine.fit_models(history)
+        self.assertIsNotNone(bundle)
+        bundle.selection_policy = {
+            "version": "test_nested_policy",
+            "ready": True,
+            "max_positions": 1,
+            "thresholds": {
+                "min_fill_probability": 0.0,
+                "min_exit_probability": 0.0,
+                "max_big_loss_probability": 1.0,
+                "min_mean_return_lcb": -1.0,
+                "min_conservative_ev": -1.0,
+                "min_selection_score": -1.0,
+            },
+        }
+        bundle.return_model = None
+        bundle.return_constant = 0.02
+        bundle.calibration_bias = 0.0
+        bundle.profit_model = None
+        bundle.profit_constant = 0.01
+        bundle.loss_model = None
+        bundle.loss_constant = 0.0
+        bundle.fill_model = None
+        bundle.fill_constant = 1.0
+        bundle.exit_model = None
+        bundle.exit_constant = 1.0
+        focus_row = history[
+            pd.to_numeric(
+                history["limit_times"],
+                errors="coerce",
+            ).round().isin((2.0, 3.0))
+        ].iloc[-1]
+        score = engine._score_candidate_at_gaps(focus_row, bundle)
+        self.assertIsNotNone(score)
+        self.assertEqual(score["risk_gate_pass"], 1)
+        self.assertEqual(score["model_reason"], "ok")
+        self.assertAlmostEqual(score["predicted_profit_probability"], 0.01)
+
+    def test_policy_batch_scoring_matches_single_candidate_math(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        history = engine.build_history()
+        bundle = engine.fit_models(history)
+        self.assertIsNotNone(bundle)
+        sample = history.tail(12).copy()
+        batch = engine._score_policy_tuning_candidates(sample, bundle)
+        self.assertEqual(len(batch), len(sample))
+        for _, row in sample.iterrows():
+            policy_row = row.copy()
+            policy_row["_policy_tuning"] = 1
+            single = engine._score_candidate_at_gaps(
+                policy_row,
+                bundle,
+                apply_policy=False,
+            )
+            self.assertIsNotNone(single)
+            matched = batch[
+                batch["signal_date"].astype(str).eq(
+                    str(row["signal_date"])
+                )
+                & batch["ts_code"].astype(str).eq(str(row["ts_code"]))
+            ]
+            self.assertEqual(len(matched), 1)
+            actual = matched.iloc[0]
+            for field in (
+                "diagnostic_gap",
+                "predicted_net_return",
+                "predicted_mean_return_lcb",
+                "predicted_big_loss_probability",
+                "predicted_continuation_limit_up_probability",
+                "predicted_fill_probability",
+                "predicted_exit_probability",
+                "conservative_ev",
+                "selection_score",
+            ):
+                self.assertAlmostEqual(
+                    float(actual[field]),
+                    float(single[field]),
+                    places=10,
+                )
+
+    def test_general_batch_scoring_matches_single_candidate_math(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        history = engine.build_history()
+        bundle = engine.fit_models(history)
+        self.assertIsNotNone(bundle)
+        signal_date = history["signal_date"].astype(str).iloc[-1]
+        sample = history[
+            history["signal_date"].astype(str).eq(signal_date)
+        ].copy()
+        batch = engine.score_candidates(
+            sample,
+            bundle,
+            apply_policy=False,
+        )
+        self.assertEqual(len(batch), len(sample))
+        for _, row in sample.iterrows():
+            single = engine._score_candidate_at_gaps(
+                row,
+                bundle,
+                apply_policy=False,
+            )
+            self.assertIsNotNone(single)
+            matched = batch[
+                batch["signal_date"].astype(str).eq(
+                    str(row["signal_date"])
+                )
+                & batch["ts_code"].astype(str).eq(str(row["ts_code"]))
+            ]
+            self.assertEqual(len(matched), 1)
+            actual = matched.iloc[0]
+            for field in (
+                "diagnostic_gap",
+                "predicted_net_return",
+                "predicted_return_lcb",
+                "predicted_return_ucb",
+                "predicted_mean_return_lcb",
+                "predicted_mean_return_ucb",
+                "predicted_profit_probability",
+                "predicted_big_loss_probability",
+                "predicted_continuation_limit_up_probability",
+                "predicted_fill_probability",
+                "predicted_exit_probability",
+                "conservative_ev",
+                "selection_score",
+            ):
+                self.assertAlmostEqual(
+                    float(actual[field]),
+                    float(single[field]),
+                    places=10,
+                )
 
     def test_formal_gate_rejects_candidates_outside_focus_stages(self) -> None:
         engine = AuctionV3Engine(self.config)
@@ -698,7 +895,9 @@ class AuctionV3Test(unittest.TestCase):
         self.assertIn("actual_buy_price", ledger.columns)
         self.assertIn("actual_exit_price", ledger.columns)
         self.assertIn("truth_source", ledger.columns)
-        self.assertGreaterEqual(cumulative.get("selected_predictions", 0), 1)
+        self.assertGreaterEqual(cumulative.get("frozen_predictions", 0), 1)
+        self.assertIn("shadow_selected", prediction.columns)
+        self.assertGreaterEqual(int(prediction["shadow_selected"].sum()), 1)
         observation, observation_metrics = engine.settle_observations()
         self.assertFalse(observation.empty)
         self.assertIn("market_daily_return", observation.columns)
