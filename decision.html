@@ -993,7 +993,7 @@
         <td class="${valueTone(row.observation_price_vs_cap)}">${signedPct(row.observation_price_vs_cap)}</td>
         <td class="${valueTone(row.market_daily_return)}">${signedPct(row.market_daily_return)}</td>
         <td class="${valueTone(row.observation_t_return)}">${signedPct(row.observation_t_return)}</td>
-        <td>${escapeHtml(continuationLabel(row.continuation_limit_up_hit))}</td>
+        <td class="${finiteNumber(row.continuation_limit_up_hit) === 1 ? "positive" : ""}">${escapeHtml(continuationLabel(row.continuation_limit_up_hit))}</td>
         <td><span class="truth-badge ${truthClass(row.validation_status)}">${escapeHtml(row.validation_status_label || "待验证")}</span></td>
         <td class="${valueTone(row.actual_net_return)}">${signedPct(row.actual_net_return)}</td>
         <td>${pct(row.predicted_continuation_limit_up_probability)}</td>
