@@ -29,7 +29,7 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  group: decision-v8-main-writer
+  group: decision-auction-main-writer
   cancel-in-progress: false
 
 jobs:
