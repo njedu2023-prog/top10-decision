@@ -171,6 +171,47 @@ class AuctionV3Test(unittest.TestCase):
         self.assertEqual(len(gate_audit), 2)
         self.assertEqual(len(shadow_audit), 2)
 
+    def test_market_shadow_forces_open_truth_and_discloses_buyability(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        oos = pd.DataFrame(
+            [
+                {
+                    "signal_date": self.dates[0],
+                    "shadow_rank": 1,
+                    "market_fill": 0,
+                    "shadow_cap_accepted": 0,
+                    "net_return": -0.05,
+                    "continuation_limit_up_hit": 0,
+                },
+                {
+                    "signal_date": self.dates[1],
+                    "shadow_rank": 1,
+                    "market_fill": 1,
+                    "shadow_cap_accepted": 1,
+                    "net_return": 0.03,
+                    "continuation_limit_up_hit": 1,
+                },
+            ]
+        )
+
+        market = engine._shadow_policy_metrics(
+            oos,
+            top_n=1,
+            respect_limit=False,
+        )
+        limited = engine._shadow_policy_metrics(
+            oos,
+            top_n=1,
+            respect_limit=True,
+        )
+
+        self.assertEqual(market["execution_mode"], "forced_market_open_truth")
+        self.assertEqual(market["filled_trades"], 2)
+        self.assertEqual(market["fill_rate"], 1.0)
+        self.assertEqual(market["market_buyable_trades"], 1)
+        self.assertEqual(market["market_buyable_rate"], 0.5)
+        self.assertEqual(limited["filled_trades"], 1)
+
     def test_prediction_is_frozen_and_has_actionable_price(self) -> None:
         engine = AuctionV3Engine(self.config)
         history = engine.build_history()
