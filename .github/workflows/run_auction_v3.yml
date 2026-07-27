@@ -1,4 +1,4 @@
-name: Run Decision Manual Auction Guidance V8
+name: Run Decision Manual Auction Guidance V9
 
 on:
   push:
@@ -39,11 +39,11 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  group: decision-v8-main-writer
+  group: decision-auction-main-writer
   cancel-in-progress: false
 
 jobs:
-  auction_guidance_v8:
+  auction_guidance_v9:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -89,7 +89,7 @@ jobs:
           fi
           python scripts/sync_tushare_minute.py "${args[@]}"
 
-      - name: Run Decision manual auction guidance V8
+      - name: Run Decision manual auction guidance V9
         env:
           SIGNAL_DATE: ${{ inputs.signal_date }}
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
@@ -115,6 +115,8 @@ jobs:
           set -e
           test -f outputs/auction_v3/predictions/pred_latest.csv
           test -f outputs/auction_v3/metrics/backtest_latest.json
+          test -f outputs/auction_v3/metrics/backtest_gate_audit_latest.csv
+          test -f outputs/auction_v3/metrics/backtest_shadow_latest.csv
           test -f outputs/auction_v3/metrics/cumulative_latest.json
           test -f outputs/auction_v3/metrics/observation_cumulative_latest.json
           test -f outputs/auction_v3/verification/observation_latest.csv
@@ -143,10 +145,10 @@ jobs:
             -print0 | xargs -0 -r git add --
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision guidance V8 has no changed artifacts"
+            echo "Decision guidance V9 has no changed artifacts"
             exit 0
           fi
-          git commit -m "auto: update Decision V8 guidance and validation"
+          git commit -m "auto: update Decision V9 guidance and validation"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main
