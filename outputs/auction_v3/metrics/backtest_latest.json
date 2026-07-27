@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-27T15:36:56+00:00",
+  "generated_at_utc": "2026-07-27T16:58:52+00:00",
   "model_version": "auction_v10_tp15_sl5_time1100_oos_1",
   "history_dates": 132,
   "oos_dates": 10,
@@ -343,5 +343,5 @@
       "nav": 1.0
     }
   ],
-  "model_artifact_sha256": "d2347f958f0b3026765cc6189cd90159911fc82346ae9b0886bea8ae661a0c73"
+  "model_artifact_sha256": "6faa97550941d8115afcf48d288b25cb5d1027b7e6956ca6768b45629dd21ff9"
 }
