@@ -16,7 +16,10 @@ from top10decision.decision.observation import (
 
 
 TARGET_INDEPENDENT_OOS_DATES = 500
-WALKFORWARD_WARMUP_DATES = 140
+# The first walk-forward block can be unavailable while the market-fill
+# training sample is still below its minimum row count. Keep enough history
+# for 500 independently scored dates even when that block is skipped.
+WALKFORWARD_WARMUP_DATES = 200
 TARGET_HISTORY_DATES = TARGET_INDEPENDENT_OOS_DATES + WALKFORWARD_WARMUP_DATES
 
 
