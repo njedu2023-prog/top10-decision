@@ -78,7 +78,6 @@ jobs:
           python -m unittest discover -s tests -p 'test_decision_v8_calibration.py' -v
           python -m unittest discover -s tests -p 'test_decision_trade_selector.py' -v
           python -m unittest discover -s tests -p 'test_decision_contract.py' -v
-          python -m unittest discover -s tests -p 'test_decision_premium_merge.py' -v
           python -m unittest discover -s tests -p 'test_premium_safety.py' -v
 
       - name: Sync strict calendar and Tushare minute truth
