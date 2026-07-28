@@ -1,9 +1,477 @@
 {
-  "generated_at_utc": "2026-07-28T15:41:29+00:00",
-  "model_version": "auction_v11_tplus1_open0930_oos_1",
-  "model_artifact_sha256": "6f560d51d20e5842a6149d0da28681907b63c4762a6a6c5fd7c170fe0446ef5b",
+  "generated_at_utc": "2026-07-28T16:23:32+00:00",
+  "model_version": "auction_v12_top10_trade_selector_oos_1",
+  "model_artifact_sha256": "157191b96b1839693f0c68c56fd443d615aab067cdd5ca557a99fd74c0c02615",
   "ready": true,
   "promoted": false,
+  "first_layer_promoted": false,
+  "trade_selector": {
+    "schema_version": "decision_trade_selector_backtest_v1",
+    "version": "trade_selector_v1_nested_oos_top10",
+    "feature_contract": "OBSERVATION_TOP10_D_CLOSE_ONLY_CONDITIONAL_FILL_RETURN_NO_T_OR_T1_LEAKAGE",
+    "target": "conditional net return from actual T auction/open fill to predeclared T+1 09:30 exit after costs",
+    "return_training_scope": "market_fill_eq_1_only",
+    "top10_contract": "exact_daily_observation_rank_without_padding",
+    "max_positions": 2,
+    "oos_dates": 356,
+    "oos_start": "20250207",
+    "oos_end": "20260724",
+    "oos_rows": 3039,
+    "walkforward_refits": 9,
+    "policy_ready_fold_ratio": 0.3139190523198421,
+    "formal_policy_oos": {
+      "all_candidates": {
+        "execution_mode": "forced_market_open_truth",
+        "signals": 135,
+        "signal_dates": 93,
+        "signal_date_ratio": 0.2612359550561798,
+        "max_no_signal_streak": 120,
+        "filled_trades": 135,
+        "mean_trade_net_return": -0.0034200296882573463,
+        "median_trade_net_return": -0.0062024503211315874,
+        "win_rate": 0.4666666666666667,
+        "continuation_hit_rate": 0.3851851851851852,
+        "realized_big_loss_rate": 0.43703703703703706,
+        "tail_10pct_mean_return": -0.13996480401969288,
+        "worst_trade_net_return": -0.2476506849315069,
+        "profit_factor": 0.904320667673905,
+        "mean_daily_return": -0.0006321897418024227,
+        "stress_2x_cost_mean_trade_return": -0.00792002968825735,
+        "cumulative_return": -0.3725309974678751,
+        "max_drawdown": -0.5389457200558381,
+        "bootstrap_probability_mean_positive": 0.32,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 97,
+            "mean_net_return": -0.005806993045124815,
+            "win_rate": 0.422680412371134,
+            "continuation_hit_rate": 0.35051546391752575
+          },
+          "3→4": {
+            "trades": 38,
+            "mean_net_return": 0.0026730083542727693,
+            "win_rate": 0.5789473684210527,
+            "continuation_hit_rate": 0.47368421052631576
+          }
+        }
+      },
+      "market_buyable_only": {
+        "execution_mode": "market_buyable_at_open_truth",
+        "signals": 135,
+        "signal_dates": 93,
+        "signal_date_ratio": 0.2612359550561798,
+        "max_no_signal_streak": 120,
+        "filled_trades": 73,
+        "mean_trade_net_return": -0.01730337842558186,
+        "median_trade_net_return": -0.0329552845528452,
+        "win_rate": 0.3424657534246575,
+        "continuation_hit_rate": 0.2602739726027397,
+        "realized_big_loss_rate": 0.5342465753424658,
+        "tail_10pct_mean_return": -0.14973936509811508,
+        "worst_trade_net_return": -0.2476506849315069,
+        "profit_factor": 0.6129199933752444,
+        "mean_daily_return": -0.0029428877289967943,
+        "stress_2x_cost_mean_trade_return": -0.021803378425581863,
+        "cumulative_return": -0.7079937599100061,
+        "max_drawdown": -0.7742705268740527,
+        "bootstrap_probability_mean_positive": 0.008,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 53,
+            "mean_net_return": -0.02010118720191105,
+            "win_rate": 0.32075471698113206,
+            "continuation_hit_rate": 0.22641509433962265
+          },
+          "3→4": {
+            "trades": 20,
+            "mean_net_return": -0.0098891851683095,
+            "win_rate": 0.4,
+            "continuation_hit_rate": 0.35
+          }
+        }
+      }
+    },
+    "shadow_policy_oos": {
+      "all_candidates": {
+        "execution_mode": "forced_market_open_truth",
+        "signals": 404,
+        "signal_dates": 294,
+        "signal_date_ratio": 0.8258426966292135,
+        "max_no_signal_streak": 8,
+        "filled_trades": 404,
+        "mean_trade_net_return": 0.0024491705057643133,
+        "median_trade_net_return": -0.001233910225671,
+        "win_rate": 0.49257425742574257,
+        "continuation_hit_rate": 0.39851485148514854,
+        "realized_big_loss_rate": 0.3811881188118812,
+        "tail_10pct_mean_return": -0.13750513013839005,
+        "worst_trade_net_return": -0.3020206611570248,
+        "profit_factor": 1.0755466797355748,
+        "mean_daily_return": 0.0011535331604504376,
+        "stress_2x_cost_mean_trade_return": -0.002050829494235689,
+        "cumulative_return": -0.3326646537470054,
+        "max_drawdown": -0.7725567380686994,
+        "bootstrap_probability_mean_positive": 0.616,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 290,
+            "mean_net_return": -0.002099782155360194,
+            "win_rate": 0.45517241379310347,
+            "continuation_hit_rate": 0.3413793103448276
+          },
+          "3→4": {
+            "trades": 114,
+            "mean_net_return": 0.014021067626168757,
+            "win_rate": 0.5877192982456141,
+            "continuation_hit_rate": 0.543859649122807
+          }
+        }
+      },
+      "market_buyable_only": {
+        "execution_mode": "market_buyable_at_open_truth",
+        "signals": 404,
+        "signal_dates": 294,
+        "signal_date_ratio": 0.8258426966292135,
+        "max_no_signal_streak": 8,
+        "filled_trades": 167,
+        "mean_trade_net_return": -0.0065475821168109,
+        "median_trade_net_return": -0.011285349499165206,
+        "win_rate": 0.41916167664670656,
+        "continuation_hit_rate": 0.281437125748503,
+        "realized_big_loss_rate": 0.4431137724550898,
+        "tail_10pct_mean_return": -0.13677972993893414,
+        "worst_trade_net_return": -0.2476506849315069,
+        "profit_factor": 0.8213771208952811,
+        "mean_daily_return": -0.002601148626257546,
+        "stress_2x_cost_mean_trade_return": -0.0110475821168109,
+        "cumulative_return": -0.7442403467622255,
+        "max_drawdown": -0.8191627838365951,
+        "bootstrap_probability_mean_positive": 0.11,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 123,
+            "mean_net_return": -0.007715547997475296,
+            "win_rate": 0.3983739837398374,
+            "continuation_hit_rate": 0.24390243902439024
+          },
+          "3→4": {
+            "trades": 44,
+            "mean_net_return": -0.003282586586771793,
+            "win_rate": 0.4772727272727273,
+            "continuation_hit_rate": 0.38636363636363635
+          }
+        }
+      }
+    },
+    "observation_top1_baseline": {
+      "all_candidates": {
+        "execution_mode": "forced_market_open_truth",
+        "signals": 356,
+        "signal_dates": 356,
+        "signal_date_ratio": 1.0,
+        "max_no_signal_streak": 0,
+        "filled_trades": 356,
+        "mean_trade_net_return": 0.0027358981333788918,
+        "median_trade_net_return": 0.0006489097387948556,
+        "win_rate": 0.5056179775280899,
+        "continuation_hit_rate": 0.4606741573033708,
+        "realized_big_loss_rate": 0.3539325842696629,
+        "tail_10pct_mean_return": -0.15346522281929642,
+        "worst_trade_net_return": -0.2250304518664047,
+        "profit_factor": 1.0799038256064701,
+        "mean_daily_return": 0.0027358981333788918,
+        "stress_2x_cost_mean_trade_return": -0.0017641018666211112,
+        "cumulative_return": -0.3341602649524069,
+        "max_drawdown": -0.901288442110428,
+        "bootstrap_probability_mean_positive": 0.75,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 271,
+            "mean_net_return": 0.0038239055406787867,
+            "win_rate": 0.5018450184501845,
+            "continuation_hit_rate": 0.42435424354243545
+          },
+          "3→4": {
+            "trades": 85,
+            "mean_net_return": -0.0007329254828360743,
+            "win_rate": 0.5176470588235295,
+            "continuation_hit_rate": 0.5764705882352941
+          }
+        }
+      },
+      "market_buyable_only": {
+        "execution_mode": "market_buyable_at_open_truth",
+        "signals": 356,
+        "signal_dates": 356,
+        "signal_date_ratio": 1.0,
+        "max_no_signal_streak": 0,
+        "filled_trades": 143,
+        "mean_trade_net_return": -0.009884286629005234,
+        "median_trade_net_return": -0.013910808406236205,
+        "win_rate": 0.38461538461538464,
+        "continuation_hit_rate": 0.22377622377622378,
+        "realized_big_loss_rate": 0.4125874125874126,
+        "tail_10pct_mean_return": -0.13758211213870675,
+        "worst_trade_net_return": -0.1923172588832486,
+        "profit_factor": 0.7245271627701619,
+        "mean_daily_return": -0.0039703735616509785,
+        "stress_2x_cost_mean_trade_return": -0.014384286629005233,
+        "cumulative_return": -0.8472329581868041,
+        "max_drawdown": -0.8618026053141475,
+        "bootstrap_probability_mean_positive": 0.066,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 123,
+            "mean_net_return": -0.003938973726169305,
+            "win_rate": 0.3983739837398374,
+            "continuation_hit_rate": 0.21951219512195122
+          },
+          "3→4": {
+            "trades": 20,
+            "mean_net_return": -0.04644796098144619,
+            "win_rate": 0.3,
+            "continuation_hit_rate": 0.25
+          }
+        }
+      }
+    },
+    "observation_top2_baseline": {
+      "all_candidates": {
+        "execution_mode": "forced_market_open_truth",
+        "signals": 712,
+        "signal_dates": 356,
+        "signal_date_ratio": 1.0,
+        "max_no_signal_streak": 0,
+        "filled_trades": 712,
+        "mean_trade_net_return": -0.0006549912647105538,
+        "median_trade_net_return": -0.001046624431034671,
+        "win_rate": 0.49157303370786515,
+        "continuation_hit_rate": 0.4410112359550562,
+        "realized_big_loss_rate": 0.3806179775280899,
+        "tail_10pct_mean_return": -0.15691970180945308,
+        "worst_trade_net_return": -0.2755378681626929,
+        "profit_factor": 0.981525713420058,
+        "mean_daily_return": -0.0006549912647105541,
+        "stress_2x_cost_mean_trade_return": -0.005154991264710556,
+        "cumulative_return": -0.6100939264652585,
+        "max_drawdown": -0.7714387189798434,
+        "bootstrap_probability_mean_positive": 0.428,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 529,
+            "mean_net_return": 0.0005277597332840433,
+            "win_rate": 0.4896030245746692,
+            "continuation_hit_rate": 0.4064272211720227
+          },
+          "3→4": {
+            "trades": 183,
+            "mean_net_return": -0.004073981854541933,
+            "win_rate": 0.4972677595628415,
+            "continuation_hit_rate": 0.5409836065573771
+          }
+        }
+      },
+      "market_buyable_only": {
+        "execution_mode": "market_buyable_at_open_truth",
+        "signals": 712,
+        "signal_dates": 356,
+        "signal_date_ratio": 1.0,
+        "max_no_signal_streak": 0,
+        "filled_trades": 306,
+        "mean_trade_net_return": -0.013393046420636332,
+        "median_trade_net_return": -0.02108210947930577,
+        "win_rate": 0.3954248366013072,
+        "continuation_hit_rate": 0.24183006535947713,
+        "realized_big_loss_rate": 0.4477124183006536,
+        "tail_10pct_mean_return": -0.14747767171197088,
+        "worst_trade_net_return": -0.2041798719487794,
+        "profit_factor": 0.6537589828660775,
+        "mean_daily_return": -0.008779898591931658,
+        "stress_2x_cost_mean_trade_return": -0.01789304642063633,
+        "cumulative_return": -0.9761255362116817,
+        "max_drawdown": -0.9757456818781624,
+        "bootstrap_probability_mean_positive": 0.0,
+        "stage_breakdown": {
+          "2→3": {
+            "trades": 256,
+            "mean_net_return": -0.010634807657116352,
+            "win_rate": 0.3984375,
+            "continuation_hit_rate": 0.23046875
+          },
+          "3→4": {
+            "trades": 50,
+            "mean_net_return": -0.02751522888985862,
+            "win_rate": 0.38,
+            "continuation_hit_rate": 0.3
+          }
+        }
+      }
+    },
+    "production_policy": {
+      "max_positions": 1,
+      "thresholds": {
+        "min_trade_score": -0.006340229981046088,
+        "min_mean_return_lcb": -0.032854970445145563,
+        "min_fill_probability": 0.0,
+        "max_big_loss_probability": 0.5054411106135244
+      },
+      "ready": false,
+      "checks": {
+        "policy_dates": true,
+        "trades": true,
+        "buyable_trades": true,
+        "signal_date_ratio": true,
+        "no_signal_streak": true,
+        "forced_open_mean_positive": false,
+        "buyable_mean_positive": false,
+        "buyable_2x_cost_positive": false,
+        "buyable_profit_factor": false
+      },
+      "metrics": {
+        "all_candidates": {
+          "execution_mode": "forced_market_open_truth",
+          "signals": 75,
+          "signal_dates": 75,
+          "signal_date_ratio": 0.9259259259259259,
+          "max_no_signal_streak": 1,
+          "filled_trades": 75,
+          "mean_trade_net_return": -0.003853660188149145,
+          "median_trade_net_return": -0.0037308141418790864,
+          "win_rate": 0.48,
+          "continuation_hit_rate": 0.3333333333333333,
+          "realized_big_loss_rate": 0.4,
+          "tail_10pct_mean_return": -0.14567309090450842,
+          "worst_trade_net_return": -0.2039514106583072,
+          "profit_factor": 0.889222580790677,
+          "mean_daily_return": -0.0035682038779158752,
+          "stress_2x_cost_mean_trade_return": -0.008353660188149146,
+          "cumulative_return": -0.4217464689616732,
+          "max_drawdown": -0.5696610234325725,
+          "bootstrap_probability_mean_positive": 0.572,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 65,
+              "mean_net_return": -0.001709784050931697,
+              "win_rate": 0.5076923076923077,
+              "continuation_hit_rate": 0.3230769230769231
+            },
+            "3→4": {
+              "trades": 10,
+              "mean_net_return": -0.01778885508006256,
+              "win_rate": 0.3,
+              "continuation_hit_rate": 0.4
+            }
+          }
+        },
+        "market_buyable_only": {
+          "execution_mode": "market_buyable_at_open_truth",
+          "signals": 75,
+          "signal_dates": 75,
+          "signal_date_ratio": 0.9259259259259259,
+          "max_no_signal_streak": 1,
+          "filled_trades": 63,
+          "mean_trade_net_return": -0.011507598520837069,
+          "median_trade_net_return": -0.011285349499165206,
+          "win_rate": 0.42857142857142855,
+          "continuation_hit_rate": 0.23809523809523808,
+          "realized_big_loss_rate": 0.4444444444444444,
+          "tail_10pct_mean_return": -0.1428534911825326,
+          "worst_trade_net_return": -0.2039514106583072,
+          "profit_factor": 0.6903206429812646,
+          "mean_daily_return": -0.008950354405095498,
+          "stress_2x_cost_mean_trade_return": -0.016007598520837066,
+          "cumulative_return": -0.60805176130004,
+          "max_drawdown": -0.6694036347166125,
+          "bootstrap_probability_mean_positive": 0.262,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 55,
+              "mean_net_return": -0.006476848720174843,
+              "win_rate": 0.4727272727272727,
+              "continuation_hit_rate": 0.23636363636363636
+            },
+            "3→4": {
+              "trades": 8,
+              "mean_net_return": -0.04609400340038987,
+              "win_rate": 0.125,
+              "continuation_hit_rate": 0.25
+            }
+          }
+        }
+      },
+      "version": "trade_selector_v1_nested_oos_top10",
+      "reason": "best_shadow_policy_failed_profit_or_coverage_gate",
+      "evaluated_policies": 12,
+      "feasible_policies": 0
+    },
+    "production_return_selection": {
+      "selected": "ridge",
+      "passed": false,
+      "relative_rmse_improvement": -0.035552091109728526,
+      "rmse": 0.08822155448523596,
+      "constant_rmse": 0.08519277324880403,
+      "fit_rows": 896,
+      "calibration_rows": 278,
+      "training_scope": "market_fill_eq_1_only"
+    },
+    "production_probability_selection": {
+      "fill": {
+        "method": "identity",
+        "rows": 825,
+        "held_out_brier": 0.25802652283073807,
+        "constant_brier": 0.2779837654893421,
+        "beats_constant": true
+      },
+      "big_loss": {
+        "method": "constant",
+        "rows": 278,
+        "held_out_brier": 0.25009848850199945,
+        "constant_brier": 0.25009848850199945,
+        "beats_constant": false
+      }
+    },
+    "production_artifact_sha256": "fe99b8786f13aba28ecda9fc274d76b6e5a10845ba45f58b34586270c428bf1a",
+    "promotion_checks": {
+      "production_policy_ready": false,
+      "return_model_chronological_skill": false,
+      "oos_dates": true,
+      "selected_trades": true,
+      "market_buyable_trades": true,
+      "signal_date_ratio": true,
+      "no_signal_streak": false,
+      "policy_ready_fold_ratio": false,
+      "forced_open_mean_positive": false,
+      "market_buyable_mean_positive": false,
+      "market_buyable_2x_cost_positive": false,
+      "market_buyable_profit_factor": false,
+      "tail_loss_floor": false,
+      "bootstrap_probability": false,
+      "beats_observation_top1_and_top2": false
+    },
+    "promotion_failures": [
+      "production_policy_ready",
+      "return_model_chronological_skill",
+      "no_signal_streak",
+      "policy_ready_fold_ratio",
+      "forced_open_mean_positive",
+      "market_buyable_mean_positive",
+      "market_buyable_2x_cost_positive",
+      "market_buyable_profit_factor",
+      "tail_loss_floor",
+      "bootstrap_probability",
+      "beats_observation_top1_and_top2"
+    ],
+    "promoted": false,
+    "no_trade_guard": {
+      "zero_trades_cannot_promote": true,
+      "minimum_signal_date_ratio": 0.1,
+      "maximum_no_signal_streak": 40,
+      "minimum_selected_trades": 60,
+      "daily_zero_allowed": true
+    },
+    "history_rows": 4402,
+    "history_dates": 536
+  },
   "training_rows": 15022,
   "training_dates": 706,
   "calibration_rows": 3465,
@@ -1308,7 +1776,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-07-28T15:41:29+00:00",
+        "generated_at_utc": "2026-07-28T16:23:32+00:00",
         "frozen_predictions": 593,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -1353,7 +1821,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-07-28T15:41:29+00:00",
+        "generated_at_utc": "2026-07-28T16:23:32+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -1532,7 +2000,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-07-28T15:41:29+00:00",
+        "generated_at_utc": "2026-07-28T16:23:32+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -1700,8 +2168,8 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-28T15:40:35+00:00",
-    "model_version": "auction_v11_tplus1_open0930_oos_1",
+    "generated_at_utc": "2026-07-28T16:21:53+00:00",
+    "model_version": "auction_v12_top10_trade_selector_oos_1",
     "history_dates": 707,
     "oos_dates": 537,
     "walkforward_refits": 5,
@@ -1754,41 +2222,34 @@
     ],
     "market_regime_count": 7,
     "promotion_checks": {
-      "history_dates": true,
+      "production_policy_ready": false,
+      "return_model_chronological_skill": false,
       "oos_dates": true,
-      "market_regime_coverage": true,
-      "filled_trades": false,
-      "stage_focus_filled_trades": false,
-      "signal_date_ratio": false,
+      "selected_trades": true,
+      "market_buyable_trades": true,
+      "signal_date_ratio": true,
       "no_signal_streak": false,
-      "mean_daily_return": false,
-      "stress_2x_cost": false,
-      "bootstrap_95": false,
-      "rolling_20d_60pct": false,
-      "positive_months_60pct": false,
-      "month_concentration": false,
-      "beats_source_topn": true,
-      "price_cap_not_worse": true,
-      "exit_on_time_90pct": false,
-      "big_loss_rate_cap": false,
+      "policy_ready_fold_ratio": false,
+      "forced_open_mean_positive": false,
+      "market_buyable_mean_positive": false,
+      "market_buyable_2x_cost_positive": false,
+      "market_buyable_profit_factor": false,
       "tail_loss_floor": false,
-      "probability_brier_skill": false
+      "bootstrap_probability": false,
+      "beats_observation_top1_and_top2": false
     },
     "promotion_failures": [
-      "filled_trades",
-      "stage_focus_filled_trades",
-      "signal_date_ratio",
+      "production_policy_ready",
+      "return_model_chronological_skill",
       "no_signal_streak",
-      "mean_daily_return",
-      "stress_2x_cost",
-      "bootstrap_95",
-      "rolling_20d_60pct",
-      "positive_months_60pct",
-      "month_concentration",
-      "exit_on_time_90pct",
-      "big_loss_rate_cap",
+      "policy_ready_fold_ratio",
+      "forced_open_mean_positive",
+      "market_buyable_mean_positive",
+      "market_buyable_2x_cost_positive",
+      "market_buyable_profit_factor",
       "tail_loss_floor",
-      "probability_models_did_not_pass_brier_skill_gate"
+      "bootstrap_probability",
+      "beats_observation_top1_and_top2"
     ],
     "promoted": false,
     "path_oos": {},
@@ -2241,8 +2702,8 @@
       }
     },
     "top10_oos": {
-      "scope": "daily_ranked_2to3_and_3to4",
-      "ranking_field": "shadow_rank",
+      "scope": "exact_daily_observation_rank_2to3_and_3to4",
+      "ranking_field": "observation_rank",
       "top_n_cap": 10,
       "padding_policy": "none",
       "oos_dates": 537,
@@ -2250,89 +2711,76 @@
       "zero_candidate_days": 1,
       "days_below_cap": 268,
       "days_at_cap": 268,
-      "average_candidates_per_candidate_day": 8.2126865672,
+      "average_candidates_per_candidate_day": 8.212686567164178,
       "all_candidates": {
-        "cohort": "daily_top10_2to3_and_3to4",
         "execution_mode": "forced_market_open_truth",
-        "portfolio_weighting": "equal_weight_within_signal_date",
         "signals": 4402,
         "signal_dates": 536,
-        "signal_date_ratio": 0.9981378026,
+        "signal_date_ratio": 0.9981378026070763,
         "max_no_signal_streak": 1,
-        "average_signals_per_signal_date": 8.2126865672,
         "filled_trades": 4402,
-        "truth_coverage": 1.0,
-        "market_buyable_trades": 1823,
-        "market_buyable_rate": 0.4141299409,
-        "exit_on_time_rate": 0.9906860518,
-        "mean_trade_net_return": -0.0069178971,
-        "median_trade_net_return": -0.0134769254,
-        "win_rate": 0.4377555657,
-        "realized_big_loss_rate": 0.4273057701,
-        "tail_10pct_mean_return": -0.1589302443,
-        "worst_trade_net_return": -0.3415429253,
-        "profit_factor": 0.8253793087,
-        "mean_daily_return": -0.0081440483,
-        "cumulative_return": -0.9925322861,
-        "max_drawdown": -0.9928229267,
+        "mean_trade_net_return": -0.006142444419289787,
+        "median_trade_net_return": -0.01182891195693965,
+        "win_rate": 0.44434348023625625,
+        "continuation_hit_rate": 0.3880054520672422,
+        "realized_big_loss_rate": 0.42276238073602906,
+        "tail_10pct_mean_return": -0.1591166010488939,
+        "worst_trade_net_return": -0.3415429252782194,
+        "profit_factor": 0.8436524105676187,
+        "mean_daily_return": -0.007508379227391463,
+        "stress_2x_cost_mean_trade_return": -0.010642444419289788,
+        "cumulative_return": -0.989344598037212,
+        "max_drawdown": -0.9893652678248328,
         "bootstrap_probability_mean_positive": 0.0,
-        "continuation_hit_rate": 0.3682417083,
         "stage_breakdown": {
           "2→3": {
-            "trades": 3336,
-            "mean_net_return": -0.0080753834,
-            "win_rate": 0.4190647482,
-            "continuation_hit_rate": 0.3330335731
+            "trades": 3298,
+            "mean_net_return": -0.007785564790170307,
+            "win_rate": 0.42480291085506366,
+            "continuation_hit_rate": 0.3471801091570649
           },
           "3→4": {
-            "trades": 1066,
-            "mean_net_return": -0.0032955948,
-            "win_rate": 0.4962476548,
-            "continuation_hit_rate": 0.478424015
+            "trades": 1104,
+            "mean_net_return": -0.0012339199780180856,
+            "win_rate": 0.5027173913043478,
+            "continuation_hit_rate": 0.509963768115942
           }
         }
       },
       "market_buyable_only": {
-        "cohort": "daily_top10_market_buyable",
         "execution_mode": "market_buyable_at_open_truth",
-        "portfolio_weighting": "equal_weight_within_signal_date",
-        "signals": 1823,
-        "signal_dates": 501,
-        "signal_date_ratio": 0.9329608939,
-        "max_no_signal_streak": 4,
-        "average_signals_per_signal_date": 3.6387225549,
-        "filled_trades": 1823,
-        "truth_coverage": 1.0,
-        "market_buyable_trades": 1823,
-        "market_buyable_rate": 1.0,
-        "exit_on_time_rate": 0.9934174438,
-        "mean_trade_net_return": -0.0132887245,
-        "median_trade_net_return": -0.0245,
-        "win_rate": 0.3911135491,
-        "realized_big_loss_rate": 0.4733955019,
-        "tail_10pct_mean_return": -0.1541229475,
-        "worst_trade_net_return": -0.2636439689,
-        "profit_factor": 0.6850405132,
-        "mean_daily_return": -0.0126674115,
-        "cumulative_return": -0.999604449,
-        "max_drawdown": -0.9996325555,
+        "signals": 4402,
+        "signal_dates": 536,
+        "signal_date_ratio": 0.9981378026070763,
+        "max_no_signal_streak": 1,
+        "filled_trades": 1752,
+        "mean_trade_net_return": -0.013310079572311293,
+        "median_trade_net_return": -0.024695774919600674,
+        "win_rate": 0.3875570776255708,
+        "continuation_hit_rate": 0.261986301369863,
+        "realized_big_loss_rate": 0.4765981735159817,
+        "tail_10pct_mean_return": -0.1527748085367648,
+        "worst_trade_net_return": -0.2636439688715955,
+        "profit_factor": 0.6842113422004609,
+        "mean_daily_return": -0.013102488297048314,
+        "stress_2x_cost_mean_trade_return": -0.017810079572311295,
+        "cumulative_return": -0.9996931409845637,
+        "max_drawdown": -0.9997149453123455,
         "bootstrap_probability_mean_positive": 0.0,
-        "continuation_hit_rate": 0.2550740538,
         "stage_breakdown": {
           "2→3": {
-            "trades": 1431,
-            "mean_net_return": -0.0131145618,
-            "win_rate": 0.3815513627,
-            "continuation_hit_rate": 0.2327044025
+            "trades": 1374,
+            "mean_net_return": -0.013416087142239064,
+            "win_rate": 0.3784570596797671,
+            "continuation_hit_rate": 0.23726346433770015
           },
           "3→4": {
-            "trades": 392,
-            "mean_net_return": -0.0139245073,
-            "win_rate": 0.4260204082,
-            "continuation_hit_rate": 0.3367346939
+            "trades": 378,
+            "mean_net_return": -0.012924750468923033,
+            "win_rate": 0.42063492063492064,
+            "continuation_hit_rate": 0.35185185185185186
           }
-        },
-        "selection_rule": "shadow_rank_le_10_and_market_fill_eq_1"
+        }
       }
     },
     "path_shadow_policies": {
@@ -5106,7 +5554,515 @@
         "nav": 1.0
       }
     ],
-    "model_artifact_sha256": "6f560d51d20e5842a6149d0da28681907b63c4762a6a6c5fd7c170fe0446ef5b"
+    "first_layer_promotion": {
+      "promoted": false,
+      "promotion_checks": {
+        "history_dates": true,
+        "oos_dates": true,
+        "market_regime_coverage": true,
+        "filled_trades": false,
+        "stage_focus_filled_trades": false,
+        "signal_date_ratio": false,
+        "no_signal_streak": false,
+        "mean_daily_return": false,
+        "stress_2x_cost": false,
+        "bootstrap_95": false,
+        "rolling_20d_60pct": false,
+        "positive_months_60pct": false,
+        "month_concentration": false,
+        "beats_source_topn": true,
+        "price_cap_not_worse": true,
+        "exit_on_time_90pct": false,
+        "big_loss_rate_cap": false,
+        "tail_loss_floor": false
+      },
+      "promotion_failures": [
+        "filled_trades",
+        "stage_focus_filled_trades",
+        "signal_date_ratio",
+        "no_signal_streak",
+        "mean_daily_return",
+        "stress_2x_cost",
+        "bootstrap_95",
+        "rolling_20d_60pct",
+        "positive_months_60pct",
+        "month_concentration",
+        "exit_on_time_90pct",
+        "big_loss_rate_cap",
+        "tail_loss_floor"
+      ]
+    },
+    "trade_selector": {
+      "schema_version": "decision_trade_selector_backtest_v1",
+      "version": "trade_selector_v1_nested_oos_top10",
+      "feature_contract": "OBSERVATION_TOP10_D_CLOSE_ONLY_CONDITIONAL_FILL_RETURN_NO_T_OR_T1_LEAKAGE",
+      "target": "conditional net return from actual T auction/open fill to predeclared T+1 09:30 exit after costs",
+      "return_training_scope": "market_fill_eq_1_only",
+      "top10_contract": "exact_daily_observation_rank_without_padding",
+      "max_positions": 2,
+      "oos_dates": 356,
+      "oos_start": "20250207",
+      "oos_end": "20260724",
+      "oos_rows": 3039,
+      "walkforward_refits": 9,
+      "policy_ready_fold_ratio": 0.3139190523198421,
+      "formal_policy_oos": {
+        "all_candidates": {
+          "execution_mode": "forced_market_open_truth",
+          "signals": 135,
+          "signal_dates": 93,
+          "signal_date_ratio": 0.2612359550561798,
+          "max_no_signal_streak": 120,
+          "filled_trades": 135,
+          "mean_trade_net_return": -0.0034200296882573463,
+          "median_trade_net_return": -0.0062024503211315874,
+          "win_rate": 0.4666666666666667,
+          "continuation_hit_rate": 0.3851851851851852,
+          "realized_big_loss_rate": 0.43703703703703706,
+          "tail_10pct_mean_return": -0.13996480401969288,
+          "worst_trade_net_return": -0.2476506849315069,
+          "profit_factor": 0.904320667673905,
+          "mean_daily_return": -0.0006321897418024227,
+          "stress_2x_cost_mean_trade_return": -0.00792002968825735,
+          "cumulative_return": -0.3725309974678751,
+          "max_drawdown": -0.5389457200558381,
+          "bootstrap_probability_mean_positive": 0.32,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 97,
+              "mean_net_return": -0.005806993045124815,
+              "win_rate": 0.422680412371134,
+              "continuation_hit_rate": 0.35051546391752575
+            },
+            "3→4": {
+              "trades": 38,
+              "mean_net_return": 0.0026730083542727693,
+              "win_rate": 0.5789473684210527,
+              "continuation_hit_rate": 0.47368421052631576
+            }
+          }
+        },
+        "market_buyable_only": {
+          "execution_mode": "market_buyable_at_open_truth",
+          "signals": 135,
+          "signal_dates": 93,
+          "signal_date_ratio": 0.2612359550561798,
+          "max_no_signal_streak": 120,
+          "filled_trades": 73,
+          "mean_trade_net_return": -0.01730337842558186,
+          "median_trade_net_return": -0.0329552845528452,
+          "win_rate": 0.3424657534246575,
+          "continuation_hit_rate": 0.2602739726027397,
+          "realized_big_loss_rate": 0.5342465753424658,
+          "tail_10pct_mean_return": -0.14973936509811508,
+          "worst_trade_net_return": -0.2476506849315069,
+          "profit_factor": 0.6129199933752444,
+          "mean_daily_return": -0.0029428877289967943,
+          "stress_2x_cost_mean_trade_return": -0.021803378425581863,
+          "cumulative_return": -0.7079937599100061,
+          "max_drawdown": -0.7742705268740527,
+          "bootstrap_probability_mean_positive": 0.008,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 53,
+              "mean_net_return": -0.02010118720191105,
+              "win_rate": 0.32075471698113206,
+              "continuation_hit_rate": 0.22641509433962265
+            },
+            "3→4": {
+              "trades": 20,
+              "mean_net_return": -0.0098891851683095,
+              "win_rate": 0.4,
+              "continuation_hit_rate": 0.35
+            }
+          }
+        }
+      },
+      "shadow_policy_oos": {
+        "all_candidates": {
+          "execution_mode": "forced_market_open_truth",
+          "signals": 404,
+          "signal_dates": 294,
+          "signal_date_ratio": 0.8258426966292135,
+          "max_no_signal_streak": 8,
+          "filled_trades": 404,
+          "mean_trade_net_return": 0.0024491705057643133,
+          "median_trade_net_return": -0.001233910225671,
+          "win_rate": 0.49257425742574257,
+          "continuation_hit_rate": 0.39851485148514854,
+          "realized_big_loss_rate": 0.3811881188118812,
+          "tail_10pct_mean_return": -0.13750513013839005,
+          "worst_trade_net_return": -0.3020206611570248,
+          "profit_factor": 1.0755466797355748,
+          "mean_daily_return": 0.0011535331604504376,
+          "stress_2x_cost_mean_trade_return": -0.002050829494235689,
+          "cumulative_return": -0.3326646537470054,
+          "max_drawdown": -0.7725567380686994,
+          "bootstrap_probability_mean_positive": 0.616,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 290,
+              "mean_net_return": -0.002099782155360194,
+              "win_rate": 0.45517241379310347,
+              "continuation_hit_rate": 0.3413793103448276
+            },
+            "3→4": {
+              "trades": 114,
+              "mean_net_return": 0.014021067626168757,
+              "win_rate": 0.5877192982456141,
+              "continuation_hit_rate": 0.543859649122807
+            }
+          }
+        },
+        "market_buyable_only": {
+          "execution_mode": "market_buyable_at_open_truth",
+          "signals": 404,
+          "signal_dates": 294,
+          "signal_date_ratio": 0.8258426966292135,
+          "max_no_signal_streak": 8,
+          "filled_trades": 167,
+          "mean_trade_net_return": -0.0065475821168109,
+          "median_trade_net_return": -0.011285349499165206,
+          "win_rate": 0.41916167664670656,
+          "continuation_hit_rate": 0.281437125748503,
+          "realized_big_loss_rate": 0.4431137724550898,
+          "tail_10pct_mean_return": -0.13677972993893414,
+          "worst_trade_net_return": -0.2476506849315069,
+          "profit_factor": 0.8213771208952811,
+          "mean_daily_return": -0.002601148626257546,
+          "stress_2x_cost_mean_trade_return": -0.0110475821168109,
+          "cumulative_return": -0.7442403467622255,
+          "max_drawdown": -0.8191627838365951,
+          "bootstrap_probability_mean_positive": 0.11,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 123,
+              "mean_net_return": -0.007715547997475296,
+              "win_rate": 0.3983739837398374,
+              "continuation_hit_rate": 0.24390243902439024
+            },
+            "3→4": {
+              "trades": 44,
+              "mean_net_return": -0.003282586586771793,
+              "win_rate": 0.4772727272727273,
+              "continuation_hit_rate": 0.38636363636363635
+            }
+          }
+        }
+      },
+      "observation_top1_baseline": {
+        "all_candidates": {
+          "execution_mode": "forced_market_open_truth",
+          "signals": 356,
+          "signal_dates": 356,
+          "signal_date_ratio": 1.0,
+          "max_no_signal_streak": 0,
+          "filled_trades": 356,
+          "mean_trade_net_return": 0.0027358981333788918,
+          "median_trade_net_return": 0.0006489097387948556,
+          "win_rate": 0.5056179775280899,
+          "continuation_hit_rate": 0.4606741573033708,
+          "realized_big_loss_rate": 0.3539325842696629,
+          "tail_10pct_mean_return": -0.15346522281929642,
+          "worst_trade_net_return": -0.2250304518664047,
+          "profit_factor": 1.0799038256064701,
+          "mean_daily_return": 0.0027358981333788918,
+          "stress_2x_cost_mean_trade_return": -0.0017641018666211112,
+          "cumulative_return": -0.3341602649524069,
+          "max_drawdown": -0.901288442110428,
+          "bootstrap_probability_mean_positive": 0.75,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 271,
+              "mean_net_return": 0.0038239055406787867,
+              "win_rate": 0.5018450184501845,
+              "continuation_hit_rate": 0.42435424354243545
+            },
+            "3→4": {
+              "trades": 85,
+              "mean_net_return": -0.0007329254828360743,
+              "win_rate": 0.5176470588235295,
+              "continuation_hit_rate": 0.5764705882352941
+            }
+          }
+        },
+        "market_buyable_only": {
+          "execution_mode": "market_buyable_at_open_truth",
+          "signals": 356,
+          "signal_dates": 356,
+          "signal_date_ratio": 1.0,
+          "max_no_signal_streak": 0,
+          "filled_trades": 143,
+          "mean_trade_net_return": -0.009884286629005234,
+          "median_trade_net_return": -0.013910808406236205,
+          "win_rate": 0.38461538461538464,
+          "continuation_hit_rate": 0.22377622377622378,
+          "realized_big_loss_rate": 0.4125874125874126,
+          "tail_10pct_mean_return": -0.13758211213870675,
+          "worst_trade_net_return": -0.1923172588832486,
+          "profit_factor": 0.7245271627701619,
+          "mean_daily_return": -0.0039703735616509785,
+          "stress_2x_cost_mean_trade_return": -0.014384286629005233,
+          "cumulative_return": -0.8472329581868041,
+          "max_drawdown": -0.8618026053141475,
+          "bootstrap_probability_mean_positive": 0.066,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 123,
+              "mean_net_return": -0.003938973726169305,
+              "win_rate": 0.3983739837398374,
+              "continuation_hit_rate": 0.21951219512195122
+            },
+            "3→4": {
+              "trades": 20,
+              "mean_net_return": -0.04644796098144619,
+              "win_rate": 0.3,
+              "continuation_hit_rate": 0.25
+            }
+          }
+        }
+      },
+      "observation_top2_baseline": {
+        "all_candidates": {
+          "execution_mode": "forced_market_open_truth",
+          "signals": 712,
+          "signal_dates": 356,
+          "signal_date_ratio": 1.0,
+          "max_no_signal_streak": 0,
+          "filled_trades": 712,
+          "mean_trade_net_return": -0.0006549912647105538,
+          "median_trade_net_return": -0.001046624431034671,
+          "win_rate": 0.49157303370786515,
+          "continuation_hit_rate": 0.4410112359550562,
+          "realized_big_loss_rate": 0.3806179775280899,
+          "tail_10pct_mean_return": -0.15691970180945308,
+          "worst_trade_net_return": -0.2755378681626929,
+          "profit_factor": 0.981525713420058,
+          "mean_daily_return": -0.0006549912647105541,
+          "stress_2x_cost_mean_trade_return": -0.005154991264710556,
+          "cumulative_return": -0.6100939264652585,
+          "max_drawdown": -0.7714387189798434,
+          "bootstrap_probability_mean_positive": 0.428,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 529,
+              "mean_net_return": 0.0005277597332840433,
+              "win_rate": 0.4896030245746692,
+              "continuation_hit_rate": 0.4064272211720227
+            },
+            "3→4": {
+              "trades": 183,
+              "mean_net_return": -0.004073981854541933,
+              "win_rate": 0.4972677595628415,
+              "continuation_hit_rate": 0.5409836065573771
+            }
+          }
+        },
+        "market_buyable_only": {
+          "execution_mode": "market_buyable_at_open_truth",
+          "signals": 712,
+          "signal_dates": 356,
+          "signal_date_ratio": 1.0,
+          "max_no_signal_streak": 0,
+          "filled_trades": 306,
+          "mean_trade_net_return": -0.013393046420636332,
+          "median_trade_net_return": -0.02108210947930577,
+          "win_rate": 0.3954248366013072,
+          "continuation_hit_rate": 0.24183006535947713,
+          "realized_big_loss_rate": 0.4477124183006536,
+          "tail_10pct_mean_return": -0.14747767171197088,
+          "worst_trade_net_return": -0.2041798719487794,
+          "profit_factor": 0.6537589828660775,
+          "mean_daily_return": -0.008779898591931658,
+          "stress_2x_cost_mean_trade_return": -0.01789304642063633,
+          "cumulative_return": -0.9761255362116817,
+          "max_drawdown": -0.9757456818781624,
+          "bootstrap_probability_mean_positive": 0.0,
+          "stage_breakdown": {
+            "2→3": {
+              "trades": 256,
+              "mean_net_return": -0.010634807657116352,
+              "win_rate": 0.3984375,
+              "continuation_hit_rate": 0.23046875
+            },
+            "3→4": {
+              "trades": 50,
+              "mean_net_return": -0.02751522888985862,
+              "win_rate": 0.38,
+              "continuation_hit_rate": 0.3
+            }
+          }
+        }
+      },
+      "production_policy": {
+        "max_positions": 1,
+        "thresholds": {
+          "min_trade_score": -0.006340229981046088,
+          "min_mean_return_lcb": -0.032854970445145563,
+          "min_fill_probability": 0.0,
+          "max_big_loss_probability": 0.5054411106135244
+        },
+        "ready": false,
+        "checks": {
+          "policy_dates": true,
+          "trades": true,
+          "buyable_trades": true,
+          "signal_date_ratio": true,
+          "no_signal_streak": true,
+          "forced_open_mean_positive": false,
+          "buyable_mean_positive": false,
+          "buyable_2x_cost_positive": false,
+          "buyable_profit_factor": false
+        },
+        "metrics": {
+          "all_candidates": {
+            "execution_mode": "forced_market_open_truth",
+            "signals": 75,
+            "signal_dates": 75,
+            "signal_date_ratio": 0.9259259259259259,
+            "max_no_signal_streak": 1,
+            "filled_trades": 75,
+            "mean_trade_net_return": -0.003853660188149145,
+            "median_trade_net_return": -0.0037308141418790864,
+            "win_rate": 0.48,
+            "continuation_hit_rate": 0.3333333333333333,
+            "realized_big_loss_rate": 0.4,
+            "tail_10pct_mean_return": -0.14567309090450842,
+            "worst_trade_net_return": -0.2039514106583072,
+            "profit_factor": 0.889222580790677,
+            "mean_daily_return": -0.0035682038779158752,
+            "stress_2x_cost_mean_trade_return": -0.008353660188149146,
+            "cumulative_return": -0.4217464689616732,
+            "max_drawdown": -0.5696610234325725,
+            "bootstrap_probability_mean_positive": 0.572,
+            "stage_breakdown": {
+              "2→3": {
+                "trades": 65,
+                "mean_net_return": -0.001709784050931697,
+                "win_rate": 0.5076923076923077,
+                "continuation_hit_rate": 0.3230769230769231
+              },
+              "3→4": {
+                "trades": 10,
+                "mean_net_return": -0.01778885508006256,
+                "win_rate": 0.3,
+                "continuation_hit_rate": 0.4
+              }
+            }
+          },
+          "market_buyable_only": {
+            "execution_mode": "market_buyable_at_open_truth",
+            "signals": 75,
+            "signal_dates": 75,
+            "signal_date_ratio": 0.9259259259259259,
+            "max_no_signal_streak": 1,
+            "filled_trades": 63,
+            "mean_trade_net_return": -0.011507598520837069,
+            "median_trade_net_return": -0.011285349499165206,
+            "win_rate": 0.42857142857142855,
+            "continuation_hit_rate": 0.23809523809523808,
+            "realized_big_loss_rate": 0.4444444444444444,
+            "tail_10pct_mean_return": -0.1428534911825326,
+            "worst_trade_net_return": -0.2039514106583072,
+            "profit_factor": 0.6903206429812646,
+            "mean_daily_return": -0.008950354405095498,
+            "stress_2x_cost_mean_trade_return": -0.016007598520837066,
+            "cumulative_return": -0.60805176130004,
+            "max_drawdown": -0.6694036347166125,
+            "bootstrap_probability_mean_positive": 0.262,
+            "stage_breakdown": {
+              "2→3": {
+                "trades": 55,
+                "mean_net_return": -0.006476848720174843,
+                "win_rate": 0.4727272727272727,
+                "continuation_hit_rate": 0.23636363636363636
+              },
+              "3→4": {
+                "trades": 8,
+                "mean_net_return": -0.04609400340038987,
+                "win_rate": 0.125,
+                "continuation_hit_rate": 0.25
+              }
+            }
+          }
+        },
+        "version": "trade_selector_v1_nested_oos_top10",
+        "reason": "best_shadow_policy_failed_profit_or_coverage_gate",
+        "evaluated_policies": 12,
+        "feasible_policies": 0
+      },
+      "production_return_selection": {
+        "selected": "ridge",
+        "passed": false,
+        "relative_rmse_improvement": -0.035552091109728526,
+        "rmse": 0.08822155448523596,
+        "constant_rmse": 0.08519277324880403,
+        "fit_rows": 896,
+        "calibration_rows": 278,
+        "training_scope": "market_fill_eq_1_only"
+      },
+      "production_probability_selection": {
+        "fill": {
+          "method": "identity",
+          "rows": 825,
+          "held_out_brier": 0.25802652283073807,
+          "constant_brier": 0.2779837654893421,
+          "beats_constant": true
+        },
+        "big_loss": {
+          "method": "constant",
+          "rows": 278,
+          "held_out_brier": 0.25009848850199945,
+          "constant_brier": 0.25009848850199945,
+          "beats_constant": false
+        }
+      },
+      "production_artifact_sha256": "fe99b8786f13aba28ecda9fc274d76b6e5a10845ba45f58b34586270c428bf1a",
+      "promotion_checks": {
+        "production_policy_ready": false,
+        "return_model_chronological_skill": false,
+        "oos_dates": true,
+        "selected_trades": true,
+        "market_buyable_trades": true,
+        "signal_date_ratio": true,
+        "no_signal_streak": false,
+        "policy_ready_fold_ratio": false,
+        "forced_open_mean_positive": false,
+        "market_buyable_mean_positive": false,
+        "market_buyable_2x_cost_positive": false,
+        "market_buyable_profit_factor": false,
+        "tail_loss_floor": false,
+        "bootstrap_probability": false,
+        "beats_observation_top1_and_top2": false
+      },
+      "promotion_failures": [
+        "production_policy_ready",
+        "return_model_chronological_skill",
+        "no_signal_streak",
+        "policy_ready_fold_ratio",
+        "forced_open_mean_positive",
+        "market_buyable_mean_positive",
+        "market_buyable_2x_cost_positive",
+        "market_buyable_profit_factor",
+        "tail_loss_floor",
+        "bootstrap_probability",
+        "beats_observation_top1_and_top2"
+      ],
+      "promoted": false,
+      "no_trade_guard": {
+        "zero_trades_cannot_promote": true,
+        "minimum_signal_date_ratio": 0.1,
+        "maximum_no_signal_streak": 40,
+        "minimum_selected_trades": 60,
+        "daily_zero_allowed": true
+      },
+      "history_rows": 4402,
+      "history_dates": 536
+    },
+    "model_quality_warnings": [
+      "first_layer_probability_models_did_not_pass_brier_skill_gate"
+    ],
+    "model_artifact_sha256": "157191b96b1839693f0c68c56fd443d615aab067cdd5ca557a99fd74c0c02615"
   },
   "universe_eligibility": {
     "rule": "a_share_price_limit_le_10_v2",
@@ -5126,6 +6082,8 @@
     "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
     "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top10, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
     "observation_ranking": "all 2-to-3 and 3-to-4 candidates receive forced-open counterfactual validation; rank buckets and path cohorts are reported separately",
+    "trade_selector": "an independent second layer is trained only on chronologically out-of-sample daily observation Top10 rows; E_ret is conditional on market_fill=1, P_fill is modeled separately, at most two rows can pass, and zero rows is valid",
+    "trade_selector_feature_contract": "OBSERVATION_TOP10_D_CLOSE_ONLY_CONDITIONAL_FILL_RETURN_NO_T_OR_T1_LEAKAGE",
     "guidance_only": true,
     "broker_connected": false,
     "entry": "manual limit order only before T 09:25 opening-auction cutoff with a frozen maximum price; market order forbidden",
