@@ -1,8 +1,12 @@
 name: Backfill Decision V11 Two-Year History
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/backfill_decision_v11_history.yml"
   schedule:
-    # Sunday 10:30 Beijing. Keep the latest 500 strict A-share sessions complete.
+    # Sunday 10:30 Beijing. Keep 500 OOS sessions plus training warmup complete.
     - cron: "30 2 * * 0"
   workflow_dispatch:
     inputs:
@@ -16,7 +20,7 @@ on:
         required: false
         type: string
       max_missing_dates:
-        description: "本次最多新增独立信号日"
+        description: "本次最多新增历史信号日"
         required: false
         default: "500"
         type: string

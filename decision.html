@@ -1149,6 +1149,7 @@
       const conformal = model?.conformal_residual_quantiles || {};
       const globalConformal = conformal.global || {};
       const coverage = model?.data_coverage || {};
+      const backtest = plan?.backtest || {};
       const truthLedgers = model?.truth_ledgers || {};
       const formalLedger = truthLedgers.formal_limit_proxy || {};
       const observationLedger = truthLedgers.market_open_observation || {};
@@ -1235,8 +1236,10 @@
         <div class="audit-block">
           <h3>独立样本与竞价真值</h3>
           <div class="audit-list">
-            ${auditRow("独立交易日", `${coverage.history_dates ?? 0} / ${coverage.target_independent_dates ?? 500}`)}
-            ${auditRow("样本日期范围", coverage.history_start && coverage.history_end ? `${dateText(coverage.history_start)} 至 ${dateText(coverage.history_end)}` : "-")}
+            ${auditRow("独立交易日", `${coverage.independent_oos_dates ?? backtest.oos_dates ?? 0} / ${coverage.target_independent_dates ?? 500}`)}
+            ${auditRow("样本外日期范围", coverage.independent_oos_start && coverage.independent_oos_end ? `${dateText(coverage.independent_oos_start)} 至 ${dateText(coverage.independent_oos_end)}` : "-")}
+            ${auditRow("模型历史交易日", `${coverage.history_dates ?? 0} / ${coverage.target_history_dates ?? 640}`)}
+            ${auditRow("历史日期范围", coverage.history_start && coverage.history_end ? `${dateText(coverage.history_start)} 至 ${dateText(coverage.history_end)}` : "-")}
             ${auditRow("候选级历史样本", coverage.history_rows ?? 0)}
             ${auditRow("真实竞价样本", `${coverage.official_auction_truth_rows ?? 0} · 覆盖 ${officialCoverage == null ? "-" : pct(officialCoverage)}`)}
             ${auditRow("交易日历", coverage.calendar === "SSE_strict_exchange_calendar" ? "上交所严格A股交易日历" : (coverage.calendar || "-"))}

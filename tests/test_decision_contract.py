@@ -137,21 +137,21 @@ class DecisionCalendarContractTests(unittest.TestCase):
                 trade_calendar_file=calendar_path,
             )
 
-    def test_two_year_backfill_uses_latest_500_mature_open_sessions(self) -> None:
+    def test_two_year_oos_backfill_keeps_training_warmup(self) -> None:
         open_dates = [
             value.strftime("%Y%m%d")
-            for value in pd.bdate_range("2023-01-02", periods=600)
+            for value in pd.bdate_range("2023-01-02", periods=750)
         ]
         target_window, missing = _latest_target_dates(
             open_dates,
-            {open_dates[92], open_dates[93]},
+            {open_dates[102], open_dates[103]},
             max_missing_dates=3,
         )
 
-        self.assertEqual(len(target_window), 500)
-        self.assertEqual(target_window[0], open_dates[92])
+        self.assertEqual(len(target_window), 640)
+        self.assertEqual(target_window[0], open_dates[102])
         self.assertEqual(target_window[-1], open_dates[-9])
-        self.assertEqual(missing, open_dates[94:97])
+        self.assertEqual(missing, open_dates[104:107])
 
     def test_intraday_backfill_excludes_unfinished_current_session(self) -> None:
         dates = ["20260724", "20260727", "20260728"]

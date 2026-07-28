@@ -38,7 +38,11 @@ from top10decision.writers.io_contract import (
     next_a_share_trading_day,
 )
 
-from .config import AuctionV3Config
+from .config import (
+    AuctionV3Config,
+    TARGET_HISTORY_DATES,
+    TARGET_INDEPENDENT_OOS_DATES,
+)
 from .calibration import (
     ProbabilityCalibrator,
     chronological_calibration_split,
@@ -7253,6 +7257,12 @@ class AuctionV3Engine:
             )
         except Exception:
             observation_metrics = {}
+        independent_equity = backtest_metrics.get("daily_equity") or []
+        independent_dates = [
+            str(item.get("signal_date") or "")
+            for item in independent_equity
+            if str(item.get("signal_date") or "")
+        ]
         model_meta = {
             "generated_at_utc": _utc_now(),
             "model_version": self.config.model_version,
@@ -7283,7 +7293,17 @@ class AuctionV3Engine:
                 bundle.conformal_residual_quantiles if bundle else {}
             ),
             "data_coverage": {
-                "target_independent_dates": 500,
+                "target_independent_dates": TARGET_INDEPENDENT_OOS_DATES,
+                "target_history_dates": TARGET_HISTORY_DATES,
+                "independent_oos_dates": int(
+                    backtest_metrics.get("oos_dates") or 0
+                ),
+                "independent_oos_start": (
+                    independent_dates[0] if independent_dates else ""
+                ),
+                "independent_oos_end": (
+                    independent_dates[-1] if independent_dates else ""
+                ),
                 "history_rows": int(len(history)),
                 "history_dates": len(history_dates),
                 "history_start": history_dates[0] if history_dates else "",

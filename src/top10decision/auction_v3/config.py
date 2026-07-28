@@ -15,6 +15,11 @@ from top10decision.decision.observation import (
 )
 
 
+TARGET_INDEPENDENT_OOS_DATES = 500
+WALKFORWARD_WARMUP_DATES = 140
+TARGET_HISTORY_DATES = TARGET_INDEPENDENT_OOS_DATES + WALKFORWARD_WARMUP_DATES
+
+
 @dataclass(frozen=True)
 class AuctionV3Config:
     """Runtime and governance settings for manual auction guidance."""
@@ -79,8 +84,8 @@ class AuctionV3Config:
     policy_position_grid: tuple[int, ...] = (1, 2, 3)
     policy_max_realized_big_loss_rate: float = 0.25
     policy_min_tail_mean_return: float = -0.05
-    promotion_min_dates: int = 500
-    promotion_min_oos_dates: int = 120
+    promotion_min_dates: int = TARGET_HISTORY_DATES
+    promotion_min_oos_dates: int = TARGET_INDEPENDENT_OOS_DATES
     promotion_min_filled_trades: int = 200
     promotion_min_stage_focus_filled_trades: int = 60
     promotion_min_market_regimes: int = 3

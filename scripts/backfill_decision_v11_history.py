@@ -22,6 +22,11 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E402
+from top10decision.auction_v3.config import (  # noqa: E402
+    TARGET_HISTORY_DATES,
+    TARGET_INDEPENDENT_OOS_DATES,
+    WALKFORWARD_WARMUP_DATES,
+)
 from top10decision.data.tushare_minute import (  # noqa: E402
     AUCTION_OPEN_FIELDS,
     TushareClient,
@@ -246,7 +251,7 @@ def _latest_target_dates(
     covered: set[str],
     *,
     max_missing_dates: int,
-    target_sessions: int = 500,
+    target_sessions: int = TARGET_HISTORY_DATES,
     maturity_lag_sessions: int = 8,
 ) -> tuple[list[str], list[str]]:
     eligible = (
@@ -262,8 +267,8 @@ def _latest_target_dates(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Build latest-500-session strict-calendar Decision V11 history "
-            "from Tushare daily and opening-auction truth"
+            "Build strict-calendar Decision V11 history for at least 500 "
+            "independent OOS sessions from Tushare daily and auction truth"
         )
     )
     parser.add_argument("--root", default=str(ROOT))
@@ -524,6 +529,8 @@ def main() -> int:
         "target_window_start": target_window[0] if target_window else "",
         "target_window_end": target_window[-1] if target_window else "",
         "target_window_open_sessions": len(target_window),
+        "target_history_sessions": TARGET_HISTORY_DATES,
+        "walkforward_warmup_sessions": WALKFORWARD_WARMUP_DATES,
         "target_signal_date_count": len(target_dates),
         "produced_signal_dates": int(
             history["signal_date"].astype(str).nunique()
@@ -536,7 +543,7 @@ def main() -> int:
             else 0.0
         ),
         "total_compact_signal_dates": len(all_covered),
-        "target_independent_dates": 500,
+        "target_independent_dates": TARGET_INDEPENDENT_OOS_DATES,
         "exit_policy": {
             "version": EXIT_POLICY_VERSION,
             "take_profit_pct": EXIT_TAKE_PROFIT_PCT,
