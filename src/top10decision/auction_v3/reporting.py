@@ -72,13 +72,15 @@ def _write(path: Path, content: str) -> None:
 
 
 def _current_table(frame: pd.DataFrame) -> str:
-    headers = ["操作", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "路径依据", "同梯队", "原排名", "前收", "竞价上限价", "T+1退出", "晋级涨停概率", "预计净收益", "保守收益", "成交概率", "次日可退出概率", "大跌概率", "价格动作"]
+    headers = ["操作", "观察排名", "交易排名", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "路径依据", "同梯队", "原排名", "前收", "竞价上限价", "T+1退出", "晋级涨停概率", "一层预计净收益", "二筛条件净收益", "二筛成交概率", "二筛大跌概率", "价格动作"]
     rows: list[str] = []
     for _, row in frame.iterrows():
         action = str(row.get("action", ""))
         css = "buy" if "BUY" in action else "reject" if action == "REJECT" else "pending"
         values = [
             f'<span class="{css}">{_esc(action)}</span>',
+            _float(row.get("observation_rank"), 0),
+            _float(row.get("trade_rank"), 0),
             _esc(row.get("ts_code")),
             _esc(row.get("name")),
             _esc(row.get("industry")),
@@ -93,10 +95,9 @@ def _current_table(frame: pd.DataFrame) -> str:
             _esc(row.get("latest_exit_time") or "09:30"),
             _pct(row.get("predicted_continuation_limit_up_probability")),
             _pct(row.get("predicted_net_return")),
-            _pct(row.get("predicted_return_lcb")),
-            _pct(row.get("predicted_fill_probability")),
-            _pct(row.get("predicted_exit_probability")),
-            _pct(row.get("predicted_big_loss_probability")),
+            _pct(row.get("trade_predicted_conditional_net_return")),
+            _pct(row.get("trade_predicted_fill_probability")),
+            _pct(row.get("trade_predicted_big_loss_probability")),
             _esc(row.get("price_action")),
         ]
         rows.append("<tr>" + "".join(f"<td>{value}</td>" for value in values) + "</tr>")
@@ -111,14 +112,22 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     status_class = "good" if promoted else "warn"
     status_text = "正式模型" if promoted else "影子验证"
     sentiment_row = prediction.iloc[0] if not prediction.empty else pd.Series(dtype=object)
+    selector = backtest.get("trade_selector", {}) or {}
+    selector_buyable = (
+        (selector.get("formal_policy_oos", {}) or {}).get(
+            "market_buyable_only",
+            {},
+        )
+        or {}
+    )
     body = f'<div class="status"><span class="badge {status_class}">{status_text}</span><span class="badge">信号日 {signal_date}</span><span class="badge">模型 {_esc(prediction.get("model_version", pd.Series(["-"])).iloc[0] if not prediction.empty else "-")}</span></div>'
     body += '<div class="metrics">'
     body += _metric("候选数", str(len(prediction)))
     body += _metric("正式买入数", str(len(formal_buys)))
-    body += _metric("回测交易日", str(backtest.get("oos_dates", 0)))
-    body += _metric("回测平均净收益", _pct(backtest.get("mean_trade_net_return")))
-    body += _metric("回测胜率", _pct(backtest.get("win_rate")))
-    body += _metric("样本外大跌率", _pct(backtest.get("realized_big_loss_rate")))
+    body += _metric("二筛样本外交易日", str(selector.get("oos_dates", 0)))
+    body += _metric("二筛现实可买净收益", _pct(selector_buyable.get("mean_trade_net_return")))
+    body += _metric("二筛现实可买胜率", _pct(selector_buyable.get("win_rate")))
+    body += _metric("二筛现实可买大跌率", _pct(selector_buyable.get("realized_big_loss_rate")))
     body += _metric("2进3/3进4命中率", _pct(backtest.get("stage_focus_continuation_hit_rate")))
     body += "</div>"
     body += '<section><h2>D日市场情绪量化</h2><p class="note">仅使用D日及更早的10%涨跌幅机制A股数据；综合分用于解释，原始因子是否进入连板模型由留出期消融决定。</p><div class="metrics">'
@@ -148,7 +157,7 @@ def current_report(prediction: pd.DataFrame, backtest: dict[str, Any]) -> str:
     body += "</section>"
     body += '<section><h2>候选复核记录（非买入名单）</h2><p class="note">下表只来自D日已涨停候选池，2进3、3进4在全部风险门禁通过后优先。模型未晋级时，SHADOW_ONLY只用于验证。当前未通过项目：' + _esc(fail_text) + "。</p>"
     body += _current_table(prediction.head(20)) + "</section>"
-    return _page("Decision 竞价人工指导 V11", "D日涨停池，T日人工限价竞价；T+1日9:30开盘集合竞价退出", body)
+    return _page("Decision 竞价人工指导 V12", "观察Top10与独立交易二筛；T日人工限价竞价，T+1日9:30退出", body)
 
 
 def _verification_table(frame: pd.DataFrame) -> str:
@@ -195,7 +204,7 @@ def verification_report(ledger: pd.DataFrame, cumulative: dict[str, Any]) -> str
     body += '<section><h2>每笔人工参考的累计验证</h2><p class="note">公开行情只生成模拟真值；人工实际买卖价格可通过手工反馈文件回填。未成交不计作零收益，一字跌停顺延到首次可交易日。</p>'
     latest = ledger.sort_values(["signal_date", "source_rank"], ascending=[False, True]).head(300) if not ledger.empty else ledger
     body += _verification_table(latest) + "</section>"
-    return _page("Decision V11 逐笔验证", "冻结竞价建议价、全体2进3与3进4样本、真实竞价与T+1日9:30退出真值分账追溯", body)
+    return _page("Decision V12 逐笔验证", "冻结竞价建议价、观察Top10与交易二筛、真实竞价与T+1日9:30退出真值分账追溯", body)
 
 
 def _equity_chart(points: Iterable[dict[str, Any]]) -> str:
@@ -250,6 +259,25 @@ def dashboard(backtest: dict[str, Any], cumulative: dict[str, Any]) -> str:
             "</tr>"
         )
     body += '<div class="table-wrap"><table><thead><tr><th>Top10口径</th><th>样本</th><th>平均净收益</th><th>胜率</th><th>晋级率</th><th>尾部10%均值</th><th>盈亏比</th></tr></thead><tbody>' + "".join(top10_rows) + "</tbody></table></div></section>"
+    selector = backtest.get("trade_selector", {}) or {}
+    selector_formal = selector.get("formal_policy_oos", {}) or {}
+    body += '<section><h2>第二层交易排序严格样本外</h2><p class="note">只在每日观察Top10内二次排序；E_ret仅用真实可成交样本训练，P_fill独立建模。最多2只、允许0只，零交易或长期无交易不能晋级。</p>'
+    selector_rows = []
+    for label, item in (
+        ("二筛全部开盘计价", selector_formal.get("all_candidates", {}) or {}),
+        ("二筛现实可买", selector_formal.get("market_buyable_only", {}) or {}),
+    ):
+        selector_rows.append(
+            "<tr>"
+            f"<td>{_esc(label)}</td>"
+            f"<td>{_esc(item.get('filled_trades', 0))}</td>"
+            f"<td>{_esc(_pct(item.get('mean_trade_net_return')))}</td>"
+            f"<td>{_esc(_pct(item.get('win_rate')))}</td>"
+            f"<td>{_esc(_pct(item.get('tail_10pct_mean_return')))}</td>"
+            f"<td>{_esc(_float(item.get('profit_factor'), 2))}</td>"
+            "</tr>"
+        )
+    body += '<div class="table-wrap"><table><thead><tr><th>交易二筛口径</th><th>样本</th><th>平均净收益</th><th>胜率</th><th>尾部10%均值</th><th>盈亏比</th></tr></thead><tbody>' + "".join(selector_rows) + "</tbody></table></div></section>"
     all_focus = backtest.get("stage_focus_all", {}) or {}
     paths = backtest.get("path_shadow_policies", {}) or {}
     body += '<section><h2>全体2进3与3进4样本外回测</h2><div class="metrics">'
@@ -290,7 +318,7 @@ def dashboard(backtest: dict[str, Any], cumulative: dict[str, Any]) -> str:
     body += _metric("正确放弃率", _pct(cumulative.get("correct_rejection_rate")))
     body += _metric("机会遗漏率", _pct(cumulative.get("missed_opportunity_rate")))
     body += "</div></section>"
-    return _page("Decision V11 回测与累计验证", "最新500个严格A股交易日内滚动样本外验证；全体2进3与3进4及加速一致、弱转强路径均按T+1日9:30退出独立统计", body)
+    return _page("Decision V12 回测与累计验证", "严格A股交易日内嵌套滚动样本外验证；观察Top10与独立交易二筛均按T+1日9:30退出分账统计", body)
 
 
 def write_reports(

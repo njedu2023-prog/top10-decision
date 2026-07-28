@@ -170,6 +170,11 @@ def _rejection_reason(value: Any) -> str:
         "conservative_ev_below_policy_floor": "扣除尾部风险与不可退出风险后的保守期望不足",
         "selection_score_below_policy_cutoff": "综合排序分低于独立留出期确定的入选分位",
         "insufficient_independent_history": "独立交易日样本不足，模型尚未达到可用条件",
+        "insufficient_nested_oos_history": "第二层交易排序的严格样本外历史不足",
+        "outside_observation_top10": "不在当日观察Top10内",
+        "below_learned_policy": "未通过第二层交易策略的收益、成交与大跌风险门槛",
+        "shadow_policy_only": "第二层仅通过影子排序，尚未达到正式晋级门槛",
+        "selector_not_promoted": "第二层交易排序未通过严格样本外晋级门槛",
     }.get(reason, reason or "没有满足风险约束的安全竞价价格")
 
 
@@ -224,7 +229,7 @@ def _merge_auction_candidates(
         universe_eligible = _integer(row.get("decision_universe_eligible")) == 1
         selected = _integer(row.get("selected")) == 1 and universe_eligible
         shadow_selected = (
-            _integer(row.get("shadow_selected")) == 1
+            _integer(row.get("trade_shadow_selected")) == 1
             and universe_eligible
         )
         action = (
@@ -241,7 +246,7 @@ def _merge_auction_candidates(
         elif not promoted and selected:
             reason = "严格样本外晋级门槛未全部通过，禁止正式买入"
         elif shadow_selected and not selected:
-            reason = "影子策略样本；全体2进3/3进4另按统一口径回测，不构成买入建议"
+            reason = "第二层影子交易排序入选，但严格样本外晋级尚未通过"
         elif action != "BUY":
             reason = _rejection_reason(row.get("model_reason"))
         rows.append(
@@ -255,6 +260,44 @@ def _merge_auction_candidates(
                 "stage_focus": _integer(row.get("stage_focus")),
                 "shadow_rank": _integer(row.get("shadow_rank")),
                 "shadow_selected": _integer(row.get("shadow_selected")),
+                "first_layer_selected": _integer(
+                    row.get("first_layer_selected")
+                ),
+                "first_layer_shadow_selected": _integer(
+                    row.get("first_layer_shadow_selected")
+                ),
+                "trade_rank": _integer(row.get("trade_rank")),
+                "trade_score": _number(row.get("trade_score")),
+                "trade_predicted_conditional_net_return": _number(
+                    row.get("trade_predicted_conditional_net_return")
+                ),
+                "trade_predicted_mean_return_lcb": _number(
+                    row.get("trade_predicted_mean_return_lcb")
+                ),
+                "trade_predicted_fill_probability": _number(
+                    row.get("trade_predicted_fill_probability")
+                ),
+                "trade_predicted_big_loss_probability": _number(
+                    row.get("trade_predicted_big_loss_probability")
+                ),
+                "trade_gate_pass": _integer(row.get("trade_gate_pass")),
+                "trade_shadow_selected": _integer(
+                    row.get("trade_shadow_selected")
+                ),
+                "trade_selected": _integer(row.get("trade_selected")),
+                "trade_selector_policy_ready": _integer(
+                    row.get("trade_selector_policy_ready")
+                ),
+                "trade_selector_promoted": _integer(
+                    row.get("trade_selector_promoted")
+                ),
+                "trade_selector_version": _text(
+                    row.get("trade_selector_version")
+                ),
+                "trade_selector_artifact_sha256": _text(
+                    row.get("trade_selector_artifact_sha256")
+                ),
+                "trade_model_reason": _text(row.get("trade_model_reason")),
                 "path_label_code": _text(row.get("path_label_code")),
                 "path_label": _text(row.get("path_label")) or "路径数据不足",
                 "path_explanation": _text(row.get("path_explanation")),
@@ -451,6 +494,13 @@ def _attach_observation_validation(
         row["prediction_timing_label"] = _prediction_timing_label(
             row.get("prediction_timing_status")
         )
+        row["watch_label"] = (
+            "正式买入"
+            if _text(row.get("action")) == "BUY"
+            else "二筛影子"
+            if _integer(row.get("trade_shadow_selected")) == 1
+            else "仅观察"
+        )
 
     metrics = _read_json(
         root
@@ -462,7 +512,7 @@ def _attach_observation_validation(
     statuses = [_text(row.get("validation_status")) for row in watchlist]
     plan.update(
         {
-            "schema_version": "decision_action_plan_v11_nested_policy_shadow",
+            "schema_version": "decision_action_plan_v12_top10_trade_selector",
             "stage_watchlist": watchlist,
             "stage_watch_count": len(watchlist),
             "stage_watch_eligible_count": watch_total,
@@ -647,15 +697,47 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
         and artifact_fingerprints_match
     )
     prediction_ready = _integer(prediction.get("model_ready", pd.Series([0])).iloc[0]) == 1 if not prediction.empty else False
-    prediction_promoted = _integer(prediction.get("model_promoted", pd.Series([0])).iloc[0]) == 1 if not prediction.empty else False
+    prediction_promoted = _integer(
+        prediction.get(
+            "trade_selector_promoted",
+            prediction.get("model_promoted", pd.Series([0])),
+        ).iloc[0]
+    ) == 1 if not prediction.empty else False
+    backtest_selector = backtest.get("trade_selector") or {}
+    meta_selector = model_meta.get("trade_selector") or {}
+    prediction_selector_artifact = (
+        _text(
+            prediction.get(
+                "trade_selector_artifact_sha256",
+                pd.Series([""]),
+            ).iloc[0]
+        )
+        if not prediction.empty
+        else ""
+    )
+    backtest_selector_artifact = _text(
+        backtest_selector.get("production_artifact_sha256")
+    )
+    meta_selector_artifact = _text(
+        meta_selector.get("production_artifact_sha256")
+    )
+    selector_artifacts_match = bool(
+        prediction_selector_artifact
+        and prediction_selector_artifact
+        == backtest_selector_artifact
+        == meta_selector_artifact
+    )
     promoted = bool(
         backtest.get("promoted") is True
         and model_meta.get("promoted") is True
+        and backtest_selector.get("promoted") is True
+        and meta_selector.get("promoted") is True
         and model_meta.get("ready") is True
         and prediction_ready
         and prediction_promoted
         and prediction_matches
         and artifacts_match
+        and selector_artifacts_match
     )
 
     if evaluation.get("stop_trading") is True:
@@ -691,7 +773,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
         limit=10,
     )
     plan = {
-        "schema_version": "decision_action_plan_v11_nested_policy_shadow",
+        "schema_version": "decision_action_plan_v12_top10_trade_selector",
         "generated_at_utc": _utc_now(),
         "report_date": chosen_date,
         "report_file": f"decision_report_{chosen_date}.md",
@@ -717,6 +799,9 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "artifact_versions_match": artifacts_match,
             "artifact_fingerprints_match": artifact_fingerprints_match,
             "artifact_sha256": meta_artifact,
+            "trade_selector_artifacts_match": selector_artifacts_match,
+            "trade_selector_artifact_sha256": meta_selector_artifact,
+            "trade_selector": meta_selector,
             "promotion_failures": list(backtest.get("promotion_failures", []) or []),
             "return_model": _text((model_meta.get("return_selection", {}) or {}).get("selected")),
             "profit_model": _text(
@@ -921,6 +1006,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
                 "path_shadow_policies",
                 "gate_funnel",
                 "shadow_policies",
+                "trade_selector",
             )
         },
         "universe_eligibility": model_meta.get("universe_eligibility") or evaluation.get("universe_eligibility") or {},
@@ -930,14 +1016,15 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
             "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
             "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top10、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
-            "observation_ranking": "以每日2进3和3进4排序Top10为主要观察与回测对象，候选少于10只时按实际数量统计、绝不补票；同时保留全候选池、排名区间与连板路径作为背景审计，正式买入另须通过独立策略留出期",
+            "observation_ranking": "第一层每天按同一算法产生2进3和3进4观察Top10，候选少于10只时按实际数量统计、绝不补票；这一层只负责候选发现与观察顺序",
+            "trade_ranking": "第二层只在第一层观察Top10内独立排序，E_ret仅用真实可成交样本训练并与P_fill分离；最多选择2只、允许0只，零交易或长期无交易不能通过晋级门槛",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
             "exit": "T+1固定按9:30开盘集合竞价成交价人工退出；一字跌停无法成交时顺延至首个可成交开盘",
             "return_target": "优先使用Tushare stk_auction_o真实开盘集合竞价成交价，计算T日竞价买入到T+1固定9:30开盘退出的保守可执行净收益；不使用T+1盘中或收盘未来信息",
             "validation": "正式限价代理、全部2进3/3进4强制开盘价反事实真值、排名分层、路径分层和人工实际成交分账累计，互不覆盖；强制真值不代表真实可成交，实际可买率另行披露",
             "probability_calibration": "全部概率按交易日隔离校准并接受Brier技能审计；大跌与P_fill必须有信息增益，盈利、晋级和近乎单一标签的退出模型可安全回退常数，不得成为全局否决器",
-            "policy_selection": "模型拟合、概率校准、策略阈值选择使用三个依次向后的交易日窗口并设置禁运间隔；策略留出期必须同时满足交易频率、费用压力、收益和尾部风险",
+            "policy_selection": "第二层模型拟合、概率校准、策略阈值选择使用三个依次向后的交易日窗口并设置禁运间隔，外层再做逐段前推；策略必须同时满足非零覆盖率、费用压力、可买样本收益和尾部风险",
             "return_uncertainty": "保形q10/q90用于尾部诊断；正式授权使用独立策略留出期确定的均值保守下界和保守期望，不把极端分位机械设为必须大于零",
             "risk_veto": "大跌、均值保守下界、P_fill、T+1退出、保守期望和综合分位均使用独立策略留出期阈值；无可行策略则正式不交易，但全部2进3/3进4反事实账继续验证",
             "guidance_only": True,

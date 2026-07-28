@@ -31,6 +31,15 @@ from top10decision.decision.observation import (
     observation_price_contract,
     rank_observation_rows,
 )
+from top10decision.decision.trade_selector import (
+    TRADE_SELECTOR_FEATURE_CONTRACT,
+    TRADE_SELECTOR_VERSION,
+    TradeSelectorBundle,
+    observation_top10_metrics,
+    prepare_observation_top10,
+    score_trade_selector,
+    walkforward_trade_selector,
+)
 from top10decision.writers.io_contract import (
     choose_exec_date,
     choose_exit_date,
@@ -555,6 +564,8 @@ class AuctionV3Engine:
         self._streak_count_cache: dict[tuple[str, str], int] = {}
         self._path_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._eligibility_audit: dict[str, Any] = {}
+        self._trade_selector_bundle: Optional[TradeSelectorBundle] = None
+        self._trade_selector_metrics: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Source discovery and point-in-time inputs
@@ -5550,6 +5561,7 @@ class AuctionV3Engine:
             "all_candidates": all_candidates,
             "market_buyable_only": buyable_candidates,
         }
+
     def _gate_funnel(self, oos: pd.DataFrame) -> dict[str, Any]:
         ordered_gates = (
             ("stage_focus", "gate_stage_focus"),
@@ -5975,6 +5987,11 @@ class AuctionV3Engine:
     def run_backtest(self, history: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
         oos = self._walkforward_predictions(history)
         metrics = self._portfolio_metrics(oos, history["signal_date"].nunique() if not history.empty else 0)
+        first_layer_promotion = {
+            "promoted": metrics.get("promoted") is True,
+            "promotion_checks": dict(metrics.get("promotion_checks") or {}),
+            "promotion_failures": list(metrics.get("promotion_failures") or []),
+        }
         _write_csv(history, self.config.metrics_root / "training_history_latest.csv")
         trade_audit = oos.copy()
         if "selected" in trade_audit.columns:
@@ -6009,16 +6026,20 @@ class AuctionV3Engine:
             stage_focus_audit,
             self.config.metrics_root / "backtest_stage_focus_all_latest.csv",
         )
-        stage_rank = pd.to_numeric(
-            stage_focus_audit.get(
-                "shadow_rank",
-                pd.Series(np.nan, index=stage_focus_audit.index),
-            ),
-            errors="coerce",
+        top10_audit = prepare_observation_top10(
+            oos,
+            limit=self.config.max_observation_candidates,
         )
-        top10_audit = stage_focus_audit[
-            stage_rank.between(1, 10, inclusive="both").fillna(False)
-        ].copy()
+        all_oos_dates = (
+            sorted(oos["signal_date"].astype(str).unique())
+            if not oos.empty
+            else []
+        )
+        metrics["top10_oos"] = observation_top10_metrics(
+            top10_audit,
+            all_oos_dates=all_oos_dates,
+            cost_rate=self.config.cost_rate,
+        )
         _write_csv(
             top10_audit,
             self.config.metrics_root / "backtest_top10_latest.csv",
@@ -6047,6 +6068,38 @@ class AuctionV3Engine:
         _write_csv(
             path_focus_audit,
             self.config.metrics_root / "backtest_path_focus_latest.csv",
+        )
+        trade_oos, trade_bundle, trade_metrics = walkforward_trade_selector(
+            top10_audit,
+            cost_rate=self.config.cost_rate,
+        )
+        self._trade_selector_bundle = trade_bundle
+        self._trade_selector_metrics = trade_metrics
+        metrics["first_layer_promotion"] = first_layer_promotion
+        metrics["trade_selector"] = trade_metrics
+        metrics["promoted"] = trade_metrics.get("promoted") is True
+        metrics["promotion_checks"] = dict(
+            trade_metrics.get("promotion_checks") or {}
+        )
+        metrics["promotion_failures"] = list(
+            trade_metrics.get("promotion_failures") or []
+        )
+        _write_csv(
+            trade_oos,
+            self.config.metrics_root
+            / "backtest_trade_selector_oos_latest.csv",
+        )
+        trade_selected = pd.to_numeric(
+            trade_oos.get(
+                "trade_selected",
+                pd.Series(0, index=trade_oos.index),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        _write_csv(
+            trade_oos.loc[trade_selected].copy(),
+            self.config.metrics_root
+            / "backtest_trade_selector_selected_latest.csv",
         )
         _write_json(metrics, self.config.metrics_root / "backtest_latest.json")
         return oos, metrics
@@ -6204,6 +6257,46 @@ class AuctionV3Engine:
         )
         scored["observation_selected"] = scored["observation_rank"].notna().astype(int)
         scored["observation_pool_size"] = int(observation_pool_size)
+        scored["first_layer_selected"] = pd.to_numeric(
+            scored.get("selected"),
+            errors="coerce",
+        ).fillna(0).astype(int)
+        scored["first_layer_shadow_selected"] = pd.to_numeric(
+            scored.get("shadow_selected"),
+            errors="coerce",
+        ).fillna(0).astype(int)
+        trade_fields: dict[str, Any] = {
+            "trade_rank": np.nan,
+            "trade_score": np.nan,
+            "trade_predicted_conditional_net_return": np.nan,
+            "trade_predicted_mean_return_lcb": np.nan,
+            "trade_predicted_fill_probability": np.nan,
+            "trade_predicted_big_loss_probability": np.nan,
+            "trade_gate_pass": 0,
+            "trade_shadow_selected": 0,
+            "trade_selected": 0,
+            "trade_selector_policy_ready": 0,
+            "trade_selector_promoted": int(promoted),
+            "trade_selector_version": TRADE_SELECTOR_VERSION,
+            "trade_selector_artifact_sha256": "",
+            "trade_model_reason": "outside_observation_top10",
+        }
+        for name, value in trade_fields.items():
+            scored[name] = value
+        observation_mask = scored["observation_selected"].eq(1)
+        if observation_mask.any():
+            trade_scored = score_trade_selector(
+                scored.loc[observation_mask].copy(),
+                self._trade_selector_bundle,
+                globally_promoted=promoted,
+            )
+            for name in trade_fields:
+                if name in trade_scored.columns:
+                    scored.loc[trade_scored.index, name] = trade_scored[name]
+        scored["selected"] = pd.to_numeric(
+            scored["trade_selected"],
+            errors="coerce",
+        ).fillna(0).astype(int)
         scored["take_profit_pct"] = np.nan
         scored["stop_loss_pct"] = np.nan
         scored["take_profit_price"] = np.nan
@@ -6233,12 +6326,18 @@ class AuctionV3Engine:
         )
         scored["model_ready"] = int(bundle is not None)
         scored["model_promoted"] = int(promoted)
+        scored["first_layer_model_promoted"] = int(
+            (backtest_metrics.get("first_layer_promotion") or {}).get(
+                "promoted"
+            )
+            is True
+        )
         scored["action"] = np.where(
             scored["selected"].eq(1),
             "BUY" if promoted else "SHADOW_ONLY",
             np.where(
                 pd.to_numeric(
-                    scored.get("shadow_selected"),
+                    scored.get("trade_shadow_selected"),
                     errors="coerce",
                 ).fillna(0).eq(1),
                 "SHADOW_ONLY",
@@ -6259,7 +6358,7 @@ class AuctionV3Engine:
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
         scored["feature_contract"] = (
-            "D_CLOSE_STREAK_PATH_SENTIMENT_V11_OPEN0930_ALL_STAGE_NESTED_POLICY_NO_T_LEAKAGE"
+            "D_CLOSE_STREAK_PATH_SENTIMENT_V12_OPEN0930_TOP10_META_SELECTOR_NO_T_LEAKAGE"
         )
         ordered = [
             "prediction_id",
@@ -6315,6 +6414,20 @@ class AuctionV3Engine:
             "observation_risk_label",
             "observation_selected",
             "observation_pool_size",
+            "trade_rank",
+            "trade_score",
+            "trade_predicted_conditional_net_return",
+            "trade_predicted_mean_return_lcb",
+            "trade_predicted_fill_probability",
+            "trade_predicted_big_loss_probability",
+            "trade_gate_pass",
+            "trade_shadow_selected",
+            "trade_selected",
+            "trade_selector_policy_ready",
+            "trade_selector_promoted",
+            "trade_selector_version",
+            "trade_selector_artifact_sha256",
+            "trade_model_reason",
             "take_profit_pct",
             "stop_loss_pct",
             "take_profit_price",
@@ -6357,6 +6470,8 @@ class AuctionV3Engine:
             "policy_min_selection_score",
             "policy_max_positions",
             "risk_gate_pass",
+            "first_layer_selected",
+            "first_layer_shadow_selected",
             "selected",
             "action",
             "price_action",
@@ -6372,6 +6487,7 @@ class AuctionV3Engine:
             "minute_available",
             "model_ready",
             "model_promoted",
+            "first_layer_model_promoted",
             "model_reason",
             "model_version",
             "model_artifact_sha256",
@@ -7233,13 +7349,13 @@ class AuctionV3Engine:
         oos, backtest_metrics = self.run_backtest(history)
         bundle = self.fit_models(history)
         model_quality_failures: list[str] = []
+        model_quality_warnings: list[str] = []
         if bundle is None:
             model_quality_failures.append("model_bundle_not_ready")
-        else:
-            if bundle.probability_quality_gate.get("passed") is not True:
-                model_quality_failures.append(
-                    "probability_models_did_not_pass_brier_skill_gate"
-                )
+        elif bundle.probability_quality_gate.get("passed") is not True:
+            model_quality_warnings.append(
+                "first_layer_probability_models_did_not_pass_brier_skill_gate"
+            )
         if model_quality_failures:
             existing_failures = list(
                 backtest_metrics.get("promotion_failures", []) or []
@@ -7248,12 +7364,28 @@ class AuctionV3Engine:
                 dict.fromkeys(existing_failures + model_quality_failures)
             )
             checks = dict(backtest_metrics.get("promotion_checks") or {})
-            checks["probability_brier_skill"] = (
-                "probability_models_did_not_pass_brier_skill_gate"
-                not in model_quality_failures
-            )
+            checks["first_layer_model_ready"] = False
             backtest_metrics["promotion_checks"] = checks
             backtest_metrics["promoted"] = False
+            trade_metrics = dict(
+                backtest_metrics.get("trade_selector") or {}
+            )
+            trade_checks = dict(
+                trade_metrics.get("promotion_checks") or {}
+            )
+            trade_checks["first_layer_model_ready"] = False
+            trade_metrics["promotion_checks"] = trade_checks
+            trade_failures = list(
+                trade_metrics.get("promotion_failures") or []
+            )
+            trade_metrics["promotion_failures"] = list(
+                dict.fromkeys(
+                    trade_failures + ["first_layer_model_ready"]
+                )
+            )
+            trade_metrics["promoted"] = False
+            backtest_metrics["trade_selector"] = trade_metrics
+        backtest_metrics["model_quality_warnings"] = model_quality_warnings
         backtest_metrics["model_artifact_sha256"] = (
             bundle.model_artifact_sha256
             if bundle is not None
@@ -7373,6 +7505,13 @@ class AuctionV3Engine:
             ),
             "ready": bundle is not None,
             "promoted": backtest_metrics.get("promoted") is True,
+            "first_layer_promoted": (
+                backtest_metrics.get("first_layer_promotion") or {}
+            ).get("promoted")
+            is True,
+            "trade_selector": (
+                backtest_metrics.get("trade_selector") or {}
+            ),
             "training_rows": bundle.train_rows if bundle else 0,
             "training_dates": bundle.train_dates if bundle else 0,
             "calibration_rows": bundle.calibration_rows if bundle else 0,
@@ -7483,6 +7622,8 @@ class AuctionV3Engine:
                 "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
                 "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top10, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
                 "observation_ranking": "all 2-to-3 and 3-to-4 candidates receive forced-open counterfactual validation; rank buckets and path cohorts are reported separately",
+                "trade_selector": "an independent second layer is trained only on chronologically out-of-sample daily observation Top10 rows; E_ret is conditional on market_fill=1, P_fill is modeled separately, at most two rows can pass, and zero rows is valid",
+                "trade_selector_feature_contract": TRADE_SELECTOR_FEATURE_CONTRACT,
                 "guidance_only": True,
                 "broker_connected": False,
                 "entry": "manual limit order only before T 09:25 opening-auction cutoff with a frozen maximum price; market order forbidden",
@@ -7524,7 +7665,8 @@ class AuctionV3Engine:
         if bundle is None:
             warnings.append("模型独立交易日或样本不足，仅生成审计结果，不给出正式买入指令")
         if backtest_metrics.get("promoted") is not True:
-            warnings.append("样本外回测未达到正式晋级门槛，当前名单为影子验证")
+            warnings.append("第二层交易排序未达到严格样本外晋级门槛，当前仅显示观察与影子交易排名")
+        warnings.extend(model_quality_warnings)
         return RunResult(
             signal_date=signal_date,
             prediction_path=str(self.config.prediction_root / f"pred_{signal_date}.csv"),
@@ -7535,6 +7677,11 @@ class AuctionV3Engine:
             dashboard_path=report_paths["dashboard"],
             model_ready=bundle is not None,
             promoted=backtest_metrics.get("promoted") is True,
-            selected_count=int(pd.to_numeric(prediction.get("selected"), errors="coerce").fillna(0).sum()),
+            selected_count=int(
+                pd.to_numeric(
+                    prediction.get("trade_selected"),
+                    errors="coerce",
+                ).fillna(0).sum()
+            ),
             warnings=warnings,
         )

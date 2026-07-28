@@ -1,4 +1,4 @@
-name: Run Decision Manual Auction Guidance V11
+name: Run Decision Top10 Trade Selector V12
 
 on:
   push:
@@ -16,6 +16,7 @@ on:
       - "tests/test_auction_v3.py"
       - "tests/test_decision_contract.py"
       - "tests/test_decision_v8_calibration.py"
+      - "tests/test_decision_trade_selector.py"
   workflow_run:
     workflows: ["Run Top10 Decision (Auto Daily)"]
     types: [completed]
@@ -43,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  auction_guidance_v11:
+  auction_guidance_v12:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -75,7 +76,10 @@ jobs:
           set -e
           python -m unittest discover -s tests -p 'test_auction_v3.py' -v
           python -m unittest discover -s tests -p 'test_decision_v8_calibration.py' -v
+          python -m unittest discover -s tests -p 'test_decision_trade_selector.py' -v
           python -m unittest discover -s tests -p 'test_decision_contract.py' -v
+          python -m unittest discover -s tests -p 'test_decision_premium_merge.py' -v
+          python -m unittest discover -s tests -p 'test_premium_safety.py' -v
 
       - name: Sync strict calendar and Tushare minute truth
         env:
@@ -89,7 +93,7 @@ jobs:
           fi
           python scripts/sync_tushare_minute.py "${args[@]}"
 
-      - name: Run Decision manual auction guidance V11
+      - name: Run Decision Top10 trade selector V12
         env:
           SIGNAL_DATE: ${{ inputs.signal_date }}
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
@@ -119,6 +123,9 @@ jobs:
           test -f outputs/auction_v3/metrics/backtest_shadow_latest.csv
           test -f outputs/auction_v3/metrics/backtest_stage_focus_all_latest.csv
           test -f outputs/auction_v3/metrics/backtest_path_focus_latest.csv
+          test -f outputs/auction_v3/metrics/backtest_top10_latest.csv
+          test -f outputs/auction_v3/metrics/backtest_trade_selector_oos_latest.csv
+          test -f outputs/auction_v3/metrics/backtest_trade_selector_selected_latest.csv
           test -f outputs/auction_v3/metrics/cumulative_latest.json
           test -f outputs/auction_v3/metrics/observation_cumulative_latest.json
           test -f outputs/auction_v3/verification/observation_latest.csv
@@ -147,10 +154,10 @@ jobs:
             -print0 | xargs -0 -r git add --
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision guidance V11 has no changed artifacts"
+            echo "Decision V12 has no changed artifacts"
             exit 0
           fi
-          git commit -m "auto: update Decision V11 guidance and validation"
+          git commit -m "auto: update Decision V12 trade selector and validation"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main

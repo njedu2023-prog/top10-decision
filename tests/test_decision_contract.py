@@ -626,9 +626,10 @@ class DecisionActionPlanTests(unittest.TestCase):
         self,
         *,
         promoted: bool,
-        version: str = "auction_v5_manual_guidance_2",
+        version: str = "auction_v12_top10_trade_selector_oos_1",
         artifact: str = "a" * 64,
     ) -> None:
+        trade_artifact = "c" * 64
         pd.DataFrame(
             [
                 {
@@ -639,6 +640,11 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "name": "主板",
                     "industry": "银行",
                     "selected": 1,
+                    "trade_selected": 1,
+                    "trade_shadow_selected": int(promoted),
+                    "trade_rank": 1,
+                    "trade_selector_promoted": int(promoted),
+                    "trade_selector_artifact_sha256": trade_artifact,
                     "action": "BUY",
                     "recommended_max_price": 10.5,
                     "mechanism_limit_pct": 10.036,
@@ -666,6 +672,11 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "ts_code": "300001.SZ",
                     "name": "创业板",
                     "selected": 1,
+                    "trade_selected": 1,
+                    "trade_shadow_selected": int(promoted),
+                    "trade_rank": 2,
+                    "trade_selector_promoted": int(promoted),
+                    "trade_selector_artifact_sha256": trade_artifact,
                     "action": "BUY",
                     "model_ready": 1,
                     "model_promoted": int(promoted),
@@ -681,6 +692,10 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "model_artifact_sha256": artifact,
                     "promoted": promoted,
                     "promotion_failures": [],
+                    "trade_selector": {
+                        "promoted": promoted,
+                        "production_artifact_sha256": trade_artifact,
+                    },
                 }
             ),
             encoding="utf-8",
@@ -692,6 +707,10 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "model_artifact_sha256": artifact,
                     "ready": True,
                     "promoted": promoted,
+                    "trade_selector": {
+                        "promoted": promoted,
+                        "production_artifact_sha256": trade_artifact,
+                    },
                     "current_market_sentiment": {
                         "market_limit_up_industry_top10": [
                             {
@@ -723,7 +742,7 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
         self.assertEqual(
             plan["schema_version"],
-            "decision_action_plan_v11_nested_policy_shadow",
+            "decision_action_plan_v12_top10_trade_selector",
         )
         self.assertEqual(plan["stage_watchlist"][0]["observation_max_price"], 10.5)
         self.assertIn("observation_statistics", plan)

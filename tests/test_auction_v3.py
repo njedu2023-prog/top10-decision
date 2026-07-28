@@ -181,7 +181,10 @@ class AuctionV3Test(unittest.TestCase):
             self.config.metrics_root / "backtest_path_focus_latest.csv"
         )
         self.assertEqual(len(returned), 2)
-        self.assertEqual(metrics, {"promoted": False})
+        self.assertFalse(metrics["promoted"])
+        self.assertIn("trade_selector", metrics)
+        self.assertFalse(metrics["trade_selector"]["promoted"])
+        self.assertFalse(metrics["first_layer_promotion"]["promoted"])
         self.assertEqual(persisted["ts_code"].tolist(), [self.codes[1]])
         self.assertEqual(len(gate_audit), 2)
         self.assertEqual(len(shadow_audit), 2)
@@ -373,6 +376,9 @@ class AuctionV3Test(unittest.TestCase):
         self.assertIn("market_failed_limit_up_rate", first.columns)
         self.assertIn("market_focus_promotion_rate", first.columns)
         self.assertIn("observation_risk_label", first.columns)
+        self.assertIn("trade_rank", first.columns)
+        self.assertIn("trade_selected", first.columns)
+        self.assertIn("trade_selector_artifact_sha256", first.columns)
         self.assertTrue(
             first["feature_contract"]
             .astype(str)
@@ -382,7 +388,7 @@ class AuctionV3Test(unittest.TestCase):
         self.assertTrue(
             first["feature_contract"]
             .astype(str)
-            .str.contains("NESTED_POLICY_NO_T_LEAKAGE")
+            .str.contains("TOP10_META_SELECTOR_NO_T_LEAKAGE")
             .all()
         )
         selected = first[first["selected"].eq(1)]
