@@ -4,8 +4,10 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -17,7 +19,11 @@ for path in (ROOT, SRC):
         sys.path.insert(0, str(path))
 
 from scripts.run_v2 import _apply_ev_upgrade_v1  # noqa: E402
-from scripts.backfill_decision_v11_history import _latest_target_dates  # noqa: E402
+from scripts.backfill_decision_v11_history import (  # noqa: E402
+    _completed_open_dates,
+    _latest_target_dates,
+    _retry_frame,
+)
 from scripts.build_eret_truth import infer_eret_label  # noqa: E402
 from scripts.build_fill_truth import infer_fill_label  # noqa: E402
 from scripts.resolve_sample_maturity import (  # noqa: E402
@@ -146,6 +152,52 @@ class DecisionCalendarContractTests(unittest.TestCase):
         self.assertEqual(target_window[0], open_dates[92])
         self.assertEqual(target_window[-1], open_dates[-9])
         self.assertEqual(missing, open_dates[94:97])
+
+    def test_intraday_backfill_excludes_unfinished_current_session(self) -> None:
+        dates = ["20260724", "20260727", "20260728"]
+        before_close = datetime(
+            2026,
+            7,
+            28,
+            13,
+            30,
+            tzinfo=ZoneInfo("Asia/Shanghai"),
+        )
+        after_ready = datetime(
+            2026,
+            7,
+            28,
+            21,
+            15,
+            tzinfo=ZoneInfo("Asia/Shanghai"),
+        )
+
+        self.assertEqual(
+            _completed_open_dates(dates, now=before_close),
+            dates[:-1],
+        )
+        self.assertEqual(
+            _completed_open_dates(dates, now=after_ready),
+            dates,
+        )
+
+    def test_backfill_retries_transient_empty_required_endpoint(self) -> None:
+        responses = [
+            pd.DataFrame(),
+            pd.DataFrame([{"ts_code": "600000.SH"}]),
+        ]
+
+        with mock.patch(
+            "scripts.backfill_decision_v11_history.time.sleep"
+        ) as sleep:
+            result = _retry_frame(
+                lambda: responses.pop(0),
+                label="daily:20260727",
+                required=True,
+            )
+
+        self.assertEqual(result["ts_code"].tolist(), ["600000.SH"])
+        sleep.assert_called_once_with(2.0)
 
 
 class DecisionStrictSemanticContractTests(unittest.TestCase):

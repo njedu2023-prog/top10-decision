@@ -8,9 +8,9 @@ import os
 import sys
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, time as clock_time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -82,6 +82,7 @@ LIMIT_LIST_FIELDS = (
     "limit_times",
     "limit",
 )
+MARKET_DATA_READY_TIME = clock_time(18, 0)
 
 
 def _date(value: Any) -> str:
@@ -132,6 +133,50 @@ def _call_paged(
     if "ts_code" in out.columns:
         out = out.drop_duplicates("ts_code", keep="last")
     return out.reset_index(drop=True)
+
+
+def _retry_frame(
+    fetch: Callable[[], pd.DataFrame],
+    *,
+    label: str,
+    required: bool = False,
+    attempts: int = 4,
+) -> pd.DataFrame:
+    last_error: Exception | None = None
+    for attempt in range(1, max(1, int(attempts)) + 1):
+        try:
+            frame = fetch()
+            if not required or not frame.empty:
+                return frame
+            last_error = RuntimeError(f"{label} returned no rows")
+        except Exception as exc:
+            last_error = exc
+        if attempt < attempts:
+            time.sleep(float(attempt * 2))
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"{label} fetch failed")
+
+
+def _completed_open_dates(
+    open_dates: Iterable[str],
+    *,
+    now: datetime | None = None,
+) -> list[str]:
+    dates = [value for value in (_date(item) for item in open_dates) if value]
+    current = now or datetime.now(ZoneInfo("Asia/Shanghai"))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+    else:
+        current = current.astimezone(ZoneInfo("Asia/Shanghai"))
+    today = current.strftime("%Y%m%d")
+    if (
+        dates
+        and dates[-1] == today
+        and current.time().replace(tzinfo=None) < MARKET_DATA_READY_TIME
+    ):
+        dates = dates[:-1]
+    return dates
 
 
 def _confirmed_limit_up_list(
@@ -256,9 +301,11 @@ def main() -> int:
     )
     calendar = client.trade_calendar(start_date, end_date)
     write_calendar(calendar, root)
-    open_dates = calendar.loc[
-        calendar["is_open"].eq(1), "cal_date"
-    ].astype(str).tolist()
+    open_dates = _completed_open_dates(
+        calendar.loc[
+            calendar["is_open"].eq(1), "cal_date"
+        ].astype(str).tolist()
+    )
     history_root = AuctionV3Config(root=root).historical_training_root
     history_root.mkdir(parents=True, exist_ok=True)
     covered = _covered_dates(history_root)
@@ -311,25 +358,36 @@ def main() -> int:
             )
             market_root.mkdir(parents=True, exist_ok=True)
             try:
-                daily = _call_paged(
-                    client,
-                    "daily",
-                    {"trade_date": trade_date},
-                    DAILY_FIELDS,
+                daily = _retry_frame(
+                    lambda: _call_paged(
+                        client,
+                        "daily",
+                        {"trade_date": trade_date},
+                        DAILY_FIELDS,
+                    ),
+                    label=f"daily:{trade_date}",
+                    required=True,
                 )
                 time.sleep(max(0.0, float(args.request_sleep)))
-                limits = _call_paged(
-                    client,
-                    "stk_limit",
-                    {"trade_date": trade_date},
-                    LIMIT_FIELDS,
+                limits = _retry_frame(
+                    lambda: _call_paged(
+                        client,
+                        "stk_limit",
+                        {"trade_date": trade_date},
+                        LIMIT_FIELDS,
+                    ),
+                    label=f"stk_limit:{trade_date}",
+                    required=True,
                 )
                 time.sleep(max(0.0, float(args.request_sleep)))
-                daily_basic = _call_paged(
-                    client,
-                    "daily_basic",
-                    {"trade_date": trade_date},
-                    DAILY_BASIC_FIELDS,
+                daily_basic = _retry_frame(
+                    lambda: _call_paged(
+                        client,
+                        "daily_basic",
+                        {"trade_date": trade_date},
+                        DAILY_BASIC_FIELDS,
+                    ),
+                    label=f"daily_basic:{trade_date}",
                 )
                 if "circ_mv" in daily_basic.columns:
                     daily_basic = daily_basic.rename(
@@ -337,11 +395,14 @@ def main() -> int:
                     )
                 time.sleep(max(0.0, float(args.request_sleep)))
                 try:
-                    detail = _call_paged(
-                        client,
-                        "limit_list_d",
-                        {"trade_date": trade_date},
-                        LIMIT_LIST_FIELDS,
+                    detail = _retry_frame(
+                        lambda: _call_paged(
+                            client,
+                            "limit_list_d",
+                            {"trade_date": trade_date},
+                            LIMIT_LIST_FIELDS,
+                        ),
+                        label=f"limit_list_d:{trade_date}",
                     )
                 except Exception as exc:
                     detail = pd.DataFrame()
@@ -354,13 +415,14 @@ def main() -> int:
                     )
                 detail = _confirmed_limit_up_list(daily, limits, detail)
                 time.sleep(max(0.0, float(args.request_sleep)))
-                auction = client.call(
-                    "stk_auction_o",
-                    {"trade_date": trade_date},
-                    AUCTION_OPEN_FIELDS,
+                auction = _retry_frame(
+                    lambda: client.call(
+                        "stk_auction_o",
+                        {"trade_date": trade_date},
+                        AUCTION_OPEN_FIELDS,
+                    ),
+                    label=f"stk_auction_o:{trade_date}",
                 )
-                if daily.empty or limits.empty:
-                    raise RuntimeError("daily or stk_limit returned no rows")
                 _write_csv(daily, market_root / "daily.csv")
                 _write_csv(limits, market_root / "stk_limit.csv")
                 _write_csv(daily_basic, market_root / "daily_basic.csv")
