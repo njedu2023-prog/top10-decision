@@ -134,6 +134,7 @@ class AuctionV3Test(unittest.TestCase):
         self.assertTrue((oos["oos_train_end"] < oos["signal_date"]).all())
         self.assertGreater(metrics["oos_dates"], 0)
         self.assertIn("stage_focus_all", metrics)
+        self.assertIn("top10_oos", metrics)
         self.assertIn("rank_bucket_oos", metrics)
         self.assertIn("path_shadow_policies", metrics)
 
@@ -287,6 +288,53 @@ class AuctionV3Test(unittest.TestCase):
         self.assertAlmostEqual(acceleration["cumulative_return"], 0.32)
         self.assertEqual(weak["filled_trades"], 1)
         self.assertAlmostEqual(weak["cumulative_return"], -0.10)
+
+    def test_top10_caps_each_day_without_padding_and_separates_buyable(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        rows = []
+        for rank in range(1, 13):
+            rows.append(
+                {
+                    "signal_date": self.dates[0],
+                    "stage_focus": 1,
+                    "shadow_rank": rank,
+                    "stage": "2→3",
+                    "market_fill": int(rank <= 4),
+                    "net_return": rank / 100.0,
+                    "continuation_limit_up_hit": int(rank % 2 == 0),
+                }
+            )
+        for rank in range(1, 4):
+            rows.append(
+                {
+                    "signal_date": self.dates[1],
+                    "stage_focus": 1,
+                    "shadow_rank": rank,
+                    "stage": "3→4",
+                    "market_fill": int(rank <= 2),
+                    "net_return": -rank / 100.0,
+                    "continuation_limit_up_hit": int(rank == 1),
+                }
+            )
+        oos = pd.DataFrame(rows)
+
+        metrics = engine._top_n_stage_metrics(
+            oos,
+            oos["stage_focus"].eq(1),
+            top_n=10,
+        )
+
+        self.assertEqual(metrics["top_n_cap"], 10)
+        self.assertEqual(metrics["padding_policy"], "none")
+        self.assertEqual(metrics["candidate_days"], 2)
+        self.assertEqual(metrics["days_at_cap"], 1)
+        self.assertEqual(metrics["days_below_cap"], 1)
+        self.assertEqual(metrics["all_candidates"]["signals"], 13)
+        self.assertEqual(metrics["market_buyable_only"]["signals"], 6)
+        self.assertEqual(
+            metrics["market_buyable_only"]["execution_mode"],
+            "market_buyable_at_open_truth",
+        )
 
     def test_prediction_is_frozen_and_has_actionable_price(self) -> None:
         engine = AuctionV3Engine(self.config)

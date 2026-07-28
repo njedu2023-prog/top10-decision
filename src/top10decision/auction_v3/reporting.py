@@ -228,6 +228,28 @@ def dashboard(backtest: dict[str, Any], cumulative: dict[str, Any]) -> str:
     body += _metric("样本外大跌率", _pct(backtest.get("realized_big_loss_rate")))
     body += _metric("2进3/3进4命中率", _pct(backtest.get("stage_focus_continuation_hit_rate")))
     body += "</div>"
+    top10 = backtest.get("top10_oos", {}) or {}
+    top10_all = top10.get("all_candidates", {}) or {}
+    top10_buyable = top10.get("market_buyable_only", {}) or {}
+    body += '<section><h2>Top10样本外回测</h2>'
+    body += '<p class="note">每日仅取2进3与3进4排序前10名；不足10只按实际数量统计，不使用其他股票补位。全部开盘计价用于排序诊断，现实可买子集用于接近可执行结果。</p>'
+    top10_rows = []
+    for label, item in (
+        ("Top10全部开盘计价", top10_all),
+        ("Top10现实可买", top10_buyable),
+    ):
+        top10_rows.append(
+            "<tr>"
+            f"<td>{_esc(label)}</td>"
+            f"<td>{_esc(item.get('filled_trades', 0))}</td>"
+            f"<td>{_esc(_pct(item.get('mean_trade_net_return')))}</td>"
+            f"<td>{_esc(_pct(item.get('win_rate')))}</td>"
+            f"<td>{_esc(_pct(item.get('continuation_hit_rate')))}</td>"
+            f"<td>{_esc(_pct(item.get('tail_10pct_mean_return')))}</td>"
+            f"<td>{_esc(_float(item.get('profit_factor'), 2))}</td>"
+            "</tr>"
+        )
+    body += '<div class="table-wrap"><table><thead><tr><th>Top10口径</th><th>样本</th><th>平均净收益</th><th>胜率</th><th>晋级率</th><th>尾部10%均值</th><th>盈亏比</th></tr></thead><tbody>' + "".join(top10_rows) + "</tbody></table></div></section>"
     all_focus = backtest.get("stage_focus_all", {}) or {}
     paths = backtest.get("path_shadow_policies", {}) or {}
     body += '<section><h2>全体2进3与3进4样本外回测</h2><div class="metrics">'

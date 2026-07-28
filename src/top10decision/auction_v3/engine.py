@@ -5481,6 +5481,75 @@ class AuctionV3Engine:
             "stage_breakdown": stages,
         }
 
+    def _top_n_stage_metrics(
+        self,
+        oos: pd.DataFrame,
+        stage_focus: pd.Series,
+        *,
+        top_n: int = 10,
+    ) -> dict[str, Any]:
+        """Report daily stage-focus TopN without padding short candidate days."""
+        dates = sorted(oos["signal_date"].astype(str).unique())
+        focus = (
+            stage_focus.reindex(oos.index, fill_value=False)
+            .fillna(False)
+            .astype(bool)
+        )
+        rank = pd.to_numeric(
+            oos.get(
+                "shadow_rank",
+                pd.Series(np.nan, index=oos.index),
+            ),
+            errors="coerce",
+        )
+        selected = focus & rank.between(1, top_n, inclusive="both").fillna(False)
+        market_buyable = pd.to_numeric(
+            oos.get(
+                "market_fill",
+                pd.Series(0, index=oos.index),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        selected_counts = (
+            oos.loc[selected]
+            .groupby(oos.loc[selected, "signal_date"].astype(str))
+            .size()
+            .reindex(dates, fill_value=0)
+        )
+        all_candidates = self._cohort_policy_metrics(
+            oos,
+            selected,
+            cohort=f"daily_top{top_n}_2to3_and_3to4",
+        )
+        buyable_candidates = self._cohort_policy_metrics(
+            oos,
+            selected & market_buyable,
+            cohort=f"daily_top{top_n}_market_buyable",
+        )
+        buyable_candidates["execution_mode"] = "market_buyable_at_open_truth"
+        buyable_candidates["selection_rule"] = (
+            f"shadow_rank_le_{top_n}_and_market_fill_eq_1"
+        )
+        return {
+            "scope": "daily_ranked_2to3_and_3to4",
+            "ranking_field": "shadow_rank",
+            "top_n_cap": int(top_n),
+            "padding_policy": "none",
+            "oos_dates": int(len(dates)),
+            "candidate_days": int(selected_counts.gt(0).sum()),
+            "zero_candidate_days": int(selected_counts.eq(0).sum()),
+            "days_below_cap": int(
+                selected_counts.between(1, top_n - 1, inclusive="both").sum()
+            ),
+            "days_at_cap": int(selected_counts.eq(top_n).sum()),
+            "average_candidates_per_candidate_day": _safe_metric(
+                selected_counts[selected_counts.gt(0)].mean()
+                if selected_counts.gt(0).any()
+                else np.nan
+            ),
+            "all_candidates": all_candidates,
+            "market_buyable_only": buyable_candidates,
+        }
     def _gate_funnel(self, oos: pd.DataFrame) -> dict[str, Any]:
         ordered_gates = (
             ("stage_focus", "gate_stage_focus"),
@@ -5876,6 +5945,11 @@ class AuctionV3Engine:
                 cohort="rank_11_plus",
             ),
         }
+        metrics["top10_oos"] = self._top_n_stage_metrics(
+            oos,
+            stage_focus,
+            top_n=10,
+        )
         path_code = oos.get(
             "path_label_code",
             pd.Series("", index=oos.index),
@@ -5934,6 +6008,32 @@ class AuctionV3Engine:
         _write_csv(
             stage_focus_audit,
             self.config.metrics_root / "backtest_stage_focus_all_latest.csv",
+        )
+        stage_rank = pd.to_numeric(
+            stage_focus_audit.get(
+                "shadow_rank",
+                pd.Series(np.nan, index=stage_focus_audit.index),
+            ),
+            errors="coerce",
+        )
+        top10_audit = stage_focus_audit[
+            stage_rank.between(1, 10, inclusive="both").fillna(False)
+        ].copy()
+        _write_csv(
+            top10_audit,
+            self.config.metrics_root / "backtest_top10_latest.csv",
+        )
+        top10_buyable = pd.to_numeric(
+            top10_audit.get(
+                "market_fill",
+                pd.Series(0, index=top10_audit.index),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        _write_csv(
+            top10_audit.loc[top10_buyable].copy(),
+            self.config.metrics_root
+            / "backtest_top10_market_buyable_latest.csv",
         )
         path_focus_audit = stage_focus_audit[
             stage_focus_audit.get(

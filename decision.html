@@ -561,6 +561,18 @@
       </div>
     </section>
 
+    <section class="panel top10-backtest-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Top10样本外回测</h2>
+          <p>每日只取2进3与3进4排序前10名；少于10只按实际数量统计，不补票。T日开盘买入，T+1日09:30退出并扣除成本。</p>
+        </div>
+        <span id="top10BacktestCount" class="count">待计算</span>
+      </div>
+      <div id="top10BacktestContent"></div>
+      <p id="top10BacktestNote" class="stats-note"></p>
+    </section>
+
     <details class="metrics-disclosure">
       <summary>
         <span class="metrics-disclosure-title">核心指标</span>
@@ -641,7 +653,7 @@
     const CACHE_KEY = "decision-dashboard-v11-open0930-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
-      "signalDate", "execDate", "exitDate", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "signalDate", "execDate", "exitDate", "top10BacktestCount", "top10BacktestContent", "top10BacktestNote", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -888,6 +900,36 @@
       ];
       els.metrics.innerHTML = rows.join("");
       els.metricsCount.textContent = `${rows.length} 项`;
+    }
+
+    function renderTop10Backtest(plan) {
+      const top10 = plan?.backtest?.top10_oos || {};
+      const allCandidates = top10?.all_candidates || {};
+      const buyable = top10?.market_buyable_only || {};
+      const stageValue = (item, stage, field) => item?.stage_breakdown?.[stage]?.[field];
+      const rows = [
+        ["Top10全部开盘计价", allCandidates],
+        ["Top10现实可买", buyable]
+      ].map(([label, item]) => `<tr>
+        <td class="left"><strong>${escapeHtml(label)}</strong></td>
+        <td>${escapeHtml(item?.filled_trades ?? "-")}</td>
+        <td class="${valueTone(item?.mean_trade_net_return)}">${signedPct(item?.mean_trade_net_return)}</td>
+        <td>${pct(item?.win_rate)}</td>
+        <td>${pct(item?.continuation_hit_rate)}</td>
+        <td>${pct(stageValue(item, "2→3", "continuation_hit_rate"))}</td>
+        <td>${pct(stageValue(item, "3→4", "continuation_hit_rate"))}</td>
+        <td class="${valueTone(item?.tail_10pct_mean_return)}">${signedPct(item?.tail_10pct_mean_return)}</td>
+        <td>${number(item?.profit_factor, 2)}</td>
+      </tr>`).join("");
+      els.top10BacktestContent.innerHTML = `<div class="table-wrap"><table class="top10-backtest-table">
+        <thead><tr><th class="left">统计口径</th><th>样本</th><th>平均净收益</th><th>胜率</th><th>总晋级率</th><th>2进3晋级率</th><th>3进4晋级率</th><th>尾部10%</th><th>盈亏比</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+      const allCount = Number(allCandidates?.filled_trades || 0);
+      const buyableCount = Number(buyable?.filled_trades || 0);
+      const buyableRate = allCount ? buyableCount / allCount : null;
+      els.top10BacktestCount.textContent = `${top10?.candidate_days ?? 0} 个候选日`;
+      els.top10BacktestNote.textContent = `Top10共 ${allCount} 个样本，现实可买 ${buyableCount} 个（${pct(buyableRate)}）；${top10?.days_below_cap ?? 0} 个交易日不足10只，保持原数量，零补位。全部开盘计价是反事实排序检查，现实可买子集更接近可执行结果，但仍不是券商实际成交。`;
     }
 
     function renderSentiment(plan) {
@@ -1347,6 +1389,7 @@
       }
       state.current = { info, plan, md };
       renderStatus(plan);
+      renderTop10Backtest(plan);
       renderMetrics(plan);
       renderSentiment(plan);
       renderStageWatchlist(plan);
@@ -1376,6 +1419,7 @@
         state.reports = [cached.info || { report_file: "cached_report", report_date: cached.plan.report_date || "" }];
         state.index = 0;
         renderStatus(cached.plan);
+        renderTop10Backtest(cached.plan);
         renderMetrics(cached.plan);
         renderSentiment(cached.plan);
         renderStageWatchlist(cached.plan);
