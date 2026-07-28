@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-28T07:34:41+00:00",
+  "generated_at_utc": "2026-07-28T07:59:11+00:00",
   "model_version": "auction_v11_tplus1_open0930_oos_1",
   "history_dates": 506,
   "oos_dates": 370,
@@ -54,8 +54,8 @@
   ],
   "market_regime_count": 7,
   "promotion_checks": {
-    "history_dates": true,
-    "oos_dates": true,
+    "history_dates": false,
+    "oos_dates": false,
     "market_regime_coverage": true,
     "filled_trades": false,
     "stage_focus_filled_trades": false,
@@ -75,6 +75,8 @@
     "probability_brier_skill": false
   },
   "promotion_failures": [
+    "history_dates",
+    "oos_dates",
     "filled_trades",
     "stage_focus_filled_trades",
     "signal_date_ratio",
@@ -2476,5 +2478,5 @@
       "nav": 1.0
     }
   ],
-  "model_artifact_sha256": "5239e03e4cc08777eac90446c49fb39e100ded926b931be31cd5281c9ca8ab9a"
+  "model_artifact_sha256": "95636a2368bb1d6a409b1990edcc1599a0635fb27d5321960e00b1a4b229f853"
 }
