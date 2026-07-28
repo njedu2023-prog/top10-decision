@@ -17,13 +17,8 @@ for path in (ROOT, SRC):
         sys.path.insert(0, str(path))
 
 from scripts.run_v2 import _apply_ev_upgrade_v1  # noqa: E402
-from scripts.backfill_decision_v8_history import (  # noqa: E402
-    _fetch_historical_minute_pair,
-)
-from scripts.build_eret_truth import (  # noqa: E402
-    _sync_historical_minute_code,
-    infer_eret_label,
-)
+from scripts.backfill_decision_v11_history import _latest_target_dates  # noqa: E402
+from scripts.build_eret_truth import infer_eret_label  # noqa: E402
 from scripts.build_fill_truth import infer_fill_label  # noqa: E402
 from scripts.resolve_sample_maturity import (  # noqa: E402
     resolve_sample_maturity_rows,
@@ -136,6 +131,22 @@ class DecisionCalendarContractTests(unittest.TestCase):
                 trade_calendar_file=calendar_path,
             )
 
+    def test_two_year_backfill_uses_latest_500_mature_open_sessions(self) -> None:
+        open_dates = [
+            value.strftime("%Y%m%d")
+            for value in pd.bdate_range("2023-01-02", periods=600)
+        ]
+        target_window, missing = _latest_target_dates(
+            open_dates,
+            {open_dates[92], open_dates[93]},
+            max_missing_dates=3,
+        )
+
+        self.assertEqual(len(target_window), 500)
+        self.assertEqual(target_window[0], open_dates[92])
+        self.assertEqual(target_window[-1], open_dates[-9])
+        self.assertEqual(missing, open_dates[94:97])
+
 
 class DecisionStrictSemanticContractTests(unittest.TestCase):
     def test_unpromoted_v8_no_trade_accepts_failed_legacy_learning_gate(self) -> None:
@@ -161,10 +172,10 @@ class DecisionStrictSemanticContractTests(unittest.TestCase):
 
 
 class DecisionExecutionTruthTests(unittest.TestCase):
-    def test_exit_contract_is_tp15_sl5_time1100(self) -> None:
-        self.assertEqual(EXIT_TAKE_PROFIT_PCT, 0.15)
-        self.assertEqual(EXIT_STOP_LOSS_PCT, -0.05)
-        self.assertEqual(EXIT_LATEST_TIME, "11:00")
+    def test_exit_contract_is_fixed_tplus1_open_0930(self) -> None:
+        self.assertIsNone(EXIT_TAKE_PROFIT_PCT)
+        self.assertIsNone(EXIT_STOP_LOSS_PCT)
+        self.assertEqual(EXIT_LATEST_TIME, "09:30")
 
     def test_historical_minute_normalizes_tushare_pro_bar(self) -> None:
         response = pd.DataFrame(
@@ -213,90 +224,6 @@ class DecisionExecutionTruthTests(unittest.TestCase):
         self.assertEqual(params["freq"], "1min")
         self.assertTrue(str(params["end_date"]).endswith("11:00:59"))
         self.assertIn("trade_time", fields)
-
-    def test_historical_minute_backfill_worker_persists_strict_truth(self) -> None:
-        response = pd.DataFrame(
-            [
-                {
-                    "ts_code": "600000.SH",
-                    "time": "2026-07-22 09:30:00",
-                    "open": 10.0,
-                    "high": 10.1,
-                    "low": 9.9,
-                    "close": 10.05,
-                    "vol": 200,
-                    "amount": 2010,
-                }
-            ]
-        )
-        client = mock.Mock(spec=TushareClient)
-        client.historical_minute.return_value = response
-        with tempfile.TemporaryDirectory() as temp:
-            result = _fetch_historical_minute_pair(
-                ("20260722", "600000.SH"),
-                client=client,
-                temp_root=Path(temp),
-                latest_time="11:00",
-                request_sleep=0.0,
-            )
-            snapshot = (
-                Path(temp)
-                / "data"
-                / "market"
-                / "minute_1m"
-                / "2026"
-                / "20260722"
-                / "600000_SH.csv"
-            )
-            self.assertTrue(snapshot.exists())
-
-        self.assertEqual(result["rows"], 1)
-        self.assertEqual(result["reason"], "")
-        client.historical_minute.assert_called_once_with(
-            "600000.SH",
-            "20260722",
-            latest_time="11:00",
-        )
-
-    def test_eret_minute_worker_persists_strict_truth(self) -> None:
-        response = pd.DataFrame(
-            [
-                {
-                    "ts_code": "000001.SZ",
-                    "time": "2026-07-22 11:00:00",
-                    "open": 11.0,
-                    "high": 11.1,
-                    "low": 10.9,
-                    "close": 11.05,
-                    "vol": 100,
-                    "amount": 1105,
-                }
-            ]
-        )
-        client = mock.Mock(spec=TushareClient)
-        client.historical_minute.return_value = response
-        with tempfile.TemporaryDirectory() as temp:
-            code, rows, reason = _sync_historical_minute_code(
-                "000001.SZ",
-                client=client,
-                project_root=Path(temp),
-                target_date="20260722",
-                latest_time="11:00",
-            )
-            snapshot = (
-                Path(temp)
-                / "data"
-                / "market"
-                / "minute_1m"
-                / "2026"
-                / "20260722"
-                / "000001_SZ.csv"
-            )
-            self.assertTrue(snapshot.exists())
-
-        self.assertEqual(code, "000001.SZ")
-        self.assertEqual(rows, 1)
-        self.assertEqual(reason, "")
 
     def test_minute_sync_cap_prioritizes_formal_and_stage_watch_names(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -353,37 +280,26 @@ class DecisionExecutionTruthTests(unittest.TestCase):
         self.assertEqual(label[0], 0)
         self.assertEqual(label[1], "strong_opening_auction_limit_up_unconfirmed")
 
-    def test_eret_gap_up_uses_predeclared_take_profit_not_hindsight_close(self) -> None:
-        minute = pd.DataFrame(
-            [
-                {
-                    "time": "2026-07-22 09:30:00",
-                    "open": 12.0,
-                    "high": 12.0,
-                    "low": 12.0,
-                    "close": 12.0,
-                }
-            ]
-        )
+    def test_eret_gap_up_uses_fixed_open_not_hindsight_close(self) -> None:
         label = infer_eret_label(
             pd.Series(
                 {
                     "y_fill": 1,
                     "entry_price_proxy_t1": 10.0,
+                    "auction_price_t2": 12.0,
                     "open_t2": 12.0,
                     "high_t2": 20.0,
                     "low_t2": 12.0,
                     "close_t2": 20.0,
-                    "_minute_frame_t2": minute,
                 }
             )
         )
-        self.assertAlmostEqual(float(label[0]), 0.15)
+        self.assertAlmostEqual(float(label[0]), 0.20)
         self.assertEqual(label[2], 1)
-        self.assertEqual(label[3], 11.5)
-        self.assertEqual(label[6], "take_profit_gap_conservative")
+        self.assertEqual(label[3], 12.0)
+        self.assertEqual(label[6], "fixed_open_0930")
 
-    def test_daily_bar_both_hits_are_counted_stop_first(self) -> None:
+    def test_daily_high_low_and_close_do_not_change_fixed_open_exit(self) -> None:
         result = simulate_tplus1_exit(
             entry_price=10.0,
             open_price=10.0,
@@ -392,10 +308,10 @@ class DecisionExecutionTruthTests(unittest.TestCase):
             close_price=10.2,
         )
         self.assertTrue(result.executable)
-        self.assertEqual(result.exit_price, 9.5)
-        self.assertEqual(result.reason, "both_hit_stop_first_conservative")
+        self.assertEqual(result.exit_price, 10.0)
+        self.assertEqual(result.reason, "fixed_open_0930")
 
-    def test_minute_first_touch_can_confirm_take_profit_before_stop(self) -> None:
+    def test_intraday_minutes_do_not_change_fixed_open_exit(self) -> None:
         minute = pd.DataFrame(
             [
                 {"time": "2026-07-22 09:30:00", "open": 10.0, "high": 10.5, "low": 9.9, "close": 10.4},
@@ -411,76 +327,33 @@ class DecisionExecutionTruthTests(unittest.TestCase):
             close_price=9.8,
             minute_frame=minute,
         )
-        self.assertEqual(result.exit_price, 11.5)
-        self.assertEqual(result.reason, "take_profit_first_touch")
+        self.assertEqual(result.exit_price, 10.0)
+        self.assertEqual(result.reason, "fixed_open_0930")
 
-    def test_strict_exit_requires_complete_intraday_truth_through_1100(self) -> None:
-        incomplete = pd.DataFrame(
-            [
-                {
-                    "time": "2026-07-22 10:59:00",
-                    "open": 10.0,
-                    "high": 10.2,
-                    "low": 9.9,
-                    "close": 10.1,
-                }
-            ]
-        )
-        result = simulate_tplus1_exit(
-            entry_price=10.0,
-            open_price=10.0,
-            high_price=10.2,
-            low_price=9.9,
-            close_price=10.1,
-            minute_frame=incomplete,
-            require_intraday=True,
-        )
-        self.assertFalse(result.executable)
-        self.assertEqual(result.reason, "minute_incomplete_before_latest_exit")
-
-    def test_strict_exit_uses_1100_minute_close_when_no_threshold_hits(self) -> None:
+    def test_minute_0930_open_is_only_a_fallback_when_daily_open_is_missing(self) -> None:
         minute = pd.DataFrame(
             [
                 {
                     "time": "2026-07-22 09:30:00",
-                    "open": 10.0,
-                    "high": 10.2,
-                    "low": 9.9,
-                    "close": 10.1,
-                },
-                {
-                    "time": "2026-07-22 11:00:00",
                     "open": 10.2,
-                    "high": 10.3,
-                    "low": 10.1,
-                    "close": 10.25,
+                    "high": 10.2,
+                    "low": 10.2,
+                    "close": 10.2,
                 },
             ]
         )
         result = simulate_tplus1_exit(
             entry_price=10.0,
-            open_price=10.0,
-            high_price=10.3,
-            low_price=9.9,
-            close_price=10.25,
+            open_price=float("nan"),
+            high_price=10.2,
+            low_price=10.2,
+            close_price=10.2,
             minute_frame=minute,
-            require_intraday=True,
         )
         self.assertTrue(result.executable)
-        self.assertEqual(result.exit_price, 10.25)
-        self.assertEqual(result.reason, "time_exit")
-        self.assertEqual(result.latest_exit_time, "11:00")
-
-    def test_no_threshold_hit_uses_time_exit_proxy(self) -> None:
-        result = simulate_tplus1_exit(
-            entry_price=10.0,
-            open_price=10.0,
-            high_price=10.2,
-            low_price=9.9,
-            close_price=10.1,
-        )
-        self.assertEqual(result.exit_price, 10.1)
-        self.assertEqual(result.reason, "time_exit_close_proxy")
+        self.assertEqual(result.exit_price, 10.2)
+        self.assertEqual(result.source, "minute_0930_open_fallback")
+        self.assertEqual(result.latest_exit_time, "09:30")
 
     def test_one_price_limit_down_is_not_an_executable_tplus1_exit(self) -> None:
         label = infer_eret_label(
@@ -904,7 +777,7 @@ class DecisionWorkflowSerializationTests(unittest.TestCase):
         for name in (
             "run_decision_daily.yml",
             "run_auction_v3.yml",
-            "backfill_decision_v8_history.yml",
+            "backfill_decision_v11_history.yml",
         ):
             text = (workflow_root / name).read_text(encoding="utf-8")
             self.assertIn("group: decision-auction-main-writer", text)

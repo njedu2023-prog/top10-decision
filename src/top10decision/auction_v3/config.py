@@ -45,11 +45,11 @@ class AuctionV3Config:
     tail_risk_aversion: float = 1.00
     blocked_exit_loss: float = 0.05
     min_tail_mean_return: float = -0.05
-    take_profit_pct: float = EXIT_TAKE_PROFIT_PCT
-    stop_loss_pct: float = EXIT_STOP_LOSS_PCT
+    take_profit_pct: float | None = EXIT_TAKE_PROFIT_PCT
+    stop_loss_pct: float | None = EXIT_STOP_LOSS_PCT
     latest_exit_time: str = EXIT_LATEST_TIME
     exit_policy_version: str = EXIT_POLICY_VERSION
-    require_intraday_exit_truth: bool = True
+    require_intraday_exit_truth: bool = False
     max_mechanism_limit_pct: float = 10.0
     min_train_dates: int = 60
     min_train_rows: int = 1_000
@@ -95,7 +95,7 @@ class AuctionV3Config:
     gap_grid_step: float = 0.005
     lower_confidence_quantile: float = 0.10
     prediction_interval_upper_quantile: float = 0.90
-    model_version: str = "auction_v10_tp15_sl5_time1100_oos_1"
+    model_version: str = "auction_v11_tplus1_open0930_oos_1"
 
     @property
     def output_root(self) -> Path:

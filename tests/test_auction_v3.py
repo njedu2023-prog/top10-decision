@@ -126,13 +126,16 @@ class AuctionV3Test(unittest.TestCase):
         engine = AuctionV3Engine(self.config)
         history = engine.build_history()
         self.assertIn(self.dates[0], set(history["signal_date"]))
-        self.assertTrue((history["exit_reason"] == "take_profit_daily_proxy").all())
-        self.assertTrue(np.allclose(history["gross_return"], self.config.take_profit_pct, atol=0.0015))
+        self.assertTrue((history["exit_reason"] == "fixed_open_0930").all())
+        self.assertTrue(np.allclose(history["gross_return"], 0.10, atol=0.0015))
         self.assertGreaterEqual(history["signal_date"].nunique(), 30)
         oos, metrics = engine.run_backtest(history)
         self.assertFalse(oos.empty)
         self.assertTrue((oos["oos_train_end"] < oos["signal_date"]).all())
         self.assertGreater(metrics["oos_dates"], 0)
+        self.assertIn("stage_focus_all", metrics)
+        self.assertIn("rank_bucket_oos", metrics)
+        self.assertIn("path_shadow_policies", metrics)
 
     def test_backtest_persists_formal_gate_and_shadow_audits(self) -> None:
         engine = AuctionV3Engine(self.config)
@@ -144,12 +147,16 @@ class AuctionV3Test(unittest.TestCase):
                     "ts_code": self.codes[0],
                     "selected": 0,
                     "shadow_selected": 1,
+                    "stage_focus": 1,
+                    "path_label_code": "ACCELERATION_CONSENSUS",
                 },
                 {
                     "signal_date": self.dates[1],
                     "ts_code": self.codes[1],
                     "selected": 1,
                     "shadow_selected": 1,
+                    "stage_focus": 1,
+                    "path_label_code": "WEAK_TO_STRONG",
                 },
             ]
         )
@@ -166,11 +173,19 @@ class AuctionV3Test(unittest.TestCase):
         shadow_audit = pd.read_csv(
             self.config.metrics_root / "backtest_shadow_latest.csv"
         )
+        all_stage_audit = pd.read_csv(
+            self.config.metrics_root / "backtest_stage_focus_all_latest.csv"
+        )
+        path_audit = pd.read_csv(
+            self.config.metrics_root / "backtest_path_focus_latest.csv"
+        )
         self.assertEqual(len(returned), 2)
         self.assertEqual(metrics, {"promoted": False})
         self.assertEqual(persisted["ts_code"].tolist(), [self.codes[1]])
         self.assertEqual(len(gate_audit), 2)
         self.assertEqual(len(shadow_audit), 2)
+        self.assertEqual(len(all_stage_audit), 2)
+        self.assertEqual(len(path_audit), 2)
 
     def test_market_shadow_forces_open_truth_and_discloses_buyability(self) -> None:
         engine = AuctionV3Engine(self.config)
@@ -212,6 +227,66 @@ class AuctionV3Test(unittest.TestCase):
         self.assertEqual(market["market_buyable_trades"], 1)
         self.assertEqual(market["market_buyable_rate"], 0.5)
         self.assertEqual(limited["filled_trades"], 1)
+
+    def test_all_stage_and_path_cohorts_use_every_candidate(self) -> None:
+        engine = AuctionV3Engine(self.config)
+        oos = pd.DataFrame(
+            [
+                {
+                    "signal_date": self.dates[0],
+                    "stage_focus": 1,
+                    "stage": "2→3",
+                    "path_label_code": "ACCELERATION_CONSENSUS",
+                    "market_fill": 1,
+                    "net_return": 0.10,
+                    "exit_on_time": 1,
+                    "continuation_limit_up_hit": 1,
+                },
+                {
+                    "signal_date": self.dates[0],
+                    "stage_focus": 1,
+                    "stage": "3→4",
+                    "path_label_code": "WEAK_TO_STRONG",
+                    "market_fill": 1,
+                    "net_return": -0.10,
+                    "exit_on_time": 1,
+                    "continuation_limit_up_hit": 0,
+                },
+                {
+                    "signal_date": self.dates[1],
+                    "stage_focus": 1,
+                    "stage": "2→3",
+                    "path_label_code": "ACCELERATION_CONSENSUS",
+                    "market_fill": 0,
+                    "net_return": 0.20,
+                    "exit_on_time": 1,
+                    "continuation_limit_up_hit": 1,
+                },
+            ]
+        )
+
+        all_stage = engine._cohort_policy_metrics(
+            oos,
+            oos["stage_focus"].eq(1),
+            cohort="all_2to3_and_3to4",
+        )
+        acceleration = engine._cohort_policy_metrics(
+            oos,
+            oos["path_label_code"].eq("ACCELERATION_CONSENSUS"),
+            cohort="ACCELERATION_CONSENSUS",
+        )
+        weak = engine._cohort_policy_metrics(
+            oos,
+            oos["path_label_code"].eq("WEAK_TO_STRONG"),
+            cohort="WEAK_TO_STRONG",
+        )
+
+        self.assertEqual(all_stage["filled_trades"], 3)
+        self.assertAlmostEqual(all_stage["cumulative_return"], 0.20)
+        self.assertEqual(acceleration["filled_trades"], 2)
+        self.assertAlmostEqual(acceleration["cumulative_return"], 0.32)
+        self.assertEqual(weak["filled_trades"], 1)
+        self.assertAlmostEqual(weak["cumulative_return"], -0.10)
 
     def test_prediction_is_frozen_and_has_actionable_price(self) -> None:
         engine = AuctionV3Engine(self.config)

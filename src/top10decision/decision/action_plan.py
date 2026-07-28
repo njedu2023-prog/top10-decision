@@ -10,11 +10,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .contracts import (
-    EXIT_LATEST_TIME,
-    EXIT_STOP_LOSS_PCT,
-    EXIT_TAKE_PROFIT_PCT,
-)
 from .eligibility import annotate_standard_limit_universe, filter_standard_limit_universe
 from .observation import (
     OBSERVATION_START_EXEC_DATE,
@@ -246,7 +241,7 @@ def _merge_auction_candidates(
         elif not promoted and selected:
             reason = "严格样本外晋级门槛未全部通过，禁止正式买入"
         elif shadow_selected and not selected:
-            reason = "Top1/Top2影子策略样本，仅用于按真实竞价与T+1规则累计验证，不构成买入建议"
+            reason = "影子策略样本；全体2进3/3进4另按统一口径回测，不构成买入建议"
         elif action != "BUY":
             reason = _rejection_reason(row.get("model_reason"))
         rows.append(
@@ -920,27 +915,30 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
                 "bootstrap_probability_mean_positive",
                 "exit_on_time_rate",
                 "path_oos",
+                "stage_focus_all",
+                "rank_bucket_oos",
+                "path_shadow_policies",
                 "gate_funnel",
                 "shadow_policies",
             )
         },
         "universe_eligibility": model_meta.get("universe_eligibility") or evaluation.get("universe_eligibility") or {},
         "execution_contract": {
-            "objective": "D日冻结信号，指导人工在T日9:25前参与开盘集合竞价，T+1按预声明择机规则卖出，最大化扣除费用和不可成交风险后的样本外收益",
+            "objective": "D日冻结信号，指导人工在T日9:25前参与开盘集合竞价，T+1固定在9:30开盘退出，最大化扣除费用和不可成交风险后的样本外收益",
             "calendar": "严格使用上交所A股交易日历，禁止工作日或raw目录推断",
             "candidate_pool": "以D日limit_list_d确认涨停清单为权威全集，不扩展到全市场、不受旧Top50截断；正式推荐严格限定2进3、3进4，其他阶段不得进入正式买入名单",
             "streak_path": "逐板量化竞价变化、首封时点、炸板变化、换手与封单斜率，识别弱转强、强转弱、加速一致、分歧回封和持续强势",
             "market_sentiment": "只用D日及更早收盘数据，量化市场广度、涨跌停生态、涨停行业Top10、炸板回封、昨日涨停溢价、2进3/3进4真实晋级、拥挤度与流动性；仅在严格时序留出期战胜常数基线时进入模型，否则自动回退",
-            "observation_ranking": "2进3和3进4候选先按保守效用形成Top1/Top2影子序列持续记账；正式买入另须通过独立策略留出期",
+            "observation_ranking": "全部2进3和3进4候选均按T日开盘买入、T+1开盘卖出的统一口径持续记账，并按排名区间与连板路径分层；正式买入另须通过独立策略留出期",
             "eligible_universe": "D日已涨停且价格涨跌幅限制机制不超过10%的A股",
             "entry": "系统不下单；T日9:25前仅允许人工限价挂单，禁止无上限市价单，高于冻结上限或未成交均放弃",
-            "exit": f"T+1按实际成交价计算{EXIT_TAKE_PROFIT_PCT * 100:g}%止盈、{abs(EXIT_STOP_LOSS_PCT) * 100:g}%止损，首次触发即人工退出；均未触发则{EXIT_LATEST_TIME}退出；一字跌停顺延",
-            "return_target": f"优先使用Tushare stk_auction_o真实9:30集合竞价成交价，到T+1止盈/止损/{EXIT_LATEST_TIME}时间退出价的保守可执行收益；缺少截至退出时点的分钟真值则不纳入训练",
-            "validation": "正式限价代理、Top1/Top2强制开盘价反事实真值、参考限价影子、人工实际成交分账累计，互不覆盖；强制真值不代表真实可成交，实际可买率另行披露",
+            "exit": "T+1固定按9:30开盘集合竞价成交价人工退出；一字跌停无法成交时顺延至首个可成交开盘",
+            "return_target": "优先使用Tushare stk_auction_o真实开盘集合竞价成交价，计算T日竞价买入到T+1固定9:30开盘退出的保守可执行净收益；不使用T+1盘中或收盘未来信息",
+            "validation": "正式限价代理、全部2进3/3进4强制开盘价反事实真值、排名分层、路径分层和人工实际成交分账累计，互不覆盖；强制真值不代表真实可成交，实际可买率另行披露",
             "probability_calibration": "全部概率按交易日隔离校准并接受Brier技能审计；大跌与P_fill必须有信息增益，盈利、晋级和近乎单一标签的退出模型可安全回退常数，不得成为全局否决器",
             "policy_selection": "模型拟合、概率校准、策略阈值选择使用三个依次向后的交易日窗口并设置禁运间隔；策略留出期必须同时满足交易频率、费用压力、收益和尾部风险",
             "return_uncertainty": "保形q10/q90用于尾部诊断；正式授权使用独立策略留出期确定的均值保守下界和保守期望，不把极端分位机械设为必须大于零",
-            "risk_veto": "大跌、均值保守下界、P_fill、T+1退出、保守期望和综合分位均使用独立策略留出期阈值；无可行策略则正式不交易，但Top1/Top2影子账继续验证",
+            "risk_veto": "大跌、均值保守下界、P_fill、T+1退出、保守期望和综合分位均使用独立策略留出期阈值；无可行策略则正式不交易，但全部2进3/3进4反事实账继续验证",
             "guidance_only": True,
             "broker_connected": False,
             "no_trade_is_valid": True,

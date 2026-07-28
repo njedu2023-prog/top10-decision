@@ -638,7 +638,7 @@
 
     const REPO = { owner: "njedu2023-prog", name: "top10-decision", branch: "main" };
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
-    const CACHE_KEY = "decision-dashboard-v10-dt-market-close-cache";
+    const CACHE_KEY = "decision-dashboard-v11-open0930-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
       "signalDate", "execDate", "exitDate", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
@@ -733,6 +733,7 @@
 
     function modelDisplayName(value) {
       const text = String(value || "");
+      if (text.startsWith("auction_v11_")) return "V11 · T+1 09:30退出 · 全候选回测";
       if (text.startsWith("auction_v10_")) return "V10 · 15%止盈 / 5%止损 / 11:00退出";
       if (text.startsWith("auction_v9_")) return "V9 · 嵌套时序策略与影子验证";
       if (text.startsWith("auction_v8_")) return "V8 · 严格校准与竞价真值";
@@ -830,6 +831,10 @@
       const shadows = bt?.shadow_policies || {};
       const top1Shadow = shadows?.top1_market_at_open || {};
       const top2Shadow = shadows?.top2_market_at_open || {};
+      const allStage = bt?.stage_focus_all || {};
+      const pathPolicies = bt?.path_shadow_policies || {};
+      const acceleration = pathPolicies?.ACCELERATION_CONSENSUS || {};
+      const weakToStrong = pathPolicies?.WEAK_TO_STRONG || {};
       const gateFunnel = bt?.gate_funnel || {};
       const finalGateRows = gateFunnel?.sequential?.combined_risk_gate?.rows;
       const promoted = plan?.model?.promoted === true;
@@ -861,14 +866,24 @@
         metric("双倍成本日收益", pct(bt.stress_2x_cost_mean_daily_return, 3), valueTone(bt.stress_2x_cost_mean_daily_return)),
         metric("次日按时退出率", pct(bt.exit_on_time_rate)),
         metric("Bootstrap 正收益概率", pct(bt.bootstrap_probability_mean_positive)),
-        metric("Top1强制开盘真值笔数", String(top1Shadow.filled_trades ?? "-")),
-        metric("Top1实际可买率", pct(top1Shadow.market_buyable_rate)),
-        metric("Top1强制开盘平均净收益", pct(top1Shadow.mean_trade_net_return), valueTone(top1Shadow.mean_trade_net_return)),
-        metric("Top1强制开盘累计收益", pct(top1Shadow.cumulative_return), valueTone(top1Shadow.cumulative_return)),
-        metric("Top2强制开盘真值笔数", String(top2Shadow.filled_trades ?? "-")),
-        metric("Top2实际可买率", pct(top2Shadow.market_buyable_rate)),
-        metric("Top2强制开盘平均净收益", pct(top2Shadow.mean_trade_net_return), valueTone(top2Shadow.mean_trade_net_return)),
-        metric("Top2强制开盘累计收益", pct(top2Shadow.cumulative_return), valueTone(top2Shadow.cumulative_return)),
+        metric("全体2进3/3进4样本", String(allStage.filled_trades ?? "-")),
+        metric("全体候选实际可买率", pct(allStage.market_buyable_rate)),
+        metric("全体候选平均净收益", pct(allStage.mean_trade_net_return), valueTone(allStage.mean_trade_net_return)),
+        metric("全体候选胜率", pct(allStage.win_rate)),
+        metric("全体候选累计收益", pct(allStage.cumulative_return), valueTone(allStage.cumulative_return)),
+        metric("全体候选最大回撤", pct(allStage.max_drawdown), valueTone(allStage.max_drawdown)),
+        metric("加速一致样本", String(acceleration.filled_trades ?? "-")),
+        metric("加速一致平均净收益", pct(acceleration.mean_trade_net_return), valueTone(acceleration.mean_trade_net_return)),
+        metric("加速一致胜率", pct(acceleration.win_rate)),
+        metric("加速一致累计收益", pct(acceleration.cumulative_return), valueTone(acceleration.cumulative_return)),
+        metric("加速一致最大回撤", pct(acceleration.max_drawdown), valueTone(acceleration.max_drawdown)),
+        metric("弱转强样本", String(weakToStrong.filled_trades ?? "-")),
+        metric("弱转强平均净收益", pct(weakToStrong.mean_trade_net_return), valueTone(weakToStrong.mean_trade_net_return)),
+        metric("弱转强胜率", pct(weakToStrong.win_rate)),
+        metric("弱转强累计收益", pct(weakToStrong.cumulative_return), valueTone(weakToStrong.cumulative_return)),
+        metric("弱转强最大回撤", pct(weakToStrong.max_drawdown), valueTone(weakToStrong.max_drawdown)),
+        metric("Top1平均净收益", pct(top1Shadow.mean_trade_net_return), valueTone(top1Shadow.mean_trade_net_return)),
+        metric("Top2平均净收益", pct(top2Shadow.mean_trade_net_return), valueTone(top2Shadow.mean_trade_net_return)),
         metric("模型版本", modelDisplayName(plan?.model?.version))
       ];
       els.metrics.innerHTML = rows.join("");
@@ -1070,9 +1085,9 @@
       const notice = formal.length
         ? `<div class="empty"><strong>本次正式人工建议 ${formal.length} 只</strong>请在 9:25 前仅用限价单按冻结上限自行挂单；禁止无上限市价单，超过上限或未成交均放弃。</div>`
         : '<div class="empty"><strong>本次没有正式买入建议</strong>影子验证只用于累计样本外证据；未晋级模型不得作为人工交易依据。</div>';
-      const headers = ["操作", "排名", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "同梯队", "近20日晋级率", "竞价上限", "最高涨幅", "止盈价", "止损价", "最迟退出", "P_fill", "P_exit", "晋级涨停概率", "盈利概率", "预计净收益", "保守下界", "大跌概率", "目标仓位", "原因 / 退出规则"];
+      const headers = ["操作", "排名", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "同梯队", "近20日晋级率", "竞价上限", "最高涨幅", "T+1卖出", "P_fill", "P_exit", "晋级涨停概率", "盈利概率", "预计净收益", "保守下界", "大跌概率", "目标仓位", "原因 / 退出规则"];
       const body = rows.map(row => {
-        const reason = row.action === "BUY" ? (row.exit_rule || "T+1按15%止盈、5%止损、11:00规则退出") : (row.rejection_reason || "-");
+        const reason = row.action === "BUY" ? (row.exit_rule || "T+1日9:30开盘集合竞价退出") : (row.rejection_reason || "-");
         return `<tr>
           <td class="left"><span class="action ${actionClass(row.action)}">${escapeHtml(actionLabel(row.action))}</span></td>
           <td>${escapeHtml(row.rank ?? "-")}</td>
@@ -1086,9 +1101,7 @@
           <td title="最近20个可用信号日，同一晋级阶段的历史真值">${pct(row.stage_recent_promotion_rate)}</td>
           <td>${price(row.recommended_max_price)}</td>
           <td>${finiteNumber(row.max_auction_change_pct) == null ? "-" : `${finiteNumber(row.max_auction_change_pct).toFixed(2)}%`}</td>
-          <td>${price(row.take_profit_price)}</td>
-          <td>${price(row.stop_loss_price)}</td>
-          <td>${escapeHtml(row.latest_exit_time || "11:00")}</td>
+          <td>${escapeHtml(row.latest_exit_time || "09:30")}</td>
           <td>${pct(row.predicted_fill_probability)}</td>
           <td>${pct(row.predicted_exit_probability)}</td>
           <td>${pct(row.predicted_continuation_limit_up_probability)}</td>
@@ -1100,7 +1113,7 @@
           <td class="reason">${escapeHtml(reason)}</td>
         </tr>`;
       }).join("");
-      els.actionContent.innerHTML = `${notice}<div class="table-wrap"><table><thead><tr>${headers.map((h, i) => `<th class="${[0,2,3,4,6,23].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.actionContent.innerHTML = `${notice}<div class="table-wrap"><table><thead><tr>${headers.map((h, i) => `<th class="${[0,2,3,4,6,21].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function auditRow(label, value) {
@@ -1202,7 +1215,7 @@
           </div>
         </div>
         <div class="audit-block">
-          <h3>V10 概率、策略与收益质量</h3>
+          <h3>V11 概率、策略与收益质量</h3>
           <div class="audit-list">
             ${auditRow("概率总门槛", probabilityGate.passed === true ? "通过：必需概率均优于逐日常数基线" : "未通过：正式交易关闭，观察名单继续累计")}
             ${auditRow("策略留出期", selectionPolicy.ready === true ? `通过 · ${dateText(selectionPolicy.tuning_start)} 至 ${dateText(selectionPolicy.tuning_end)}` : `未通过 · ${selectionPolicy.reason || "等待模型生成"}`)}

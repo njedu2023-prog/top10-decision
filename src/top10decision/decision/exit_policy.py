@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -33,10 +32,6 @@ def _finite(value: Any) -> float:
     except Exception:
         return float("nan")
     return number if math.isfinite(number) else float("nan")
-
-
-def _price(value: float) -> float:
-    return round(float(value) + 1e-12, 2)
 
 
 def adjusted_entry_reference(
@@ -112,8 +107,8 @@ def simulate_tplus1_exit(
     target_pre_close: Any = None,
     down_limit: Any = None,
     minute_frame: pd.DataFrame | None = None,
-    take_profit_pct: float = EXIT_TAKE_PROFIT_PCT,
-    stop_loss_pct: float = EXIT_STOP_LOSS_PCT,
+    take_profit_pct: float | None = EXIT_TAKE_PROFIT_PCT,
+    stop_loss_pct: float | None = EXIT_STOP_LOSS_PCT,
     latest_exit_time: str = EXIT_LATEST_TIME,
     require_intraday: bool = False,
 ) -> TimedExitResult:
@@ -121,8 +116,6 @@ def simulate_tplus1_exit(
     if not math.isfinite(reference) or reference <= 0:
         return TimedExitResult(None, False, "missing_entry_reference", "", None, None, latest_exit_time)
 
-    take_profit = _price(reference * (1.0 + float(take_profit_pct)))
-    stop_loss = _price(reference * (1.0 + float(stop_loss_pct)))
     daily_open = _finite(open_price)
     daily_high = _finite(high_price)
     daily_low = _finite(low_price)
@@ -140,62 +133,43 @@ def simulate_tplus1_exit(
             False,
             "blocked_one_price_limit_down",
             "daily_limit_truth",
-            take_profit,
-            stop_loss,
+            None,
+            None,
+            latest_exit_time,
+        )
+
+    if math.isfinite(daily_open) and daily_open > 0:
+        return TimedExitResult(
+            daily_open,
+            True,
+            "fixed_open_0930",
+            "tplus1_open_0930",
+            None,
+            None,
             latest_exit_time,
         )
 
     minute = _minute_window(minute_frame, latest_exit_time)
     if not minute.empty:
-        first_open = float(minute.iloc[0]["open"])
-        if first_open <= stop_loss:
-            return TimedExitResult(first_open, True, "stop_gap_at_open", "minute_1m_first_touch", take_profit, stop_loss, latest_exit_time)
-        if first_open >= take_profit:
-            return TimedExitResult(take_profit, True, "take_profit_gap_conservative", "minute_1m_first_touch", take_profit, stop_loss, latest_exit_time)
-        for _, bar in minute.iterrows():
-            low_value = float(bar["low"])
-            high_value = float(bar["high"])
-            if low_value <= stop_loss:
-                reason = "both_hit_stop_first_conservative" if high_value >= take_profit else "stop_loss_first_touch"
-                return TimedExitResult(stop_loss, True, reason, "minute_1m_first_touch", take_profit, stop_loss, latest_exit_time)
-            if high_value >= take_profit:
-                return TimedExitResult(take_profit, True, "take_profit_first_touch", "minute_1m_first_touch", take_profit, stop_loss, latest_exit_time)
-        if str(minute.iloc[-1]["_hhmm"]) < latest_exit_time:
-            return TimedExitResult(
-                None,
-                False,
-                "minute_incomplete_before_latest_exit",
-                "minute_1m_incomplete",
-                take_profit,
-                stop_loss,
-                latest_exit_time,
-            )
-        final_close = float(minute.iloc[-1]["close"])
-        return TimedExitResult(final_close, True, "time_exit", "minute_1m_time_exit", take_profit, stop_loss, latest_exit_time)
-
-    if require_intraday:
         return TimedExitResult(
+            float(minute.iloc[0]["open"]),
+            True,
+            "fixed_open_0930",
+            "minute_0930_open_fallback",
             None,
-            False,
-            "missing_intraday_exit_truth",
-            "",
-            take_profit,
-            stop_loss,
+            None,
             latest_exit_time,
         )
 
-    if not all(math.isfinite(value) and value > 0 for value in (daily_open, daily_high, daily_low, daily_close)):
-        return TimedExitResult(None, False, "missing_tplus1_ohlc", "", take_profit, stop_loss, latest_exit_time)
-    if daily_open <= stop_loss:
-        return TimedExitResult(daily_open, True, "stop_gap_at_open", "daily_ohlc_conservative_proxy", take_profit, stop_loss, latest_exit_time)
-    if daily_open >= take_profit:
-        return TimedExitResult(take_profit, True, "take_profit_gap_conservative", "daily_ohlc_conservative_proxy", take_profit, stop_loss, latest_exit_time)
-    if daily_low <= stop_loss:
-        reason = "both_hit_stop_first_conservative" if daily_high >= take_profit else "stop_loss_daily_proxy"
-        return TimedExitResult(stop_loss, True, reason, "daily_ohlc_conservative_proxy", take_profit, stop_loss, latest_exit_time)
-    if daily_high >= take_profit:
-        return TimedExitResult(take_profit, True, "take_profit_daily_proxy", "daily_ohlc_conservative_proxy", take_profit, stop_loss, latest_exit_time)
-    return TimedExitResult(daily_close, True, "time_exit_close_proxy", "daily_ohlc_conservative_proxy", take_profit, stop_loss, latest_exit_time)
+    return TimedExitResult(
+        None,
+        False,
+        "missing_tplus1_open_0930",
+        "",
+        None,
+        None,
+        latest_exit_time,
+    )
 
 
 __all__ = [

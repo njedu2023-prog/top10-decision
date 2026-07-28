@@ -9,14 +9,14 @@ build_eret_truth.py
 - 严格消费 sample_maturity_latest.csv，不自猜日期
 - 只处理 ERET_READY=1 的成熟样本
 - 优先复用 fill_truth_{trade_date}.csv 中的 entry_price_proxy_t1 作为买入价口径
-- 使用执行日下一交易日(target_date)的预声明止盈/止损/时间退出策略构建 E_ret 真值层
+- 使用执行日下一交易日(target_date)的9:30开盘集合竞价成交价构建 E_ret 真值层
 
 输出：
 - data/market/eret_truth_{trade_date}.csv
 - data/market/eret_truth_{trade_date}.meta.json
 
 当前阶段只做“真值层 / 标签层”：
-- realized_ret_open_to_tplus1_timed_exit（主目标）
+- realized_ret_open_to_tplus1_open_0930（主目标）
 - realized_ret_t1_to_t2（Decision 兼容别名，数值与主目标一致）
 - exit_price_tplus1_timed
 - eret_label_quality
@@ -32,7 +32,7 @@ build_eret_truth.py
 2. E_ret 的买入价口径优先复用 fill_truth / entry_price_proxy_t1
 3. 训练日期机制必须复用 sample_maturity，不得另起一套时间逻辑
 4. E_ret 服务于 EV，不是独立漂浮展示值；因此保留 fill 状态与样本可训练性审计
-5. 择机退出必须先声明规则；仅有日线时同日止盈止损双触发按止损先发生处理
+5. 退出规则固定为T+1 9:30开盘，不读取T+1盘中或收盘信息
 """
 
 from __future__ import annotations
@@ -40,10 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
@@ -54,13 +51,6 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from top10decision.data.tushare_minute import (
-    TushareClient,
-    minute_output_path,
-    opening_auction_price,
-    read_minute_snapshot,
-    write_minute_snapshot,
-)
 from top10decision.decision.contracts import (
     DECISION_EXECUTION_CONTRACT,
     ERET_COMPAT_TARGET_COLUMN,
@@ -423,17 +413,19 @@ def infer_eret_label(
 ]:
     y_fill = row.get("y_fill")
     entry = to_float(row.get("entry_price_proxy_t1"))
+    auction_open = to_float(row.get("auction_price_t2"))
+    daily_open = to_float(row.get("open_t2"))
+    exit_open = auction_open if pd.notna(auction_open) and auction_open > 0 else daily_open
     result = simulate_tplus1_exit(
         entry_price=entry,
         buy_close=row.get("close_t1"),
         target_pre_close=row.get("pre_close_t2"),
-        open_price=row.get("open_t2"),
+        open_price=exit_open,
         high_price=row.get("high_t2"),
         low_price=row.get("low_t2"),
         close_price=row.get("close_t2"),
         down_limit=row.get("down_limit_t2"),
-        minute_frame=row.get("_minute_frame_t2"),
-        require_intraday=True,
+        require_intraday=False,
     )
 
     if pd.isna(y_fill):
@@ -473,7 +465,7 @@ def infer_eret_label(
         return None, "invalid_timed_exit_return", 0, result.exit_price, result.source, 1, result.reason, result.take_profit_price, result.stop_loss_price, result.latest_exit_time, result.policy_version
     return (
         float(realized_ret),
-        f"strong_{result.source}_{result.reason}",
+        f"strong_tplus1_open_0930_{result.reason}",
         1,
         float(result.exit_price),
         result.source,
@@ -501,43 +493,6 @@ def _compat_close_return(row: pd.Series) -> Optional[float]:
     return float(value) if pd.notna(value) else None
 
 
-def _sync_historical_minute_code(
-    code: str,
-    *,
-    client: TushareClient,
-    project_root: Path,
-    target_date: str,
-    latest_time: str,
-    retry_attempts: int = 2,
-) -> tuple[str, int, str]:
-    path = minute_output_path(project_root, target_date, code)
-    if path.exists() and path.stat().st_size > 0:
-        return code, 0, ""
-    last_reason = f"{code}:empty"
-    for attempt in range(max(0, int(retry_attempts)) + 1):
-        try:
-            minute = client.historical_minute(
-                code,
-                target_date,
-                latest_time=latest_time,
-            )
-            if minute.empty:
-                return code, 0, f"{code}:empty"
-            write_minute_snapshot(
-                minute,
-                project_root,
-                target_date,
-                code,
-                source="tushare:stk_mins:historical_1min",
-            )
-            return code, len(minute), ""
-        except Exception as exc:
-            last_reason = f"{code}:{type(exc).__name__}"
-            if attempt < max(0, int(retry_attempts)):
-                time.sleep(1.5 * (attempt + 1))
-    return code, 0, last_reason
-
-
 # =========================
 # 主流程
 # =========================
@@ -550,8 +505,6 @@ def build_eret_truth(
     label_ready_fill: int,
     label_ready_ret: int,
     paths: Paths,
-    sync_historical_minute: bool = False,
-    minute_workers: int = 6,
 ) -> Tuple[pd.DataFrame, str, str, str]:
     pred, pred_source_path = load_candidate_pool(paths, trade_date)
     fill_truth = load_fill_truth(paths.fill_truth, trade_date)
@@ -578,50 +531,6 @@ def build_eret_truth(
     # join prevents excluded 20%/30%/no-limit securities re-entering E_ret.
     out = out.merge(fill_truth, on=["trade_date", "ts_code"], how="inner")
     out = out.merge(t2, on="ts_code", how="left")
-    if sync_historical_minute:
-        client = TushareClient.from_env(timeout_seconds=20)
-        failures: list[str] = []
-        fetched = 0
-        filled = pd.to_numeric(out.get("y_fill"), errors="coerce").eq(1)
-        minute_codes = sorted(set(out.loc[filled, "ts_code"].astype(str)))
-        workers = max(1, min(12, int(minute_workers)))
-        minute_worker = partial(
-            _sync_historical_minute_code,
-            client=client,
-            project_root=paths.project_root,
-            target_date=target_date,
-            latest_time=EXIT_LATEST_TIME,
-        )
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            for _code, rows, reason in executor.map(
-                minute_worker,
-                minute_codes,
-            ):
-                if rows > 0:
-                    fetched += 1
-                elif reason:
-                    failures.append(reason)
-        print(
-            "[build_eret_truth] historical minute "
-            f"target={target_date} fetched={fetched} failures={len(failures)} "
-            f"workers={workers}"
-        )
-        if failures:
-            print(
-                "[build_eret_truth] historical minute failures="
-                + ",".join(failures[:20])
-            )
-    out["minute_open_t2"] = out["ts_code"].map(
-        lambda code: opening_auction_price(paths.project_root, target_date, code)
-    )
-    out["minute_open_available_t2"] = pd.to_numeric(
-        out["minute_open_t2"], errors="coerce"
-    ).gt(0).astype(int)
-    out["_minute_frame_t2"] = [
-        read_minute_snapshot(paths.project_root, target_date, code)
-        for code in out["ts_code"].astype(str)
-    ]
-
     out["exec_date"] = out.get("exec_date", exec_date)
     out["exec_date"] = out["exec_date"].map(norm_ymd).replace("", exec_date)
     out["target_date"] = out.get("target_date", target_date)
@@ -656,9 +565,8 @@ def build_eret_truth(
     out["entry_price_t_opening_auction"] = out["entry_price_proxy_t1"]
     missing = pd.Series(float("nan"), index=out.index, dtype=float)
     auction_open = pd.to_numeric(out["auction_price_t2"], errors="coerce") if "auction_price_t2" in out.columns else missing
-    minute_open = pd.to_numeric(out["minute_open_t2"], errors="coerce") if "minute_open_t2" in out.columns else missing
     daily_open = pd.to_numeric(out["open_t2"], errors="coerce") if "open_t2" in out.columns else missing
-    out["exit_price_tplus1_open"] = auction_open.fillna(minute_open).fillna(daily_open)
+    out["exit_price_tplus1_open"] = auction_open.fillna(daily_open)
     out["exit_price_t2_close"] = out.get("close_t2")
     out["eret_truth_version"] = ERET_TRUTH_VERSION
     out["return_holding_mode"] = ERET_HOLDING_MODE
@@ -706,7 +614,6 @@ def build_eret_truth(
         "return_holding_mode",
         "execution_contract",
     ]
-    out = out.drop(columns=["_minute_frame_t2"], errors="ignore")
     remain = [c for c in out.columns if c not in front]
     out = out[[c for c in front if c in out.columns] + remain].copy()
 
@@ -762,9 +669,6 @@ def write_meta(
             "fill_truth": fill_truth_path,
             "target_daily": target_daily_path,
             "target_auction": str(snapshot_dir(paths.raw_root, target_date) / "stk_auction.csv"),
-            "target_minute_root": str(
-                paths.project_root / "data" / "market" / "minute_1m" / target_date[:4] / target_date
-            ),
             "sample_maturity_csv": str(paths.maturity_csv),
         },
         "output": str(paths.out_csv),
@@ -793,17 +697,6 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="样本成熟度解析结果路径；留空默认 data/market/sample_maturity_latest.csv",
     )
-    ap.add_argument(
-        "--sync-historical-minute",
-        action="store_true",
-        help="用Tushare历史1分钟数据补齐T+1截至11:00的严格退出真值",
-    )
-    ap.add_argument(
-        "--minute-workers",
-        type=int,
-        default=6,
-        help="历史分钟真值并发请求数（1-12）",
-    )
     return ap.parse_args()
 
 
@@ -831,8 +724,6 @@ def main() -> int:
         label_ready_fill=maturity_info.label_ready_fill,
         label_ready_ret=maturity_info.label_ready_ret,
         paths=paths,
-        sync_historical_minute=args.sync_historical_minute,
-        minute_workers=args.minute_workers,
     )
 
     df.to_csv(paths.out_csv, index=False, encoding="utf-8-sig")

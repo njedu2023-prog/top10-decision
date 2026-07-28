@@ -1,15 +1,15 @@
-name: Backfill Decision V10 Independent History
+name: Backfill Decision V11 Two-Year History
 
 on:
   schedule:
-    # Sunday 10:30 Beijing. Each run appends a bounded immutable batch.
+    # Sunday 10:30 Beijing. Keep the latest 500 strict A-share sessions complete.
     - cron: "30 2 * * 0"
   workflow_dispatch:
     inputs:
       start_date:
         description: "历史起始日 YYYYMMDD"
         required: false
-        default: "20230101"
+        default: "20200101"
         type: string
       end_date:
         description: "历史结束日 YYYYMMDD（留空=北京时间今天）"
@@ -18,7 +18,7 @@ on:
       max_missing_dates:
         description: "本次最多新增独立信号日"
         required: false
-        default: "40"
+        default: "500"
         type: string
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
   backfill:
     name: Build strict-calendar compact history
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
 
     steps:
       - name: Checkout latest main
@@ -68,14 +68,14 @@ jobs:
           INPUT_MAX: ${{ inputs.max_missing_dates }}
         run: |
           set -e
-          start="${INPUT_START:-20230101}"
+          start="${INPUT_START:-20200101}"
           end="${INPUT_END:-$(TZ=Asia/Shanghai date +%Y%m%d)}"
-          maximum="${INPUT_MAX:-40}"
+          maximum="${INPUT_MAX:-500}"
           echo "${start}" | grep -Eq '^[0-9]{8}$'
           echo "${end}" | grep -Eq '^[0-9]{8}$'
           echo "${maximum}" | grep -Eq '^[0-9]+$'
           test "${maximum}" -ge 1
-          test "${maximum}" -le 120
+          test "${maximum}" -le 500
           echo "start_date=${start}" >> "$GITHUB_OUTPUT"
           echo "end_date=${end}" >> "$GITHUB_OUTPUT"
           echo "max_missing_dates=${maximum}" >> "$GITHUB_OUTPUT"
@@ -87,11 +87,10 @@ jobs:
           set -e
           completed=0
           for attempt in 1 2 3; do
-            if python scripts/backfill_decision_v8_history.py \
+            if python scripts/backfill_decision_v11_history.py \
               --start-date "${{ steps.request.outputs.start_date }}" \
               --end-date "${{ steps.request.outputs.end_date }}" \
-              --max-missing-dates "${{ steps.request.outputs.max_missing_dates }}" \
-              --minute-workers 6; then
+              --max-missing-dates "${{ steps.request.outputs.max_missing_dates }}"; then
               completed=1
               break
             fi
@@ -107,10 +106,10 @@ jobs:
           git add data/auction_v3/history
           git add data/market/trade_cal_sse.csv
           if git diff --cached --quiet; then
-            echo "Decision V10 compact history is already current"
+            echo "Decision V11 two-year history is already current"
             exit 0
           fi
-          git commit -m "auto: extend Decision V10 independent history"
+          git commit -m "auto: extend Decision V11 two-year history"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main
@@ -123,14 +122,14 @@ jobs:
           done
           test "${pushed}" = "1"
 
-      - name: Run Decision V10 calibration tests
+      - name: Run Decision V11 calibration tests
         run: |
           set -e
           python -m unittest discover -s tests -p 'test_auction_v3.py' -v
           python -m unittest discover -s tests -p 'test_decision_v8_calibration.py' -v
           python -m unittest discover -s tests -p 'test_decision_contract.py' -v
 
-      - name: Rebuild Decision V10 evidence and page data
+      - name: Rebuild Decision V11 evidence and page data
         run: |
           set -e
           python scripts/run_auction_v3.py
@@ -147,10 +146,10 @@ jobs:
           git add outputs/decision/report_index.json
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision V10 history is already current"
+            echo "Decision V11 history is already current"
             exit 0
           fi
-          git commit -m "auto: extend Decision V10 independent history"
+          git commit -m "auto: extend Decision V11 two-year history"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main

@@ -2110,7 +2110,11 @@ class AuctionV3Engine:
                     entry_price=entry_price,
                     buy_close=buy_close,
                     target_pre_close=_pre_close(daily),
-                    open_price=daily.get("open"),
+                    open_price=self._execution_open_price(
+                        trade_date,
+                        code,
+                        daily,
+                    ),
                     high_price=daily.get("high"),
                     low_price=daily.get("low"),
                     close_price=daily.get("close"),
@@ -5332,6 +5336,147 @@ class AuctionV3Engine:
             ),
         }
 
+    def _cohort_policy_metrics(
+        self,
+        oos: pd.DataFrame,
+        mask: pd.Series,
+        *,
+        cohort: str,
+    ) -> dict[str, Any]:
+        """Evaluate every member of a cohort with equal weight inside each day."""
+        dates = sorted(oos["signal_date"].astype(str).unique())
+        eligible = mask.reindex(oos.index, fill_value=False).fillna(False).astype(bool)
+        selected = oos.loc[eligible].copy()
+        selected_returns = pd.to_numeric(
+            selected.get(
+                "net_return",
+                pd.Series(np.nan, index=selected.index),
+            ),
+            errors="coerce",
+        )
+        filled = selected.loc[selected_returns.notna()].copy()
+        filled["_cohort_net_return"] = selected_returns.loc[filled.index]
+        signal_dates = set(selected["signal_date"].astype(str))
+        daily = (
+            filled.groupby(filled["signal_date"].astype(str))["_cohort_net_return"]
+            .mean()
+            .reindex(dates, fill_value=0.0)
+        )
+        realized = filled["_cohort_net_return"]
+        nav = (1.0 + daily).cumprod()
+        drawdown = nav / nav.cummax() - 1.0
+        positives = realized[realized > 0].sum()
+        negatives = -realized[realized < 0].sum()
+        tail_count = (
+            max(1, int(math.ceil(len(realized) * 0.10)))
+            if len(realized)
+            else 0
+        )
+        no_signal_streak = 0
+        current_streak = 0
+        for signal_date in dates:
+            if signal_date in signal_dates:
+                current_streak = 0
+            else:
+                current_streak += 1
+                no_signal_streak = max(no_signal_streak, current_streak)
+
+        market_buyable = pd.to_numeric(
+            selected.get(
+                "market_fill",
+                pd.Series(0, index=selected.index),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        stages: dict[str, Any] = {}
+        if "stage" in filled.columns:
+            for stage, group in filled.groupby("stage", dropna=False):
+                stage_returns = pd.to_numeric(
+                    group["_cohort_net_return"],
+                    errors="coerce",
+                ).dropna()
+                stages[str(stage)] = {
+                    "trades": int(len(stage_returns)),
+                    "mean_net_return": _safe_metric(stage_returns.mean()),
+                    "win_rate": _safe_metric((stage_returns > 0).mean()),
+                    "continuation_hit_rate": _safe_metric(
+                        pd.to_numeric(
+                            group.get(
+                                "continuation_limit_up_hit",
+                                pd.Series(np.nan, index=group.index),
+                            ),
+                            errors="coerce",
+                        ).mean()
+                    ),
+                }
+
+        return {
+            "cohort": cohort,
+            "execution_mode": "forced_market_open_truth",
+            "portfolio_weighting": "equal_weight_within_signal_date",
+            "signals": int(len(selected)),
+            "signal_dates": int(len(signal_dates)),
+            "signal_date_ratio": _safe_metric(
+                len(signal_dates) / len(dates) if dates else np.nan
+            ),
+            "max_no_signal_streak": int(no_signal_streak),
+            "average_signals_per_signal_date": _safe_metric(
+                len(selected) / len(signal_dates) if signal_dates else np.nan
+            ),
+            "filled_trades": int(len(realized)),
+            "truth_coverage": _safe_metric(
+                len(realized) / len(selected) if len(selected) else np.nan
+            ),
+            "market_buyable_trades": int(market_buyable.sum()),
+            "market_buyable_rate": _safe_metric(
+                market_buyable.mean() if len(selected) else np.nan
+            ),
+            "exit_on_time_rate": _safe_metric(
+                pd.to_numeric(
+                    filled.get(
+                        "exit_on_time",
+                        pd.Series(np.nan, index=filled.index),
+                    ),
+                    errors="coerce",
+                ).mean()
+            ),
+            "mean_trade_net_return": _safe_metric(realized.mean()),
+            "median_trade_net_return": _safe_metric(realized.median()),
+            "win_rate": _safe_metric((realized > 0).mean()),
+            "realized_big_loss_rate": _safe_metric(
+                (realized <= self.config.big_loss_threshold).mean()
+            ),
+            "tail_10pct_mean_return": _safe_metric(
+                realized.nsmallest(tail_count).mean()
+                if tail_count
+                else np.nan
+            ),
+            "worst_trade_net_return": _safe_metric(realized.min()),
+            "profit_factor": _safe_metric(
+                positives / negatives if negatives > 0 else np.nan
+            ),
+            "mean_daily_return": _safe_metric(daily.mean()),
+            "cumulative_return": _safe_metric(
+                nav.iloc[-1] - 1.0 if len(nav) else np.nan
+            ),
+            "max_drawdown": _safe_metric(
+                drawdown.min() if len(drawdown) else np.nan
+            ),
+            "bootstrap_probability_mean_positive": _safe_metric(
+                self._block_bootstrap_positive_probability(daily)
+            ),
+            "continuation_hit_rate": _safe_metric(
+                pd.to_numeric(
+                    filled.get(
+                        "continuation_limit_up_hit",
+                        pd.Series(np.nan, index=filled.index),
+                    ),
+                    errors="coerce",
+                ).mean()
+            ),
+            "stage_breakdown": stages,
+        }
+
     def _gate_funnel(self, oos: pd.DataFrame) -> dict[str, Any]:
         ordered_gates = (
             ("stage_focus", "gate_stage_focus"),
@@ -5681,6 +5826,68 @@ class AuctionV3Engine:
                 respect_limit=True,
             ),
         }
+        stage_focus = pd.to_numeric(
+            oos.get(
+                "stage_focus",
+                pd.Series(0, index=oos.index),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        metrics["stage_focus_all"] = self._cohort_policy_metrics(
+            oos,
+            stage_focus,
+            cohort="all_2to3_and_3to4",
+        )
+        shadow_rank = pd.to_numeric(
+            oos.get(
+                "shadow_rank",
+                pd.Series(np.nan, index=oos.index),
+            ),
+            errors="coerce",
+        )
+        metrics["rank_bucket_oos"] = {
+            "rank_1": self._cohort_policy_metrics(
+                oos,
+                stage_focus & shadow_rank.eq(1),
+                cohort="rank_1",
+            ),
+            "rank_2": self._cohort_policy_metrics(
+                oos,
+                stage_focus & shadow_rank.eq(2),
+                cohort="rank_2",
+            ),
+            "rank_3_to_5": self._cohort_policy_metrics(
+                oos,
+                stage_focus & shadow_rank.between(3, 5, inclusive="both"),
+                cohort="rank_3_to_5",
+            ),
+            "rank_6_to_10": self._cohort_policy_metrics(
+                oos,
+                stage_focus & shadow_rank.between(6, 10, inclusive="both"),
+                cohort="rank_6_to_10",
+            ),
+            "rank_11_plus": self._cohort_policy_metrics(
+                oos,
+                stage_focus & shadow_rank.ge(11),
+                cohort="rank_11_plus",
+            ),
+        }
+        path_code = oos.get(
+            "path_label_code",
+            pd.Series("", index=oos.index),
+        ).fillna("").astype(str)
+        metrics["path_shadow_policies"] = {
+            "ACCELERATION_CONSENSUS": self._cohort_policy_metrics(
+                oos,
+                stage_focus & path_code.eq("ACCELERATION_CONSENSUS"),
+                cohort="ACCELERATION_CONSENSUS",
+            ),
+            "WEAK_TO_STRONG": self._cohort_policy_metrics(
+                oos,
+                stage_focus & path_code.eq("WEAK_TO_STRONG"),
+                cohort="WEAK_TO_STRONG",
+            ),
+        }
         metrics["daily_equity"] = [
             {"signal_date": date, "daily_return": _safe_metric(daily.loc[date]), "nav": _safe_metric(nav.loc[date])}
             for date in dates
@@ -5710,6 +5917,32 @@ class AuctionV3Engine:
         _write_csv(
             shadow_audit,
             self.config.metrics_root / "backtest_shadow_latest.csv",
+        )
+        stage_focus_audit = oos[
+            pd.to_numeric(
+                oos.get(
+                    "stage_focus",
+                    pd.Series(0, index=oos.index),
+                ),
+                errors="coerce",
+            ).fillna(0).eq(1)
+        ].copy()
+        _write_csv(
+            stage_focus_audit,
+            self.config.metrics_root / "backtest_stage_focus_all_latest.csv",
+        )
+        path_focus_audit = stage_focus_audit[
+            stage_focus_audit.get(
+                "path_label_code",
+                pd.Series("", index=stage_focus_audit.index),
+            )
+            .fillna("")
+            .astype(str)
+            .isin(("ACCELERATION_CONSENSUS", "WEAK_TO_STRONG"))
+        ].copy()
+        _write_csv(
+            path_focus_audit,
+            self.config.metrics_root / "backtest_path_focus_latest.csv",
         )
         _write_json(metrics, self.config.metrics_root / "backtest_latest.json")
         return oos, metrics
@@ -5867,20 +6100,14 @@ class AuctionV3Engine:
         )
         scored["observation_selected"] = scored["observation_rank"].notna().astype(int)
         scored["observation_pool_size"] = int(observation_pool_size)
-        scored["take_profit_pct"] = float(self.config.take_profit_pct)
-        scored["stop_loss_pct"] = float(self.config.stop_loss_pct)
-        scored["take_profit_price"] = scored["recommended_max_price"].map(
-            lambda value: _round_price(float(value) * (1.0 + self.config.take_profit_pct))
-            if math.isfinite(_finite(value)) else np.nan
-        )
-        scored["stop_loss_price"] = scored["recommended_max_price"].map(
-            lambda value: _round_price(float(value) * (1.0 + self.config.stop_loss_pct))
-            if math.isfinite(_finite(value)) else np.nan
-        )
+        scored["take_profit_pct"] = np.nan
+        scored["stop_loss_pct"] = np.nan
+        scored["take_profit_price"] = np.nan
+        scored["stop_loss_price"] = np.nan
         scored["latest_exit_time"] = self.config.latest_exit_time
         scored["exit_policy_version"] = self.config.exit_policy_version
         scored["entry_rule"] = "系统仅供人工参考：T日9:25前仅用限价单参与集合竞价；不得使用无上限市价单，高于上限或未成交均放弃"
-        scored["exit_rule"] = "T+1按实际成交价计算15%止盈、5%止损，首次触发即人工退出；均未触发则11:00退出；一字跌停顺延"
+        scored["exit_rule"] = "T+1固定按9:30开盘集合竞价成交价退出；一字跌停无法成交时顺延至首个可成交开盘"
         scored["guidance_only"] = 1
         scored["broker_connected"] = 0
         scored["order_type"] = "LIMIT_ONLY_MANUAL"
@@ -5928,7 +6155,7 @@ class AuctionV3Engine:
         scored["generated_at_utc"] = _utc_now()
         scored["source_snapshot_sha256"] = _hash_frame(candidates)
         scored["feature_contract"] = (
-            "D_CLOSE_STREAK_PATH_SENTIMENT_V10_NESTED_POLICY_NO_T_LEAKAGE"
+            "D_CLOSE_STREAK_PATH_SENTIMENT_V11_OPEN0930_ALL_STAGE_NESTED_POLICY_NO_T_LEAKAGE"
         )
         ordered = [
             "prediction_id",
@@ -7135,11 +7362,11 @@ class AuctionV3Engine:
                 "stage_focus": "risk-first 2-to-3 and 3-to-4 ranking with point-in-time streak-path, cohort, and market-sentiment features",
                 "streak_path": "quantified weak-to-strong, strong-to-weak, acceleration-consensus, divergence-reseal, and stable-strong paths",
                 "market_sentiment": "D-close-only eligible-main-board breadth, limit-up ecology and industry Top10, failed-board/reseal quality, prior-limit-up profit effect, realized 2-to-3/3-to-4 promotion, crowding, and liquidity; enabled only after held-out Brier ablation",
-                "observation_ranking": "stage-focused Top1/Top2 shadow ranking by conservative utility; formal selection separately requires a nested temporal policy holdout",
+                "observation_ranking": "all 2-to-3 and 3-to-4 candidates receive forced-open counterfactual validation; rank buckets and path cohorts are reported separately",
                 "guidance_only": True,
                 "broker_connected": False,
                 "entry": "manual limit order only before T 09:25 opening-auction cutoff with a frozen maximum price; market order forbidden",
-                "exit": "manual T+1 first-touch +15% take-profit / -5% stop-loss, then 11:00 time exit; one-price limit-down delays exit",
+                "exit": "manual fixed T+1 09:30 opening-auction exit; one-price limit-down delays to the first tradable open",
                 "exit_policy_version": self.config.exit_policy_version,
                 "take_profit_pct": self.config.take_profit_pct,
                 "stop_loss_pct": self.config.stop_loss_pct,

@@ -374,6 +374,7 @@ jobs:
           import subprocess
           from top10decision.decision.contracts import (
               ERET_HOLDING_MODE,
+              ERET_TARGET_COLUMN,
               ERET_TRUTH_VERSION,
           )
 
@@ -444,7 +445,7 @@ jobs:
               modes = set(df['return_holding_mode'].dropna().astype(str))
               if versions != {eret_truth_version} or modes != {eret_holding_mode}:
                   return False
-              if 'realized_ret_open_to_tplus1_timed_exit' not in df.columns:
+              if ERET_TARGET_COLUMN not in df.columns:
                   return False
               for col in fs_v2_cols:
                   if col not in df.columns:
@@ -513,9 +514,6 @@ jobs:
                           'scripts/build_eret_truth.py',
                           '--trade-date',
                           td,
-                          '--sync-historical-minute',
-                          '--minute-workers',
-                          '6',
                       ],
                       check=True,
                   )
@@ -647,9 +645,7 @@ jobs:
         run: |
           set -e
           python scripts/build_eret_truth.py \
-            --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}" \
-            --sync-historical-minute \
-            --minute-workers 6
+            --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
 
       - name: Build E_ret trainset
         if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'

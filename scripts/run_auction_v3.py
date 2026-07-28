@@ -19,8 +19,8 @@ from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run Decision V10 manual auction guidance with nested temporal "
-            "policy selection, shadow validation and auction truth"
+            "Run Decision V11 manual auction guidance with fixed T+1 09:30 "
+            "exit, all-stage shadow validation and auction truth"
         )
     )
     parser.add_argument("--signal-date", default="", help="D-day signal date, YYYYMMDD; default latest frozen pred source")

@@ -524,6 +524,7 @@ def _resolve_eret_model(project_root: Optional[Path] = None) -> Tuple[Optional[E
 
 
 LEAKAGE_COLS = {
+    "realized_ret_open_to_tplus1_open_0930",
     "realized_ret_open_to_tplus1_timed_exit",
     "realized_ret_open_to_next_open",
     "realized_ret_t1_to_t2",

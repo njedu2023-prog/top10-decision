@@ -150,9 +150,9 @@ class ERetTrainingSafetyTests(unittest.TestCase):
                 "prior_prob_prior": [np.nan, np.nan],
                 "intraday_missing_reason": [np.nan, np.nan],
                 "realized_ret_t1_to_t2": [0.01, -0.01],
-                "realized_ret_open_to_tplus1_timed_exit": [0.01, -0.01],
+                "realized_ret_open_to_tplus1_open_0930": [0.01, -0.01],
                 "exit_price_tplus1_timed": [10.1, 9.9],
-                "exit_reason": ["take_profit_first_touch", "stop_loss_first_touch"],
+                "exit_reason": ["fixed_open_0930", "fixed_open_0930"],
             }
         )
         self.assertEqual(train_eret.select_feature_columns(frame), ["stable_feature"])

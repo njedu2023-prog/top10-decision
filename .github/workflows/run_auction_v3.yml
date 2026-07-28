@@ -1,4 +1,4 @@
-name: Run Decision Manual Auction Guidance V10
+name: Run Decision Manual Auction Guidance V11
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       - "src/top10decision/data/**"
       - "scripts/run_auction_v3.py"
       - "scripts/sync_tushare_minute.py"
-      - "scripts/backfill_decision_v8_history.py"
+      - "scripts/backfill_decision_v11_history.py"
       - "scripts/publish_decision_action.py"
       - "scripts/verify_decision_observations.py"
       - "tests/test_auction_v3.py"
@@ -43,7 +43,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  auction_guidance_v10:
+  auction_guidance_v11:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -89,7 +89,7 @@ jobs:
           fi
           python scripts/sync_tushare_minute.py "${args[@]}"
 
-      - name: Run Decision manual auction guidance V10
+      - name: Run Decision manual auction guidance V11
         env:
           SIGNAL_DATE: ${{ inputs.signal_date }}
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
@@ -117,6 +117,8 @@ jobs:
           test -f outputs/auction_v3/metrics/backtest_latest.json
           test -f outputs/auction_v3/metrics/backtest_gate_audit_latest.csv
           test -f outputs/auction_v3/metrics/backtest_shadow_latest.csv
+          test -f outputs/auction_v3/metrics/backtest_stage_focus_all_latest.csv
+          test -f outputs/auction_v3/metrics/backtest_path_focus_latest.csv
           test -f outputs/auction_v3/metrics/cumulative_latest.json
           test -f outputs/auction_v3/metrics/observation_cumulative_latest.json
           test -f outputs/auction_v3/verification/observation_latest.csv
@@ -145,10 +147,10 @@ jobs:
             -print0 | xargs -0 -r git add --
           git add docs/reports/auction_v3*.html
           if git diff --cached --quiet; then
-            echo "Decision guidance V10 has no changed artifacts"
+            echo "Decision guidance V11 has no changed artifacts"
             exit 0
           fi
-          git commit -m "auto: update Decision V10 guidance and validation"
+          git commit -m "auto: update Decision V11 guidance and validation"
           pushed=0
           for attempt in 1 2 3; do
             git fetch origin main

@@ -24,7 +24,7 @@ env:
   PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
-  # Serialize with Decision V10/backfill writers that update the same outputs.
+  # Serialize with Decision V11/backfill writers that update the same outputs.
   group: decision-auction-main-writer
   cancel-in-progress: false
 

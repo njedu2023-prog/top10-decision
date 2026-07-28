@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 
-ERET_TARGET_COLUMN = "realized_ret_open_to_tplus1_timed_exit"
+ERET_TARGET_COLUMN = "realized_ret_open_to_tplus1_open_0930"
 ERET_COMPAT_TARGET_COLUMN = "realized_ret_t1_to_t2"
-ERET_TRUTH_VERSION = "eret_truth_v4_tplus1_tp15_sl5_time1100"
-ERET_HOLDING_MODE = "manual_buy_t_0925_auction_to_tplus1_tp15_sl5_time1100_exit"
-DECISION_EXECUTION_CONTRACT = "D_signal_manual_T_0925_auction_guidance_Tplus1_tp15_sl5_time1100_exit"
+ERET_TRUTH_VERSION = "eret_truth_v5_tplus1_open0930"
+ERET_HOLDING_MODE = "manual_buy_t_0925_auction_to_tplus1_open0930_exit"
+DECISION_EXECUTION_CONTRACT = "D_signal_manual_T_0925_auction_guidance_Tplus1_open0930_exit"
 PFILL_TRUTH_VERSION = "pfill_truth_v6_manual_0925_proxy"
 PFILL_EXECUTION_CONTRACT = "manual_guidance_0925_public_market_fillability_proxy"
-EXIT_POLICY_VERSION = "tplus1_first_touch_tp15_sl5_time1100_v2"
-EXIT_TAKE_PROFIT_PCT = 0.15
-EXIT_STOP_LOSS_PCT = -0.05
-EXIT_LATEST_TIME = "11:00"
-HISTORY_CONTRACT_VERSION = "decision_v10_tp15_sl5_time1100_strict_intraday_no_future"
+EXIT_POLICY_VERSION = "tplus1_open_0930_v1"
+EXIT_TAKE_PROFIT_PCT = None
+EXIT_STOP_LOSS_PCT = None
+EXIT_LATEST_TIME = "09:30"
+HISTORY_CONTRACT_VERSION = "decision_v11_tplus1_open0930_strict_calendar_no_future"
 
 
 __all__ = [
