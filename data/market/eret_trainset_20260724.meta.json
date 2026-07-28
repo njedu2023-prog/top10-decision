@@ -1,24 +1,24 @@
 {
-  "trade_date": "20260707",
-  "rows": 28,
+  "trade_date": "20260724",
+  "rows": 34,
   "eret_truth_ready_only": true,
   "eret_sample_eligible_only": true,
   "target_column": "realized_ret_open_to_tplus1_open_0930",
   "eret_truth_version": "eret_truth_v5_tplus1_open0930",
   "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_open0930_exit",
   "source": {
-    "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260707.csv",
-    "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260707.csv",
-    "eret_truth": "/home/runner/work/top10-decision/top10-decision/data/market/eret_truth_20260707.csv",
+    "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260724.csv",
+    "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260724.csv",
+    "eret_truth": "/home/runner/work/top10-decision/top10-decision/data/market/eret_truth_20260724.csv",
     "prior_mode": "dated_pred_source_archive",
-    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260707.csv"
+    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260724.csv"
   },
-  "output": "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260707.csv",
+  "output": "/home/runner/work/top10-decision/top10-decision/data/market/eret_trainset_20260724.csv",
   "input_rows": {
-    "features_base": 5517,
-    "features_limit": 5517,
-    "eret_truth_after_filter": 28,
-    "prior": 33
+    "features_base": 5526,
+    "features_limit": 5526,
+    "eret_truth_after_filter": 34,
+    "prior": 41
   },
   "coverage": {
     "realized_ret_open_to_tplus1_open_0930": 1.0,
@@ -51,15 +51,15 @@
   },
   "fs_v2_history_feature_audit": {
     "base_nonnull_rate": {
-      "ret_2d": 0.999637,
-      "ret_5d": 0.999275,
-      "ret_10d": 0.998369,
-      "volatility_5d": 0.999637,
-      "volatility_10d": 0.999275,
-      "volatility_20d": 0.998369,
-      "atr": 0.999275,
-      "downside_vol": 0.999275,
-      "max_drawdown_20d": 0.999275,
+      "ret_2d": 0.999819,
+      "ret_5d": 0.999457,
+      "ret_10d": 0.999276,
+      "volatility_5d": 0.999819,
+      "volatility_10d": 0.999457,
+      "volatility_20d": 0.999276,
+      "atr": 0.999457,
+      "downside_vol": 0.999457,
+      "max_drawdown_20d": 0.999457,
       "tail_risk_score": 1.0,
       "bid_ask_proxy": 1.0,
       "spread_proxy": 1.0
@@ -97,15 +97,15 @@
         "spread_proxy"
       ],
       "base_nonnull_rate": {
-        "ret_2d": 0.999637,
-        "ret_5d": 0.999275,
-        "ret_10d": 0.998369,
-        "volatility_5d": 0.999637,
-        "volatility_10d": 0.999275,
-        "volatility_20d": 0.998369,
-        "atr": 0.999275,
-        "downside_vol": 0.999275,
-        "max_drawdown_20d": 0.999275,
+        "ret_2d": 0.999819,
+        "ret_5d": 0.999457,
+        "ret_10d": 0.999276,
+        "volatility_5d": 0.999819,
+        "volatility_10d": 0.999457,
+        "volatility_20d": 0.999276,
+        "atr": 0.999457,
+        "downside_vol": 0.999457,
+        "max_drawdown_20d": 0.999457,
         "tail_risk_score": 1.0,
         "bid_ask_proxy": 1.0,
         "spread_proxy": 1.0
@@ -157,15 +157,15 @@
           "spread_proxy"
         ],
         "base_nonnull_rate": {
-          "ret_2d": 0.999637,
-          "ret_5d": 0.999275,
-          "ret_10d": 0.998369,
-          "volatility_5d": 0.999637,
-          "volatility_10d": 0.999275,
-          "volatility_20d": 0.998369,
-          "atr": 0.999275,
-          "downside_vol": 0.999275,
-          "max_drawdown_20d": 0.999275,
+          "ret_2d": 0.999819,
+          "ret_5d": 0.999457,
+          "ret_10d": 0.999276,
+          "volatility_5d": 0.999819,
+          "volatility_10d": 0.999457,
+          "volatility_20d": 0.999276,
+          "atr": 0.999457,
+          "downside_vol": 0.999457,
+          "max_drawdown_20d": 0.999457,
           "tail_risk_score": 1.0,
           "bid_ask_proxy": 1.0,
           "spread_proxy": 1.0
@@ -205,23 +205,23 @@
     }
   },
   "y_fill_distribution": {
-    "1": 28
+    "1": 34
   },
   "eret_quality_distribution": {
-    "strong_tplus1_open_0930_fixed_open_0930": 28
+    "strong_tplus1_open_0930_fixed_open_0930": 34
   },
   "fill_quality_distribution": {
-    "strong_official_opening_auction": 28
+    "strong_official_opening_auction": 34
   },
   "sample_maturity_distribution": {
-    "FULLY_READY": 28
+    "FULLY_READY": 34
   },
   "target_stats": {
-    "mean": -0.019991,
-    "median": -0.013292,
-    "min": -0.148366,
-    "max": 0.117687,
-    "positive_rate": 0.357143
+    "mean": 0.025556,
+    "median": 0.019293,
+    "min": -0.091525,
+    "max": 0.171429,
+    "positive_rate": 0.588235
   },
   "column_groups": {
     "base_cols": [
@@ -393,7 +393,7 @@
   },
   "cold_start_ratio": 0.0,
   "feature_coverage_score_mean": 1.0,
-  "sample_weight_mean": 1.357143,
+  "sample_weight_mean": 1.323529,
   "notes": [
     "本文件是 E_ret 训练前宽表，不是训练结果文件。",
     "训练集只保留 label_ready_ret=1 且 eret_sample_eligible=1 的样本。",
