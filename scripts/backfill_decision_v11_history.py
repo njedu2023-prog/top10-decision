@@ -268,7 +268,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Build strict-calendar Decision V11 history for at least 500 "
-            "independent OOS sessions from Tushare daily and auction truth"
+            "independent OOS sessions plus a conservative model warmup from "
+            "Tushare daily and auction truth"
         )
     )
     parser.add_argument("--root", default=str(ROOT))
