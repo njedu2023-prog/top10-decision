@@ -1,8 +1,12 @@
 name: Backfill Decision V11 Two-Year History
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/backfill_decision_v11_history.yml"
   schedule:
-    # Sunday 10:30 Beijing. Keep 500 OOS sessions plus training warmup complete.
+    # Sunday 10:30 Beijing. Keep 500 OOS sessions plus conservative warmup complete.
     - cron: "30 2 * * 0"
   workflow_dispatch:
     inputs:
@@ -127,6 +131,11 @@ jobs:
           python scripts/run_auction_v3.py
           python scripts/publish_decision_action.py
           python scripts/validate_io_contract.py --strict-semantic
+
+      - name: Enforce two full out-of-sample years
+        run: |
+          set -e
+          python -c "import json; from top10decision.auction_v3.config import TARGET_INDEPENDENT_OOS_DATES as target; payload=json.load(open('outputs/auction_v3/metrics/backtest_latest.json', encoding='utf-8')); actual=int(payload.get('oos_dates') or 0); print(f'[Decision V11] independent_oos_dates={actual}, target={target}'); assert actual >= target, f'independent OOS coverage {actual} < {target}'"
 
       - name: Commit Decision-only history and evidence
         run: |
