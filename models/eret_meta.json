@@ -1,5 +1,5 @@
 {
-  "train_time_utc": "2026-07-28T13:41:37+00:00",
+  "train_time_utc": "2026-07-28T15:34:49+00:00",
   "anchor_trade_date": "20260724",
   "status": "trained",
   "skip_reason": "",
@@ -25,10 +25,10 @@
     "selected_model_acceptance_eligible": false,
     "selection_rule": "acceptance_eligible_then_daily_spearman_rmse_skill_rmse_mae_directional",
     "selected_metrics": {
-      "mae": 0.051779742064766515,
+      "mae": 0.05177974206476652,
       "rmse": 0.06772730522231139,
       "r2": -0.2826486137714601,
-      "corr": -0.03403791280720386,
+      "corr": -0.034037912807203946,
       "spearman_corr": -0.06080240410622058,
       "daily_spearman_corr_mean": 0.08020684206787304,
       "daily_spearman_valid_dates": 5,
@@ -42,10 +42,10 @@
     },
     "candidate_metrics": {
       "lr": {
-        "mae": 0.051779742064766515,
+        "mae": 0.05177974206476652,
         "rmse": 0.06772730522231139,
         "r2": -0.2826486137714601,
-        "corr": -0.03403791280720386,
+        "corr": -0.034037912807203946,
         "spearman_corr": -0.06080240410622058,
         "daily_spearman_corr_mean": 0.08020684206787304,
         "daily_spearman_valid_dates": 5,
@@ -57,7 +57,7 @@
         "mae": 0.05665167831515137,
         "rmse": 0.0733974561836666,
         "r2": -0.5064062917474368,
-        "corr": -0.11522247761420715,
+        "corr": -0.11522247761420712,
         "spearman_corr": -0.17091815360323323,
         "daily_spearman_corr_mean": -0.07704554076179078,
         "daily_spearman_valid_dates": 5,
@@ -835,10 +835,10 @@
   },
   "metrics_valid": {
     "lr": {
-      "mae": 0.051779742064766515,
+      "mae": 0.05177974206476652,
       "rmse": 0.06772730522231139,
       "r2": -0.2826486137714601,
-      "corr": -0.03403791280720386,
+      "corr": -0.034037912807203946,
       "spearman_corr": -0.06080240410622058,
       "daily_spearman_corr_mean": 0.08020684206787304,
       "daily_spearman_valid_dates": 5,
@@ -850,7 +850,7 @@
       "mae": 0.05665167831515137,
       "rmse": 0.0733974561836666,
       "r2": -0.5064062917474368,
-      "corr": -0.11522247761420715,
+      "corr": -0.11522247761420712,
       "spearman_corr": -0.17091815360323323,
       "daily_spearman_corr_mean": -0.07704554076179078,
       "daily_spearman_valid_dates": 5,

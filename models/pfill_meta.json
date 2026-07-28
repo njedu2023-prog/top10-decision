@@ -1,5 +1,5 @@
 {
-  "train_time_utc": "2026-07-28T13:41:33+00:00",
+  "train_time_utc": "2026-07-28T15:34:43+00:00",
   "anchor_trade_date": "20260727",
   "status": "trained",
   "skip_reason": "",
@@ -22,10 +22,10 @@
       "lr": {
         "auc": 0.8178330620785865,
         "pr_auc": 0.9862924483508632,
-        "logloss": 0.2681790930917506,
-        "brier": 0.07835532747296806,
+        "logloss": 0.2681790930924967,
+        "brier": 0.07835532747323898,
         "baseline_brier_train_rate": 0.050479583351764806,
-        "brier_skill_vs_train_rate": -0.5522181894203113,
+        "brier_skill_vs_train_rate": -0.5522181894256784,
         "valid_dates": 6
       },
       "lgbm": {
@@ -784,10 +784,10 @@
     "lr": {
       "auc": 0.8178330620785865,
       "pr_auc": 0.9862924483508632,
-      "logloss": 0.2681790930917506,
-      "brier": 0.07835532747296806,
+      "logloss": 0.2681790930924967,
+      "brier": 0.07835532747323898,
       "baseline_brier_train_rate": 0.050479583351764806,
-      "brier_skill_vs_train_rate": -0.5522181894203113,
+      "brier_skill_vs_train_rate": -0.5522181894256784,
       "valid_dates": 6
     },
     "lgbm": {
