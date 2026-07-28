@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-07-28T13:49:17+00:00",
+  "generated_at_utc": "2026-07-28T13:57:02+00:00",
   "model_version": "auction_v11_tplus1_open0930_oos_1",
-  "model_artifact_sha256": "04618379f81707edfab1e45fb5b82ae8911f12048e0afa0fcf08ceefa1b7f3b9",
+  "model_artifact_sha256": "4ea70bc3e564ac49812177aef18947b775452c5627fae883b9d3022f51ff91d6",
   "ready": true,
   "promoted": false,
   "training_rows": 15022,
@@ -1308,7 +1308,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-07-28T13:49:16+00:00",
+        "generated_at_utc": "2026-07-28T13:57:02+00:00",
         "frozen_predictions": 593,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -1353,7 +1353,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-07-28T13:49:17+00:00",
+        "generated_at_utc": "2026-07-28T13:57:02+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -1532,7 +1532,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-07-28T13:49:16+00:00",
+        "generated_at_utc": "2026-07-28T13:57:02+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -1700,7 +1700,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-07-28T13:48:17+00:00",
+    "generated_at_utc": "2026-07-28T13:56:03+00:00",
     "model_version": "auction_v11_tplus1_open0930_oos_1",
     "history_dates": 707,
     "oos_dates": 537,
@@ -5106,7 +5106,7 @@
         "nav": 1.0
       }
     ],
-    "model_artifact_sha256": "04618379f81707edfab1e45fb5b82ae8911f12048e0afa0fcf08ceefa1b7f3b9"
+    "model_artifact_sha256": "4ea70bc3e564ac49812177aef18947b775452c5627fae883b9d3022f51ff91d6"
   },
   "universe_eligibility": {
     "rule": "a_share_price_limit_le_10_v2",
