@@ -1,10 +1,6 @@
 name: Backfill Decision V11 Two-Year History
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/backfill_decision_v11_history.yml"
   schedule:
     # Sunday 10:30 Beijing. Keep the latest 500 strict A-share sessions complete.
     - cron: "30 2 * * 0"
@@ -34,7 +30,7 @@ env:
 
 concurrency:
   group: decision-auction-main-writer
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   backfill:
