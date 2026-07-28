@@ -157,9 +157,9 @@
       "actual_exit_price": 13.84,
       "actual_gross_return": -0.0539986329460013,
       "actual_net_return": -0.0584986329460013,
-      "exit_reason": "stop_gap_at_open",
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -234,9 +234,9 @@
       "actual_exit_price": 9.3,
       "actual_gross_return": -0.0558375634517765,
       "actual_net_return": -0.0603375634517765,
-      "exit_reason": "stop_gap_at_open",
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -308,12 +308,12 @@
       "observation_t_return": -0.0183673469387756,
       "continuation_limit_up_hit": 0.0,
       "actual_exit_date": 20260722,
-      "actual_exit_price": 9.31,
-      "actual_gross_return": -0.05,
-      "actual_net_return": -0.0545,
-      "exit_reason": "stop_loss_first_touch",
+      "actual_exit_price": 9.36,
+      "actual_gross_return": -0.0448979591836735,
+      "actual_net_return": -0.0493979591836735,
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -388,9 +388,9 @@
       "actual_exit_price": 10.81,
       "actual_gross_return": -0.074486301369863,
       "actual_net_return": -0.078986301369863,
-      "exit_reason": "stop_gap_at_open",
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -465,9 +465,9 @@
       "actual_exit_price": 2.8,
       "actual_gross_return": -0.1054313099041535,
       "actual_net_return": -0.1099313099041535,
-      "exit_reason": "stop_gap_at_open",
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -539,12 +539,12 @@
       "observation_t_return": 0.0,
       "continuation_limit_up_hit": 1.0,
       "actual_exit_date": 20260722,
-      "actual_exit_price": 11.01,
-      "actual_gross_return": 0.0999000999000998,
-      "actual_net_return": 0.0954000999000998,
-      "exit_reason": "time_exit",
+      "actual_exit_price": 10.9,
+      "actual_gross_return": 0.0889110889110889,
+      "actual_net_return": 0.0844110889110889,
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -619,9 +619,9 @@
       "actual_exit_price": 8.77,
       "actual_gross_return": -0.0826359832635983,
       "actual_net_return": -0.0871359832635983,
-      "exit_reason": "stop_gap_at_open",
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -693,12 +693,12 @@
       "observation_t_return": 0.0314285714285713,
       "continuation_limit_up_hit": 1.0,
       "actual_exit_date": 20260722,
-      "actual_exit_price": 7.51,
-      "actual_gross_return": 0.0728571428571427,
-      "actual_net_return": 0.0683571428571427,
-      "exit_reason": "time_exit",
+      "actual_exit_price": 6.88,
+      "actual_gross_return": -0.0171428571428572,
+      "actual_net_return": -0.0216428571428572,
+      "exit_reason": "fixed_open_0930",
       "truth_source": "market_repo_auction",
-      "truth_generated_at_utc": "2026-07-27T17:49:06+00:00",
+      "truth_generated_at_utc": "2026-07-28T02:59:09+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     }
@@ -2627,7 +2627,7 @@
     "premarket_valid_rows": 0,
     "retrospective_rows": 8,
     "pending_rows": 0,
-    "generated_at_utc": "2026-07-27T17:49:06+00:00",
+    "generated_at_utc": "2026-07-28T02:59:09+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -2637,7 +2637,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-07-27T17:49:06+00:00",
+    "generated_at_utc": "2026-07-28T02:59:09+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -2674,18 +2674,18 @@
     "continuation_hit_rate_95ci_low": 0.1737553142,
     "continuation_hit_rate_95ci_high": 0.4733813515,
     "final_verified_trades": 21,
-    "final_win_rate": 0.2380952381,
-    "final_win_rate_95ci_low": 0.1062801302,
-    "final_win_rate_95ci_high": 0.4509117368,
-    "mean_final_net_return": -0.0444172485,
+    "final_win_rate": 0.3333333333,
+    "final_win_rate_95ci_low": 0.1719475261,
+    "final_win_rate_95ci_high": 0.5462654803,
+    "mean_final_net_return": -0.040922208,
     "median_final_net_return": -0.0812878077,
     "worst_final_net_return": -0.2039514107,
-    "tail_10pct_mean_return": -0.1596248743,
-    "profit_factor": 0.3649711778,
+    "tail_10pct_mean_return": -0.1534672388,
+    "profit_factor": 0.3684482752,
     "matured_portfolio_dates": 1,
-    "equal_slot_cumulative_return": -0.0059582938,
-    "equal_slot_max_drawdown": -0.0059582938,
-    "equal_slot_mean_daily_return": -0.0059582938,
+    "equal_slot_cumulative_return": 0.006170812,
+    "equal_slot_max_drawdown": 0.0,
+    "equal_slot_mean_daily_return": 0.006170812,
     "latest_t_validated_exec_date": "20260727",
     "latest_all_truth_exec_date": "20260727",
     "latest_final_exec_date": "20260723",
@@ -2694,16 +2694,16 @@
         "exec_date": "20260723",
         "observation_slots": 9,
         "filled_slots": 9,
-        "equal_slot_net_return": -0.0059582938,
-        "nav": 0.9940417062
+        "equal_slot_net_return": 0.006170812,
+        "nav": 1.006170812
       }
     ],
     "all_truth_summary": {
       "t_validated_rows": 41,
       "fillable_rows": 41,
       "final_verified_trades": 29,
-      "final_win_rate": 0.2413793103,
-      "mean_final_net_return": -0.0420136127
+      "final_win_rate": 0.275862069,
+      "mean_final_net_return": -0.0427891685
     },
     "stage_2_to_3": {
       "samples": 28,
@@ -2768,31 +2768,31 @@
         "t_validated_rows": 23,
         "continuation_hit_rate": 0.3913043478,
         "final_verified_trades": 21,
-        "mean_final_net_return": -0.0444172485,
-        "win_rate": 0.2380952381
+        "mean_final_net_return": -0.040922208,
+        "win_rate": 0.3333333333
       }
     },
     "trading_date_windows": {
       "20": {
         "portfolio_dates": 1,
         "filled_trades": 9,
-        "mean_net_return": -0.0059582938,
-        "win_rate": 0.3333333333,
-        "equal_slot_cumulative_return": -0.0059582938
+        "mean_net_return": 0.006170812,
+        "win_rate": 0.5555555556,
+        "equal_slot_cumulative_return": 0.006170812
       },
       "60": {
         "portfolio_dates": 1,
         "filled_trades": 9,
-        "mean_net_return": -0.0059582938,
-        "win_rate": 0.3333333333,
-        "equal_slot_cumulative_return": -0.0059582938
+        "mean_net_return": 0.006170812,
+        "win_rate": 0.5555555556,
+        "equal_slot_cumulative_return": 0.006170812
       },
       "all": {
         "portfolio_dates": 1,
         "filled_trades": 9,
-        "mean_net_return": -0.0059582938,
-        "win_rate": 0.3333333333,
-        "equal_slot_cumulative_return": -0.0059582938
+        "mean_net_return": 0.006170812,
+        "win_rate": 0.5555555556,
+        "equal_slot_cumulative_return": 0.006170812
       }
     }
   },
