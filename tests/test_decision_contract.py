@@ -36,6 +36,11 @@ from top10decision.data.tushare_minute import (  # noqa: E402
     TushareClient,
     opening_auction_price_from_snapshot,
 )
+from top10decision.auction_v3.config import (  # noqa: E402
+    TARGET_HISTORY_DATES,
+    TARGET_INDEPENDENT_OOS_DATES,
+    WALKFORWARD_WARMUP_DATES,
+)
 from top10decision.decision.action_plan import build_action_plan  # noqa: E402
 from top10decision.decision.contracts import (  # noqa: E402
     EXIT_LATEST_TIME,
@@ -148,10 +153,13 @@ class DecisionCalendarContractTests(unittest.TestCase):
             max_missing_dates=3,
         )
 
-        self.assertEqual(len(target_window), 640)
-        self.assertEqual(target_window[0], open_dates[102])
+        self.assertEqual(TARGET_INDEPENDENT_OOS_DATES, 500)
+        self.assertEqual(WALKFORWARD_WARMUP_DATES, 200)
+        self.assertEqual(TARGET_HISTORY_DATES, 700)
+        self.assertEqual(len(target_window), 700)
+        self.assertEqual(target_window[0], open_dates[42])
         self.assertEqual(target_window[-1], open_dates[-9])
-        self.assertEqual(missing, open_dates[104:107])
+        self.assertEqual(missing, open_dates[42:45])
 
     def test_intraday_backfill_excludes_unfinished_current_session(self) -> None:
         dates = ["20260724", "20260727", "20260728"]
