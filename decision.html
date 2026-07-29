@@ -446,6 +446,11 @@
       font-variant-numeric: tabular-nums;
     }
     .market-breadth-stats b { font-size: 14px; }
+    .breadth-pair {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 13px;
+    }
     .market-breadth-stats small {
       color: var(--muted);
       font-size: 10px;
@@ -926,6 +931,11 @@
       return parsed == null ? "-" : Math.trunc(parsed).toLocaleString("zh-CN");
     }
 
+    function plainIntegerText(value) {
+      const parsed = finiteNumber(value);
+      return parsed == null ? "-" : String(Math.trunc(parsed));
+    }
+
     function modelDisplayName(value) {
       const text = String(value || "");
       if (text.startsWith("auction_v12_")) return "V12 · Top10独立交易二筛";
@@ -959,11 +969,12 @@
       return `<div class="market-breadth-day">
         <div class="market-breadth-head"><strong>${day}日全A股</strong><span>${date}</span></div>
         <div class="market-breadth-stats">
-          <b class="breadth-up">涨 ${integerText(snapshot.up_count)}</b>
-          <b class="breadth-down">跌 ${integerText(snapshot.down_count)}</b>
-          <b class="breadth-flat">平 ${integerText(snapshot.flat_count)}</b>
-          <b class="breadth-limit">涨停 ${integerText(snapshot.limit_up_count)}</b>
-          <small>覆盖 ${integerText(snapshot.stock_count)} 家</small>
+          <span class="breadth-pair">
+            <b class="breadth-up">↑ ${plainIntegerText(snapshot.up_count)}</b>
+            <b class="breadth-down">↓ ${plainIntegerText(snapshot.down_count)}</b>
+          </span>
+          <b class="breadth-flat">平 ${plainIntegerText(snapshot.flat_count)}</b>
+          <b class="breadth-limit">涨停 ${plainIntegerText(snapshot.limit_up_count)}</b>
         </div>
       </div>`;
     }
