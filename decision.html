@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Decision 开盘竞价决策</title>
+  <title>Decision 竞价决策</title>
   <style>
     :root {
       --bg: #f4f6f7;
@@ -63,7 +63,7 @@
     .brand { min-width: 0; }
     .brand h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 720; }
     .brand p { margin: 5px 0 0; color: #b9c8c4; font-size: 12px; line-height: 1.4; }
-    .brand-dates { margin-left: 8px; color: #fff; font-weight: 650; white-space: nowrap; }
+    .brand-dates { margin-left: 0; color: #fff; font-weight: 650; white-space: nowrap; }
     .controls { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
     .icon-btn {
       width: 42px;
@@ -82,29 +82,6 @@
     .icon-btn:disabled { opacity: 0.35; cursor: default; }
 
     main { max-width: 1580px; margin: 0 auto; padding: 18px 22px 34px; }
-    .loadline {
-      min-height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .loadline strong { color: var(--ink); font-weight: 650; }
-    .source-pill {
-      display: inline-flex;
-      align-items: center;
-      min-height: 26px;
-      padding: 3px 8px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: var(--surface);
-      color: var(--muted);
-      white-space: nowrap;
-    }
-
     .status-band {
       border: 1px solid var(--line-strong);
       border-left: 5px solid var(--brand);
@@ -341,7 +318,6 @@
     .diagnostic-disclosure summary:hover::before { background: var(--brand-soft); }
     .diagnostic-title { margin-right: auto; }
     .diagnostic-title strong { display: block; font-size: 15px; line-height: 1.3; }
-    .diagnostic-title small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 500; line-height: 1.4; }
     table.path-diagnostic-table { min-width: 760px; table-layout: fixed; font-size: 11px; }
     table.path-diagnostic-table th,
     table.path-diagnostic-table td { height: 36px; padding: 7px 8px; }
@@ -651,7 +627,6 @@
         font-size: 9px;
         line-height: 1.2;
       }
-      .brand-scope { display: none; }
       .brand-dates { display: block; margin-left: 0; }
       .controls {
         position: absolute;
@@ -660,7 +635,6 @@
       }
       .icon-btn { width: 38px; height: 38px; }
       main { padding: 12px 0 26px; }
-      .loadline { padding: 0 12px; }
       .status-band { margin: 0 12px 10px; padding: 13px; }
       .status-title { font-size: 16px; }
       .date-contract { grid-template-columns: 1fr; }
@@ -706,8 +680,8 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <h1>Decision 开盘竞价决策</h1>
-        <p><span class="brand-scope">D日涨停候选 · 重点识别2进3/3进4 · T日人工限价竞价 · T+1择机退出</span><span id="brandDates" class="brand-dates">D:- · T:- · T+1:-</span></p>
+        <h1>Decision 竞价决策</h1>
+        <p id="brandDates" class="brand-dates">D:- · T:- · T+1:-</p>
       </div>
       <nav class="controls" aria-label="报告导航">
         <button id="prevBtn" class="icon-btn" type="button" title="上一份历史报告" aria-label="上一份历史报告">←</button>
@@ -718,11 +692,6 @@
   </header>
 
   <main>
-    <div class="loadline">
-      <div id="loadStatus"><strong>正在读取统一报告索引</strong></div>
-      <span id="sourcePill" class="source-pill">report_index</span>
-    </div>
-
     <section id="statusBand" class="status-band warn">
       <div>
         <p class="status-kicker">执行结论</p>
@@ -739,7 +708,6 @@
       <summary class="panel-head">
         <div>
           <h2>二筛影子 · 样本外与前向验证</h2>
-          <p>固定第一层观察排序，在相同样本外窗口比较Top1、Top2与二筛影子；同时分开审计强制开盘代理、现实可买和每日前向影子结果。</p>
         </div>
         <span id="top10BacktestCount" class="count">待计算</span>
       </summary>
@@ -759,7 +727,6 @@
       <div class="panel-head">
         <div>
           <h2>市场情绪量化</h2>
-          <p>严格使用D日及更早的A股交易日数据，联合市场广度、涨跌停生态、涨停行业、炸板回封、昨日涨停溢价、真实晋级、拥挤度与流动性。</p>
         </div>
         <span id="sentimentState" class="count">数据不足</span>
       </div>
@@ -771,7 +738,6 @@
       <div class="panel-head">
         <div>
           <h2>2→3→4</h2>
-          <p>量化弱转强、强转弱、加速一致等逐板路径；先按安全门槛与大跌风险分层，再比较收益和晋级机会。</p>
         </div>
         <span id="stageCount" class="count">0 条</span>
       </div>
@@ -782,7 +748,6 @@
       <div class="panel-head">
         <div>
           <h2>观察真值与累计统计</h2>
-          <p>T日收盘后验证市场表现与成交代理，T+1按预声明退出规则形成最终净收益；收益统计只纳入T日9:25前已冻结的预测，收盘后生成的历史样本单列回溯。</p>
         </div>
         <span id="observationUpdate" class="count">待验证</span>
       </div>
@@ -794,7 +759,6 @@
       <summary>
         <span class="diagnostic-title">
           <strong>连板路径 · 小样本诊断</strong>
-          <small>只用于研究路径差异；少于20笔统一标记样本不足，不据此指导交易。</small>
         </span>
         <span id="pathDiagnosticsCount" class="count">待统计</span>
       </summary>
@@ -806,7 +770,6 @@
       <div class="panel-head">
         <div>
           <h2>人工操作参考</h2>
-          <p>系统不连接券商、不代替下单；只支持人工限价参考，禁止无上限市价单。</p>
         </div>
         <span id="candidateCount" class="count">0 条</span>
       </div>
@@ -838,12 +801,12 @@
     const RAW_BASE = `https://raw.githubusercontent.com/${REPO.owner}/${REPO.name}/${REPO.branch}/`;
     const CACHE_KEY = "decision-dashboard-v11-open0930-cache";
     const els = Object.fromEntries([
-      "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "brandDates",
+      "prevBtn", "refreshBtn", "nextBtn", "statusBand", "statusTitle", "brandDates",
       "signalDate", "execDate", "exitDate", "top10BacktestCount", "top10BacktestContent", "top10BacktestNote", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "pathDiagnosticsCount", "pathDiagnosticsContent", "pathDiagnosticsNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
-    const state = { reports: [], index: 0, mode: "report_index", current: null };
+    const state = { reports: [], index: 0, current: null };
 
     function escapeHtml(value) {
       return String(value == null ? "" : value)
@@ -867,7 +830,6 @@
         try {
           const response = await fetch(`${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}`, { cache: "no-store" });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          state.mode = url.startsWith(RAW_BASE) ? "raw-fallback" : "same-origin";
           return kind === "text" ? await response.text() : await response.json();
         } catch (error) {
           lastError = error;
@@ -1666,8 +1628,6 @@
       setNavigation();
       const info = state.reports[state.index];
       if (!info) throw new Error("报告索引为空");
-      els.loadStatus.innerHTML = `<strong>正在加载 ${escapeHtml(info.report_file)}</strong>`;
-
       const actionPath = info.action_url || `outputs/decision/action_plan_${info.report_date}.json`;
       const [planResult, reportResult] = await Promise.allSettled([
         fetchPath(actionPath),
@@ -1699,8 +1659,6 @@
       renderAudit(plan);
       renderReport(md, info.report_file);
       cacheCurrent(info, plan, md);
-      els.sourcePill.textContent = state.mode === "same-origin" ? "同源结构化数据" : "raw 结构化回退";
-      els.loadStatus.innerHTML = `<strong>${escapeHtml(info.report_file)}</strong> · ${state.index + 1}/${state.reports.length}`;
       els.footer.textContent = `Decision · ${info.report_file} · 本页面不自动刷新 · 本次读取 ${new Date().toLocaleString("zh-CN")}`;
     }
 
@@ -1729,8 +1687,6 @@
         renderActions(cached.plan);
         renderAudit(cached.plan);
         renderReport(cached.md || "", cached.info?.report_file || "cached_report");
-        els.sourcePill.textContent = "本地缓存";
-        els.loadStatus.innerHTML = `<strong>网络读取失败，显示最近缓存</strong> · ${escapeHtml(error.message || error)}`;
         setNavigation();
       } finally {
         els.refreshBtn.disabled = false;
@@ -1742,8 +1698,8 @@
     els.nextBtn.addEventListener("click", () => loadReport(state.index - 1).catch(showError));
 
     function showError(error) {
-      els.loadStatus.innerHTML = `<strong>读取失败</strong> · ${escapeHtml(error?.message || error)}`;
-      els.sourcePill.textContent = "错误";
+      els.statusBand.className = "status-band bad";
+      els.statusTitle.textContent = `读取失败：${String(error?.message || error || "未知错误")}`;
     }
 
     window.addEventListener("error", event => showError(event.error || event.message));
