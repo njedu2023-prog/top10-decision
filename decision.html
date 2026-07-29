@@ -545,6 +545,60 @@
     details.top10-backtest-panel > summary.panel-head:hover::before { background: var(--brand-soft); }
     details.top10-backtest-panel > summary.panel-head > div { min-width: 0; margin-right: auto; }
     details.top10-backtest-panel[open] > summary.panel-head { border-bottom: 1px solid var(--line); }
+    details.panel > summary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .metrics-disclosure > summary::before,
+    .industry-disclosure > summary::before,
+    details.panel > summary::before,
+    details.top10-backtest-panel > summary.panel-head::before {
+      content: "";
+      width: 28px;
+      height: 28px;
+      border: 0;
+      border-radius: 50%;
+      background-color: #111715;
+      background-image:
+        linear-gradient(#fff, #fff),
+        linear-gradient(#fff, #fff);
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: 12px 2px, 2px 12px;
+      box-shadow: none;
+      color: #fff;
+      flex: 0 0 28px;
+      display: inline-block;
+      padding: 0;
+      line-height: 1;
+      vertical-align: middle;
+    }
+    .metrics-disclosure[open] > summary::before,
+    .industry-disclosure[open] > summary::before,
+    details.panel[open] > summary::before,
+    details.top10-backtest-panel[open] > summary.panel-head::before {
+      content: "";
+      background-image: linear-gradient(#fff, #fff);
+      background-size: 12px 2px;
+    }
+    .metrics-disclosure > summary:hover::before,
+    .industry-disclosure > summary:hover::before,
+    details.panel > summary:hover::before,
+    details.top10-backtest-panel > summary.panel-head:hover::before {
+      background:
+        linear-gradient(#fff, #fff) center / 12px 2px no-repeat,
+        linear-gradient(#fff, #fff) center / 2px 12px no-repeat,
+        #28312e;
+    }
+    .metrics-disclosure[open] > summary:hover::before,
+    .industry-disclosure[open] > summary:hover::before,
+    details.panel[open] > summary:hover::before,
+    details.top10-backtest-panel[open] > summary.panel-head:hover::before {
+      background:
+        linear-gradient(#fff, #fff) center / 12px 2px no-repeat,
+        #28312e;
+    }
     .report-body { border-top: 1px solid var(--line); padding: 16px; }
     .report-meta { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 8px; margin-bottom: 14px; }
     .report-meta div { border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: var(--surface-soft); }
