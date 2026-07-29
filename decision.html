@@ -268,6 +268,86 @@
     table.top10-backtest-table td { padding: 7px 6px; }
     table.top10-backtest-table th:first-child,
     table.top10-backtest-table td:first-child { width: 156px; }
+    .shadow-summary {
+      margin: 0;
+      padding: 0 16px 14px;
+    }
+    .shadow-subhead {
+      min-height: 44px;
+      padding: 11px 16px 8px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .shadow-subhead h3 { margin: 0; font-size: 13px; line-height: 1.35; }
+    .shadow-subhead span { color: var(--muted); font-size: 10px; line-height: 1.4; text-align: right; }
+    table.shadow-comparison-table { min-width: 1060px; table-layout: fixed; font-size: 11px; }
+    table.shadow-audit-table { min-width: 1160px; table-layout: fixed; font-size: 11px; }
+    table.shadow-forward-table { min-width: 1120px; table-layout: fixed; font-size: 11px; }
+    table.shadow-comparison-table th,
+    table.shadow-comparison-table td,
+    table.shadow-audit-table th,
+    table.shadow-audit-table td,
+    table.shadow-forward-table th,
+    table.shadow-forward-table td { height: 36px; padding: 7px 6px; }
+    table.shadow-comparison-table th:first-child,
+    table.shadow-comparison-table td:first-child,
+    table.shadow-audit-table th:first-child,
+    table.shadow-audit-table td:first-child { width: 142px; }
+    .verdict-badge,
+    .sample-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 23px;
+      padding: 2px 7px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-weight: 680;
+      white-space: nowrap;
+    }
+    .verdict-badge.warn { color: var(--warn); border-color: #ddc47f; background: var(--warn-soft); }
+    .verdict-badge.bad { color: var(--bad); border-color: #e4aaa4; background: var(--bad-soft); }
+    .sample-badge.ready { color: var(--good); border-color: #8cc6a8; background: var(--good-soft); }
+    .sample-badge.insufficient { color: var(--muted); }
+    .shadow-empty { margin-top: 0; }
+    .diagnostic-disclosure summary {
+      min-height: 50px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .diagnostic-disclosure summary::before {
+      content: "+";
+      width: 20px;
+      height: 20px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--brand);
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 750;
+      line-height: 1;
+    }
+    .diagnostic-disclosure[open] summary::before { content: "−"; }
+    .diagnostic-disclosure summary:hover::before { background: var(--brand-soft); }
+    .diagnostic-title { margin-right: auto; }
+    .diagnostic-title strong { display: block; font-size: 15px; line-height: 1.3; }
+    .diagnostic-title small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 500; line-height: 1.4; }
+    table.path-diagnostic-table { min-width: 760px; table-layout: fixed; font-size: 11px; }
+    table.path-diagnostic-table th,
+    table.path-diagnostic-table td { height: 36px; padding: 7px 8px; }
+    table.path-diagnostic-table th:first-child,
+    table.path-diagnostic-table td:first-child { width: 132px; }
     table.stage-table { min-width: 1720px; }
     table.stage-table th, table.stage-table td { height: 38px; padding: 6px 7px; }
     th, td { height: 42px; padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
@@ -503,6 +583,9 @@
       .metric { min-height: 76px; }
       .metric strong { font-size: 17px; }
       .panel-head { padding: 11px 12px; }
+      .shadow-summary { padding: 0 12px 12px; }
+      .shadow-subhead { padding: 10px 12px 7px; align-items: flex-start; }
+      .shadow-subhead span { max-width: 48%; }
       .empty { margin: 0 12px 12px; }
       .panel-metrics { padding: 0 12px; }
       .sentiment-industries { margin: -2px 12px 12px; }
@@ -569,8 +652,8 @@
     <section class="panel top10-backtest-panel">
       <div class="panel-head">
         <div>
-          <h2>Top10与交易二筛样本外回测</h2>
-          <p>第一层观察Top10与第二层交易排序分账验证；少于10只按实际数量统计，不补票。T日开盘买入，T+1日09:30退出并扣除成本。</p>
+          <h2>二筛影子 · 样本外与前向验证</h2>
+          <p>固定第一层观察排序，在相同样本外窗口比较Top1、Top2与二筛影子；同时分开审计强制开盘代理、现实可买和每日前向影子结果。</p>
         </div>
         <span id="top10BacktestCount" class="count">待计算</span>
       </div>
@@ -621,6 +704,18 @@
       <p id="observationNote" class="stats-note"></p>
     </section>
 
+    <details class="panel diagnostic-disclosure">
+      <summary>
+        <span class="diagnostic-title">
+          <strong>连板路径 · 小样本诊断</strong>
+          <small>只用于研究路径差异；少于20笔统一标记样本不足，不据此指导交易。</small>
+        </span>
+        <span id="pathDiagnosticsCount" class="count">待统计</span>
+      </summary>
+      <div id="pathDiagnosticsContent"></div>
+      <p id="pathDiagnosticsNote" class="stats-note"></p>
+    </details>
+
     <section class="panel">
       <div class="panel-head">
         <div>
@@ -659,7 +754,7 @@
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "loadStatus", "sourcePill", "statusBand", "statusTitle", "statusSub", "brandDates",
       "signalDate", "execDate", "exitDate", "top10BacktestCount", "top10BacktestContent", "top10BacktestNote", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
-      "observationNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
+      "observationNote", "pathDiagnosticsCount", "pathDiagnosticsContent", "pathDiagnosticsNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
     const state = { reports: [], index: 0, mode: "report_index", current: null };
@@ -909,40 +1004,106 @@
     }
 
     function renderTop10Backtest(plan) {
-      const top10 = plan?.backtest?.top10_oos || {};
-      const allCandidates = top10?.all_candidates || {};
-      const buyable = top10?.market_buyable_only || {};
       const selector = plan?.backtest?.trade_selector || {};
-      const formalSelector = selector?.formal_policy_oos || {};
-      const selectorAll = formalSelector?.all_candidates || {};
-      const selectorBuyable = formalSelector?.market_buyable_only || {};
-      const stageValue = (item, stage, field) => item?.stage_breakdown?.[stage]?.[field];
-      const rows = [
-        ["观察Top10全部", allCandidates],
-        ["观察Top10现实可买", buyable],
-        ["交易二筛严格样本外", selectorAll],
-        ["交易二筛现实可买", selectorBuyable]
+      const shadowPolicy = selector?.shadow_policy_oos || {};
+      const shadowAll = shadowPolicy?.all_candidates || {};
+      const shadowBuyable = shadowPolicy?.market_buyable_only || {};
+      const top1Buyable = selector?.observation_top1_baseline?.market_buyable_only || {};
+      const top2Buyable = selector?.observation_top2_baseline?.market_buyable_only || {};
+      const oosDates = Number(selector?.oos_dates || 0);
+      const shadowSignalDates = Number(shadowAll?.signal_dates || 0);
+      const shadowForwardRows = (Array.isArray(plan?.stage_watchlist) ? plan.stage_watchlist : [])
+        .filter(row => Number(row?.trade_shadow_selected || 0) === 1);
+      const promoted = selector?.promoted === true;
+      const comparisonRows = [
+        ["Top1基准", top1Buyable],
+        ["Top2基准", top2Buyable],
+        ["二筛影子", shadowBuyable]
       ].map(([label, item]) => `<tr>
+        <td class="left"><strong>${escapeHtml(label)}</strong></td>
+        <td>${escapeHtml(item?.signal_dates ?? "-")}</td>
+        <td>${escapeHtml(item?.filled_trades ?? "-")}</td>
+        <td class="${valueTone(item?.mean_trade_net_return)}">${signedPct(item?.mean_trade_net_return)}</td>
+        <td>${pct(item?.win_rate)}</td>
+        <td>${number(item?.profit_factor, 2)}</td>
+        <td>${pct(item?.realized_big_loss_rate)}</td>
+        <td class="${valueTone(item?.tail_10pct_mean_return)}">${signedPct(item?.tail_10pct_mean_return)}</td>
+        <td>${pct(item?.continuation_hit_rate)}</td>
+        <td class="${valueTone(item?.max_drawdown)}">${signedPct(item?.max_drawdown)}</td>
+      </tr>`).join("");
+      const auditRows = [
+        ["强制开盘代理", shadowAll, "初步改善，未晋级", "warn"],
+        ["现实可买", shadowBuyable, promoted ? "已通过" : "现实口径未通过", promoted ? "" : "bad"]
+      ].map(([label, item, verdict, verdictTone]) => `<tr>
         <td class="left"><strong>${escapeHtml(label)}</strong></td>
         <td>${escapeHtml(item?.filled_trades ?? "-")}</td>
         <td class="${valueTone(item?.mean_trade_net_return)}">${signedPct(item?.mean_trade_net_return)}</td>
         <td>${pct(item?.win_rate)}</td>
-        <td>${pct(item?.continuation_hit_rate)}</td>
-        <td>${pct(stageValue(item, "2→3", "continuation_hit_rate"))}</td>
-        <td>${pct(stageValue(item, "3→4", "continuation_hit_rate"))}</td>
-        <td class="${valueTone(item?.tail_10pct_mean_return)}">${signedPct(item?.tail_10pct_mean_return)}</td>
         <td>${number(item?.profit_factor, 2)}</td>
+        <td>${pct(item?.realized_big_loss_rate)}</td>
+        <td class="${valueTone(item?.tail_10pct_mean_return)}">${signedPct(item?.tail_10pct_mean_return)}</td>
+        <td class="${valueTone(item?.stress_2x_cost_mean_trade_return)}">${signedPct(item?.stress_2x_cost_mean_trade_return)}</td>
+        <td>${pct(item?.bootstrap_probability_mean_positive)}</td>
+        <td class="${valueTone(item?.max_drawdown)}">${signedPct(item?.max_drawdown)}</td>
+        <td><span class="verdict-badge ${verdictTone}">${escapeHtml(verdict)}</span></td>
       </tr>`).join("");
-      els.top10BacktestContent.innerHTML = `<div class="table-wrap"><table class="top10-backtest-table">
-        <thead><tr><th class="left">统计口径</th><th>样本</th><th>平均净收益</th><th>胜率</th><th>总晋级率</th><th>2进3晋级率</th><th>3进4晋级率</th><th>尾部10%</th><th>盈亏比</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>`;
-      const allCount = Number(allCandidates?.filled_trades || 0);
-      const buyableCount = Number(buyable?.filled_trades || 0);
-      const buyableRate = allCount ? buyableCount / allCount : null;
-      const selectorState = selector?.promoted === true ? "已晋级" : "未晋级";
-      els.top10BacktestCount.textContent = `${selector?.oos_dates ?? 0} 个二筛样本外交易日`;
-      els.top10BacktestNote.textContent = `观察Top10共 ${allCount} 个样本，现实可买 ${buyableCount} 个（${pct(buyableRate)}）；${top10?.days_below_cap ?? 0} 个交易日不足10只，保持原数量，零补位。交易二筛${selectorState}，最多2只且允许0只；只有严格样本外现实可买净收益、成本压力、覆盖率和尾部风险同时通过才会允许买入。`;
+      const forwardRows = shadowForwardRows.map(row => `<tr>
+        <td>${dateText(plan?.signal_date)} / ${dateText(plan?.exec_date)}</td>
+        <td>${escapeHtml(row?.trade_rank || "-")}</td>
+        <td class="left"><strong>${escapeHtml(row?.name || "-")}</strong> · ${escapeHtml(row?.ts_code || "-")}</td>
+        <td>${escapeHtml(row?.stage_transition || "-")}</td>
+        <td class="left">${escapeHtml(row?.path_label || "路径数据不足")}</td>
+        <td>${price(row?.actual_open_price)}</td>
+        <td>${price(row?.actual_t_close)}</td>
+        <td class="${valueTone(row?.observation_t_return)}">${signedPct(row?.observation_t_return)}</td>
+        <td class="${finiteNumber(row?.continuation_limit_up_hit) === 1 ? "positive" : ""}">${escapeHtml(continuationLabel(row?.continuation_limit_up_hit))}</td>
+        <td class="${valueTone(row?.actual_net_return)}">${signedPct(row?.actual_net_return)}</td>
+        <td><span class="truth-badge ${truthClass(row?.validation_status)}">${escapeHtml(row?.validation_status_label || "待验证")}</span></td>
+      </tr>`).join("");
+      const signalRatio = oosDates ? shadowSignalDates / oosDates : null;
+      const summary = [
+        metric("独立样本外交易日", integerText(oosDates)),
+        metric("二筛出手日", `${integerText(shadowSignalDates)} / ${integerText(oosDates)} · ${pct(signalRatio)}`),
+        metric("强制开盘样本", integerText(shadowAll?.filled_trades)),
+        metric("现实可买样本", integerText(shadowBuyable?.filled_trades)),
+        metric("最长连续空仓", shadowAll?.max_no_signal_streak == null ? "-" : `${integerText(shadowAll.max_no_signal_streak)} 日`),
+        metric("二筛影子状态", promoted ? "已晋级" : "未晋级", promoted ? "good" : "warn")
+      ].join("");
+      els.top10BacktestContent.innerHTML = `
+        <div class="metrics shadow-summary">${summary}</div>
+        <div class="shadow-subhead">
+          <h3>同窗现实可买对比</h3>
+          <span>同一${integerText(oosDates)}日窗口 · T开盘至T+1 09:30 · 已扣成本</span>
+        </div>
+        <div class="table-wrap"><table class="shadow-comparison-table">
+          <thead><tr><th class="left">策略</th><th>信号日</th><th>可买样本</th><th>平均净收益</th><th>胜率</th><th>盈亏因子</th><th>大亏率</th><th>尾部10%</th><th>晋级率</th><th>最大回撤</th></tr></thead>
+          <tbody>${comparisonRows}</tbody>
+        </table></div>
+        <div class="shadow-subhead">
+          <h3>二筛影子双口径审计</h3>
+          <span>强制开盘用于研究上限 · 现实可买决定能否晋级</span>
+        </div>
+        <div class="table-wrap"><table class="shadow-audit-table">
+          <thead><tr><th class="left">执行口径</th><th>样本</th><th>平均净收益</th><th>胜率</th><th>盈亏因子</th><th>大亏率</th><th>尾部10%</th><th>2倍成本</th><th>正收益可信概率</th><th>最大回撤</th><th>结论</th></tr></thead>
+          <tbody>${auditRows}</tbody>
+        </table></div>
+        <div class="shadow-subhead">
+          <h3>每日前向二筛影子</h3>
+          <span>按当天9:25前冻结结果逐笔累计，不回填改选</span>
+        </div>
+        ${forwardRows
+          ? `<div class="table-wrap"><table class="shadow-forward-table">
+              <thead><tr><th>D / T</th><th>二筛排名</th><th class="left">股票</th><th>晋级</th><th class="left">路径</th><th>T开盘</th><th>T收盘</th><th>T收益</th><th>T晋级</th><th>T+1净收益</th><th>状态</th></tr></thead>
+              <tbody>${forwardRows}</tbody>
+            </table></div>`
+          : '<div class="empty shadow-empty"><strong>本报告无二筛影子入选</strong>二筛允许一天0只，不会为了凑数量降低门槛。</div>'}`;
+      els.top10BacktestCount.textContent = `${integerText(oosDates)}日样本外 · 前向${shadowForwardRows.length}笔`;
+      const realisticMean = finiteNumber(shadowBuyable?.mean_trade_net_return);
+      const realisticPf = finiteNumber(shadowBuyable?.profit_factor);
+      const verdict = promoted
+        ? "二筛已经通过正式晋级门槛。"
+        : `现实可买平均净收益 ${signedPct(realisticMean)}、盈亏因子 ${number(realisticPf, 2)}，仍未达到正式买入门槛；当前“二筛影子”只代表Top10内相对更值得跟踪的候选，不是买入信号。`;
+      els.top10BacktestNote.textContent = `历史样本外、当天前向影子和正式交易资格三套账本彼此独立，不混用未来数据。${verdict}`;
     }
 
     function renderSentiment(plan) {
@@ -1083,7 +1244,6 @@
       const top1 = stats.top1_continuation || {};
       const top3 = stats.top3_continuation || {};
       const allTruth = stats.all_truth_summary || {};
-      const pathPerformance = stats.path_performance || {};
       const truthRows = Number(stats.t_validated_rows || 0);
       const officialAuctionRows = Number(stats.official_auction_truth_rows || 0);
       const rows = [
@@ -1093,20 +1253,21 @@
         metric("真实竞价真值", String(officialAuctionRows), officialAuctionRows ? "good" : "warn"),
         metric("真实竞价覆盖率", truthRows ? pct(officialAuctionRows / truthRows) : "-", officialAuctionRows === truthRows && truthRows ? "good" : "warn"),
         metric("分钟 / 日开盘代理", `${stats.minute_proxy_truth_rows ?? 0} / ${stats.daily_open_proxy_truth_rows ?? 0}`),
-        metric("市价成交验证率", pct(stats.observation_fill_rate)),
-        metric("开盘不超限率", pct(stats.display_limit_met_rate)),
+        metric("开盘价代理覆盖率", pct(stats.observation_fill_rate)),
+        metric("开盘价≤参考限价", pct(stats.display_limit_met_rate)),
         metric("开盘超限样本", String(stats.above_display_limit_rows ?? 0)),
         metric("平均开盘较限价", signedPct(stats.mean_open_vs_display_limit), valueTone(stats.mean_open_vs_display_limit)),
-        metric("T日市场上涨率", pct(stats.market_positive_rate)),
-        metric("T日平均市场涨跌", signedPct(stats.mean_market_daily_return), valueTone(stats.mean_market_daily_return)),
+        metric("观察样本上涨占比", pct(stats.market_positive_rate)),
+        metric("观察样本平均涨跌", signedPct(stats.mean_market_daily_return), valueTone(stats.mean_market_daily_return)),
         metric("T日平均观察收益", signedPct(stats.mean_t_observation_return), valueTone(stats.mean_t_observation_return)),
         metric("2进3命中率", pct(stage23.hit_rate)),
         metric("3进4命中率", pct(stage34.hit_rate)),
         metric("Top1晋级命中率", pct(top1.hit_rate)),
         metric("Top3晋级命中率", pct(top3.hit_rate)),
-        metric("时序合格T+1笔数", String(stats.final_verified_trades ?? 0)),
-        metric("时序合格T+1胜率", pct(stats.final_win_rate)),
-        metric("时序合格平均净收益", signedPct(stats.mean_final_net_return), valueTone(stats.mean_final_net_return)),
+        metric("正式样本T+1完成", String(stats.final_verified_trades ?? 0)),
+        metric("正式样本T+1胜率", pct(stats.final_win_rate)),
+        metric("正式样本平均净收益", signedPct(stats.mean_final_net_return), valueTone(stats.mean_final_net_return)),
+        metric("成熟组合交易日", String(stats.matured_portfolio_dates ?? 0)),
         metric("全部回补T+1笔数", String(allTruth.final_verified_trades ?? 0)),
         metric("全部回补平均净收益", signedPct(allTruth.mean_final_net_return), valueTone(allTruth.mean_final_net_return)),
         metric("等权槽位累计收益", signedPct(stats.equal_slot_cumulative_return), valueTone(stats.equal_slot_cumulative_return)),
@@ -1115,19 +1276,55 @@
         metric("尾部10%平均收益", signedPct(stats.tail_10pct_mean_return), valueTone(stats.tail_10pct_mean_return)),
         metric("盈亏比", number(stats.profit_factor, 2))
       ];
-      ["WEAK_TO_STRONG", "ACCELERATION_CONSENSUS", "STRONG_TO_WEAK"].forEach(code => {
-        const item = pathPerformance[code];
-        if (!item) return;
-        rows.push(metric(`${item.label || code}晋级率`, `${pct(item.continuation_hit_rate)} · ${item.t_validated_rows || 0} 样本`));
-        rows.push(metric(`${item.label || code}T+1净收益`, signedPct(item.mean_final_net_return), valueTone(item.mean_final_net_return)));
-      });
       els.observationMetrics.innerHTML = rows.join("");
       const generated = current.generated_at_utc ? new Date(current.generated_at_utc).toLocaleString("zh-CN") : "尚未生成";
       const retrospective = Number(current.retrospective_rows || 0);
-      els.observationUpdate.textContent = `${dateText(current.exec_date)} · ${current.final_rows || 0} 条最终${retrospective ? ` · ${retrospective} 条回溯` : ""}`;
+      const currentRows = Number(current.rows || 0);
+      const currentTValidated = Number(current.t_validated_rows || 0);
+      const currentFinal = Number(current.final_rows || 0);
+      const currentPending = Number(current.pending_rows || 0);
+      els.observationUpdate.textContent = `${dateText(current.exec_date)} · T ${currentTValidated}/${currentRows}${currentFinal ? ` · T+1最终 ${currentFinal}` : ""}${currentPending ? ` · T+1待 ${currentPending}` : ""}${retrospective ? ` · 回溯 ${retrospective}` : ""}`;
       const window20 = stats?.trading_date_windows?.["20"] || {};
       const window60 = stats?.trading_date_windows?.["60"] || {};
-      els.observationNote.textContent = `数据更新时间：${generated}。全部真值从 ${dateText(stats.validation_start_exec_date || "20260721")} 起回补；核心命中率和收益只统计T日9:25前已冻结样本，未成交按空仓0收益计入等权槽位组合。真实竞价真值优先使用 Tushare stk_auction_o，缺失时才标记分钟或日开盘代理。20日累计 ${signedPct(window20.equal_slot_cumulative_return)}，60日累计 ${signedPct(window60.equal_slot_cumulative_return)}。公开行情代理与人工实际成交分开，不把人工回填混入模型晋级。`;
+      els.observationNote.textContent = `数据更新时间：${generated}。全部真值从 ${dateText(stats.validation_start_exec_date || "20260721")} 起回补；核心命中率和收益只统计T日9:25前已冻结样本，未成交按空仓0收益计入等权槽位组合。真实竞价真值优先使用 Tushare stk_auction_o，缺失时才使用分钟或日开盘代理。20日累计 ${signedPct(window20.equal_slot_cumulative_return)}，60日累计 ${signedPct(window60.equal_slot_cumulative_return)}。公开行情代理与人工实际成交分开，不把人工回填混入模型晋级。`;
+    }
+
+    function renderPathDiagnostics(plan) {
+      const pathPerformance = plan?.observation_statistics?.path_performance || {};
+      const entries = Object.entries(pathPerformance)
+        .sort(([, left], [, right]) => Number(right?.t_validated_rows || 0) - Number(left?.t_validated_rows || 0));
+      const minimumSamples = 20;
+      if (!entries.length) {
+        els.pathDiagnosticsCount.textContent = "0 条";
+        els.pathDiagnosticsContent.innerHTML = '<div class="empty"><strong>暂无路径真值</strong>等待T日与T+1验证累计。</div>';
+        els.pathDiagnosticsNote.textContent = "";
+        return;
+      }
+      const readyCount = entries.filter(([, item]) =>
+        Number(item?.t_validated_rows || 0) >= minimumSamples &&
+        Number(item?.final_verified_trades || 0) >= minimumSamples
+      ).length;
+      const rows = entries.map(([code, item]) => {
+        const tSamples = Number(item?.t_validated_rows || 0);
+        const finalSamples = Number(item?.final_verified_trades || 0);
+        const sufficient = tSamples >= minimumSamples && finalSamples >= minimumSamples;
+        const returnTone = sufficient ? valueTone(item?.mean_final_net_return) : "";
+        return `<tr>
+          <td class="left"><strong>${escapeHtml(item?.label || code)}</strong></td>
+          <td>${integerText(tSamples)}</td>
+          <td>${pct(item?.continuation_hit_rate)}</td>
+          <td>${integerText(finalSamples)}</td>
+          <td class="${returnTone}">${signedPct(item?.mean_final_net_return)}</td>
+          <td>${pct(item?.win_rate)}</td>
+          <td><span class="sample-badge ${sufficient ? "ready" : "insufficient"}">${sufficient ? "可观察" : "样本不足"}</span></td>
+        </tr>`;
+      }).join("");
+      els.pathDiagnosticsCount.textContent = `${entries.length} 条路径 · ${readyCount} 条可观察`;
+      els.pathDiagnosticsContent.innerHTML = `<div class="table-wrap"><table class="path-diagnostic-table">
+        <thead><tr><th class="left">连板路径</th><th>T验证样本</th><th>晋级率</th><th>T+1完成</th><th>平均净收益</th><th>胜率</th><th>样本判断</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+      els.pathDiagnosticsNote.textContent = `路径结果是诊断分组，不是独立交易策略。任一路径少于 ${minimumSamples} 笔时，收益与胜率仅展示原始事实，不着色、不参与交易结论；达到门槛也只代表可以开始观察，不能替代严格样本外检验。`;
     }
 
     function renderActions(plan) {
@@ -1408,6 +1605,7 @@
       renderSentiment(plan);
       renderStageWatchlist(plan);
       renderObservationStatistics(plan);
+      renderPathDiagnostics(plan);
       renderActions(plan);
       renderAudit(plan);
       renderReport(md, info.report_file);
@@ -1438,6 +1636,7 @@
         renderSentiment(cached.plan);
         renderStageWatchlist(cached.plan);
         renderObservationStatistics(cached.plan);
+        renderPathDiagnostics(cached.plan);
         renderActions(cached.plan);
         renderAudit(cached.plan);
         renderReport(cached.md || "", cached.info?.report_file || "cached_report");
