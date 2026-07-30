@@ -707,7 +707,7 @@
     <details class="panel top10-backtest-panel">
       <summary class="panel-head">
         <div>
-          <h2>二筛影子 · 样本外与前向验证</h2>
+          <h2>二筛影子 · 前向累计验证</h2>
         </div>
         <span id="top10BacktestCount" class="count">待计算</span>
       </summary>
@@ -1055,51 +1055,22 @@
     }
 
     function renderTop10Backtest(plan) {
-      const selector = plan?.backtest?.trade_selector || {};
-      const shadowPolicy = selector?.shadow_policy_oos || {};
-      const shadowAll = shadowPolicy?.all_candidates || {};
-      const shadowBuyable = shadowPolicy?.market_buyable_only || {};
-      const top1Buyable = selector?.observation_top1_baseline?.market_buyable_only || {};
-      const top2Buyable = selector?.observation_top2_baseline?.market_buyable_only || {};
-      const oosDates = Number(selector?.oos_dates || 0);
-      const shadowSignalDates = Number(shadowAll?.signal_dates || 0);
-      const shadowForwardRows = (Array.isArray(plan?.stage_watchlist) ? plan.stage_watchlist : [])
-        .filter(row => Number(row?.trade_shadow_selected || 0) === 1);
-      const promoted = selector?.promoted === true;
-      const comparisonRows = [
-        ["Top1基准", top1Buyable],
-        ["Top2基准", top2Buyable],
-        ["二筛影子", shadowBuyable]
-      ].map(([label, item]) => `<tr>
-        <td class="left"><strong>${escapeHtml(label)}</strong></td>
-        <td>${escapeHtml(item?.signal_dates ?? "-")}</td>
-        <td>${escapeHtml(item?.filled_trades ?? "-")}</td>
-        <td class="${valueTone(item?.mean_trade_net_return)}">${signedPct(item?.mean_trade_net_return)}</td>
-        <td>${pct(item?.win_rate)}</td>
-        <td>${number(item?.profit_factor, 2)}</td>
-        <td>${pct(item?.realized_big_loss_rate)}</td>
-        <td class="${valueTone(item?.tail_10pct_mean_return)}">${signedPct(item?.tail_10pct_mean_return)}</td>
-        <td>${pct(item?.continuation_hit_rate)}</td>
-        <td class="${valueTone(item?.max_drawdown)}">${signedPct(item?.max_drawdown)}</td>
-      </tr>`).join("");
-      const auditRows = [
-        ["强制开盘代理", shadowAll, "初步改善，未晋级", "warn"],
-        ["现实可买", shadowBuyable, promoted ? "已通过" : "现实口径未通过", promoted ? "" : "bad"]
-      ].map(([label, item, verdict, verdictTone]) => `<tr>
-        <td class="left"><strong>${escapeHtml(label)}</strong></td>
-        <td>${escapeHtml(item?.filled_trades ?? "-")}</td>
-        <td class="${valueTone(item?.mean_trade_net_return)}">${signedPct(item?.mean_trade_net_return)}</td>
-        <td>${pct(item?.win_rate)}</td>
-        <td>${number(item?.profit_factor, 2)}</td>
-        <td>${pct(item?.realized_big_loss_rate)}</td>
-        <td class="${valueTone(item?.tail_10pct_mean_return)}">${signedPct(item?.tail_10pct_mean_return)}</td>
-        <td class="${valueTone(item?.stress_2x_cost_mean_trade_return)}">${signedPct(item?.stress_2x_cost_mean_trade_return)}</td>
-        <td>${pct(item?.bootstrap_probability_mean_positive)}</td>
-        <td class="${valueTone(item?.max_drawdown)}">${signedPct(item?.max_drawdown)}</td>
-        <td><span class="verdict-badge ${verdictTone}">${escapeHtml(verdict)}</span></td>
-      </tr>`).join("");
-      const forwardRows = shadowForwardRows.map(row => `<tr>
-        <td>${dateText(plan?.signal_date)} / ${dateText(plan?.exec_date)}</td>
+      const stats = plan?.observation_statistics?.forward_shadow || {};
+      const rows = Array.isArray(stats?.rows) ? stats.rows : [];
+      const observedDates = Number(stats?.observed_signal_dates || 0);
+      const shadowDates = Number(stats?.shadow_signal_dates || 0);
+      const shadowEntries = Number(stats?.shadow_entries || 0);
+      const finalTrades = Number(stats?.final_verified_trades || 0);
+      const pendingEntries = Number(stats?.pending_t_entries || 0)
+        + Number(stats?.pending_t1_entries || 0);
+      const noFillEntries = Math.max(
+        0,
+        Number(stats?.finalized_entries || 0) - finalTrades
+      );
+      const minimumFinalTrades = Number(stats?.minimum_final_trades || 20);
+      const startSignalDate = dateText(stats?.start_signal_date || "20260728");
+      const forwardRows = rows.map(row => `<tr>
+        <td>${dateText(row?.signal_date)} / ${dateText(row?.expected_buy_date)}</td>
         <td>${escapeHtml(row?.trade_rank || "-")}</td>
         <td class="left"><strong>${escapeHtml(row?.name || "-")}</strong> · ${escapeHtml(row?.ts_code || "-")}</td>
         <td>${escapeHtml(row?.stage_transition || "-")}</td>
@@ -1111,50 +1082,40 @@
         <td class="${valueTone(row?.actual_net_return)}">${signedPct(row?.actual_net_return)}</td>
         <td><span class="truth-badge ${truthClass(row?.validation_status)}">${escapeHtml(row?.validation_status_label || "待验证")}</span></td>
       </tr>`).join("");
-      const signalRatio = oosDates ? shadowSignalDates / oosDates : null;
       const summary = [
-        metric("独立样本外交易日", integerText(oosDates)),
-        metric("二筛出手日", `${integerText(shadowSignalDates)} / ${integerText(oosDates)} · ${pct(signalRatio)}`),
-        metric("强制开盘样本", integerText(shadowAll?.filled_trades)),
-        metric("现实可买样本", integerText(shadowBuyable?.filled_trades)),
-        metric("最长连续空仓", shadowAll?.max_no_signal_streak == null ? "-" : `${integerText(shadowAll.max_no_signal_streak)} 日`),
-        metric("二筛影子状态", promoted ? "已晋级" : "未晋级", promoted ? "good" : "warn")
+        metric("累计D日", integerText(observedDates)),
+        metric("影子入选日", `${integerText(shadowDates)} / ${integerText(observedDates)} · ${pct(stats?.shadow_signal_rate)}`),
+        metric("影子入选", `${integerText(shadowEntries)} 笔`),
+        metric("T+1已完成", `${integerText(finalTrades)} 笔`, finalTrades ? "good" : "warn"),
+        metric("待验证", `${integerText(pendingEntries)} 笔`, pendingEntries ? "warn" : ""),
+        metric("最终无成交", `${integerText(noFillEntries)} 笔`),
+        metric("平均净收益", signedPct(stats?.mean_final_net_return), valueTone(stats?.mean_final_net_return)),
+        metric("胜率", pct(stats?.final_win_rate)),
+        metric("盈亏因子", number(stats?.profit_factor, 2)),
+        metric("等权累计收益", signedPct(stats?.equal_slot_cumulative_return), valueTone(stats?.equal_slot_cumulative_return)),
+        metric("最大回撤", signedPct(stats?.equal_slot_max_drawdown), valueTone(stats?.equal_slot_max_drawdown)),
+        metric("晋级率", pct(stats?.continuation_hit_rate)),
+        metric("最长连续空仓", `${integerText(stats?.longest_no_signal_streak || 0)} 日`),
+        metric(
+          "样本状态",
+          stats?.sample_sufficient === true ? "已达观察门槛" : `${integerText(finalTrades)} / ${integerText(minimumFinalTrades)} · 样本不足`,
+          stats?.sample_sufficient === true ? "good" : "warn"
+        )
       ].join("");
       els.top10BacktestContent.innerHTML = `
         <div class="metrics shadow-summary">${summary}</div>
         <div class="shadow-subhead">
-          <h3>同窗现实可买对比</h3>
-          <span>同一${integerText(oosDates)}日窗口 · T开盘至T+1 09:30 · 已扣成本</span>
-        </div>
-        <div class="table-wrap"><table class="shadow-comparison-table">
-          <thead><tr><th class="left">策略</th><th>信号日</th><th>可买样本</th><th>平均净收益</th><th>胜率</th><th>盈亏因子</th><th>大亏率</th><th>尾部10%</th><th>晋级率</th><th>最大回撤</th></tr></thead>
-          <tbody>${comparisonRows}</tbody>
-        </table></div>
-        <div class="shadow-subhead">
-          <h3>二筛影子双口径审计</h3>
-          <span>强制开盘用于研究上限 · 现实可买决定能否晋级</span>
-        </div>
-        <div class="table-wrap"><table class="shadow-audit-table">
-          <thead><tr><th class="left">执行口径</th><th>样本</th><th>平均净收益</th><th>胜率</th><th>盈亏因子</th><th>大亏率</th><th>尾部10%</th><th>2倍成本</th><th>正收益可信概率</th><th>最大回撤</th><th>结论</th></tr></thead>
-          <tbody>${auditRows}</tbody>
-        </table></div>
-        <div class="shadow-subhead">
-          <h3>每日前向二筛影子</h3>
-          <span>按当天9:25前冻结结果逐笔累计，不回填改选</span>
+          <h3>每日影子记录</h3>
+          <span>D ${startSignalDate} 起 · 待验证不进入收益</span>
         </div>
         ${forwardRows
           ? `<div class="table-wrap"><table class="shadow-forward-table">
               <thead><tr><th>D / T</th><th>二筛排名</th><th class="left">股票</th><th>晋级</th><th class="left">路径</th><th>T开盘</th><th>T收盘</th><th>T收益</th><th>T晋级</th><th>T+1净收益</th><th>状态</th></tr></thead>
               <tbody>${forwardRows}</tbody>
             </table></div>`
-          : '<div class="empty shadow-empty"><strong>本报告无二筛影子入选</strong>二筛允许一天0只，不会为了凑数量降低门槛。</div>'}`;
-      els.top10BacktestCount.textContent = `${integerText(oosDates)}日样本外 · 前向${shadowForwardRows.length}笔`;
-      const realisticMean = finiteNumber(shadowBuyable?.mean_trade_net_return);
-      const realisticPf = finiteNumber(shadowBuyable?.profit_factor);
-      const verdict = promoted
-        ? "二筛已经通过正式晋级门槛。"
-        : `现实可买平均净收益 ${signedPct(realisticMean)}、盈亏因子 ${number(realisticPf, 2)}，仍未达到正式买入门槛；当前“二筛影子”只代表Top10内相对更值得跟踪的候选，不是买入信号。`;
-      els.top10BacktestNote.textContent = `历史样本外、当天前向影子和正式交易资格三套账本彼此独立，不混用未来数据。${verdict}`;
+          : '<div class="empty shadow-empty"><strong>0728起尚无二筛影子记录</strong>二筛允许一天0只，不会为了凑数量降低门槛。</div>'}`;
+      els.top10BacktestCount.textContent = `D 0728起 · ${integerText(shadowEntries)}笔 / ${integerText(finalTrades)}笔已完成`;
+      els.top10BacktestNote.textContent = `只累计D=${startSignalDate}以后9:25前冻结的二筛影子；待验证不进入收益，历史样本外回测不计入本窗口。`;
     }
 
     function renderSentiment(plan) {

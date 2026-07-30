@@ -6852,6 +6852,294 @@ class AuctionV3Engine:
         )
         return _safe_metric(max(0.0, centre - radius)), _safe_metric(min(1.0, centre + radius))
 
+    def _forward_shadow_metrics(self, ledger: pd.DataFrame) -> dict[str, Any]:
+        start_signal_date = _normal_date(
+            self.config.forward_shadow_start_signal_date
+        )
+        payload: dict[str, Any] = {
+            "schema_version": "decision_forward_shadow_validation_v1",
+            "start_signal_date": start_signal_date,
+            "performance_scope": "premarket_frozen_trade_shadow_selected_only",
+            "minimum_final_trades": 20,
+            "observed_signal_dates": 0,
+            "shadow_signal_dates": 0,
+            "shadow_signal_rate": None,
+            "shadow_entries": 0,
+            "t_validated_entries": 0,
+            "pending_t_entries": 0,
+            "pending_t1_entries": 0,
+            "finalized_entries": 0,
+            "final_verified_trades": 0,
+            "market_buyable_entries": 0,
+            "mean_final_net_return": None,
+            "median_final_net_return": None,
+            "final_win_rate": None,
+            "final_win_rate_95ci_low": None,
+            "final_win_rate_95ci_high": None,
+            "profit_factor": None,
+            "worst_final_net_return": None,
+            "tail_10pct_mean_return": None,
+            "realized_big_loss_rate": None,
+            "continuation_samples": 0,
+            "continuation_hits": 0,
+            "continuation_hit_rate": None,
+            "matured_portfolio_dates": 0,
+            "equal_slot_cumulative_return": None,
+            "equal_slot_max_drawdown": None,
+            "equal_slot_mean_daily_return": None,
+            "longest_no_signal_streak": 0,
+            "latest_signal_date": "",
+            "latest_final_signal_date": "",
+            "sample_sufficient": False,
+            "daily_portfolio": [],
+            "rows": [],
+        }
+        if ledger.empty or not start_signal_date:
+            return payload
+
+        frame = ledger.copy()
+        frame["signal_date"] = frame.get(
+            "signal_date",
+            pd.Series("", index=frame.index, dtype=str),
+        ).map(_normal_date)
+        timing_valid = pd.to_numeric(
+            frame.get(
+                "prediction_timing_valid",
+                pd.Series(0, index=frame.index, dtype=float),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        frame = frame[
+            timing_valid
+            & frame["signal_date"].ge(start_signal_date)
+        ].copy()
+        if frame.empty:
+            return payload
+
+        observed_dates = sorted(
+            date
+            for date in frame["signal_date"].dropna().astype(str).unique()
+            if date
+        )
+        shadow_selected = pd.to_numeric(
+            frame.get(
+                "trade_shadow_selected",
+                pd.Series(0, index=frame.index, dtype=float),
+            ),
+            errors="coerce",
+        ).fillna(0).eq(1)
+        selected = frame[shadow_selected].copy()
+        shadow_dates = set(selected["signal_date"].astype(str))
+        streak = 0
+        longest_streak = 0
+        for signal_date in observed_dates:
+            if signal_date in shadow_dates:
+                streak = 0
+            else:
+                streak += 1
+                longest_streak = max(longest_streak, streak)
+
+        payload.update(
+            {
+                "observed_signal_dates": int(len(observed_dates)),
+                "shadow_signal_dates": int(len(shadow_dates)),
+                "shadow_signal_rate": _safe_metric(
+                    len(shadow_dates) / len(observed_dates)
+                    if observed_dates
+                    else np.nan
+                ),
+                "shadow_entries": int(len(selected)),
+                "longest_no_signal_streak": int(longest_streak),
+                "latest_signal_date": max(observed_dates) if observed_dates else "",
+            }
+        )
+        if selected.empty:
+            return payload
+
+        statuses = selected.get(
+            "validation_status",
+            pd.Series("", index=selected.index, dtype=str),
+        ).fillna("").astype(str)
+        pending_t = statuses.eq("PENDING_T")
+        pending_t1 = statuses.isin(("PENDING_T1", "PENDING_EXIT_TRUTH"))
+        finalized = statuses.str.startswith("FINAL_")
+        t_validated = statuses.ne("") & ~pending_t
+        final = selected[statuses.eq("FINAL_VERIFIED")].copy()
+        final_returns = pd.to_numeric(
+            final.get(
+                "actual_net_return",
+                pd.Series(np.nan, index=final.index, dtype=float),
+            ),
+            errors="coerce",
+        ).dropna()
+        positive = float(final_returns[final_returns > 0].sum())
+        negative = float(-final_returns[final_returns < 0].sum())
+        continuation = pd.to_numeric(
+            selected.loc[
+                t_validated,
+                "continuation_limit_up_hit",
+            ]
+            if "continuation_limit_up_hit" in selected.columns
+            else pd.Series(dtype=float),
+            errors="coerce",
+        ).dropna()
+        market_buyable = pd.to_numeric(
+            selected.loc[
+                t_validated,
+                "market_buyable_diagnostic",
+            ]
+            if "market_buyable_diagnostic" in selected.columns
+            else pd.Series(dtype=float),
+            errors="coerce",
+        ).dropna()
+        win_low, win_high = self._wilson_interval(
+            int((final_returns > 0).sum()),
+            int(len(final_returns)),
+        )
+
+        daily_records: list[dict[str, Any]] = []
+        for signal_date, group in selected.groupby("signal_date", sort=True):
+            group_statuses = group.get(
+                "validation_status",
+                pd.Series("", index=group.index, dtype=str),
+            ).fillna("").astype(str)
+            if group_statuses.empty or not group_statuses.str.startswith("FINAL_").all():
+                continue
+            slot_returns = pd.to_numeric(
+                group.get(
+                    "actual_net_return",
+                    pd.Series(np.nan, index=group.index, dtype=float),
+                ),
+                errors="coerce",
+            ).fillna(0.0)
+            daily_records.append(
+                {
+                    "signal_date": str(signal_date),
+                    "shadow_slots": int(len(group)),
+                    "verified_trades": int(group_statuses.eq("FINAL_VERIFIED").sum()),
+                    "equal_slot_net_return": float(slot_returns.mean()),
+                }
+            )
+        daily = pd.DataFrame(daily_records)
+        if not daily.empty:
+            daily["nav"] = (1.0 + daily["equal_slot_net_return"]).cumprod()
+            peak = daily["nav"].cummax().clip(lower=1.0)
+            drawdown = daily["nav"] / peak - 1.0
+            cumulative_return = float(daily["nav"].iloc[-1] - 1.0)
+            max_drawdown = float(drawdown.min())
+        else:
+            cumulative_return = float("nan")
+            max_drawdown = float("nan")
+
+        rows: list[dict[str, Any]] = []
+        ordered = selected.assign(
+            _trade_rank=pd.to_numeric(
+                selected.get(
+                    "trade_rank",
+                    pd.Series(np.nan, index=selected.index, dtype=float),
+                ),
+                errors="coerce",
+            )
+        ).sort_values(
+            ["signal_date", "_trade_rank", "ts_code"],
+            ascending=[False, True, True],
+            na_position="last",
+        )
+        status_labels = {
+            "PENDING_T": "等待T日收盘",
+            "PENDING_T1": "等待T+1",
+            "PENDING_EXIT_TRUTH": "等待退出真值",
+            "FINAL_VERIFIED": "已完成",
+            "FINAL_NO_FILL": "最终无成交",
+        }
+        for _, row in ordered.iterrows():
+            status = str(row.get("validation_status") or "")
+            trade_rank = _finite(row.get("trade_rank"))
+            rows.append(
+                {
+                    "signal_date": _normal_date(row.get("signal_date")),
+                    "expected_buy_date": _normal_date(row.get("expected_buy_date")),
+                    "expected_exit_date": _normal_date(row.get("expected_exit_date")),
+                    "trade_rank": int(trade_rank) if math.isfinite(trade_rank) else None,
+                    "ts_code": str(row.get("ts_code") or ""),
+                    "name": str(row.get("name") or ""),
+                    "industry": str(row.get("industry") or ""),
+                    "stage_transition": str(row.get("stage_transition") or ""),
+                    "path_label": str(row.get("path_label") or "路径数据不足"),
+                    "actual_open_price": _safe_metric(row.get("actual_open_price")),
+                    "actual_t_close": _safe_metric(row.get("actual_t_close")),
+                    "observation_t_return": _safe_metric(row.get("observation_t_return")),
+                    "continuation_limit_up_hit": _safe_metric(
+                        row.get("continuation_limit_up_hit")
+                    ),
+                    "actual_net_return": _safe_metric(row.get("actual_net_return")),
+                    "market_buyable_diagnostic": _safe_metric(
+                        row.get("market_buyable_diagnostic")
+                    ),
+                    "validation_status": status,
+                    "validation_status_label": status_labels.get(status, status or "待验证"),
+                }
+            )
+
+        payload.update(
+            {
+                "t_validated_entries": int(t_validated.sum()),
+                "pending_t_entries": int(pending_t.sum()),
+                "pending_t1_entries": int(pending_t1.sum()),
+                "finalized_entries": int(finalized.sum()),
+                "final_verified_trades": int(len(final_returns)),
+                "market_buyable_entries": int(market_buyable.eq(1).sum()),
+                "mean_final_net_return": _safe_metric(final_returns.mean()),
+                "median_final_net_return": _safe_metric(final_returns.median()),
+                "final_win_rate": _safe_metric((final_returns > 0).mean()),
+                "final_win_rate_95ci_low": win_low,
+                "final_win_rate_95ci_high": win_high,
+                "profit_factor": _safe_metric(
+                    positive / negative if negative > 0 else np.nan
+                ),
+                "worst_final_net_return": _safe_metric(final_returns.min()),
+                "tail_10pct_mean_return": _safe_metric(
+                    final_returns.nsmallest(
+                        max(1, math.ceil(len(final_returns) * 0.10))
+                    ).mean()
+                    if len(final_returns)
+                    else np.nan
+                ),
+                "realized_big_loss_rate": _safe_metric(
+                    final_returns.le(self.config.big_loss_threshold).mean()
+                ),
+                "continuation_samples": int(len(continuation)),
+                "continuation_hits": int(continuation.sum()) if len(continuation) else 0,
+                "continuation_hit_rate": _safe_metric(continuation.mean()),
+                "matured_portfolio_dates": int(len(daily)),
+                "equal_slot_cumulative_return": _safe_metric(cumulative_return),
+                "equal_slot_max_drawdown": _safe_metric(max_drawdown),
+                "equal_slot_mean_daily_return": _safe_metric(
+                    daily["equal_slot_net_return"].mean()
+                    if not daily.empty
+                    else np.nan
+                ),
+                "latest_final_signal_date": (
+                    max(daily["signal_date"]) if not daily.empty else ""
+                ),
+                "sample_sufficient": bool(len(final_returns) >= 20),
+                "daily_portfolio": [
+                    {
+                        "signal_date": str(row["signal_date"]),
+                        "shadow_slots": int(row["shadow_slots"]),
+                        "verified_trades": int(row["verified_trades"]),
+                        "equal_slot_net_return": _safe_metric(
+                            row["equal_slot_net_return"]
+                        ),
+                        "nav": _safe_metric(row["nav"]),
+                    }
+                    for _, row in daily.iterrows()
+                ],
+                "rows": rows,
+            }
+        )
+        return payload
+
     def _observation_metrics(self, ledger: pd.DataFrame) -> dict[str, Any]:
         if ledger.empty:
             return {
@@ -6860,8 +7148,10 @@ class AuctionV3Engine:
                 "generated_at_utc": _utc_now(),
                 "validation_start_exec_date": self.config.observation_validation_start_date,
                 "observation_rows": 0,
+                "forward_shadow": self._forward_shadow_metrics(ledger),
             }
         frame = ledger.copy()
+        frame["signal_date"] = frame["signal_date"].map(_normal_date)
         frame["expected_buy_date"] = frame["expected_buy_date"].map(_normal_date)
         frame["observation_rank"] = pd.to_numeric(frame.get("observation_rank"), errors="coerce")
         timing_valid = pd.to_numeric(
@@ -7121,6 +7411,7 @@ class AuctionV3Engine:
                 ),
             }
         payload["trading_date_windows"] = rolling
+        payload["forward_shadow"] = self._forward_shadow_metrics(frame)
         return payload
 
     def settle_observations(self) -> tuple[pd.DataFrame, dict[str, Any]]:

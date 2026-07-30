@@ -1153,6 +1153,118 @@ class AuctionV3Test(unittest.TestCase):
         self.assertEqual(late[0:2], ("RETROSPECTIVE_LATE_GENERATION", 0))
         self.assertEqual(valid[2], "2026-07-23T01:25:00+00:00")
 
+    def test_forward_shadow_metrics_start_at_20260728(self) -> None:
+        rows = [
+            {
+                "signal_date": "20260727",
+                "expected_buy_date": "20260728",
+                "expected_exit_date": "20260729",
+                "ts_code": "600001.SH",
+                "prediction_timing_valid": 1,
+                "trade_shadow_selected": 1,
+                "trade_rank": 1,
+                "validation_status": "FINAL_VERIFIED",
+                "actual_net_return": -0.50,
+                "continuation_limit_up_hit": 0,
+                "market_buyable_diagnostic": 1,
+            },
+            {
+                "signal_date": "20260728",
+                "expected_buy_date": "20260729",
+                "expected_exit_date": "20260730",
+                "ts_code": "600002.SH",
+                "name": "甲",
+                "prediction_timing_valid": 1,
+                "trade_shadow_selected": 1,
+                "trade_rank": 1,
+                "validation_status": "FINAL_VERIFIED",
+                "actual_net_return": 0.10,
+                "continuation_limit_up_hit": 1,
+                "market_buyable_diagnostic": 1,
+            },
+            {
+                "signal_date": "20260729",
+                "expected_buy_date": "20260730",
+                "expected_exit_date": "20260731",
+                "ts_code": "600003.SH",
+                "name": "乙",
+                "prediction_timing_valid": 1,
+                "trade_shadow_selected": 1,
+                "trade_rank": 1,
+                "validation_status": "FINAL_VERIFIED",
+                "actual_net_return": 0.05,
+                "continuation_limit_up_hit": 1,
+                "market_buyable_diagnostic": 1,
+            },
+            {
+                "signal_date": "20260729",
+                "expected_buy_date": "20260730",
+                "expected_exit_date": "20260731",
+                "ts_code": "600004.SH",
+                "name": "丙",
+                "prediction_timing_valid": 1,
+                "trade_shadow_selected": 1,
+                "trade_rank": 2,
+                "validation_status": "FINAL_VERIFIED",
+                "actual_net_return": -0.02,
+                "continuation_limit_up_hit": 0,
+                "market_buyable_diagnostic": 1,
+            },
+            {
+                "signal_date": "20260730",
+                "expected_buy_date": "20260731",
+                "expected_exit_date": "20260803",
+                "ts_code": "600005.SH",
+                "prediction_timing_valid": 1,
+                "trade_shadow_selected": 0,
+                "validation_status": "PENDING_T",
+            },
+            {
+                "signal_date": "20260731",
+                "expected_buy_date": "20260803",
+                "expected_exit_date": "20260804",
+                "ts_code": "600006.SH",
+                "name": "丁",
+                "prediction_timing_valid": 1,
+                "trade_shadow_selected": 1,
+                "trade_rank": 1,
+                "validation_status": "PENDING_T1",
+                "continuation_limit_up_hit": 0,
+                "market_buyable_diagnostic": 0,
+            },
+            {
+                "signal_date": "20260803",
+                "expected_buy_date": "20260804",
+                "expected_exit_date": "20260805",
+                "ts_code": "600007.SH",
+                "prediction_timing_valid": 0,
+                "trade_shadow_selected": 1,
+                "trade_rank": 1,
+                "validation_status": "FINAL_VERIFIED",
+                "actual_net_return": 0.80,
+            },
+        ]
+
+        metrics = AuctionV3Engine(self.config)._forward_shadow_metrics(
+            pd.DataFrame(rows)
+        )
+
+        self.assertEqual(metrics["start_signal_date"], "20260728")
+        self.assertEqual(metrics["observed_signal_dates"], 4)
+        self.assertEqual(metrics["shadow_signal_dates"], 3)
+        self.assertEqual(metrics["shadow_entries"], 4)
+        self.assertEqual(metrics["final_verified_trades"], 3)
+        self.assertEqual(metrics["pending_t1_entries"], 1)
+        self.assertEqual(metrics["matured_portfolio_dates"], 2)
+        self.assertEqual(metrics["longest_no_signal_streak"], 1)
+        self.assertAlmostEqual(metrics["mean_final_net_return"], 0.13 / 3)
+        self.assertAlmostEqual(metrics["profit_factor"], 7.5)
+        self.assertAlmostEqual(metrics["equal_slot_cumulative_return"], 0.1165)
+        self.assertEqual(metrics["equal_slot_max_drawdown"], 0.0)
+        self.assertFalse(metrics["sample_sufficient"])
+        self.assertEqual(metrics["latest_signal_date"], "20260731")
+        self.assertEqual(metrics["rows"][0]["signal_date"], "20260731")
+
 
 if __name__ == "__main__":
     unittest.main()
