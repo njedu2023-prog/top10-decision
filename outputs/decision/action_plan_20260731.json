@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_action_plan_v12_top10_trade_selector",
-  "generated_at_utc": "2026-07-30T11:37:26+00:00",
+  "generated_at_utc": "2026-07-30T14:19:21+00:00",
   "report_date": "20260731",
   "report_file": "decision_report_20260731.md",
   "signal_date": "20260730",
@@ -24,9 +24,9 @@
     "prediction_matches_report": true,
     "artifact_versions_match": true,
     "artifact_fingerprints_match": true,
-    "artifact_sha256": "8bd29d8f71fd5245102cdaf947ecf46a333b8b4539a9659bbb6d1009d9cc269e",
+    "artifact_sha256": "83c6d3319fe4373f04df834e3bd369f507fe9ec954071242066fa29165ec7302",
     "trade_selector_artifacts_match": false,
-    "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+    "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
     "trade_selector": {
       "schema_version": "decision_trade_selector_backtest_v1",
       "version": "trade_selector_v1_nested_oos_top10",
@@ -332,7 +332,7 @@
       "production_policy": {
         "max_positions": 1,
         "thresholds": {
-          "min_trade_score": -0.00517366515879752,
+          "min_trade_score": -0.0051736651587975,
           "min_mean_return_lcb": -0.02760340808767762,
           "min_fill_probability": 0.0,
           "max_big_loss_probability": 0.5022919448153094
@@ -440,7 +440,7 @@
         "fill": {
           "method": "identity",
           "rows": 829,
-          "held_out_brier": 0.2769721306126511,
+          "held_out_brier": 0.27697213061264797,
           "constant_brier": 0.2915962872297281,
           "beats_constant": true
         },
@@ -452,7 +452,7 @@
           "beats_constant": false
         }
       },
-      "production_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "production_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "promotion_checks": {
         "production_policy_ready": false,
         "return_model_chronological_skill": false,
@@ -1606,7 +1606,7 @@
         "max_big_loss_probability": 0.35,
         "min_mean_return_lcb": -0.05,
         "min_conservative_ev": 0.0,
-        "min_selection_score": -0.02251734305605835
+        "min_selection_score": -0.022517343056058348
       },
       "max_positions": 3,
       "diagnostics": {
@@ -1803,7 +1803,7 @@
         "path": "outputs/auction_v3/verification/verify_latest.csv",
         "metrics": {
           "status": "ok",
-          "generated_at_utc": "2026-07-30T11:37:25+00:00",
+          "generated_at_utc": "2026-07-30T14:19:19+00:00",
           "frozen_predictions": 712,
           "selected_predictions": 0,
           "verified_trades": 0,
@@ -1848,7 +1848,7 @@
         "metrics": {
           "schema_version": "decision_observation_validation_v4_auction_truth",
           "status": "ok",
-          "generated_at_utc": "2026-07-30T11:37:26+00:00",
+          "generated_at_utc": "2026-07-30T14:19:20+00:00",
           "validation_start_exec_date": "20260721",
           "validation_mode": "market_at_open_proxy",
           "market_open_fill_assumption": true,
@@ -2056,6 +2056,129 @@
               "win_rate": 0.3404255319,
               "equal_slot_cumulative_return": -0.190149637
             }
+          },
+          "forward_shadow": {
+            "schema_version": "decision_forward_shadow_validation_v1",
+            "start_signal_date": "20260728",
+            "performance_scope": "premarket_frozen_trade_shadow_selected_only",
+            "minimum_final_trades": 20,
+            "observed_signal_dates": 3,
+            "shadow_signal_dates": 3,
+            "shadow_signal_rate": 1.0,
+            "shadow_entries": 4,
+            "t_validated_entries": 3,
+            "pending_t_entries": 1,
+            "pending_t1_entries": 2,
+            "finalized_entries": 1,
+            "final_verified_trades": 1,
+            "market_buyable_entries": 1,
+            "mean_final_net_return": 0.0047879257,
+            "median_final_net_return": 0.0047879257,
+            "final_win_rate": 1.0,
+            "final_win_rate_95ci_low": 0.2065493144,
+            "final_win_rate_95ci_high": 1.0,
+            "profit_factor": null,
+            "worst_final_net_return": 0.0047879257,
+            "tail_10pct_mean_return": 0.0047879257,
+            "realized_big_loss_rate": 0.0,
+            "continuation_samples": 3,
+            "continuation_hits": 0,
+            "continuation_hit_rate": 0.0,
+            "matured_portfolio_dates": 1,
+            "equal_slot_cumulative_return": 0.0047879257,
+            "equal_slot_max_drawdown": 0.0,
+            "equal_slot_mean_daily_return": 0.0047879257,
+            "longest_no_signal_streak": 0,
+            "latest_signal_date": "20260730",
+            "latest_final_signal_date": "20260728",
+            "sample_sufficient": false,
+            "daily_portfolio": [
+              {
+                "signal_date": "20260728",
+                "shadow_slots": 1,
+                "verified_trades": 1,
+                "equal_slot_net_return": 0.0047879257,
+                "nav": 1.0047879257
+              }
+            ],
+            "rows": [
+              {
+                "signal_date": "20260730",
+                "expected_buy_date": "20260731",
+                "expected_exit_date": "20260803",
+                "trade_rank": 1,
+                "ts_code": "603556.SH",
+                "name": "海兴电力",
+                "industry": "电网设备",
+                "stage_transition": "2→3",
+                "path_label": "强转弱",
+                "actual_open_price": null,
+                "actual_t_close": null,
+                "observation_t_return": null,
+                "continuation_limit_up_hit": null,
+                "actual_net_return": null,
+                "market_buyable_diagnostic": null,
+                "validation_status": "PENDING_T",
+                "validation_status_label": "等待T日收盘"
+              },
+              {
+                "signal_date": "20260729",
+                "expected_buy_date": "20260730",
+                "expected_exit_date": "20260731",
+                "trade_rank": 2,
+                "ts_code": "603400.SH",
+                "name": "华之杰",
+                "industry": "通用设备",
+                "stage_transition": "2→3",
+                "path_label": "路径混合",
+                "actual_open_price": 45.18,
+                "actual_t_close": 45.3,
+                "observation_t_return": 0.0026560425,
+                "continuation_limit_up_hit": 0.0,
+                "actual_net_return": null,
+                "market_buyable_diagnostic": 0.0,
+                "validation_status": "PENDING_T1",
+                "validation_status_label": "等待T+1"
+              },
+              {
+                "signal_date": "20260729",
+                "expected_buy_date": "20260730",
+                "expected_exit_date": "20260731",
+                "trade_rank": 3,
+                "ts_code": "603580.SH",
+                "name": "艾艾精工",
+                "industry": "塑料",
+                "stage_transition": "2→3",
+                "path_label": "路径混合",
+                "actual_open_price": 55.2,
+                "actual_t_close": 56.2,
+                "observation_t_return": 0.018115942,
+                "continuation_limit_up_hit": 0.0,
+                "actual_net_return": null,
+                "market_buyable_diagnostic": 1.0,
+                "validation_status": "PENDING_T1",
+                "validation_status_label": "等待T+1"
+              },
+              {
+                "signal_date": "20260728",
+                "expected_buy_date": "20260729",
+                "expected_exit_date": "20260730",
+                "trade_rank": 1,
+                "ts_code": "002309.SZ",
+                "name": "中利集团",
+                "industry": "电网设备",
+                "stage_transition": "2→3",
+                "path_label": "加速一致",
+                "actual_open_price": 3.23,
+                "actual_t_close": 3.28,
+                "observation_t_return": 0.0154798762,
+                "continuation_limit_up_hit": 0.0,
+                "actual_net_return": 0.0047879257,
+                "market_buyable_diagnostic": 0.0,
+                "validation_status": "FINAL_VERIFIED",
+                "validation_status_label": "已完成"
+              }
+            ]
           }
         }
       },
@@ -2063,7 +2186,7 @@
         "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
         "metrics": {
           "schema_version": "decision_manual_actual_v1",
-          "generated_at_utc": "2026-07-30T11:37:25+00:00",
+          "generated_at_utc": "2026-07-30T14:19:19+00:00",
           "truth_source": "manual_actual",
           "trades": 0,
           "win_rate": null,
@@ -3187,7 +3310,7 @@
       "production_policy": {
         "max_positions": 1,
         "thresholds": {
-          "min_trade_score": -0.00517366515879752,
+          "min_trade_score": -0.0051736651587975,
           "min_mean_return_lcb": -0.02760340808767762,
           "min_fill_probability": 0.0,
           "max_big_loss_probability": 0.5022919448153094
@@ -3295,7 +3418,7 @@
         "fill": {
           "method": "identity",
           "rows": 829,
-          "held_out_brier": 0.2769721306126511,
+          "held_out_brier": 0.27697213061264797,
           "constant_brier": 0.2915962872297281,
           "beats_constant": true
         },
@@ -3307,7 +3430,7 @@
           "beats_constant": false
         }
       },
-      "production_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "production_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "promotion_checks": {
         "production_policy_ready": false,
         "return_model_chronological_skill": false,
@@ -3408,7 +3531,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -3496,7 +3619,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-30T11:37:26+00:00",
+      "truth_generated_at_utc": "2026-07-30T14:19:20+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -3524,7 +3647,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "shadow_policy_only",
       "path_label_code": "STRONG_TO_WEAK",
       "path_label": "强转弱",
@@ -3612,7 +3735,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-30T11:37:26+00:00",
+      "truth_generated_at_utc": "2026-07-30T14:19:20+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -3640,7 +3763,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "DIVERGENCE_RESEAL",
       "path_label": "分歧回封",
@@ -3728,7 +3851,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-30T11:37:26+00:00",
+      "truth_generated_at_utc": "2026-07-30T14:19:20+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -3756,7 +3879,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "STABLE_STRONG",
       "path_label": "持续强势",
@@ -3844,7 +3967,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-30T11:37:26+00:00",
+      "truth_generated_at_utc": "2026-07-30T14:19:20+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -3872,7 +3995,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -3960,7 +4083,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-30T11:37:26+00:00",
+      "truth_generated_at_utc": "2026-07-30T14:19:20+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -3988,7 +4111,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "STABLE_STRONG",
       "path_label": "持续强势",
@@ -4076,7 +4199,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-30T11:37:26+00:00",
+      "truth_generated_at_utc": "2026-07-30T14:19:20+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -4104,7 +4227,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -4192,7 +4315,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-07-30T11:37:26+00:00",
+      "truth_generated_at_utc": "2026-07-30T14:19:20+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -5230,7 +5353,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "shadow_policy_only",
       "path_label_code": "STRONG_TO_WEAK",
       "path_label": "强转弱",
@@ -7162,7 +7285,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "STABLE_STRONG",
       "path_label": "持续强势",
@@ -7246,7 +7369,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "DIVERGENCE_RESEAL",
       "path_label": "分歧回封",
@@ -7582,7 +7705,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -7750,7 +7873,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -7834,7 +7957,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -7918,7 +8041,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+      "trade_selector_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "STABLE_STRONG",
       "path_label": "持续强势",
@@ -8209,7 +8332,7 @@
     "premarket_valid_rows": 7,
     "retrospective_rows": 0,
     "pending_rows": 7,
-    "generated_at_utc": "2026-07-30T11:37:26+00:00",
+    "generated_at_utc": "2026-07-30T14:19:20+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -8219,7 +8342,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-07-30T13:50:50+00:00",
+    "generated_at_utc": "2026-07-30T14:19:20+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,

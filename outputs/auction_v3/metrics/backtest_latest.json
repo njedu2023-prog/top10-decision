@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-30T11:36:10+00:00",
+  "generated_at_utc": "2026-07-30T14:17:37+00:00",
   "model_version": "auction_v12_top10_trade_selector_oos_1",
   "history_dates": 709,
   "oos_dates": 539,
@@ -3739,7 +3739,7 @@
     "production_policy": {
       "max_positions": 1,
       "thresholds": {
-        "min_trade_score": -0.00517366515879752,
+        "min_trade_score": -0.0051736651587975,
         "min_mean_return_lcb": -0.02760340808767762,
         "min_fill_probability": 0.0,
         "max_big_loss_probability": 0.5022919448153094
@@ -3847,7 +3847,7 @@
       "fill": {
         "method": "identity",
         "rows": 829,
-        "held_out_brier": 0.2769721306126511,
+        "held_out_brier": 0.27697213061264797,
         "constant_brier": 0.2915962872297281,
         "beats_constant": true
       },
@@ -3859,7 +3859,7 @@
         "beats_constant": false
       }
     },
-    "production_artifact_sha256": "e8bcf075598663c17d30c18fe64fe61a711b2937f1254e2b2f55fb66f41434bb",
+    "production_artifact_sha256": "c4fa58524adcc5c940ef8df0c1463f5d9dfdddd90c094afd56f84247aac733e1",
     "promotion_checks": {
       "production_policy_ready": false,
       "return_model_chronological_skill": false,
@@ -3904,5 +3904,5 @@
   "model_quality_warnings": [
     "first_layer_probability_models_did_not_pass_brier_skill_gate"
   ],
-  "model_artifact_sha256": "8bd29d8f71fd5245102cdaf947ecf46a333b8b4539a9659bbb6d1009d9cc269e"
+  "model_artifact_sha256": "83c6d3319fe4373f04df834e3bd369f507fe9ec954071242066fa29165ec7302"
 }
