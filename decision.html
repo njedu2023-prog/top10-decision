@@ -991,16 +991,8 @@
     }
 
     function renderMetrics(plan) {
-      const bt = plan?.backtest || {};
-      const shadows = bt?.shadow_policies || {};
-      const top1Shadow = shadows?.top1_market_at_open || {};
-      const top2Shadow = shadows?.top2_market_at_open || {};
-      const allStage = bt?.stage_focus_all || {};
-      const pathPolicies = bt?.path_shadow_policies || {};
-      const acceleration = pathPolicies?.ACCELERATION_CONSENSUS || {};
-      const weakToStrong = pathPolicies?.WEAK_TO_STRONG || {};
-      const gateFunnel = bt?.gate_funnel || {};
-      const finalGateRows = gateFunnel?.sequential?.combined_risk_gate?.rows;
+      const stats = plan?.observation_statistics || {};
+      const forward = stats?.forward_shadow || {};
       const promoted = plan?.model?.promoted === true;
       const sentiment = plan?.market_sentiment || {};
       const sentimentScore = finiteNumber(sentiment.score);
@@ -1011,47 +1003,63 @@
         : ["ICE", "EBB"].includes(sentimentRegimeCode)
           ? "negative"
           : "warn";
+      const liveStartDate = "20260721";
+      const shadowStartDate = forward.start_signal_date || "20260728";
+      const premarketRows = Number(stats.premarket_valid_rows || 0);
+      const premarketValidatedRows = Number(stats.premarket_validated_rows || 0);
+      const pendingTRows = Math.max(0, premarketRows - premarketValidatedRows);
+      const forwardFinalTrades = Number(forward.final_verified_trades || 0);
+      const forwardMinimumTrades = Number(forward.minimum_final_trades || 20);
+      const forwardSampleReady = forward.sample_sufficient === true
+        || forwardFinalTrades >= forwardMinimumTrades;
       const rows = [
         metric("正式模型状态", promoted ? "已晋级" : "未晋级", promoted ? "good" : "bad"),
         metric("正式人工建议数", String(plan?.formal_buy_count || 0), plan?.formal_buy_count ? "good" : "warn"),
         metric("风险预算", number(plan?.risk_budget, 2)),
         metric("市场情绪", sentimentScore == null ? sentimentRegime : `${sentimentRegime} · ${(sentimentScore * 100).toFixed(1)}分`, sentimentTone),
-        metric("样本外交易日", String(bt.oos_dates ?? "-")),
-        metric("样本外出手日占比", pct(bt.signal_date_ratio), Number(bt.signal_date_ratio) < 0.05 ? "warn" : ""),
-        metric("最长连续空仓", bt.max_no_signal_streak == null ? "-" : `${bt.max_no_signal_streak} 日`, Number(bt.max_no_signal_streak) > 30 ? "warn" : ""),
-        metric("样本外成交笔数", String(bt.filled_trades ?? "-")),
-        metric("全部门槛通过候选", finalGateRows == null ? "-" : `${finalGateRows} 行`, Number(finalGateRows) === 0 ? "warn" : "good"),
-        metric("样本外平均单笔净收益", pct(bt.mean_trade_net_return), valueTone(bt.mean_trade_net_return)),
-        metric("样本外胜率", pct(bt.win_rate)),
-        metric("样本外大跌率", pct(bt.realized_big_loss_rate), Number(bt.realized_big_loss_rate) > 0.15 ? "bad" : "good"),
-        metric("2进3/3进4晋级命中率", pct(bt.stage_focus_continuation_hit_rate)),
-        metric("样本外累计收益", pct(bt.cumulative_return), valueTone(bt.cumulative_return)),
-        metric("最大回撤", pct(bt.max_drawdown), Number(bt.max_drawdown) < 0 ? "bad" : ""),
-        metric("双倍成本日收益", pct(bt.stress_2x_cost_mean_daily_return, 3), valueTone(bt.stress_2x_cost_mean_daily_return)),
-        metric("次日按时退出率", pct(bt.exit_on_time_rate)),
-        metric("Bootstrap 正收益概率", pct(bt.bootstrap_probability_mean_positive)),
-        metric("全体2进3/3进4样本", String(allStage.filled_trades ?? "-")),
-        metric("全体候选实际可买率", pct(allStage.market_buyable_rate)),
-        metric("全体候选平均净收益", pct(allStage.mean_trade_net_return), valueTone(allStage.mean_trade_net_return)),
-        metric("全体候选胜率", pct(allStage.win_rate)),
-        metric("全体候选累计收益", pct(allStage.cumulative_return), valueTone(allStage.cumulative_return)),
-        metric("全体候选最大回撤", pct(allStage.max_drawdown), valueTone(allStage.max_drawdown)),
-        metric("加速一致样本", String(acceleration.filled_trades ?? "-")),
-        metric("加速一致平均净收益", pct(acceleration.mean_trade_net_return), valueTone(acceleration.mean_trade_net_return)),
-        metric("加速一致胜率", pct(acceleration.win_rate)),
-        metric("加速一致累计收益", pct(acceleration.cumulative_return), valueTone(acceleration.cumulative_return)),
-        metric("加速一致最大回撤", pct(acceleration.max_drawdown), valueTone(acceleration.max_drawdown)),
-        metric("弱转强样本", String(weakToStrong.filled_trades ?? "-")),
-        metric("弱转强平均净收益", pct(weakToStrong.mean_trade_net_return), valueTone(weakToStrong.mean_trade_net_return)),
-        metric("弱转强胜率", pct(weakToStrong.win_rate)),
-        metric("弱转强累计收益", pct(weakToStrong.cumulative_return), valueTone(weakToStrong.cumulative_return)),
-        metric("弱转强最大回撤", pct(weakToStrong.max_drawdown), valueTone(weakToStrong.max_drawdown)),
-        metric("Top1平均净收益", pct(top1Shadow.mean_trade_net_return), valueTone(top1Shadow.mean_trade_net_return)),
-        metric("Top2平均净收益", pct(top2Shadow.mean_trade_net_return), valueTone(top2Shadow.mean_trade_net_return)),
-        metric("模型版本", modelDisplayName(plan?.model?.version))
+        metric("模型版本", modelDisplayName(plan?.model?.version)),
+        metric("实际统计起点", `D ${dateText(liveStartDate)}`),
+        metric("样本口径", "9:25前冻结"),
+        metric("冻结预测样本", integerText(premarketRows)),
+        metric("T日已验证", integerText(premarketValidatedRows)),
+        metric("T日待验证", integerText(pendingTRows), pendingTRows > 0 ? "warn" : ""),
+        metric("T+1已完成", integerText(stats.final_verified_trades)),
+        metric("T+1已完成交易日", integerText(stats.matured_portfolio_dates)),
+        metric("开盘代理成交率", pct(stats.observation_fill_rate)),
+        metric("开盘价≤限价", pct(stats.display_limit_met_rate)),
+        metric("开盘超限样本", integerText(stats.above_display_limit_rows)),
+        metric("平均开盘较限价", signedPct(stats.mean_open_vs_display_limit), valueTone(stats.mean_open_vs_display_limit)),
+        metric("T日上涨率", pct(stats.market_positive_rate)),
+        metric("T日平均收盘涨跌", signedPct(stats.mean_market_daily_return), valueTone(stats.mean_market_daily_return)),
+        metric("T日平均观察收益", signedPct(stats.mean_t_observation_return), valueTone(stats.mean_t_observation_return)),
+        metric("T日晋级率", pct(stats.continuation_hit_rate)),
+        metric("2→3晋级率", pct(stats?.stage_2_to_3?.hit_rate)),
+        metric("3→4晋级率", pct(stats?.stage_3_to_4?.hit_rate)),
+        metric("Top1晋级率", pct(stats?.top1_continuation?.hit_rate)),
+        metric("Top3晋级率", pct(stats?.top3_continuation?.hit_rate)),
+        metric("T+1胜率", pct(stats.final_win_rate)),
+        metric("T+1平均净收益", signedPct(stats.mean_final_net_return), valueTone(stats.mean_final_net_return)),
+        metric("T+1中位净收益", signedPct(stats.median_final_net_return), valueTone(stats.median_final_net_return)),
+        metric("盈亏因子", number(stats.profit_factor, 2)),
+        metric("尾部10%平均收益", signedPct(stats.tail_10pct_mean_return), valueTone(stats.tail_10pct_mean_return)),
+        metric("最差单笔净收益", signedPct(stats.worst_final_net_return), valueTone(stats.worst_final_net_return)),
+        metric("等权累计收益", signedPct(stats.equal_slot_cumulative_return), valueTone(stats.equal_slot_cumulative_return)),
+        metric("等权最大回撤", signedPct(stats.equal_slot_max_drawdown), valueTone(stats.equal_slot_max_drawdown)),
+        metric("二筛统计起点", `D ${dateText(shadowStartDate)}`),
+        metric("二筛影子入选", integerText(forward.shadow_entries)),
+        metric("二筛T+1完成", integerText(forwardFinalTrades)),
+        metric("二筛平均净收益", signedPct(forward.mean_final_net_return), valueTone(forward.mean_final_net_return)),
+        metric("二筛胜率", pct(forward.final_win_rate)),
+        metric(
+          "二筛样本状态",
+          forwardSampleReady
+            ? `${forwardFinalTrades}/${forwardMinimumTrades} · 已达观察门槛`
+            : `${forwardFinalTrades}/${forwardMinimumTrades} · 累计中`,
+          forwardSampleReady ? "good" : "warn"
+        )
       ];
       els.metrics.innerHTML = rows.join("");
-      els.metricsCount.textContent = `${rows.length} 项`;
+      els.metricsCount.textContent = `D 0721起 · ${rows.length} 项`;
     }
 
     function renderTop10Backtest(plan) {
