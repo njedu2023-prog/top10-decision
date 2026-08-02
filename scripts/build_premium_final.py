@@ -75,27 +75,19 @@ def _read_json(path: Path) -> dict:
         return {}
 
 
-def _inject_execution_link(path: Path, href: str) -> None:
+def _remove_execution_link(path: Path) -> None:
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8", errors="ignore")
-    if 'data-execution-report="1"' in text:
-        text = re.sub(
-            r'(<a[^>]+data-execution-report="1"[^>]+href=")[^"]+("[^>]*>)',
-            rf"\1{href}\2",
-            text,
-            count=1,
-        )
-        path.write_text(text, encoding="utf-8")
-        return
-    marker = '<div class="tabs" role="tablist" aria-label="列表切换">'
-    link = (
-        f'<a class="tab-btn" data-execution-report="1" href="{_h(href)}" '
-        'title="打开净收益执行名单">净收益执行名单</a>'
+    cleaned = re.sub(
+        r'\s*<a[^>]+data-execution-report="1"[^>]*>.*?</a>',
+        "",
+        text,
+        count=1,
+        flags=re.S,
     )
-    if marker in text:
-        text = text.replace(marker, marker + link, 1)
-        path.write_text(text, encoding="utf-8")
+    if cleaned != text:
+        path.write_text(cleaned, encoding="utf-8")
 
 
 def _date_from_name(path: Path) -> Optional[str]:
@@ -437,8 +429,8 @@ def build(cfg: PremiumConfig, trade_date: str, verbose: bool = False) -> int:
     html_text = _render_html(trade_date, buy, watch, reject, stats, _utc_now_iso(), backtest_meta)
     p_html = _write_text(report_root / f"premium_final_{trade_date}.html", html_text)
     _write_text(report_root / "premium_final_latest.html", html_text)
-    _inject_execution_link(report_root / f"premium_{trade_date}.html", f"premium_final_{trade_date}.html")
-    _inject_execution_link(report_root / "premium_latest.html", "premium_final_latest.html")
+    _remove_execution_link(report_root / f"premium_{trade_date}.html")
+    _remove_execution_link(report_root / "premium_latest.html")
 
     if verbose:
         print(f"[premium-final] trade_date={trade_date}")
@@ -460,7 +452,7 @@ def build(cfg: PremiumConfig, trade_date: str, verbose: bool = False) -> int:
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build Premium final executable buy list.")
     p.add_argument("--trade-date", default="", help="YYYYMMDD; default reads outputs/premium/_last_run.txt")
-    p.add_argument("--link-only", action="store_true", help="Only restore links from the main report")
+    p.add_argument("--link-only", action="store_true", help="Only synchronize main report navigation")
     p.add_argument("--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -472,11 +464,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not re.fullmatch(r"20\d{6}", trade_date):
         raise SystemExit(f"bad trade_date: {trade_date}")
     if args.link_only:
-        _inject_execution_link(
-            cfg.reports_root() / f"premium_{trade_date}.html",
-            f"premium_final_{trade_date}.html",
-        )
-        _inject_execution_link(cfg.reports_root() / "premium_latest.html", "premium_final_latest.html")
+        _remove_execution_link(cfg.reports_root() / f"premium_{trade_date}.html")
+        _remove_execution_link(cfg.reports_root() / "premium_latest.html")
         return 0
     return build(cfg, trade_date, verbose=bool(args.verbose))
 

@@ -130,36 +130,31 @@ TEXT_REPLACEMENTS = [
     ('False', '否'),
 ]
 
-TABLE_HEADERS_CN_TO_EN = {
-    '排名': 'Rank',
-    '代码': 'Code',
-    '名称': 'Name',
-    '板块': 'Sector',
-    'D日收盘': 'D Close',
-    'D 关': 'D Close',
-    '分组': 'Bucket',
-    '桶': 'Bucket',
-    'T涨停概率': 'T-Up',
-    'T强度': 'T-Strength',
-    'T攻击分': 'T-Attack',
-    'T+1上涨概率': 'T1-Up',
-    'T+1承接分': 'T1-Accept',
-    'T+1接力分': 'T1-Relay',
-    '总分': 'Score',
-    '门槛原因': 'Gate',
-    '门': 'Gate',
-    'T日竞价动作': 'T Auction Action',
-    'T 拍卖行动': 'T Auction Action',
-    '价格': 'Price',
-    'T+1卖出计划': 'T+1 Sell Plan',
-    'T+1 销售计划': 'T+1 Sell Plan',
+TABLE_HEADERS_EN_TO_CN = {
+    'Rank': '排名',
+    'Code': '代码',
+    'Name': '名称',
+    'Sector': '板块',
+    'D Close': 'D收盘',
+    'Bucket': '候选池',
+    'T-Up': 'T涨停概率',
+    'T-Strength': 'T强度',
+    'T-Attack': 'T攻击',
+    'T1-Up': 'T+1上涨概率',
+    'T1-Accept': 'T+1承接',
+    'T1-Relay': 'T+1接力',
+    'Score': '综合分',
+    'Gate': '筛选原因',
+    'T Auction Action': 'T竞价动作',
+    'Price': '买入价',
+    'T+1 Sell Plan': 'T+1卖出计划',
 }
 
 
 def localize_html(text: str) -> str:
     for old, new in TEXT_REPLACEMENTS:
         text = text.replace(old, new)
-    for old, new in TABLE_HEADERS_CN_TO_EN.items():
+    for old, new in TABLE_HEADERS_EN_TO_CN.items():
         text = text.replace(f'<th>{old}</th>', f'<th>{new}</th>')
     text = re.sub(r'(\d+) days', r'\1日', text)
     text = text.replace(':天数=', '：天数=').replace(';样本=', '；样本=').replace(';t1_', '；t1_')

@@ -87,6 +87,15 @@ def _load_rebuild_module():
     return module
 
 
+def _load_final_report_module():
+    path = ROOT / "scripts" / "build_premium_final.py"
+    spec = importlib.util.spec_from_file_location("premium_final_report", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
 class PremiumSafetyTests(unittest.TestCase):
     def test_t_close_truth_preserves_original_ranking(self):
         ranked = pd.DataFrame({
@@ -107,7 +116,11 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertEqual(list(shown["T收盘"]), ["+10.00% ↑", "-2.50% ↓"])
         pending = shown.iloc[[0]].copy()
         pending["T收盘"] = "-"
-        self.assertIn('<td class="num truth-flat">-</td>', _table_html(pending))
+        table_html = _table_html(pending)
+        self.assertIn('<td class="num truth-flat">-</td>', table_html)
+        self.assertIn("<th>排名</th>", table_html)
+        self.assertIn("<th>T涨停概率</th>", table_html)
+        self.assertNotIn("<th>Rank</th>", table_html)
 
     def test_top1_shadow_uses_auction_and_1100_minute_open(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -438,12 +451,16 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn("<title>Premium TOP 10 20260105</title>", html)
         self.assertIn("<h1>Premium TOP 10</h1>", html)
         self.assertIn("<h2>TOP1 影子验证</h2>", html)
+        self.assertNotIn("TOP20 Watch List", html)
+        self.assertNotIn('id="top20-panel"', html)
         self.assertIn('<details class="metrics-details">', html)
         self.assertNotIn('<details class="metrics-details" open', html)
         self.assertIn('class="metrics-toggle"', html)
 
         styled = _load_apple_style_module().restyle_html(html)
         self.assertIn(".metrics-toggle::before{content:\"+\"", styled)
+        self.assertIn("<th>排名</th>", styled)
+        self.assertNotIn("<th>Rank</th>", styled)
         self.assertIn(".report-nav{position:sticky;top:8px", styled)
         self.assertIn("overflow-x:auto;scrollbar-width:none", styled)
         self.assertIn(".nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}", styled)
@@ -453,6 +470,20 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn("activatePremiumTab(savedNavigationState.activeTab)", styled)
         self.assertIn('<details class="metrics-details">', styled)
         self.assertNotIn("验证口径：T日收盘涨停=命中", styled)
+
+    def test_main_report_removes_execution_list_link(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "premium_latest.html"
+            path.write_text(
+                '<div class="tabs"><a class="tab-btn" data-execution-report="1" '
+                'href="premium_final_latest.html">净收益执行名单</a>'
+                '<button class="tab-btn">TOP10 执行名单</button></div>',
+                encoding="utf-8",
+            )
+            _load_final_report_module()._remove_execution_link(path)
+            cleaned = path.read_text(encoding="utf-8")
+            self.assertNotIn("净收益执行名单", cleaned)
+            self.assertIn("TOP10 执行名单", cleaned)
 
     def test_probability_calibrator_requires_holdout_brier_improvement(self):
         class Cfg:

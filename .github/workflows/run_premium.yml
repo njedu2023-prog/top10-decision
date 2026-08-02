@@ -231,7 +231,10 @@ jobs:
           python -m json.tool outputs/premium/models/execution_profit_model_meta.json >/dev/null
           python -m json.tool outputs/premium/models/execution_profit_backtest_meta.json >/dev/null
           python -m json.tool outputs/premium/verification/premium_top1_shadow_summary.json >/dev/null
-          grep -q '净收益执行名单' docs/reports/premium_latest.html
+          ! grep -q '净收益执行名单' docs/reports/premium_latest.html
+          ! grep -q 'TOP20 观察名单' docs/reports/premium_latest.html
+          grep -q '<th>排名</th>' docs/reports/premium_latest.html
+          ! grep -q '<th>Rank</th>' docs/reports/premium_latest.html
           grep -q 'T收盘' docs/reports/premium_latest.html
           grep -q 'TOP1 影子验证' docs/reports/premium_latest.html
           grep -q 'TOP1 总收益' docs/reports/premium_latest.html

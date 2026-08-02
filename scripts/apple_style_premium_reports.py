@@ -109,15 +109,12 @@ PREMIUM_STYLE = '''<style>
   </style>'''
 
 HEADER_MAP = {
-    '排名': 'Rank', '代码': 'Code', '名称': 'Name', '姓名': 'Name',
-    '板块': 'Sector', '部门': 'Sector', 'D日收盘': 'D Close', 'D 关': 'D Close',
-    '分组': 'Bucket', '桶': 'Bucket', 'T涨停概率': 'T-Up',
-    'T强度': 'T-Strength', 'T力量': 'T-Strength', 'T攻击': 'T-Attack',
-    'T攻击分': 'T-Attack', 'T+1上涨概率': 'T1-Up', 'T+1承接分': 'T1-Accept',
-    'T1-接受': 'T1-Accept', 'T+1接力分': 'T1-Relay', 'T1中继': 'T1-Relay',
-    '总分': 'Score', '分数': 'Score', '门槛原因': 'Gate', '门': 'Gate',
-    'T日竞价动作': 'T Auction Action', 'T 拍卖行动': 'T Auction Action',
-    '价格': 'Price', 'T+1卖出计划': 'T+1 Sell Plan', 'T+1 销售计划': 'T+1 Sell Plan',
+    'Rank': '排名', 'Code': '代码', 'Name': '名称', 'Sector': '板块',
+    'D Close': 'D收盘', 'Bucket': '候选池', 'T-Up': 'T涨停概率',
+    'T-Strength': 'T强度', 'T-Attack': 'T攻击', 'T1-Up': 'T+1上涨概率',
+    'T1-Accept': 'T+1承接', 'T1-Relay': 'T+1接力', 'Score': '综合分',
+    'Gate': '筛选原因', 'T Auction Action': 'T竞价动作', 'Price': '买入价',
+    'T+1 Sell Plan': 'T+1卖出计划',
 }
 
 DATE_LABELS = {

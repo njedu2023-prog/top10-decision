@@ -339,7 +339,28 @@ def _score_class(x: object, good_at: float, mid_at: float) -> str:
 def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
     if df is None or df.empty:
         return '<p class="empty">No data available</p>'
-    head = "".join(f"<th>{_html_escape(c)}</th>" for c in df.columns)
+    header_labels = {
+        "Rank": "排名",
+        "Code": "代码",
+        "Name": "名称",
+        "Sector": "板块",
+        "D Close": "D收盘",
+        "Bucket": "候选池",
+        "T-Up": "T涨停概率",
+        "T-Strength": "T强度",
+        "T-Attack": "T攻击",
+        "T1-Up": "T+1上涨概率",
+        "T1-Accept": "T+1承接",
+        "T1-Relay": "T+1接力",
+        "Score": "综合分",
+        "Gate": "筛选原因",
+        "T Auction Action": "T竞价动作",
+        "Price": "买入价",
+        "T+1 Sell Plan": "T+1卖出计划",
+    }
+    head = "".join(
+        f"<th>{_html_escape(header_labels.get(c, c))}</th>" for c in df.columns
+    )
     body_rows = []
     for _, r in df.iterrows():
         cells = []
@@ -532,7 +553,6 @@ def render_premium_report_html(
     stats = limitup_stats_from_verify(df_verify)
     display_frame = _merge_display_truth(df_top, df_verify)
     top10 = _display_table(display_frame, 10)
-    top20 = _display_table(display_frame, 20)
     hist = historical_limitup_stats or {}
     hist_ready = bool(hist.get("ready", False))
     hist_top1_rate = pd.to_numeric(pd.Series([hist.get("top1_hit_rate", np.nan)]), errors="coerce").iloc[0]
@@ -809,7 +829,6 @@ def render_premium_report_html(
     <div class="toolbar">
       <div class="tabs" role="tablist" aria-label="List switcher">
         <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 Execution List</button>
-        <button class="tab-btn" type="button" data-target="top20-panel">TOP20 Watch List</button>
         <button class="tab-btn" type="button" data-target="verify-panel">Validation & Learning</button>
       </div>
       <div class="hint">Tables scroll horizontally with the first column pinned; stronger colors indicate higher probability or score.</div>
@@ -817,10 +836,6 @@ def render_premium_report_html(
     <section id="top10-panel">
       <div class="section-head"><h2>TOP10: Highest T-day Limit-up Probability</h2><span class="badge">Core Execution List</span></div>
       {_table_html(top10, "top10-table")}
-    </section>
-    <section id="top20-panel" class="hidden">
-      <div class="section-head"><h2>TOP20: T+1 Continuation Candidates</h2><span class="badge">Extended Watch List</span></div>
-      {_table_html(top20, "top20-table")}
     </section>
     <section id="verify-panel" class="hidden">
       <div class="section-head"><h2>Validation & Learning</h2><span class="badge">{_html_escape(verify_badge)}</span></div>
