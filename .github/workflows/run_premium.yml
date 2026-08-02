@@ -234,6 +234,9 @@ jobs:
           ! grep -q '净收益执行名单' docs/reports/premium_latest.html
           ! grep -q 'TOP20 观察名单' docs/reports/premium_latest.html
           grep -q '<th>排名</th>' docs/reports/premium_latest.html
+          grep -q '<th>T日攻击力</th>' docs/reports/premium_latest.html
+          grep -q '<th>T+1承接力</th>' docs/reports/premium_latest.html
+          grep -q '<th>接力综合分</th>' docs/reports/premium_latest.html
           ! grep -q '<th>Rank</th>' docs/reports/premium_latest.html
           grep -q 'T收盘' docs/reports/premium_latest.html
           grep -q 'TOP1 影子验证' docs/reports/premium_latest.html

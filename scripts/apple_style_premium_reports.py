@@ -111,8 +111,8 @@ PREMIUM_STYLE = '''<style>
 HEADER_MAP = {
     'Rank': '排名', 'Code': '代码', 'Name': '名称', 'Sector': '板块',
     'D Close': 'D收盘', 'Bucket': '候选池', 'T-Up': 'T涨停概率',
-    'T-Strength': 'T强度', 'T-Attack': 'T攻击', 'T1-Up': 'T+1上涨概率',
-    'T1-Accept': 'T+1承接', 'T1-Relay': 'T+1接力', 'Score': '综合分',
+    'T-Strength': 'T强度', 'T-Attack': 'T日攻击力', 'T1-Up': 'T+1上涨概率',
+    'T1-Accept': 'T+1承接力', 'T1-Relay': '接力综合分', 'Score': '综合分',
     'Gate': '筛选原因', 'T Auction Action': 'T竞价动作', 'Price': '买入价',
     'T+1 Sell Plan': 'T+1卖出计划',
 }

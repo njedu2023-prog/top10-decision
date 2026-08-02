@@ -120,6 +120,9 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn('<td class="num truth-flat">-</td>', table_html)
         self.assertIn("<th>排名</th>", table_html)
         self.assertIn("<th>T涨停概率</th>", table_html)
+        self.assertIn("<th>T日攻击力</th>", table_html)
+        self.assertIn("<th>T+1承接力</th>", table_html)
+        self.assertIn("<th>接力综合分</th>", table_html)
         self.assertNotIn("<th>Rank</th>", table_html)
 
     def test_top1_shadow_uses_auction_and_1100_minute_open(self):
