@@ -55,7 +55,6 @@ TEXT_REPLACEMENTS = [
     ('TOP10 Execution List', 'TOP10 执行名单'),
     ('TOP20 Watch List', 'TOP20 观察名单'),
     ('Validation & Learning', '验证与学习'),
-    ('Tables scroll horizontally with the first column pinned; stronger colors indicate higher probability or score.', '表格可横向滚动，首列固定；颜色越强表示概率或评分越高。'),
     ('TOP10: Highest T-day Limit-up Probability', 'TOP10: T日涨停概率最高'),
     ('Core Execution List', '核心执行名单'),
     ('TOP20: T+1 Continuation Candidates', 'TOP20: T+1接力观察候选'),

@@ -831,7 +831,6 @@ def render_premium_report_html(
         <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 Execution List</button>
         <button class="tab-btn" type="button" data-target="verify-panel">Validation & Learning</button>
       </div>
-      <div class="hint">Tables scroll horizontally with the first column pinned; stronger colors indicate higher probability or score.</div>
     </div>
     <section id="top10-panel">
       <div class="section-head"><h2>TOP10: T日涨停概率最高 · D {_html_escape(trade_date)}</h2><span class="badge">Core Execution List</span></div>

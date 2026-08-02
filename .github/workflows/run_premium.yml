@@ -238,6 +238,7 @@ jobs:
           grep -q '<th>T+1承接力</th>' docs/reports/premium_latest.html
           grep -q '<th>接力综合分</th>' docs/reports/premium_latest.html
           ! grep -q '<th>Rank</th>' docs/reports/premium_latest.html
+          ! grep -q '表格可横向滚动' docs/reports/premium_latest.html
           grep -q 'T收盘' docs/reports/premium_latest.html
           grep -q 'TOP1 影子验证' docs/reports/premium_latest.html
           grep -q 'TOP1 总收益' docs/reports/premium_latest.html
