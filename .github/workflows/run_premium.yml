@@ -234,6 +234,7 @@ jobs:
           grep -q '净收益执行名单' docs/reports/premium_latest.html
           grep -q 'T收盘' docs/reports/premium_latest.html
           grep -q 'TOP1 影子记账' docs/reports/premium_latest.html
+          grep -q 'TOP1 总收益' docs/reports/premium_latest.html
           python - <<'PY'
           import pandas as pd
           from pathlib import Path

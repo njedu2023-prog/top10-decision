@@ -334,11 +334,12 @@ def summarize_top1_shadow(ledger: pd.DataFrame) -> Dict[str, object]:
         else pd.Series(dtype=float)
     )
     if returns.empty:
-        compound = average = median = max_drawdown = float("nan")
+        total = compound = average = median = max_drawdown = float("nan")
         wins = 0
     else:
         equity = (1.0 + returns).cumprod()
         peak = equity.cummax()
+        total = float(returns.sum())
         compound = float(equity.iloc[-1] - 1.0)
         average = float(returns.mean())
         median = float(returns.median())
@@ -366,6 +367,7 @@ def summarize_top1_shadow(ledger: pd.DataFrame) -> Dict[str, object]:
         "win_rate": float(wins / len(returns)) if len(returns) else float("nan"),
         "average_net_return": average,
         "median_net_return": median,
+        "total_net_return": total,
         "unit_compound_return": compound,
         "unit_max_drawdown": max_drawdown,
         "first_d_date": (

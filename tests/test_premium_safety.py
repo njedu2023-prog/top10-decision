@@ -55,6 +55,7 @@ from top10decision.premium.premium_views import (
 from top10decision.premium.shadow_account import (
     build_and_write_top1_shadow,
     build_top1_shadow_ledger,
+    summarize_top1_shadow,
 )
 from top10decision.premium.train import _build_ehx_feature_cols, _fit_validated_ehx
 
@@ -163,7 +164,19 @@ class PremiumSafetyTests(unittest.TestCase):
             self.assertEqual(result.summary["wins"], 1)
             self.assertTrue(paths["month_202607"].exists())
             payload = json.loads(paths["summary"].read_text(encoding="utf-8"))
+            self.assertAlmostEqual(float(payload["total_net_return"]), 0.0965)
             self.assertAlmostEqual(float(payload["unit_compound_return"]), 0.0965)
+
+    def test_shadow_total_return_is_equal_notional_sum(self):
+        ledger = pd.DataFrame({
+            "status": ["READY", "READY"],
+            "net_return": [0.10, -0.05],
+            "cost_bps": [35.0, 35.0],
+            "d_trade_date": ["20260701", "20260702"],
+        })
+        summary = summarize_top1_shadow(ledger)
+        self.assertAlmostEqual(float(summary["total_net_return"]), 0.05)
+        self.assertAlmostEqual(float(summary["unit_compound_return"]), 0.045)
 
     def test_empty_shadow_summary_writes_strict_json(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,6 +187,7 @@ class PremiumSafetyTests(unittest.TestCase):
             _, paths = build_and_write_top1_shadow(out_root, market_root)
             payload = json.loads(paths["summary"].read_text(encoding="utf-8"))
             self.assertIsNone(payload["win_rate"])
+            self.assertIsNone(payload["total_net_return"])
             self.assertIsNone(payload["unit_compound_return"])
 
     def test_shadow_distinguishes_future_pending_from_historical_missing(self):
@@ -427,6 +441,9 @@ class PremiumSafetyTests(unittest.TestCase):
 
         styled = _load_apple_style_module().restyle_html(html)
         self.assertIn(".metrics-toggle::before{content:\"+\"", styled)
+        self.assertIn(".report-nav{position:sticky;top:8px", styled)
+        self.assertIn("overflow-x:auto;scrollbar-width:none", styled)
+        self.assertIn(".nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}", styled)
         self.assertIn('<details class="metrics-details">', styled)
         self.assertNotIn("验证口径：T日收盘涨停=命中", styled)
 

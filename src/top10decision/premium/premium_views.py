@@ -429,6 +429,9 @@ def _shadow_report_html(
     pending = int(cumulative.get("pending", 0) or 0)
     missing = int(cumulative.get("missing", 0) or 0)
     win_rate = pd.to_numeric(pd.Series([cumulative.get("win_rate", np.nan)]), errors="coerce").iloc[0]
+    total_return = pd.to_numeric(
+        pd.Series([cumulative.get("total_net_return", np.nan)]), errors="coerce"
+    ).iloc[0]
     compound = pd.to_numeric(
         pd.Series([cumulative.get("unit_compound_return", np.nan)]), errors="coerce"
     ).iloc[0]
@@ -437,6 +440,9 @@ def _shadow_report_html(
     ).iloc[0]
     result_class = "truth-up" if np.isfinite(net_return) and net_return > 0 else (
         "truth-down" if np.isfinite(net_return) and net_return < 0 else "truth-flat"
+    )
+    total_class = "truth-up" if np.isfinite(total_return) and total_return > 0 else (
+        "truth-down" if np.isfinite(total_return) and total_return < 0 else "truth-flat"
     )
     route = (
         f"D {_clean_text(current.get('d_trade_date'), '-')} → "
@@ -456,6 +462,7 @@ def _shadow_report_html(
         <div class="shadow-item"><span>T+1卖出</span><strong>{_html_escape('-' if not np.isfinite(sell_price) else f'{sell_price:.2f}')}</strong><small>{_html_escape(current.get('sell_time', '等待11:00真值'))}</small></div>
         <div class="shadow-item"><span>单笔净收益</span><strong class="{result_class}">{_html_escape('-' if not np.isfinite(net_return) else _fmt_pct(net_return))}</strong><small>{_html_escape('-' if not np.isfinite(pnl) else f'每万元 {pnl:+.2f} 元')}</small></div>
         <div class="shadow-item"><span>累计验证</span><strong>{completed} 笔 / {wins} 胜</strong><small>胜率 {_html_escape('-' if not np.isfinite(win_rate) else _fmt_pct(win_rate))}；待验证 {pending}；缺失 {missing}</small></div>
+        <div class="shadow-item"><span>TOP1 总收益</span><strong class="{total_class}">{_html_escape('-' if not np.isfinite(total_return) else _fmt_pct(total_return))}</strong><small>等额单笔累计，已扣成本</small></div>
         <div class="shadow-item"><span>逐笔复合</span><strong>{_html_escape('-' if not np.isfinite(compound) else _fmt_pct(compound))}</strong><small>单位资金影子指数</small></div>
         <div class="shadow-item"><span>Max Drawdown</span><strong>{_html_escape('-' if not np.isfinite(max_drawdown) else _fmt_pct(max_drawdown))}</strong><small>已完成影子交易</small></div>
       </div>
@@ -689,7 +696,7 @@ def render_premium_report_html(
     * {{ box-sizing:border-box; }}
     html {{ scroll-behavior:smooth; }}
     body {{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif; color:var(--ink); background:#eef2f6; }}
-    header {{ padding:24px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:10; }}
+    header {{ padding:24px 28px 18px; background:#ffffff; border-bottom:1px solid var(--line); position:static; }}
     .topbar {{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; max-width:1480px; margin:0 auto; }}
     .kicker {{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:0; }}
     h1 {{ margin:7px 0 0; font-size:24px; line-height:1.18; letter-spacing:0; }}
@@ -697,8 +704,10 @@ def render_premium_report_html(
     .status-pill {{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:999px; padding:8px 12px; color:var(--muted); font-size:13px; white-space:nowrap; background:#fff; }}
     .status-pill b {{ color:var(--ink); }}
     main {{ padding:18px 28px 36px; max-width:1480px; margin:0 auto; }}
-    .report-nav {{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 0 14px; }}
-    .nav-actions, .date-chips, .tabs {{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }}
+    .report-nav {{ position:sticky; top:8px; z-index:20; display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:14px; width:100%; margin:0 0 14px; padding:10px; overflow-x:auto; scrollbar-width:none; background:rgba(255,255,255,.94); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(20,32,51,.10); backdrop-filter:saturate(180%) blur(16px); }}
+    .report-nav::-webkit-scrollbar {{ display:none; }}
+    .nav-actions, .date-chips, .tabs {{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }}
+    .nav-actions, .date-chips {{ flex:0 0 auto; }}
     .nav-btn, .date-chip, .tab-btn {{ border:1px solid var(--line); background:#fff; color:#334155; text-decoration:none; border-radius:8px; padding:8px 11px; font-size:13px; line-height:1; cursor:pointer; }}
     .nav-btn:hover, .date-chip:hover, .tab-btn:hover {{ border-color:#b6c0d0; background:#f8fafc; }}
     .nav-btn.primary, .date-chip.active, .tab-btn.active {{ border-color:#1f6f54; color:#0f5b43; background:#edf8f3; font-weight:700; }}
@@ -761,7 +770,7 @@ def render_premium_report_html(
     @media (max-width: 900px) {{
       header {{ position:static; }}
       header, main {{ padding-left:16px; padding-right:16px; }}
-      .topbar, .report-nav, .toolbar {{ align-items:flex-start; flex-direction:column; }}
+      .topbar, .toolbar {{ align-items:flex-start; flex-direction:column; }}
       .metrics {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
       .metric-wide {{ grid-column:1 / -1; }}
       .shadow-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
