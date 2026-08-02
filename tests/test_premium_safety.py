@@ -469,6 +469,8 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn("pageY: window.scrollY", styled)
         self.assertIn("window.scrollTo({", styled)
         self.assertIn("activatePremiumTab(savedNavigationState.activeTab)", styled)
+        self.assertIn("document.querySelectorAll('#top10-panel, #verify-panel')", styled)
+        self.assertNotIn("document.querySelectorAll('main > section')", styled)
         self.assertIn('<details class="metrics-details">', styled)
         self.assertNotIn("验证口径：T日收盘涨停=命中", styled)
 

@@ -871,7 +871,7 @@ def render_premium_report_html(
       const panel = document.getElementById(target);
       if (!selected || !panel) return;
       buttons.forEach((button) => button.classList.remove('active'));
-      document.querySelectorAll('main > section').forEach((item) => item.classList.add('hidden'));
+      document.querySelectorAll('#top10-panel, #verify-panel').forEach((item) => item.classList.add('hidden'));
       selected.classList.add('active');
       panel.classList.remove('hidden');
     }};
