@@ -166,8 +166,10 @@ def localize_html(text: str) -> str:
     text = text.replace(', 没有', '，没有').replace(', 交易日', '，交易日').replace(', T日', '，T日')
     text = text.replace('涨停Rank IC:', '涨停Rank IC：').replace('T+1收益Rank IC:', 'T+1收益Rank IC：')
     text = text.replace('状态： ok', '状态： 正常')
-    text = text.replace('<title>Premium 涨停 Relay Forecast', '<title>Premium Limit-up Relay Forecast')
-    text = text.replace('<h1>Premium 涨停 Relay TOP10 / TOP20</h1>', '<h1>Premium Limit-up Relay TOP10 / TOP20</h1>')
+    text = text.replace('<title>Premium 涨停 Relay Forecast', '<title>Premium TOP 10')
+    text = text.replace('<title>Premium Limit-up Relay Forecast', '<title>Premium TOP 10')
+    text = text.replace('<h1>Premium 涨停 Relay TOP10 / TOP20</h1>', '<h1>Premium TOP 10</h1>')
+    text = text.replace('<h1>Premium Limit-up Relay TOP10 / TOP20</h1>', '<h1>Premium TOP 10</h1>')
     return text
 
 

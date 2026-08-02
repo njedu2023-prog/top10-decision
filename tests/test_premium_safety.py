@@ -435,6 +435,9 @@ class PremiumSafetyTests(unittest.TestCase):
             "20260105", "20260106", "20260107", rows, rows,
             True, "pending", "now", "test",
         )
+        self.assertIn("<title>Premium TOP 10 20260105</title>", html)
+        self.assertIn("<h1>Premium TOP 10</h1>", html)
+        self.assertIn("<h2>TOP1 影子验证</h2>", html)
         self.assertIn('<details class="metrics-details">', html)
         self.assertNotIn('<details class="metrics-details" open', html)
         self.assertIn('class="metrics-toggle"', html)

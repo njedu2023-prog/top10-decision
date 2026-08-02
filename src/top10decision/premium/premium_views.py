@@ -450,9 +450,9 @@ def _shadow_report_html(
         f"T+1 {_clean_text(current.get('t1_trade_date'), '-')}"
     )
     return f"""
-    <section class="shadow-panel" aria-label="TOP1 shadow accounting">
+    <section class="shadow-panel" aria-label="TOP1 shadow validation">
       <div class="section-head">
-        <div><h2>TOP1 影子记账</h2><p class="section-sub">固定规则：T日集合竞价真实成交价买入，T+1 11:00分钟开盘价卖出；扣除 {_html_escape(cumulative.get('cost_bps', current.get('cost_bps', 35)))} bp 成本。</p></div>
+        <div><h2>TOP1 影子验证</h2><p class="section-sub">固定规则：T日集合竞价真实成交价买入，T+1 11:00分钟开盘价卖出；扣除 {_html_escape(cumulative.get('cost_bps', current.get('cost_bps', 35)))} bp 成本。</p></div>
         <span class="badge">{_html_escape(_shadow_status_text(status))}</span>
       </div>
       <div class="shadow-grid">
@@ -685,7 +685,7 @@ def render_premium_report_html(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Premium Limit-up Relay Forecast {html.escape(str(trade_date))}</title>
+  <title>Premium TOP 10 {html.escape(str(trade_date))}</title>
   <style>
     :root {{
       color-scheme: light;
@@ -794,7 +794,7 @@ def render_premium_report_html(
     <div class="topbar">
       <div>
         <div class="kicker">Premium V4 Quant Engine</div>
-        <h1>Premium Limit-up Relay TOP10 / TOP20</h1>
+        <h1>Premium TOP 10</h1>
       </div>
       <div class="status-pill">Validation <b>{_html_escape(verify_badge)}</b></div>
     </div>

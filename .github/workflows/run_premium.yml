@@ -233,9 +233,10 @@ jobs:
           python -m json.tool outputs/premium/verification/premium_top1_shadow_summary.json >/dev/null
           grep -q '净收益执行名单' docs/reports/premium_latest.html
           grep -q 'T收盘' docs/reports/premium_latest.html
-          grep -q 'TOP1 影子记账' docs/reports/premium_latest.html
+          grep -q 'TOP1 影子验证' docs/reports/premium_latest.html
           grep -q 'TOP1 总收益' docs/reports/premium_latest.html
           grep -q 'premium-report-nav-scroll-state-v1' docs/reports/premium_latest.html
+          grep -q '<h1>Premium TOP 10</h1>' docs/reports/premium_latest.html
           python - <<'PY'
           import pandas as pd
           from pathlib import Path
