@@ -451,6 +451,7 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn("<title>Premium TOP 10 20260105</title>", html)
         self.assertIn("<h1>Premium TOP 10</h1>", html)
         self.assertIn("<h2>TOP1 影子验证</h2>", html)
+        self.assertIn("<h2>TOP10: T日涨停概率最高 · D 20260105</h2>", html)
         self.assertNotIn("TOP20 Watch List", html)
         self.assertNotIn('id="top20-panel"', html)
         self.assertIn('<details class="metrics-details">', html)

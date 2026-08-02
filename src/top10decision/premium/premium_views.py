@@ -834,7 +834,7 @@ def render_premium_report_html(
       <div class="hint">Tables scroll horizontally with the first column pinned; stronger colors indicate higher probability or score.</div>
     </div>
     <section id="top10-panel">
-      <div class="section-head"><h2>TOP10: Highest T-day Limit-up Probability</h2><span class="badge">Core Execution List</span></div>
+      <div class="section-head"><h2>TOP10: T日涨停概率最高 · D {_html_escape(trade_date)}</h2><span class="badge">Core Execution List</span></div>
       {_table_html(top10, "top10-table")}
     </section>
     <section id="verify-panel" class="hidden">
