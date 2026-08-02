@@ -228,6 +228,54 @@ def _stage_text(row: pd.Series) -> str:
     return f"{n}→{n + 1}"
 
 
+def _merge_display_truth(df_top: pd.DataFrame, df_verify: pd.DataFrame) -> pd.DataFrame:
+    """Attach matured T-close truth without changing the prediction row order."""
+    if df_top is None or df_top.empty:
+        return df_top
+    out = df_top.copy()
+    if df_verify is None or df_verify.empty or "ts_code" not in df_verify.columns:
+        return out
+    truth_columns = [
+        "ts_code",
+        "close_T_actual",
+        "t_close_ret",
+        "t_limitup_verify_ready",
+        "t_limitup_verify_trade_date",
+    ]
+    truth = df_verify[[c for c in truth_columns if c in df_verify.columns]].copy()
+    if "t_close_ret" not in truth.columns:
+        return out
+    truth = truth.drop_duplicates(subset=["ts_code"], keep="last")
+    out["_premium_display_order"] = np.arange(len(out))
+    out = out.merge(truth, on="ts_code", how="left", sort=False, suffixes=("", "_truth"))
+    for column in truth_columns[1:]:
+        truth_column = f"{column}_truth"
+        if truth_column not in out.columns:
+            continue
+        if column in out.columns:
+            out[column] = out[truth_column].combine_first(out[column])
+        else:
+            out[column] = out[truth_column]
+        out = out.drop(columns=[truth_column])
+    return (
+        out.sort_values("_premium_display_order", kind="stable")
+        .drop(columns=["_premium_display_order"])
+        .reset_index(drop=True)
+    )
+
+
+def _fmt_truth_return(row: pd.Series) -> str:
+    ready = pd.to_numeric(pd.Series([row.get("t_limitup_verify_ready")]), errors="coerce").iloc[0]
+    value = pd.to_numeric(pd.Series([row.get("t_close_ret")]), errors="coerce").iloc[0]
+    if not np.isfinite(ready) or int(ready) != 1 or not np.isfinite(value):
+        return "-"
+    if value > 0:
+        return f"+{value * 100:.2f}% ↑"
+    if value < 0:
+        return f"{value * 100:.2f}% ↓"
+    return "0.00% →"
+
+
 def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
@@ -251,6 +299,7 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                     "-",
                 ),
                 "D Close": _fmt_num(r.get("close_T"), 2),
+                "T收盘": _fmt_truth_return(r),
                 "Bucket": _clean_text(r.get("premium_bucket"), "WATCH"),
                 "T-Up": _fmt_pct(r.get("t_limitup_prob"), 2),
                 "T-Strength": _fmt_num(r.get("t_limitup_strength"), 2),
@@ -303,6 +352,15 @@ def _table_html(df: pd.DataFrame, table_id: str = "") -> str:
                 cls = f' class="num {_score_class(val, 0.70, 0.50)}"'
             elif c in {"T-Strength", "T-Attack", "T1-Accept", "T1-Relay", "Score"}:
                 cls = f' class="num {_score_class(val, 70.0, 55.0)}"'
+            elif c == "T收盘":
+                if str(val) == "-":
+                    cls = ' class="num truth-flat"'
+                elif str(val).startswith("+"):
+                    cls = ' class="num truth-up"'
+                elif str(val).startswith("-"):
+                    cls = ' class="num truth-down"'
+                else:
+                    cls = ' class="num truth-flat"'
             elif c in {"Rank", "D Close"}:
                 cls = ' class="num"'
             cells.append(f"<td{cls}>{_html_escape(val)}</td>")
@@ -335,6 +393,74 @@ def _rate_rows_card(title: str, rows: Sequence[Dict[str, object]]) -> str:
             f"{note_html}</div>"
         )
     return f'<div class="metric metric-wide"><span>{_html_escape(title)}</span><div class="metric-lines">{"".join(parts)}</div></div>'
+
+
+def _shadow_number(record: Dict[str, object], key: str) -> float:
+    value = pd.to_numeric(pd.Series([record.get(key, np.nan)]), errors="coerce").iloc[0]
+    return float(value) if np.isfinite(value) else float("nan")
+
+
+def _shadow_status_text(status: object) -> str:
+    return {
+        "READY": "已完成",
+        "PENDING": "待验证",
+        "PENDING_T_AUCTION": "等待T日竞价",
+        "PENDING_T1_1100": "等待T+1 11:00",
+        "MISSING_T_AUCTION": "缺少T日竞价真值",
+        "MISSING_T1_1100": "缺少T+1分钟真值",
+        "MISSING_TRADING_DATES": "交易日期缺失",
+        "MISSING_RANK1": "TOP1记录缺失",
+    }.get(str(status), _clean_text(status, "待验证"))
+
+
+def _shadow_report_html(
+    record: Optional[Dict[str, object]],
+    summary: Optional[Dict[str, object]],
+) -> str:
+    current = record or {}
+    cumulative = summary or {}
+    status = _clean_text(current.get("status"), "PENDING")
+    buy_price = _shadow_number(current, "buy_price")
+    sell_price = _shadow_number(current, "sell_price")
+    net_return = _shadow_number(current, "net_return")
+    pnl = _shadow_number(current, "pnl_per_10000")
+    completed = int(cumulative.get("completed", 0) or 0)
+    wins = int(cumulative.get("wins", 0) or 0)
+    pending = int(cumulative.get("pending", 0) or 0)
+    missing = int(cumulative.get("missing", 0) or 0)
+    win_rate = pd.to_numeric(pd.Series([cumulative.get("win_rate", np.nan)]), errors="coerce").iloc[0]
+    compound = pd.to_numeric(
+        pd.Series([cumulative.get("unit_compound_return", np.nan)]), errors="coerce"
+    ).iloc[0]
+    max_drawdown = pd.to_numeric(
+        pd.Series([cumulative.get("unit_max_drawdown", np.nan)]), errors="coerce"
+    ).iloc[0]
+    result_class = "truth-up" if np.isfinite(net_return) and net_return > 0 else (
+        "truth-down" if np.isfinite(net_return) and net_return < 0 else "truth-flat"
+    )
+    route = (
+        f"D {_clean_text(current.get('d_trade_date'), '-')} → "
+        f"T {_clean_text(current.get('t_trade_date'), '-')} → "
+        f"T+1 {_clean_text(current.get('t1_trade_date'), '-')}"
+    )
+    return f"""
+    <section class="shadow-panel" aria-label="TOP1 shadow accounting">
+      <div class="section-head">
+        <div><h2>TOP1 影子记账</h2><p class="section-sub">固定规则：T日集合竞价真实成交价买入，T+1 11:00分钟开盘价卖出；扣除 {_html_escape(cumulative.get('cost_bps', current.get('cost_bps', 35)))} bp 成本。</p></div>
+        <span class="badge">{_html_escape(_shadow_status_text(status))}</span>
+      </div>
+      <div class="shadow-grid">
+        <div class="shadow-item"><span>股票</span><strong>{_html_escape(current.get('name', '-'))}</strong><small>{_html_escape(current.get('ts_code', '-'))}</small></div>
+        <div class="shadow-item shadow-route"><span>验证路径</span><strong>{_html_escape(route)}</strong><small>原始 Rank 1，不事后换票</small></div>
+        <div class="shadow-item"><span>T竞价买入</span><strong>{_html_escape('-' if not np.isfinite(buy_price) else f'{buy_price:.2f}')}</strong><small>09:25 集合竞价</small></div>
+        <div class="shadow-item"><span>T+1卖出</span><strong>{_html_escape('-' if not np.isfinite(sell_price) else f'{sell_price:.2f}')}</strong><small>{_html_escape(current.get('sell_time', '等待11:00真值'))}</small></div>
+        <div class="shadow-item"><span>单笔净收益</span><strong class="{result_class}">{_html_escape('-' if not np.isfinite(net_return) else _fmt_pct(net_return))}</strong><small>{_html_escape('-' if not np.isfinite(pnl) else f'每万元 {pnl:+.2f} 元')}</small></div>
+        <div class="shadow-item"><span>累计验证</span><strong>{completed} 笔 / {wins} 胜</strong><small>胜率 {_html_escape('-' if not np.isfinite(win_rate) else _fmt_pct(win_rate))}；待验证 {pending}；缺失 {missing}</small></div>
+        <div class="shadow-item"><span>逐笔复合</span><strong>{_html_escape('-' if not np.isfinite(compound) else _fmt_pct(compound))}</strong><small>单位资金影子指数</small></div>
+        <div class="shadow-item"><span>Max Drawdown</span><strong>{_html_escape('-' if not np.isfinite(max_drawdown) else _fmt_pct(max_drawdown))}</strong><small>已完成影子交易</small></div>
+      </div>
+    </section>
+    """
 
 
 def _link_button(label: str, href: str, enabled: bool, kind: str = "") -> str:
@@ -392,11 +518,14 @@ def render_premium_report_html(
     audit_notes: Optional[Iterable[str]] = None,
     report_dates: Optional[Sequence[str]] = None,
     historical_limitup_stats: Optional[Dict[str, object]] = None,
+    shadow_record: Optional[Dict[str, object]] = None,
+    shadow_summary: Optional[Dict[str, object]] = None,
 ) -> str:
     """Render the human-friendly Premium HTML report."""
     stats = limitup_stats_from_verify(df_verify)
-    top10 = _display_table(df_top, 10)
-    top20 = _display_table(df_top, 20)
+    display_frame = _merge_display_truth(df_top, df_verify)
+    top10 = _display_table(display_frame, 10)
+    top20 = _display_table(display_frame, 20)
     hist = historical_limitup_stats or {}
     hist_ready = bool(hist.get("ready", False))
     hist_top1_rate = pd.to_numeric(pd.Series([hist.get("top1_hit_rate", np.nan)]), errors="coerce").iloc[0]
@@ -542,6 +671,7 @@ def render_premium_report_html(
     notes = "".join(f"<li>{_html_escape(x)}</li>" for x in (audit_notes or []))
     verify_badge = "PENDING" if verify_pending else "READY"
     nav = _report_nav_html(str(trade_date), report_dates)
+    shadow_panel = _shadow_report_html(shadow_record, shadow_summary)
 
     return f"""<!doctype html>
 <html lang="en">
@@ -613,6 +743,17 @@ def render_premium_report_html(
     .good {{ color:var(--accent); }}
     .mid {{ color:var(--warn); }}
     .quiet {{ color:#475467; }}
+    .truth-up {{ color:#c52a1d; font-weight:750; }}
+    .truth-down {{ color:#087a4f; font-weight:750; }}
+    .truth-flat {{ color:#667085; font-weight:700; }}
+    .section-sub {{ margin:5px 0 0; color:var(--muted); font-size:12px; line-height:1.45; }}
+    .shadow-grid {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }}
+    .shadow-item {{ min-height:94px; padding:14px 16px; border-right:1px solid #edf0f5; border-bottom:1px solid #edf0f5; }}
+    .shadow-item:nth-child(4n) {{ border-right:0; }}
+    .shadow-item span,.shadow-item small {{ display:block; color:var(--muted); font-size:12px; }}
+    .shadow-item strong {{ display:block; margin-top:7px; font-size:18px; line-height:1.25; }}
+    .shadow-item small {{ margin-top:7px; line-height:1.35; }}
+    .shadow-route {{ grid-column:span 2; }}
     .explain {{ padding:14px 18px; color:var(--muted); line-height:1.7; }}
     .explain ul {{ margin:8px 0 0; padding-left:18px; }}
     .empty {{ margin:0; padding:16px 18px; color:var(--muted); }}
@@ -623,6 +764,9 @@ def render_premium_report_html(
       .topbar, .report-nav, .toolbar {{ align-items:flex-start; flex-direction:column; }}
       .metrics {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
       .metric-wide {{ grid-column:1 / -1; }}
+      .shadow-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
+      .shadow-item:nth-child(4n) {{ border-right:1px solid #edf0f5; }}
+      .shadow-item:nth-child(2n) {{ border-right:0; }}
       h1 {{ font-size:24px; }}
     }}
     @media (max-width: 560px) {{
@@ -630,6 +774,9 @@ def render_premium_report_html(
       .metric-line {{ grid-template-columns:1fr auto; }}
       .metric-line small {{ grid-column:1 / -1; }}
       .section-head {{ align-items:flex-start; flex-direction:column; }}
+      .shadow-grid {{ grid-template-columns:1fr; }}
+      .shadow-item,.shadow-item:nth-child(2n),.shadow-item:nth-child(4n) {{ border-right:0; }}
+      .shadow-route {{ grid-column:auto; }}
     }}
   </style>
 </head>
@@ -649,6 +796,7 @@ def render_premium_report_html(
       <summary><span>核心指标</span><span class="metrics-toggle" aria-hidden="true"></span></summary>
       <div class="metrics">{''.join(cards)}</div>
     </details>
+    {shadow_panel}
     <div class="toolbar">
       <div class="tabs" role="tablist" aria-label="List switcher">
         <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 Execution List</button>
