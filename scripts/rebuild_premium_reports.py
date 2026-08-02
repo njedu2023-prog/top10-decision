@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import re
 import sys
 from datetime import datetime, timezone
@@ -645,12 +646,37 @@ def _top_frame_for_date(cfg: PremiumConfig, trade_date: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def _load_shadow_artifacts(cfg: PremiumConfig) -> tuple[pd.DataFrame, Dict[str, object]]:
+    verify_root = cfg.out_root() / "verification"
+    ledger = _read_optional_csv(verify_root / "premium_top1_shadow_ledger.csv")
+    summary_path = verify_root / "premium_top1_shadow_summary.json"
+    summary: Dict[str, object] = {}
+    if summary_path.exists():
+        try:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                summary = payload
+        except Exception:
+            summary = {}
+    return ledger, summary
+
+
+def _shadow_record_for_date(ledger: pd.DataFrame, trade_date: str) -> Dict[str, object]:
+    if ledger.empty or "d_trade_date" not in ledger.columns:
+        return {}
+    dates = ledger["d_trade_date"].map(_to_yyyymmdd)
+    hit = ledger.loc[dates.eq(str(trade_date))]
+    return hit.iloc[-1].to_dict() if not hit.empty else {}
+
+
 def _render_one(
     cfg: PremiumConfig,
     trade_date: str,
     report_dates: Sequence[str],
     historical_stats: Dict[str, object],
     training_labels: pd.DataFrame,
+    shadow_ledger: pd.DataFrame,
+    shadow_summary: Dict[str, object],
 ) -> Optional[Path]:
     df_top = _top_frame_for_date(cfg, trade_date)
     if df_top.empty:
@@ -677,6 +703,7 @@ def _render_one(
 
     verify_pending = bool(_verify_ready_rows(df_verify) <= 0)
     verify_reason = "ok" if not verify_pending else refresh_reason
+    shadow_record = _shadow_record_for_date(shadow_ledger, trade_date)
 
     html = render_premium_report_html(
         trade_date=trade_date,
@@ -695,6 +722,8 @@ def _render_one(
         ],
         report_dates=report_dates,
         historical_limitup_stats=historical_stats,
+        shadow_record=shadow_record,
+        shadow_summary=shadow_summary,
     )
     out_path = cfg.report_html_path(trade_date)
     _write_text(out_path, html)
@@ -726,11 +755,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     historical_stats = _collect_historical_limitup_stats(cfg)
     training_labels = _load_training_labels(cfg)
+    shadow_ledger, shadow_summary = _load_shadow_artifacts(cfg)
 
     built: List[Path] = []
     skipped: List[str] = []
     for trade_date in dates:
-        out_path = _render_one(cfg, trade_date, dates, historical_stats, training_labels)
+        out_path = _render_one(
+            cfg,
+            trade_date,
+            dates,
+            historical_stats,
+            training_labels,
+            shadow_ledger,
+            shadow_summary,
+        )
         if out_path is None:
             skipped.append(trade_date)
             continue
