@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -44,7 +46,16 @@ from top10decision.premium.predict import (
     _load_validated_platt_calibrator,
     _recent_limitup_model_health,
 )
-from top10decision.premium.premium_views import render_premium_report_html
+from top10decision.premium.premium_views import (
+    _display_table,
+    _merge_display_truth,
+    _table_html,
+    render_premium_report_html,
+)
+from top10decision.premium.shadow_account import (
+    build_and_write_top1_shadow,
+    build_top1_shadow_ledger,
+)
 from top10decision.premium.train import _build_ehx_feature_cols, _fit_validated_ehx
 
 
@@ -76,6 +87,134 @@ def _load_rebuild_module():
 
 
 class PremiumSafetyTests(unittest.TestCase):
+    def test_t_close_truth_preserves_original_ranking(self):
+        ranked = pd.DataFrame({
+            "rank": [1, 2],
+            "ts_code": ["600001.SH", "000002.SZ"],
+            "name": ["A", "B"],
+            "close_T": [10.0, 20.0],
+        })
+        truth = pd.DataFrame({
+            "ts_code": ["000002.SZ", "600001.SH"],
+            "t_close_ret": [-0.025, 0.10],
+            "t_limitup_verify_ready": [1, 1],
+        })
+        merged = _merge_display_truth(ranked, truth)
+        self.assertEqual(list(merged["rank"]), [1, 2])
+        self.assertEqual(list(merged["ts_code"]), ["600001.SH", "000002.SZ"])
+        shown = _display_table(merged, 10)
+        self.assertEqual(list(shown["T收盘"]), ["+10.00% ↑", "-2.50% ↓"])
+        pending = shown.iloc[[0]].copy()
+        pending["T收盘"] = "-"
+        self.assertIn('<td class="num truth-flat">-</td>', _table_html(pending))
+
+    def test_top1_shadow_uses_auction_and_1100_minute_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out_root = root / "outputs" / "premium"
+            market_root = root / "data" / "market"
+            out_root.mkdir(parents=True)
+            pd.DataFrame({
+                "rank": [1, 2],
+                "ts_code": ["600001.SH", "000002.SZ"],
+                "name": ["TOP1", "TOP2"],
+                "buy_date": ["20260702", "20260702"],
+                "target_date": ["20260703", "20260703"],
+            }).to_csv(out_root / "premium_top10_20260701.csv", index=False)
+
+            auction_dir = market_root / "raw" / "2026" / "20260702"
+            auction_dir.mkdir(parents=True)
+            pd.DataFrame({
+                "ts_code": ["600001.SH"],
+                "trade_date": ["20260702"],
+                "vol": [100000],
+                "price": [10.0],
+                "amount": [1000000],
+            }).to_csv(auction_dir / "stk_auction.csv", index=False)
+
+            minute_dir = market_root / "minute_1m" / "2026" / "20260703"
+            minute_dir.mkdir(parents=True)
+            pd.DataFrame({
+                "ts_code": ["600001.SH", "600001.SH"],
+                "time": ["2026-07-03 10:59:00", "2026-07-03 11:00:00"],
+                "open": [10.8, 11.0],
+                "close": [10.9, 11.5],
+                "high": [11.0, 11.6],
+                "low": [10.7, 10.9],
+                "vol": [1000, 2000],
+                "amount": [10800, 22000],
+            }).to_csv(minute_dir / "600001_SH.csv", index=False)
+
+            result, paths = build_and_write_top1_shadow(
+                out_root,
+                market_root,
+                start_date="20260701",
+                cost_bps=35.0,
+            )
+            row = result.ledger.iloc[0]
+            self.assertEqual(row["status"], "READY")
+            self.assertEqual(int(row["rank"]), 1)
+            self.assertEqual(row["ts_code"], "600001.SH")
+            self.assertAlmostEqual(float(row["buy_price"]), 10.0, places=6)
+            self.assertAlmostEqual(float(row["sell_price"]), 11.0, places=6)
+            self.assertEqual(row["sell_time"], "2026-07-03 11:00:00")
+            self.assertAlmostEqual(float(row["net_return"]), 0.0965, places=6)
+            self.assertEqual(result.summary["completed"], 1)
+            self.assertEqual(result.summary["wins"], 1)
+            self.assertTrue(paths["month_202607"].exists())
+            payload = json.loads(paths["summary"].read_text(encoding="utf-8"))
+            self.assertAlmostEqual(float(payload["unit_compound_return"]), 0.0965)
+
+    def test_empty_shadow_summary_writes_strict_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out_root = root / "outputs" / "premium"
+            market_root = root / "data" / "market"
+            out_root.mkdir(parents=True)
+            _, paths = build_and_write_top1_shadow(out_root, market_root)
+            payload = json.loads(paths["summary"].read_text(encoding="utf-8"))
+            self.assertIsNone(payload["win_rate"])
+            self.assertIsNone(payload["unit_compound_return"])
+
+    def test_shadow_distinguishes_future_pending_from_historical_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out_root = root / "outputs" / "premium"
+            market_root = root / "data" / "market"
+            out_root.mkdir(parents=True)
+            pd.DataFrame({
+                "rank": [1],
+                "ts_code": ["600001.SH"],
+                "buy_date": ["20990102"],
+                "target_date": ["20990103"],
+            }).to_csv(out_root / "premium_top10_20990101.csv", index=False)
+            future = build_top1_shadow_ledger(
+                out_root, market_root, start_date="20990101"
+            )
+            self.assertEqual(future.loc[0, "status"], "PENDING_T_AUCTION")
+
+            pd.DataFrame({
+                "rank": [1],
+                "ts_code": ["600001.SH"],
+                "buy_date": ["20200102"],
+                "target_date": ["20200103"],
+            }).to_csv(out_root / "premium_top10_20200101.csv", index=False)
+            auction_dir = market_root / "raw" / "2020" / "20200102"
+            auction_dir.mkdir(parents=True)
+            pd.DataFrame({
+                "ts_code": ["600001.SH"],
+                "vol": [1000],
+                "price": [10.0],
+            }).to_csv(auction_dir / "stk_auction.csv", index=False)
+            with mock.patch.dict("os.environ", {"TUSHARE_TOKEN": ""}):
+                historical = build_top1_shadow_ledger(
+                    out_root,
+                    market_root,
+                    start_date="20200101",
+                    end_date="20200101",
+                )
+            self.assertEqual(historical.loc[0, "status"], "MISSING_T1_1100")
+
     def test_time_split_has_two_day_embargo(self):
         dates = [f"202601{x:02d}" for x in range(1, 21)]
         df = pd.DataFrame({"d_trade_date": np.repeat(dates, 2), "x": np.arange(40)})
