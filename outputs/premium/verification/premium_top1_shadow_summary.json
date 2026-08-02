@@ -13,6 +13,7 @@
   "win_rate": 0.5714285714285714,
   "average_net_return": 0.01898274787304351,
   "median_net_return": 0.012935986159169414,
+  "total_net_return": 0.39863770533391374,
   "unit_compound_return": 0.33376406635099287,
   "unit_max_drawdown": -0.2155429883070762,
   "first_d_date": "20260701",
