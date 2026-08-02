@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-07-31T11:35:30+00:00",
+  "generated_at_utc": "2026-08-02T05:48:47+00:00",
   "model_version": "auction_v12_top10_trade_selector_oos_1",
   "history_dates": 710,
   "oos_dates": 540,
@@ -3744,7 +3744,7 @@
     "production_policy": {
       "max_positions": 1,
       "thresholds": {
-        "min_trade_score": -0.005223798267550372,
+        "min_trade_score": -0.0052237982675503725,
         "min_mean_return_lcb": -0.027681299395922117,
         "min_fill_probability": 0.0,
         "max_big_loss_probability": 0.5022919448153094
@@ -3864,7 +3864,7 @@
         "beats_constant": false
       }
     },
-    "production_artifact_sha256": "2dc91569e2beb29320c3aca3547f832379de87241e496439b65ec2e468a3bffb",
+    "production_artifact_sha256": "467ef6dc269a0c0b6be23721954a45254058b98e708256ce0dca318292728713",
     "promotion_checks": {
       "production_policy_ready": false,
       "return_model_chronological_skill": false,
@@ -3909,5 +3909,5 @@
   "model_quality_warnings": [
     "first_layer_probability_models_did_not_pass_brier_skill_gate"
   ],
-  "model_artifact_sha256": "14710d3c75691ce2a32152f4ee61150636f0c92c40e58ecadb0b79be9b1b2b95"
+  "model_artifact_sha256": "727e127dfbc6a9fb848673e69099470a9fca2b02f981ac8a6cccff1bdcafd2fa"
 }
