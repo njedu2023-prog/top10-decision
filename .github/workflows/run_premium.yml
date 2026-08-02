@@ -7,6 +7,7 @@ on:
       - ".github/workflows/run_premium.yml"
       - "scripts/run_premium.py"
       - "scripts/backfill_premium_limitup_truth.py"
+      - "scripts/backfill_premium_top1_shadow.py"
       - "scripts/maybe_train_premium.py"
       - "scripts/rebuild_premium_reports.py"
       - "scripts/build_premium_final.py"
@@ -160,6 +161,15 @@ jobs:
           set -e
           python scripts/run_premium.py "$PREMIUM_CMD" --verbose
 
+      - name: Rebuild TOP1 shadow ledger
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+          TUSHARE_TOKEN: "${{ secrets.TUSHARE_TOKEN }}"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -e
+          python scripts/backfill_premium_top1_shadow.py --start-date 20260701 --verbose
+
       - name: Rebuild Premium HTML report archive
         env:
           PYTHONPATH: "${{ github.workspace }}/src"
@@ -213,11 +223,17 @@ jobs:
           test -f outputs/premium/premium_final_reject_latest.csv
           test -f outputs/premium/models/execution_profit_model_meta.json
           test -f outputs/premium/models/execution_profit_backtest_meta.json
+          test -f outputs/premium/verification/premium_top1_shadow_ledger.csv
+          test -f outputs/premium/verification/premium_top1_shadow_summary.json
+          test -f outputs/premium/verification/premium_top1_shadow_202607.csv
           test -f docs/reports/premium_final_latest.html
           test -f docs/reports/premium_latest.html
           python -m json.tool outputs/premium/models/execution_profit_model_meta.json >/dev/null
           python -m json.tool outputs/premium/models/execution_profit_backtest_meta.json >/dev/null
+          python -m json.tool outputs/premium/verification/premium_top1_shadow_summary.json >/dev/null
           grep -q '净收益执行名单' docs/reports/premium_latest.html
+          grep -q 'T收盘' docs/reports/premium_latest.html
+          grep -q 'TOP1 影子记账' docs/reports/premium_latest.html
           python - <<'PY'
           import pandas as pd
           from pathlib import Path
@@ -231,6 +247,27 @@ jobs:
           required = {"exec_model_ready", "exec_trade_eligible", "exec_expected_net_return"}
           if not all(required.issubset(set(frame.columns)) for frame in frames):
               raise SystemExit("Premium execution-profit output contract missing")
+
+          shadow = pd.read_csv(
+              "outputs/premium/verification/premium_top1_shadow_ledger.csv"
+          )
+          shadow_required = {
+              "d_trade_date",
+              "t_trade_date",
+              "t1_trade_date",
+              "rank",
+              "ts_code",
+              "buy_price",
+              "sell_price",
+              "net_return",
+              "status",
+          }
+          if not shadow_required.issubset(set(shadow.columns)):
+              raise SystemExit("Premium TOP1 shadow ledger contract missing")
+          if shadow["d_trade_date"].astype(str).duplicated().any():
+              raise SystemExit("Premium TOP1 shadow ledger has duplicate D dates")
+          if not pd.to_numeric(shadow["rank"], errors="coerce").dropna().eq(1).all():
+              raise SystemExit("Premium TOP1 shadow ledger contains non-TOP1 rows")
           PY
           head -n 5 outputs/premium/premium_final_buy_latest.csv || true
 
