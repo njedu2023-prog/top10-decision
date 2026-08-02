@@ -444,6 +444,10 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn(".report-nav{position:sticky;top:8px", styled)
         self.assertIn("overflow-x:auto;scrollbar-width:none", styled)
         self.assertIn(".nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}", styled)
+        self.assertIn("premium-report-nav-scroll-state-v1", styled)
+        self.assertIn("pageY: window.scrollY", styled)
+        self.assertIn("window.scrollTo({", styled)
+        self.assertIn("activatePremiumTab(savedNavigationState.activeTab)", styled)
         self.assertIn('<details class="metrics-details">', styled)
         self.assertNotIn("验证口径：T日收盘涨停=命中", styled)
 

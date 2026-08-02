@@ -847,16 +847,77 @@ def render_premium_report_html(
     <p class="footnote">This report is generated automatically by Premium. Previous/next navigation is based on historical HTML report dates already present in the repository.</p>
   </main>
   <script>
+    const premiumScrollStateKey = 'premium-report-nav-scroll-state-v1';
+
+    const activatePremiumTab = (target) => {{
+      if (!target) return;
+      const buttons = Array.from(document.querySelectorAll('.tab-btn'));
+      const selected = buttons.find((button) => button.getAttribute('data-target') === target);
+      const panel = document.getElementById(target);
+      if (!selected || !panel) return;
+      buttons.forEach((button) => button.classList.remove('active'));
+      document.querySelectorAll('main > section').forEach((item) => item.classList.add('hidden'));
+      selected.classList.add('active');
+      panel.classList.remove('hidden');
+    }};
+
     document.querySelectorAll('.tab-btn').forEach((btn) => {{
       btn.addEventListener('click', () => {{
-        const target = btn.getAttribute('data-target');
-        document.querySelectorAll('.tab-btn').forEach((x) => x.classList.remove('active'));
-        document.querySelectorAll('main > section').forEach((panel) => panel.classList.add('hidden'));
-        btn.classList.add('active');
-        const panel = document.getElementById(target);
-        if (panel) panel.classList.remove('hidden');
+        activatePremiumTab(btn.getAttribute('data-target'));
       }});
     }});
+
+    const reportNav = document.querySelector('.report-nav');
+    if (reportNav) {{
+      reportNav.querySelectorAll('a[href]').forEach((link) => {{
+        link.addEventListener('click', () => {{
+          try {{
+            const target = new URL(link.href, window.location.href);
+            if (target.origin !== window.location.origin) return;
+            const activeTab = document.querySelector('.tab-btn.active');
+            sessionStorage.setItem(premiumScrollStateKey, JSON.stringify({{
+              target: `${{target.pathname}}${{target.search}}`,
+              pageY: window.scrollY,
+              navX: reportNav.scrollLeft,
+              activeTab: activeTab ? activeTab.getAttribute('data-target') : '',
+              savedAt: Date.now(),
+            }}));
+          }} catch (error) {{
+            // Navigation still works when storage is unavailable.
+          }}
+        }});
+      }});
+    }}
+
+    let savedNavigationState = null;
+    try {{
+      const rawState = sessionStorage.getItem(premiumScrollStateKey);
+      if (rawState) {{
+        sessionStorage.removeItem(premiumScrollStateKey);
+        savedNavigationState = JSON.parse(rawState);
+      }}
+    }} catch (error) {{
+      savedNavigationState = null;
+    }}
+
+    if (savedNavigationState) {{
+      const currentTarget = `${{window.location.pathname}}${{window.location.search}}`;
+      const savedAt = Number(savedNavigationState.savedAt);
+      const isFresh = Number.isFinite(savedAt) && Date.now() - savedAt < 120000;
+      if (isFresh && savedNavigationState.target === currentTarget) {{
+        activatePremiumTab(savedNavigationState.activeTab);
+        requestAnimationFrame(() => {{
+          requestAnimationFrame(() => {{
+            window.scrollTo({{
+              top: Number(savedNavigationState.pageY) || 0,
+              left: 0,
+              behavior: 'auto',
+            }});
+            if (reportNav) reportNav.scrollLeft = Number(savedNavigationState.navX) || 0;
+          }});
+        }});
+      }}
+    }}
   </script>
 </body>
 </html>
