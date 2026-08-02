@@ -1,8 +1,8 @@
 trade_date: 20260731
-run_id: gh_30757725813
-commit_sha: 9ab7b3361ce3
+run_id: gh_30759202391
+commit_sha: 9e3e8b33d86f
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-08-02T16:56:57Z
+created_at_utc: 2026-08-02T17:36:50Z
 ok: True
 buy_date: 20260803
 target_date: 20260804
@@ -14,6 +14,10 @@ verify_pending: True
 verify_reason: truth_not_ready: T_ok=True T2_ok=False (buy_date:trade_cal_ok;target_date:trade_cal_ok)
 market_sentiment_reason: ok:prev=20260730
 calendar_contract: strict_a_share_trade_calendar_only
+premium_universe: MAIN_BOARD_10PCT
+premium_universe_source_count: 100
+premium_universe_filtered_count: 15
+premium_universe_candidate_count: 85
 analysis_date_calendar_reason: trade_cal_ok
 buy_date_calendar_reason: trade_cal_ok
 target_date_calendar_reason: trade_cal_ok
@@ -23,8 +27,8 @@ mkt_touch_strong_count: 822.0
 mkt_emotion_score: 0.8157753106516628
 decision_merge_mode: decision_label_left_join_v1
 decision_merge_rows: 70
-decision_merge_coverage: 0.7
-decision_merge_dec_p_fill_coverage: 0.7
+decision_merge_coverage: 0.804598
+decision_merge_dec_p_fill_coverage: 0.804598
 decision_merge_dec_can_buy_coverage: 0.0
 decision_merge_dec_weight_coverage: 0.0
 decision_merge_reason: ok
@@ -50,7 +54,7 @@ limitup_calibration_reason: ok
 limitup_calibration_platt_raw_brier: 0.25250466949433464
 limitup_calibration_platt_brier: 0.12939316857085462
 limitup_calibration_platt_kind: platt_monotonic
-limitup_calibration_avg_delta: -0.20366708266310518
+limitup_calibration_avg_delta: -0.21365313817930828
 limitup_calibration_platt_slope: 0.13349338730326343
 limitup_calibration_platt_intercept: -1.6463148120563977
 t1_calibration_mode: validated_platt_v1
@@ -58,7 +62,7 @@ t1_calibration_reason: ok
 t1_calibration_raw_brier: 0.2616376215585555
 t1_calibration_brier: 0.24945734470491132
 t1_calibration_kind: platt_monotonic
-t1_calibration_avg_delta: -0.09185591642249849
+t1_calibration_avg_delta: -0.09716742645826248
 t1_calibration_slope: 0.1752519961518399
 t1_calibration_intercept: -0.3344754314875474
 adaptive_rank_mode: history_ic_weighted_v1
@@ -71,17 +75,17 @@ adaptive_t1_ret_ic: -0.003401
 adaptive_reason: t1_downweighted_negative_ic
 premium_score_mode: t_attack_t1_accept_final_v1
 premium_intraday_mode: intraday_weighted_v1
-premium_intraday_avg_attack_edge: 0.528051478266142
-premium_intraday_avg_execution_edge: 0.5274441250367455
+premium_intraday_avg_attack_edge: 0.531289875567394
+premium_intraday_avg_execution_edge: 0.5296112976158723
 premium_intraday_avg_risk_penalty: 0.0
 premium_stage_mode: tushare_limit_times_hump_v1
-premium_stage_rows: 99
-premium_stage_avg_quality_weight: 0.7964
-premium_stage_avg_risk_weight: 0.034650000000000014
+premium_stage_rows: 85
+premium_stage_avg_quality_weight: 0.7960000000000002
+premium_stage_avg_risk_weight: 0.03488235294117648
 premium_intraday_hard_risk_count: 0
 premium_eligible_count: 0
-premium_watch_count: 88
-premium_excluded_count: 12
+premium_watch_count: 76
+premium_excluded_count: 9
 premium_model_can_rank_count: 0
 premium_ehx_validated_count: 0
 premium_rank_blend: professional_75_adaptive_25
