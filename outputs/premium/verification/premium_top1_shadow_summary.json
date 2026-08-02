@@ -1,0 +1,20 @@
+{
+  "generated_from": "premium_top10_*.csv",
+  "buy_rule": "T opening call auction actual matched price",
+  "sell_rule": "T+1 11:00 minute open",
+  "fill_assumption": "small shadow order and positive auction matched volume",
+  "cost_bps": 35.0,
+  "records": 23,
+  "completed": 21,
+  "pending": 2,
+  "missing": 0,
+  "wins": 12,
+  "losses": 9,
+  "win_rate": 0.5714285714285714,
+  "average_net_return": 0.01898274787304351,
+  "median_net_return": 0.012935986159169414,
+  "unit_compound_return": 0.33376406635099287,
+  "unit_max_drawdown": -0.2155429883070762,
+  "first_d_date": "20260701",
+  "last_d_date": "20260731"
+}
