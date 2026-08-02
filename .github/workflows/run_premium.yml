@@ -242,6 +242,9 @@ jobs:
           grep -q 'T收盘' docs/reports/premium_latest.html
           grep -q 'TOP1 影子验证' docs/reports/premium_latest.html
           grep -q 'TOP1 总收益' docs/reports/premium_latest.html
+          grep -Fq '<details class="shadow-details" aria-label="TOP1 影子验证">' docs/reports/premium_latest.html
+          ! grep -Fq '<details class="shadow-details" open' docs/reports/premium_latest.html
+          grep -Fq '.shadow-details[open] .metrics-toggle::before{content:"−"' docs/reports/premium_latest.html
           grep -q 'premium-report-nav-scroll-state-v1' docs/reports/premium_latest.html
           grep -q '<h1>Premium TOP 10</h1>' docs/reports/premium_latest.html
           grep -q 'TOP10: T日涨停概率最高 · D ' docs/reports/premium_latest.html
@@ -258,6 +261,27 @@ jobs:
           required = {"exec_model_ready", "exec_trade_eligible", "exec_expected_net_return"}
           if not all(required.issubset(set(frame.columns)) for frame in frames):
               raise SystemExit("Premium execution-profit output contract missing")
+          main_prefixes = ("000", "001", "002", "003", "600", "601", "603", "605")
+          for path, frame in zip(paths, frames):
+              if "premium_limit_regime" not in frame.columns:
+                  raise SystemExit(f"Premium 10pct universe marker missing: {path}")
+              if not frame["premium_limit_regime"].dropna().eq("MAIN_BOARD_10PCT").all():
+                  raise SystemExit(f"Premium non-10pct universe marker found: {path}")
+              codes = frame["ts_code"].astype(str).str.extract(r"(\d{6})", expand=False)
+              suffixes = frame["ts_code"].astype(str).str.upper().str.extract(
+                  r"\.([A-Z]{2})$", expand=False
+              ).fillna("")
+              names = frame["name"].fillna("").astype(str).str.upper()
+              valid = (
+                  codes.fillna("").str.startswith(main_prefixes)
+                  & suffixes.isin(("", "SH", "SZ"))
+                  & ~names.str.contains(r"(?:\*?ST|S\*ST|退)", regex=True, na=False)
+              )
+              if not valid.all():
+                  bad = frame.loc[~valid, ["ts_code", "name"]].head(10)
+                  raise SystemExit(
+                      f"Premium candidate outside normal 10pct main board: {path}\n{bad}"
+                  )
 
           shadow = pd.read_csv(
               "outputs/premium/verification/premium_top1_shadow_ledger.csv"
@@ -293,6 +317,7 @@ jobs:
           grep -E '^report_md:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
           grep -E '^report_html:[[:space:]]*[^[:space:]]+' outputs/premium/_last_run.txt
           grep -E '^rank_groups:[[:space:]]*TOP10\|TOP20' outputs/premium/_last_run.txt
+          grep -E '^premium_universe:[[:space:]]*MAIN_BOARD_10PCT' outputs/premium/_last_run.txt
 
           if [ "$PREMIUM_CMD" != "predict" ]; then
             echo "=== _last_train.txt ==="

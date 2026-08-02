@@ -471,11 +471,14 @@ def _shadow_report_html(
         f"T+1 {_clean_text(current.get('t1_trade_date'), '-')}"
     )
     return f"""
-    <section class="shadow-panel" aria-label="TOP1 shadow validation">
-      <div class="section-head">
-        <div><h2>TOP1 影子验证</h2><p class="section-sub">固定规则：T日集合竞价真实成交价买入，T+1 11:00分钟开盘价卖出；扣除 {_html_escape(cumulative.get('cost_bps', current.get('cost_bps', 35)))} bp 成本。</p></div>
-        <span class="badge">{_html_escape(_shadow_status_text(status))}</span>
-      </div>
+    <details class="shadow-details" aria-label="TOP1 影子验证">
+      <summary>
+        <div class="shadow-summary-copy"><h2>TOP1 影子验证</h2><p class="section-sub">固定规则：T日集合竞价真实成交价买入，T+1 11:00分钟开盘价卖出；扣除 {_html_escape(cumulative.get('cost_bps', current.get('cost_bps', 35)))} bp 成本。</p></div>
+        <div class="shadow-summary-actions">
+          <span class="badge">{_html_escape(_shadow_status_text(status))}</span>
+          <span class="metrics-toggle" aria-hidden="true"></span>
+        </div>
+      </summary>
       <div class="shadow-grid">
         <div class="shadow-item"><span>股票</span><strong>{_html_escape(current.get('name', '-'))}</strong><small>{_html_escape(current.get('ts_code', '-'))}</small></div>
         <div class="shadow-item shadow-route"><span>验证路径</span><strong>{_html_escape(route)}</strong><small>原始 Rank 1，不事后换票</small></div>
@@ -487,7 +490,7 @@ def _shadow_report_html(
         <div class="shadow-item"><span>逐笔复合</span><strong>{_html_escape('-' if not np.isfinite(compound) else _fmt_pct(compound))}</strong><small>单位资金影子指数</small></div>
         <div class="shadow-item"><span>Max Drawdown</span><strong>{_html_escape('-' if not np.isfinite(max_drawdown) else _fmt_pct(max_drawdown))}</strong><small>已完成影子交易</small></div>
       </div>
-    </section>
+    </details>
     """
 
 
@@ -776,6 +779,15 @@ def render_premium_report_html(
     .truth-down {{ color:#087a4f; font-weight:750; }}
     .truth-flat {{ color:#667085; font-weight:700; }}
     .section-sub {{ margin:5px 0 0; color:var(--muted); font-size:12px; line-height:1.45; }}
+    .shadow-details {{ margin:0 0 14px; border-radius:8px; background:#fff; box-shadow:var(--shadow); }}
+    .shadow-details > summary {{ display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:66px; padding:12px 14px 12px 18px; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer; user-select:none; }}
+    .shadow-details > summary::-webkit-details-marker {{ display:none; }}
+    .shadow-details > summary::marker {{ content:""; }}
+    .shadow-details[open] > summary {{ border-bottom-left-radius:0; border-bottom-right-radius:0; }}
+    .shadow-details[open] .metrics-toggle::before {{ content:"−"; transform:none; }}
+    .shadow-summary-copy {{ min-width:0; }}
+    .shadow-summary-actions {{ display:flex; align-items:center; gap:10px; flex:0 0 auto; }}
+    .shadow-details .shadow-grid {{ border:1px solid var(--line); border-top:0; border-radius:0 0 8px 8px; overflow:hidden; }}
     .shadow-grid {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }}
     .shadow-item {{ min-height:94px; padding:14px 16px; border-right:1px solid #edf0f5; border-bottom:1px solid #edf0f5; }}
     .shadow-item:nth-child(4n) {{ border-right:0; }}
@@ -803,6 +815,8 @@ def render_premium_report_html(
       .metric-line {{ grid-template-columns:1fr auto; }}
       .metric-line small {{ grid-column:1 / -1; }}
       .section-head {{ align-items:flex-start; flex-direction:column; }}
+      .shadow-details > summary {{ align-items:flex-start; padding-left:14px; }}
+      .shadow-summary-actions {{ gap:6px; }}
       .shadow-grid {{ grid-template-columns:1fr; }}
       .shadow-item,.shadow-item:nth-child(2n),.shadow-item:nth-child(4n) {{ border-right:0; }}
       .shadow-route {{ grid-column:auto; }}

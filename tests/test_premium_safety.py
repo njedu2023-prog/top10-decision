@@ -42,6 +42,7 @@ from top10decision.premium.limitup_probability_engine import (
 from top10decision.premium.predict import (
     _apply_adaptive_rank_score,
     _apply_professional_premium_scores,
+    _filter_standard_10pct_candidates,
     _historical_limitup_stats_from_df,
     _load_validated_platt_calibrator,
     _recent_limitup_model_health,
@@ -97,6 +98,39 @@ def _load_final_report_module():
 
 
 class PremiumSafetyTests(unittest.TestCase):
+    def test_candidate_universe_keeps_only_standard_10pct_main_board(self):
+        candidates = pd.DataFrame({
+            "ts_code": [
+                "600000.SH",
+                "000001.SZ",
+                "002001.SZ",
+                "300001.SZ",
+                "688001.SH",
+                "830001.BJ",
+                "600001.SH",
+                "605001.SH",
+            ],
+            "name": [
+                "浦发银行",
+                "平安银行",
+                "新和成",
+                "创业样本",
+                "科创样本",
+                "北交样本",
+                "*ST样本",
+                "新股样本",
+            ],
+            "pct_chg": [10.01, 0.10, np.nan, 20.0, 20.0, 30.0, 5.0, 44.0],
+        })
+
+        result = _filter_standard_10pct_candidates(candidates)
+
+        self.assertEqual(
+            result["ts_code"].tolist(),
+            ["600000.SH", "000001.SZ", "002001.SZ"],
+        )
+        self.assertTrue(result["premium_limit_regime"].eq("MAIN_BOARD_10PCT").all())
+
     def test_t_close_truth_preserves_original_ranking(self):
         ranked = pd.DataFrame({
             "rank": [1, 2],
@@ -454,6 +488,9 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn("<title>Premium TOP 10 20260105</title>", html)
         self.assertIn("<h1>Premium TOP 10</h1>", html)
         self.assertIn("<h2>TOP1 影子验证</h2>", html)
+        self.assertIn('<details class="shadow-details" aria-label="TOP1 影子验证">', html)
+        self.assertNotIn('<details class="shadow-details" open', html)
+        self.assertIn('class="shadow-summary-actions"', html)
         self.assertIn("<h2>TOP10: T日涨停概率最高 · D 20260105</h2>", html)
         self.assertNotIn("Tables scroll horizontally", html)
         self.assertNotIn("TOP20 Watch List", html)
@@ -464,6 +501,9 @@ class PremiumSafetyTests(unittest.TestCase):
 
         styled = _load_apple_style_module().restyle_html(html)
         self.assertIn(".metrics-toggle::before{content:\"+\"", styled)
+        self.assertIn('.shadow-details[open] .metrics-toggle::before{content:"−"', styled)
+        self.assertIn('<details class="shadow-details" aria-label="TOP1 影子验证">', styled)
+        self.assertNotIn('<details class="shadow-details" open', styled)
         self.assertIn("<th>排名</th>", styled)
         self.assertNotIn("<th>Rank</th>", styled)
         self.assertIn(".report-nav{position:sticky;top:8px", styled)

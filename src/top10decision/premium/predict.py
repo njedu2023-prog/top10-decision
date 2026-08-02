@@ -1630,6 +1630,39 @@ def _normalize_pred_source(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _filter_standard_10pct_candidates(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only normal 10% main-board limit-up candidates."""
+    if df is None or df.empty or "ts_code" not in df.columns:
+        return df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+
+    out = df.copy()
+    codes = out["ts_code"].astype(str).str.strip().str.upper()
+    raw_codes = codes.str.extract(r"(\d{6})", expand=False).fillna("")
+    suffixes = codes.str.extract(r"\.([A-Z]{2})$", expand=False).fillna("")
+    main_board = raw_codes.str.startswith(
+        ("000", "001", "002", "003", "600", "601", "603", "605")
+    )
+    exchange_ok = suffixes.isin(("", "SH", "SZ"))
+
+    names = out.get("name", pd.Series("", index=out.index)).fillna("").astype(str).str.upper()
+    special_treatment = names.str.contains(r"(?:\*?ST|S\*ST|退)", regex=True, na=False)
+    if "is_st_like" in out.columns:
+        special_treatment |= pd.to_numeric(
+            out["is_st_like"], errors="coerce"
+        ).fillna(0).gt(0)
+
+    pct_col = _first_existing_col(out, "pct_chg", "pct_change", "涨跌幅")
+    pct_ok = pd.Series(True, index=out.index)
+    if pct_col is not None:
+        pct = pd.to_numeric(out[pct_col], errors="coerce")
+        pct_points = pct.where(pct.abs() > 1.5, pct * 100.0)
+        pct_ok = pct.isna() | pct_points.between(8.5, 11.5, inclusive="both")
+
+    filtered = out.loc[main_board & exchange_ok & ~special_treatment & pct_ok].copy()
+    filtered["premium_limit_regime"] = "MAIN_BOARD_10PCT"
+    return filtered.reset_index(drop=True)
+
+
 def _infer_trade_date(df: pd.DataFrame) -> str:
     if "trade_date" in df.columns:
         s = df["trade_date"].dropna().astype(str).map(_to_yyyymmdd)
@@ -2566,6 +2599,25 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     if "sector" not in df0.columns:
         df0["sector"] = pd.NA
 
+    source_candidate_count = int(len(df0))
+    df0 = _filter_standard_10pct_candidates(df0)
+    universe_filtered_count = source_candidate_count - int(len(df0))
+    if df0.empty:
+        reason = "no_standard_10pct_main_board_candidates"
+        _write_last_run(
+            cfg,
+            trade_date,
+            {
+                "ok": False,
+                "reason": reason,
+                "premium_universe": "MAIN_BOARD_10PCT",
+                "premium_universe_source_count": source_candidate_count,
+                "premium_universe_filtered_count": universe_filtered_count,
+                "premium_universe_candidate_count": 0,
+            },
+        )
+        return PredictResult(False, trade_date, None, True, reason)
+
     pack_status = detect_factor_packs(cfg, trade_date)
     r_t = ensure_daily_cached(cfg, trade_date)
     if not r_t.ok:
@@ -2662,6 +2714,27 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     feats = build_features_by_packs(cfg, trade_date, df0, pack_status.packs_used)
     if feats is not None and not feats.empty:
         df = df.merge(feats, on="ts_code", how="left")
+
+    before_feature_gate = int(len(df))
+    df = _filter_standard_10pct_candidates(df)
+    universe_filtered_count += before_feature_gate - int(len(df))
+    if df.empty:
+        reason = "no_standard_10pct_main_board_candidates_after_factor_gate"
+        _write_last_run(
+            cfg,
+            trade_date,
+            {
+                "ok": False,
+                "reason": reason,
+                "buy_date": buy_date,
+                "target_date": target_date,
+                "premium_universe": "MAIN_BOARD_10PCT",
+                "premium_universe_source_count": source_candidate_count,
+                "premium_universe_filtered_count": universe_filtered_count,
+                "premium_universe_candidate_count": 0,
+            },
+        )
+        return PredictResult(False, trade_date, target_date, True, reason)
 
     df, ehx_trace = _build_ehx_v1(cfg, df)
     df = _compute_quantile_returns(cfg, df)
@@ -2792,6 +2865,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
 
     out_cols = [
         "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "晋阶", "sector", "close_T",
+        "premium_limit_regime",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         *exec_cols,
         "t_limitup_prob", "T日涨停概率", "t_limitup_strength", "T日涨停强度",
@@ -2834,6 +2908,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
     verify_reason = "pending"
     verify_cols = [
         "rank", "trade_date", "base_date", "buy_date", "target_date", "ts_code", "name", "晋阶", "sector", "close_T",
+        "premium_limit_regime",
         "rank_group", "is_top10", "is_top20", "榜单分组",
         "T日建议买入方式", "T日可接受买入价",
         "T+1建议买入方式", "T+1可接受买入价", "T+1卖出计划", "T+2卖出计划",
@@ -2997,6 +3072,10 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             "verify_reason": verify_reason,
             "market_sentiment_reason": market_sentiment_reason,
             "calendar_contract": "strict_a_share_trade_calendar_only",
+            "premium_universe": "MAIN_BOARD_10PCT",
+            "premium_universe_source_count": source_candidate_count,
+            "premium_universe_filtered_count": universe_filtered_count,
+            "premium_universe_candidate_count": int(len(df)),
             "analysis_date_calendar_reason": d_calendar_reason,
             "buy_date_calendar_reason": buy_reason,
             "target_date_calendar_reason": td_reason,
