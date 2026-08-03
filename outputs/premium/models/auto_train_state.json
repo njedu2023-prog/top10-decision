@@ -1,8 +1,8 @@
 {
-  "checked_at_utc": "2026-08-02T17:36:28.859980+00:00",
+  "checked_at_utc": "2026-08-03T11:53:07.417565+00:00",
   "attempted_n_days": 36,
-  "matured_n_days": 36,
-  "new_n_days": 0,
+  "matured_n_days": 37,
+  "new_n_days": 1,
   "decision": "skip_no_increment",
   "trained": false,
   "reason": "validation_not_pass:days=11;samples=774;raw_mae=0.058429121927323135;plus_mae=0.06828939909679695;improve_rate=0.4354005167958656;raw_daily_ic=-0.04026964867392184;plus_daily_ic=0.06068664007662882;bias=0.03558736197539281",
