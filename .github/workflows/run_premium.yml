@@ -45,9 +45,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PYTHONDONTWRITEBYTECODE: "1"
 
+# Premium、Decision 与 V12 都会写入 main/data/market；必须跨 workflow 串行化。
 concurrency:
-  group: premium-follow-decision
-  cancel-in-progress: true
+  group: decision-auction-main-writer
+  cancel-in-progress: false
 
 jobs:
   premium:
