@@ -737,7 +737,7 @@
     <section class="panel">
       <div class="panel-head">
         <div>
-          <h2>2→3→4</h2>
+          <h2>2→3→4 · <span id="stageSignalDate">D：-</span></h2>
         </div>
         <span id="stageCount" class="count">0 条</span>
       </div>
@@ -802,7 +802,7 @@
     const CACHE_KEY = "decision-dashboard-v11-open0930-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "statusBand", "statusTitle", "brandDates",
-      "signalDate", "execDate", "exitDate", "top10BacktestCount", "top10BacktestContent", "top10BacktestNote", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "signalDate", "execDate", "exitDate", "top10BacktestCount", "top10BacktestContent", "top10BacktestNote", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageSignalDate", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "pathDiagnosticsCount", "pathDiagnosticsContent", "pathDiagnosticsNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -988,6 +988,7 @@
       els.signalDate.textContent = dateText(plan?.signal_date);
       els.execDate.textContent = dateText(plan?.exec_date);
       els.exitDate.textContent = dateText(plan?.exit_date);
+      els.stageSignalDate.textContent = `D：${dateText(plan?.signal_date)}`;
     }
 
     function renderMetrics(plan) {
