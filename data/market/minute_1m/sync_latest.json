@@ -1,6 +1,6 @@
 {
   "source": "tushare",
-  "trade_date": "20260803",
+  "trade_date": "20260804",
   "signal_date": "",
   "calendar_path": "data/market/trade_cal_sse.csv",
   "calendar_rows": 365,
@@ -10,9 +10,9 @@
   "minute_files_written": 80,
   "minute_sync_skipped_non_current_date": false,
   "auction_truth_source": "tushare:stk_auction_o",
-  "auction_truth_status": "existing_immutable_partition",
-  "auction_truth_rows": 120,
-  "auction_truth_path": "data/market/raw/2026/20260803/stk_auction_o.csv",
+  "auction_truth_status": "source_pending_or_empty",
+  "auction_truth_rows": 0,
+  "auction_truth_path": "",
   "failures": [],
   "token_persisted": false
 }
