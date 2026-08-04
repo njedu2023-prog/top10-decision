@@ -526,6 +526,14 @@
     details.top10-backtest-panel > summary.panel-head:hover::before { background: var(--brand-soft); }
     details.top10-backtest-panel > summary.panel-head > div { min-width: 0; margin-right: auto; }
     details.top10-backtest-panel[open] > summary.panel-head { border-bottom: 1px solid var(--line); }
+    details.observation-disclosure > summary.panel-head {
+      padding: 12px 16px;
+      font-size: inherit;
+      font-weight: inherit;
+      justify-content: flex-start;
+    }
+    details.observation-disclosure > summary.panel-head > div { min-width: 0; margin-right: auto; }
+    details.observation-disclosure[open] > summary.panel-head { border-bottom: 1px solid var(--line); }
     details.panel > summary {
       display: flex;
       align-items: center;
@@ -745,16 +753,16 @@
       <div id="stageContent"></div>
     </section>
 
-    <section class="panel">
-      <div class="panel-head">
+    <details class="panel observation-disclosure">
+      <summary class="panel-head">
         <div>
           <h2>观察真值与累计统计</h2>
         </div>
         <span id="observationUpdate" class="count">待验证</span>
-      </div>
+      </summary>
       <div id="observationMetrics" class="metrics panel-metrics"></div>
       <p id="observationNote" class="stats-note"></p>
-    </section>
+    </details>
 
     <details class="panel diagnostic-disclosure">
       <summary>
