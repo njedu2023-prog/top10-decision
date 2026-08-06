@@ -4,10 +4,10 @@
   "target_date": "20260806",
   "rows": 123,
   "sample_maturity": {
-    "PFILL_READY": 123
+    "FULLY_READY": 123
   },
   "label_ready_fill": 123,
-  "label_ready_ret": 0,
+  "label_ready_ret": 123,
   "y_fill_rate": 0.943089430894309,
   "quality_counts": {
     "strong_official_opening_auction": 116,
