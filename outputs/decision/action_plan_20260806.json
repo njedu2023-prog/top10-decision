@@ -12860,114 +12860,106 @@
       "up_count": 2789,
       "down_count": 2590,
       "flat_count": 154,
-      "limit_up_count": 100,
-      "classified_limit_up_count": 100,
+      "limit_up_count": 79,
+      "classified_limit_up_count": 79,
       "industry_top10": [
         {
           "rank": 1,
-          "industry": "化学制品",
-          "limit_up_count": 9,
-          "share": 0.09
+          "industry": "通信设备",
+          "limit_up_count": 8,
+          "share": 0.10126582278481013
         },
         {
           "rank": 2,
-          "industry": "煤炭开采",
-          "limit_up_count": 9,
-          "share": 0.09
+          "industry": "化学制品",
+          "limit_up_count": 7,
+          "share": 0.08860759493670886
         },
         {
           "rank": 3,
-          "industry": "通信设备",
-          "limit_up_count": 8,
-          "share": 0.08
+          "industry": "煤炭开采",
+          "limit_up_count": 7,
+          "share": 0.08860759493670886
         },
         {
           "rank": 4,
           "industry": "元件",
-          "limit_up_count": 7,
-          "share": 0.07
+          "limit_up_count": 6,
+          "share": 0.0759493670886076
         },
         {
           "rank": 5,
           "industry": "专用设备",
           "limit_up_count": 4,
-          "share": 0.04
+          "share": 0.05063291139240506
         },
         {
           "rank": 6,
-          "industry": "半导体",
+          "industry": "计算机设",
           "limit_up_count": 4,
-          "share": 0.04
+          "share": 0.05063291139240506
         },
         {
           "rank": 7,
-          "industry": "计算机设",
+          "industry": "软件开发",
           "limit_up_count": 4,
-          "share": 0.04
+          "share": 0.05063291139240506
         },
         {
           "rank": 8,
-          "industry": "软件开发",
-          "limit_up_count": 4,
-          "share": 0.04
+          "industry": "半导体",
+          "limit_up_count": 3,
+          "share": 0.0379746835443038
         },
         {
           "rank": 9,
-          "industry": "医药商业",
+          "industry": "电子化学",
           "limit_up_count": 3,
-          "share": 0.03
+          "share": 0.0379746835443038
         },
         {
           "rank": 10,
-          "industry": "消费电子",
-          "limit_up_count": 3,
-          "share": 0.03
+          "industry": "化学制药",
+          "limit_up_count": 2,
+          "share": 0.02531645569620253
         }
       ],
       "industry_counts": {
-        "化学制品": 9,
-        "煤炭开采": 9,
         "通信设备": 8,
-        "元件": 7,
+        "化学制品": 7,
+        "煤炭开采": 7,
+        "元件": 6,
         "专用设备": 4,
-        "半导体": 4,
         "计算机设": 4,
         "软件开发": 4,
-        "医药商业": 3,
-        "消费电子": 3,
+        "半导体": 3,
         "电子化学": 3,
-        "农产品加": 2,
         "化学制药": 2,
-        "化学原料": 2,
         "医疗服务": 2,
-        "小金属": 2,
+        "医药商业": 2,
         "水泥": 2,
         "游戏Ⅱ": 2,
         "电网设备": 2,
-        "通信服务": 2,
         "IT服务Ⅱ": 1,
-        "专业工程": 1,
         "光学光电": 1,
         "其他电源": 1,
         "军工电子": 1,
-        "包装印刷": 1,
+        "农产品加": 1,
+        "化学原料": 1,
         "塑料": 1,
         "多元金融": 1,
         "家居用品": 1,
-        "广告营销": 1,
-        "影视院线": 1,
+        "小金属": 1,
         "房地产开发": 1,
-        "汽车零部件": 1,
+        "消费电子": 1,
         "环境治理": 1,
         "电力": 1,
         "电机Ⅱ": 1,
-        "种植业": 1,
         "纺织制造": 1,
         "自动化设": 1,
         "装修装饰": 1,
-        "贵金属": 1,
+        "通信服务": 1,
         "通用设备": 1,
-        "金属新材": 1,
         "饰品": 1
       },
       "raw_close_available": true,
