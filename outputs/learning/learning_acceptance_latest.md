@@ -1,22 +1,22 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-08-06T15:34:24+00:00
-- current_run_date: 20260806
+- generated_at_utc: 2026-08-07T12:03:31+00:00
+- current_run_date: 20260807
 - overall_pass: FAIL
 
 ## P_fill
-- anchor_trade_date: 20260805
+- anchor_trade_date: 20260806
 - status: trained
-- loaded_trade_dates: 36
+- loaded_trade_dates: 37
 - missing_trade_dates: 1
 - selected_model: lgbm
 - selected_model_pass: PASS
 - acceptance_pass: PASS
 
 ## E_ret
-- anchor_trade_date: 20260804
+- anchor_trade_date: 20260805
 - status: trained
-- loaded_trade_dates: 31
+- loaded_trade_dates: 32
 - missing_trade_dates: 1
 - fs_v2_still_all_missing: []
 - selected_model: lgbm
