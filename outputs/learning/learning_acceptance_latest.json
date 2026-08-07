@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-08-07T12:03:31+00:00",
+  "generated_at_utc": "2026-08-07T14:22:05+00:00",
   "current_run_date": "20260807",
   "pfill": {
     "anchor_trade_date": "20260806",
@@ -10,10 +10,10 @@
       "lr": {
         "auc": 0.8578010065814944,
         "pr_auc": 0.9734818623766845,
-        "logloss": 0.40247594319194396,
-        "brier": 0.10980209314195925,
+        "logloss": 0.4024759405848203,
+        "brier": 0.10980209238156681,
         "baseline_brier_train_rate": 0.06803722128771186,
-        "brier_skill_vs_train_rate": -0.6138532859482093,
+        "brier_skill_vs_train_rate": -0.6138532747720851,
         "valid_dates": 8
       },
       "lgbm": {
@@ -48,16 +48,16 @@
     "missing_trade_dates": 1,
     "metrics_valid": {
       "lr": {
-        "mae": 0.05293004572992406,
-        "rmse": 0.06992679992312108,
-        "r2": -0.49527777830069675,
-        "corr": -0.18050193184486069,
+        "mae": 0.05293004572992405,
+        "rmse": 0.06992679992312105,
+        "r2": -0.49527777830069564,
+        "corr": -0.18050193184486002,
         "spearman_corr": -0.2359384082744195,
         "daily_spearman_corr_mean": -0.06805462442231174,
         "daily_spearman_valid_dates": 7,
         "directional_acc": 0.4308300395256917,
         "baseline_rmse_train_mean": 0.06113681001869136,
-        "rmse_skill_vs_train_mean": -0.14377573677367783
+        "rmse_skill_vs_train_mean": -0.1437757367736774
       },
       "lgbm": {
         "mae": 0.05575705978702765,
