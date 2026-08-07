@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-08-07T12:09:50+00:00",
+  "generated_at_utc": "2026-08-07T14:29:32+00:00",
   "model_version": "auction_v12_top10_trade_selector_oos_1",
   "history_dates": 715,
   "oos_dates": 544,
@@ -3765,10 +3765,10 @@
     "production_policy": {
       "max_positions": 1,
       "thresholds": {
-        "min_trade_score": -0.0054317978792633205,
-        "min_mean_return_lcb": -0.03230497695085449,
+        "min_trade_score": -0.005431797879289988,
+        "min_mean_return_lcb": -0.03230497695085767,
         "min_fill_probability": 0.0,
-        "max_big_loss_probability": 0.5656941089520814
+        "max_big_loss_probability": 0.5656941089516743
       },
       "ready": false,
       "checks": {
@@ -3862,8 +3862,8 @@
     "production_return_selection": {
       "selected": "ridge",
       "passed": false,
-      "relative_rmse_improvement": -0.011414388013599423,
-      "rmse": 0.08795427231505593,
+      "relative_rmse_improvement": -0.01141438801360038,
+      "rmse": 0.08795427231505601,
       "constant_rmse": 0.08696165820598678,
       "fit_rows": 916,
       "calibration_rows": 329,
@@ -3873,19 +3873,19 @@
       "fill": {
         "method": "identity",
         "rows": 825,
-        "held_out_brier": 0.3071708245795268,
+        "held_out_brier": 0.3071708245792599,
         "constant_brier": 0.3175542195060362,
         "beats_constant": true
       },
       "big_loss": {
         "method": "platt",
         "rows": 329,
-        "held_out_brier": 0.24765684278881095,
+        "held_out_brier": 0.24765684278881783,
         "constant_brier": 0.2503629119986001,
         "beats_constant": true
       }
     },
-    "production_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+    "production_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
     "promotion_checks": {
       "production_policy_ready": false,
       "return_model_chronological_skill": false,
@@ -3931,5 +3931,5 @@
   "model_quality_warnings": [
     "first_layer_probability_models_did_not_pass_brier_skill_gate"
   ],
-  "model_artifact_sha256": "d1fc4d11522d812751a94e4334123d62c2d5834b8e91456f468788f44a007dfa"
+  "model_artifact_sha256": "6227ffc4489dd0f086897b3389968b544ea11b787a345dacd66003c4caf4ed5e"
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_action_plan_v12_top10_trade_selector",
-  "generated_at_utc": "2026-08-07T14:20:25+00:00",
+  "generated_at_utc": "2026-08-07T14:30:52+00:00",
   "report_date": "20260810",
   "report_file": "decision_report_20260810.md",
   "signal_date": "20260807",
@@ -24,9 +24,9 @@
     "prediction_matches_report": true,
     "artifact_versions_match": true,
     "artifact_fingerprints_match": true,
-    "artifact_sha256": "d1fc4d11522d812751a94e4334123d62c2d5834b8e91456f468788f44a007dfa",
+    "artifact_sha256": "6227ffc4489dd0f086897b3389968b544ea11b787a345dacd66003c4caf4ed5e",
     "trade_selector_artifacts_match": false,
-    "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+    "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
     "trade_selector": {
       "schema_version": "decision_trade_selector_backtest_v1",
       "version": "trade_selector_v1_nested_oos_top10",
@@ -332,10 +332,10 @@
       "production_policy": {
         "max_positions": 1,
         "thresholds": {
-          "min_trade_score": -0.0054317978792633205,
-          "min_mean_return_lcb": -0.03230497695085449,
+          "min_trade_score": -0.005431797879289988,
+          "min_mean_return_lcb": -0.03230497695085767,
           "min_fill_probability": 0.0,
-          "max_big_loss_probability": 0.5656941089520814
+          "max_big_loss_probability": 0.5656941089516743
         },
         "ready": false,
         "checks": {
@@ -429,8 +429,8 @@
       "production_return_selection": {
         "selected": "ridge",
         "passed": false,
-        "relative_rmse_improvement": -0.011414388013599423,
-        "rmse": 0.08795427231505593,
+        "relative_rmse_improvement": -0.01141438801360038,
+        "rmse": 0.08795427231505601,
         "constant_rmse": 0.08696165820598678,
         "fit_rows": 916,
         "calibration_rows": 329,
@@ -440,19 +440,19 @@
         "fill": {
           "method": "identity",
           "rows": 825,
-          "held_out_brier": 0.3071708245795268,
+          "held_out_brier": 0.3071708245792599,
           "constant_brier": 0.3175542195060362,
           "beats_constant": true
         },
         "big_loss": {
           "method": "platt",
           "rows": 329,
-          "held_out_brier": 0.24765684278881095,
+          "held_out_brier": 0.24765684278881783,
           "constant_brier": 0.2503629119986001,
           "beats_constant": true
         }
       },
-      "production_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "production_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "promotion_checks": {
         "production_policy_ready": false,
         "return_model_chronological_skill": false,
@@ -1666,7 +1666,7 @@
         "max_big_loss_probability": 0.45,
         "min_mean_return_lcb": -0.05,
         "min_conservative_ev": 0.0,
-        "min_selection_score": -0.023150989673030767
+        "min_selection_score": -0.023150989673030704
       },
       "max_positions": 1,
       "diagnostics": {
@@ -1807,7 +1807,7 @@
         "path": "outputs/auction_v3/verification/verify_latest.csv",
         "metrics": {
           "status": "ok",
-          "generated_at_utc": "2026-08-07T12:11:27+00:00",
+          "generated_at_utc": "2026-08-07T14:30:51+00:00",
           "frozen_predictions": 1214,
           "selected_predictions": 0,
           "verified_trades": 0,
@@ -1852,7 +1852,7 @@
         "metrics": {
           "schema_version": "decision_observation_validation_v4_auction_truth",
           "status": "ok",
-          "generated_at_utc": "2026-08-07T12:11:27+00:00",
+          "generated_at_utc": "2026-08-07T14:30:51+00:00",
           "validation_start_exec_date": "20260721",
           "validation_mode": "market_at_open_proxy",
           "market_open_fill_assumption": true,
@@ -2464,7 +2464,7 @@
         "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
         "metrics": {
           "schema_version": "decision_manual_actual_v1",
-          "generated_at_utc": "2026-08-07T12:11:27+00:00",
+          "generated_at_utc": "2026-08-07T14:30:51+00:00",
           "truth_source": "manual_actual",
           "trades": 0,
           "win_rate": null,
@@ -3588,10 +3588,10 @@
       "production_policy": {
         "max_positions": 1,
         "thresholds": {
-          "min_trade_score": -0.0054317978792633205,
-          "min_mean_return_lcb": -0.03230497695085449,
+          "min_trade_score": -0.005431797879289988,
+          "min_mean_return_lcb": -0.03230497695085767,
           "min_fill_probability": 0.0,
-          "max_big_loss_probability": 0.5656941089520814
+          "max_big_loss_probability": 0.5656941089516743
         },
         "ready": false,
         "checks": {
@@ -3685,8 +3685,8 @@
       "production_return_selection": {
         "selected": "ridge",
         "passed": false,
-        "relative_rmse_improvement": -0.011414388013599423,
-        "rmse": 0.08795427231505593,
+        "relative_rmse_improvement": -0.01141438801360038,
+        "rmse": 0.08795427231505601,
         "constant_rmse": 0.08696165820598678,
         "fit_rows": 916,
         "calibration_rows": 329,
@@ -3696,19 +3696,19 @@
         "fill": {
           "method": "identity",
           "rows": 825,
-          "held_out_brier": 0.3071708245795268,
+          "held_out_brier": 0.3071708245792599,
           "constant_brier": 0.3175542195060362,
           "beats_constant": true
         },
         "big_loss": {
           "method": "platt",
           "rows": 329,
-          "held_out_brier": 0.24765684278881095,
+          "held_out_brier": 0.24765684278881783,
           "constant_brier": 0.2503629119986001,
           "beats_constant": true
         }
       },
-      "production_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "production_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "promotion_checks": {
         "production_policy_ready": false,
         "return_model_chronological_skill": false,
@@ -3810,7 +3810,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "DIVERGENCE_RESEAL",
       "path_label": "分歧回封",
@@ -3898,7 +3898,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -3926,7 +3926,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "STABLE_STRONG",
       "path_label": "持续强势",
@@ -4014,7 +4014,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -4042,7 +4042,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "shadow_policy_only",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -4130,7 +4130,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -4158,7 +4158,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -4246,7 +4246,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -4274,7 +4274,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -4362,7 +4362,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -4390,7 +4390,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "DIVERGENCE_RESEAL",
       "path_label": "分歧回封",
@@ -4478,7 +4478,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -4506,7 +4506,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -4594,7 +4594,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -4622,7 +4622,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "WEAK_TO_STRONG",
       "path_label": "弱转强",
@@ -4710,7 +4710,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-08-07T12:11:27+00:00",
+      "truth_generated_at_utc": "2026-08-07T14:30:51+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -5244,7 +5244,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "DIVERGENCE_RESEAL",
       "path_label": "分歧回封",
@@ -5580,7 +5580,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "DIVERGENCE_RESEAL",
       "path_label": "分歧回封",
@@ -8016,7 +8016,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "STABLE_STRONG",
       "path_label": "持续强势",
@@ -8436,7 +8436,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -8688,7 +8688,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -8940,7 +8940,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -9444,7 +9444,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "shadow_policy_only",
       "path_label_code": "ACCELERATION_CONSENSUS",
       "path_label": "加速一致",
@@ -9612,7 +9612,7 @@
       "trade_selector_policy_ready": 0,
       "trade_selector_promoted": 0,
       "trade_selector_version": "trade_selector_v1_nested_oos_top10",
-      "trade_selector_artifact_sha256": "6d477794ef8954ea3db736cee753d18f029bf7859987add38dd6d2f53cc478e7",
+      "trade_selector_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
       "trade_model_reason": "below_learned_policy",
       "path_label_code": "WEAK_TO_STRONG",
       "path_label": "弱转强",
@@ -9818,7 +9818,7 @@
     "premarket_valid_rows": 8,
     "retrospective_rows": 0,
     "pending_rows": 8,
-    "generated_at_utc": "2026-08-07T12:11:27+00:00",
+    "generated_at_utc": "2026-08-07T14:30:51+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -9828,7 +9828,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-08-07T12:11:27+00:00",
+    "generated_at_utc": "2026-08-07T14:30:51+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
