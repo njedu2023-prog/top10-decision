@@ -1,8 +1,8 @@
 trade_date: 20260805
 model_version: premium_v4_a_share_d_t_t1
-run_id: gh_31316310787
-commit_sha: 3059da6c2623
-created_at_utc: 2026-08-09T13:51:18Z
+run_id: gh_31319535745
+commit_sha: 25301d07fdb9
+created_at_utc: 2026-08-09T15:04:34Z
 trained: False
 reason: validation_not_pass:days=13;samples=1047;raw_mae=0.058536928823241026;plus_mae=0.07754334242866381;improve_rate=0.32855778414517667;raw_daily_ic=-0.06255346142105712;plus_daily_ic=-0.01679386216233677;bias=0.05274047367979797
 n_samples: 2049
@@ -34,6 +34,7 @@ limitup_trainset_path: /home/runner/work/top10-decision/top10-decision/outputs/p
 limitup_feature_n: 65
 limitup_train_end_date: 20260625
 limitup_valid_start_date: 20260630
-limitup_gate_version: premium_target_gate_v2
+limitup_gate_version: premium_target_gate_v3_stable_artifact
+limitup_artifact_version: 2
 limitup_target_gate_status: {'t_limit': 'PROVISIONAL', 't_touch': 'PROVISIONAL', 't1': 'SHADOW', 't_return': 'PROVISIONAL', 't1_return': 'SHADOW'}
 limitup_target_probability_status: {'t_limit': 'SHADOW', 't_touch': 'SHADOW', 't1': 'SHADOW'}

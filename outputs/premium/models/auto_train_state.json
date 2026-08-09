@@ -1,9 +1,9 @@
 {
-  "checked_at_utc": "2026-08-09T13:39:22.668949+00:00",
+  "checked_at_utc": "2026-08-09T14:52:22.169854+00:00",
   "attempted_n_days": 42,
   "matured_n_days": 42,
-  "new_n_days": 1,
-  "gate_version": "premium_target_gate_v2",
+  "new_n_days": 0,
+  "gate_version": "premium_target_gate_v3_stable_artifact",
   "contract_upgrade": true,
   "decision": "trained",
   "trained": false,

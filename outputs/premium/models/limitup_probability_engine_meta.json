@@ -6,7 +6,8 @@
   "promoted": true,
   "model_can_rank": true,
   "gate_reason": "rank_enabled_provisional:status=PROVISIONAL;days=28;samples=1703;validation_days=28;validation_samples=1703;t_limit_auc=0.587935561444837;t_limit_brier_skill=-0.0764054436866799;t_limit_top10_lift=0.08238860182618109;t_limit_daily_ic=0.12700035167718096;t_limit_positive_ic_rate=0.8214285714285714",
-  "gate_version": "premium_target_gate_v2",
+  "gate_version": "premium_target_gate_v3_stable_artifact",
+  "artifact_version": 2,
   "target_gate_status": {
     "t_limit": "PROVISIONAL",
     "t_touch": "PROVISIONAL",
@@ -514,7 +515,7 @@
       "skip premium_verify_20260807.csv: no verified T/T+1 rows"
     ]
   },
-  "created_at_utc": "2026-08-09T13:51:18Z",
-  "commit_sha": "3059da6c2623",
-  "run_id": "gh_31316310787"
+  "created_at_utc": "2026-08-09T15:04:34Z",
+  "commit_sha": "25301d07fdb9",
+  "run_id": "gh_31319535745"
 }
