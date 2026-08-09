@@ -93,7 +93,11 @@ def main() -> int:
         args.signal_date,
         force_prediction=args.force_prediction,
     )
-    runtime_audit = validate_runtime_artifacts(root, manifest)
+    runtime_audit = validate_runtime_artifacts(
+        root,
+        manifest,
+        check_action_plan=False,
+    )
     print(
         json.dumps(
             {

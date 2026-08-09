@@ -156,6 +156,12 @@ class DecisionModelFreezeTest(unittest.TestCase):
             self.root / "outputs/decision/action_plan_latest.json",
             action_plan,
         )
+        audit = validate_runtime_artifacts(
+            self.root,
+            self.manifest,
+            check_action_plan=False,
+        )
+        self.assertEqual(audit["action_plan_checks"], {})
         with self.assertRaises(DecisionModelFreezeError):
             validate_runtime_artifacts(self.root, self.manifest)
 

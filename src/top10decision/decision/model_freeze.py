@@ -168,6 +168,8 @@ def validate_pinned_files(
 def validate_runtime_artifacts(
     root: Path | str,
     manifest: dict[str, Any],
+    *,
+    check_action_plan: bool = True,
 ) -> dict[str, Any]:
     if not model_freeze_active(manifest):
         return {"active": False, "validated": True}
@@ -247,7 +249,7 @@ def validate_runtime_artifacts(
 
     action_plan_path = root_path / "outputs/decision/action_plan_latest.json"
     action_plan_checks: dict[str, bool] = {}
-    if action_plan_path.is_file():
+    if check_action_plan and action_plan_path.is_file():
         action_plan = _read_json(action_plan_path)
         action_model = action_plan.get("model", {}) or {}
         action_selector = action_model.get("trade_selector", {}) or {}
