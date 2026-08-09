@@ -1,5 +1,5 @@
 {
-  "checked_at_utc": "2026-08-09T16:25:18.524686+00:00",
+  "checked_at_utc": "2026-08-09T17:13:14.590368+00:00",
   "attempted_n_days": 92,
   "attempted_t_days": 92,
   "attempted_t1_days": 41,
@@ -17,10 +17,11 @@
   "truth_snapshot_version": 2,
   "truth_snapshot_upgrade": false,
   "gate_version": "premium_target_gate_v4_walkforward_provenance",
-  "contract_upgrade": true,
-  "decision": "trained",
+  "contract_upgrade": false,
+  "decision": "skip_no_increment",
   "trained": false,
   "reason": "validation_not_pass:days=13;samples=1047;raw_mae=0.058536928823241026;plus_mae=0.07754334242866381;improve_rate=0.32855778414517667;raw_daily_ic=-0.06255346142105712;plus_daily_ic=-0.01679386216233677;bias=0.05274047367979797",
   "n_samples": 2049,
-  "n_days": 41
+  "n_days": 41,
+  "previous_n_days": 92
 }
