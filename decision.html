@@ -1228,6 +1228,20 @@
 
     function renderStageWatchlist(plan) {
       const rows = Array.isArray(plan?.stage_watchlist) ? plan.stage_watchlist : [];
+      const displayRows = [...rows].sort((left, right) => {
+        const leftPromotionRank = finiteNumber(left?.promotion_rank);
+        const rightPromotionRank = finiteNumber(right?.promotion_rank);
+        const leftRank = leftPromotionRank != null && leftPromotionRank > 0
+          ? leftPromotionRank
+          : Number.POSITIVE_INFINITY;
+        const rightRank = rightPromotionRank != null && rightPromotionRank > 0
+          ? rightPromotionRank
+          : Number.POSITIVE_INFINITY;
+        if (leftRank !== rightRank) return leftRank - rightRank;
+        const leftObservationRank = finiteNumber(left?.stage_watch_rank) ?? Number.POSITIVE_INFINITY;
+        const rightObservationRank = finiteNumber(right?.stage_watch_rank) ?? Number.POSITIVE_INFINITY;
+        return leftObservationRank - rightObservationRank;
+      });
       const total = Number(plan?.stage_watch_eligible_count ?? rows.length);
       const limit = Number(plan?.stage_watch_display_limit ?? 10);
       els.stageCount.textContent = `共 ${total} 只，仅展示前 ${Math.min(limit, rows.length)} 只`;
@@ -1240,7 +1254,7 @@
         "T开盘", "开盘较限价", "T收盘", "T观察收益", "T晋级结果", "T+1验证状态",
         "T+1净收益", "晋级概率", "大跌概率", "结论"
       ];
-      const body = rows.map(row => `<tr>
+      const body = displayRows.map(row => `<tr>
         <td>${escapeHtml(row.stage_watch_rank ?? "-")}</td>
         <td><span class="truth-badge">${escapeHtml(row.promotion_rank || "-")}</span></td>
         <td><span class="truth-badge">${escapeHtml(row.trade_rank || "-")}</span></td>
