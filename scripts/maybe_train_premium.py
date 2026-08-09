@@ -51,17 +51,27 @@ _T1_TRUTH_COLS = [
     "t1_high_ret",
 ]
 
+TRUTH_SNAPSHOT_VERSION = 2
+
 _TRUTH_FINGERPRINT_COLS = [
     "trade_date",
     "d_analysis_trade_date",
+    "d_trade_date",
     "buy_date",
     "t_trade_date",
     "target_date",
     "t1_trade_date",
     "ts_code",
+    "t_limitup_verify_ready",
+    "t_verify_ready",
+    "t1_verify_ready",
+    "label_matured",
     "t_up_actual",
+    "t_up_hit",
     "t_limitup_actual",
+    "t_limitup_hit",
     "t_touch_limitup_actual",
+    "t_touch_limitup",
     "t_high_profit_hit",
     "t_open_ret",
     "t_intraday_ret",
@@ -90,19 +100,23 @@ def _truth_snapshot(out_root: Path) -> Dict[str, object]:
     digest = hashlib.sha256()
     fingerprint_files = 0
     fingerprint_rows = 0
-    for path in sorted(out_root.glob("premium_verify_*.csv")):
+    source_paths = list(sorted(out_root.glob("premium_verify_*.csv")))
+    training_path = out_root / "learning" / "limitup_probability_training_samples.csv"
+    if training_path.exists():
+        source_paths.insert(0, training_path)
+    for path in source_paths:
         try:
             df = pd.read_csv(path, encoding="utf-8-sig")
         except Exception:
             continue
         if df.empty:
             continue
-        t_ready = _ready_mask(df, ["t_limitup_verify_ready"])
+        t_ready = _ready_mask(df, ["t_limitup_verify_ready", "t_verify_ready"])
         if not t_ready.any():
-            t_ready = pd.to_numeric(
-                df.get("t_limitup_actual", pd.Series(np.nan, index=df.index)),
-                errors="coerce",
-            ).notna()
+            t_ready = pd.Series(False, index=df.index, dtype=bool)
+            for col in ("t_limitup_actual", "t_limitup_hit"):
+                if col in df.columns:
+                    t_ready = t_ready | pd.to_numeric(df[col], errors="coerce").notna()
         t1_ready = _ready_mask(df, ["t1_verify_ready", "label_matured"])
         if not t1_ready.any():
             t1_ready = pd.Series(False, index=df.index, dtype=bool)
@@ -111,15 +125,30 @@ def _truth_snapshot(out_root: Path) -> Dict[str, object]:
                     t1_ready = t1_ready | pd.to_numeric(df[col], errors="coerce").notna()
         if not t_ready.any() and not t1_ready.any():
             continue
-        d_col = "trade_date" if "trade_date" in df.columns else "d_analysis_trade_date"
-        t_col = "buy_date" if "buy_date" in df.columns else "t_trade_date"
+        d_col = next(
+            (name for name in ("d_trade_date", "trade_date", "d_analysis_trade_date") if name in df.columns),
+            "",
+        )
+        t_col = next(
+            (name for name in ("t_trade_date", "buy_date") if name in df.columns),
+            "",
+        )
         if not all(c in df.columns for c in (d_col, t_col)):
             continue
         d = df[d_col].map(_date_text)
         t = df[t_col].map(_date_text)
         valid_calendar = d.lt(t) & d.str.len().eq(8) & t.str.len().eq(8)
         t_valid = t_ready & valid_calendar
-        t1_valid = t1_ready & valid_calendar
+        t1_col = next(
+            (name for name in ("t1_trade_date", "target_date") if name in df.columns),
+            "",
+        )
+        if t1_col:
+            t1 = df[t1_col].map(_date_text)
+            valid_t1_calendar = valid_calendar & t.lt(t1) & t1.str.len().eq(8)
+        else:
+            valid_t1_calendar = valid_calendar
+        t1_valid = t1_ready & valid_t1_calendar
         t_days.update(d.loc[t_valid].tolist())
         t1_days.update(d.loc[t1_valid].tolist())
 
@@ -139,6 +168,7 @@ def _truth_snapshot(out_root: Path) -> Dict[str, object]:
             fingerprint_files += 1
             fingerprint_rows += int(len(canonical))
     return {
+        "truth_snapshot_version": TRUTH_SNAPSHOT_VERSION,
         "t_days": t_days,
         "t1_days": t1_days,
         "truth_fingerprint": digest.hexdigest(),
@@ -209,15 +239,22 @@ def main() -> int:
         int(meta.get("n_days", 0) or 0),
         int(state.get("attempted_t_days", state.get("attempted_n_days", 0)) or 0),
     )
-    previous_t1_days = int(
-        state.get(
-            "attempted_t1_days",
-            state.get("training_baseline_t1_days", current_t1_days),
+    snapshot_upgrade = int(state.get("truth_snapshot_version", 0) or 0) != TRUTH_SNAPSHOT_VERSION
+    previous_t1_days = (
+        current_t1_days
+        if snapshot_upgrade
+        else int(
+            state.get(
+                "attempted_t1_days",
+                state.get("training_baseline_t1_days", current_t1_days),
+            )
+            or 0
         )
-        or 0
     )
     truth_fingerprint = str(snapshot["truth_fingerprint"])
-    previous_fingerprint = str(state.get("truth_fingerprint", "") or "")
+    previous_fingerprint = (
+        "" if snapshot_upgrade else str(state.get("truth_fingerprint", "") or "")
+    )
     has_candidate = (model_dir / "limitup_probability_engine_candidate.joblib").exists()
     contract_upgrade = str(meta.get("gate_version", "")) != GATE_VERSION
     should_train, truth_revision, new_days, new_t1_days = _training_decision(
@@ -239,7 +276,8 @@ def main() -> int:
             f"new_t_days={new_days} t1_days={current_t1_days} "
             f"previous_t1_days={previous_t1_days} new_t1_days={new_t1_days} "
             f"threshold={args.min_new_days} truth_revision={truth_revision} "
-            f"contract_upgrade={contract_upgrade} should_train={should_train}"
+            f"snapshot_upgrade={snapshot_upgrade} contract_upgrade={contract_upgrade} "
+            f"should_train={should_train}"
         )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -259,6 +297,8 @@ def main() -> int:
             "truth_fingerprint_files": int(snapshot["fingerprint_files"]),
             "truth_fingerprint_rows": int(snapshot["fingerprint_rows"]),
             "truth_revision": truth_revision,
+            "truth_snapshot_version": TRUTH_SNAPSHOT_VERSION,
+            "truth_snapshot_upgrade": snapshot_upgrade,
             "gate_version": GATE_VERSION,
             "contract_upgrade": contract_upgrade,
             "decision": "skip_no_increment",
@@ -266,22 +306,27 @@ def main() -> int:
         return 0
 
     result = train_models(cfg)
+    post_snapshot = _truth_snapshot(out_root)
+    post_t_days = len(post_snapshot["t_days"])
+    post_t1_days = len(post_snapshot["t1_days"])
     _write_state(state_path, {
         "checked_at_utc": now,
-        "attempted_n_days": current_days,
-        "attempted_t_days": current_days,
-        "attempted_t1_days": current_t1_days,
-        "training_baseline_t1_days": current_t1_days,
-        "matured_n_days": current_days,
-        "matured_t_days": current_days,
-        "matured_t1_days": current_t1_days,
+        "attempted_n_days": post_t_days,
+        "attempted_t_days": post_t_days,
+        "attempted_t1_days": post_t1_days,
+        "training_baseline_t1_days": post_t1_days,
+        "matured_n_days": post_t_days,
+        "matured_t_days": post_t_days,
+        "matured_t1_days": post_t1_days,
         "new_n_days": new_days,
         "new_t_days": new_days,
         "new_t1_days": new_t1_days,
-        "truth_fingerprint": truth_fingerprint,
-        "truth_fingerprint_files": int(snapshot["fingerprint_files"]),
-        "truth_fingerprint_rows": int(snapshot["fingerprint_rows"]),
+        "truth_fingerprint": str(post_snapshot["truth_fingerprint"]),
+        "truth_fingerprint_files": int(post_snapshot["fingerprint_files"]),
+        "truth_fingerprint_rows": int(post_snapshot["fingerprint_rows"]),
         "truth_revision": truth_revision,
+        "truth_snapshot_version": TRUTH_SNAPSHOT_VERSION,
+        "truth_snapshot_upgrade": snapshot_upgrade,
         "gate_version": GATE_VERSION,
         "contract_upgrade": contract_upgrade,
         "decision": "trained",

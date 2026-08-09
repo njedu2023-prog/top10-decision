@@ -899,6 +899,41 @@ class PremiumSafetyTests(unittest.TestCase):
             corrected = module._truth_snapshot(root)
             self.assertNotEqual(matured["truth_fingerprint"], corrected["truth_fingerprint"])
 
+    def test_auto_train_snapshot_unions_frozen_training_and_new_verify_days(self):
+        module = _load_maybe_train_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            learning = root / "learning"
+            learning.mkdir()
+            pd.DataFrame({
+                "d_trade_date": ["20260701", "20260702"],
+                "t_trade_date": ["20260702", "20260703"],
+                "t1_trade_date": ["20260703", "20260706"],
+                "ts_code": ["600001.SH", "600002.SH"],
+                "t_verify_ready": [1, 1],
+                "label_matured": [1, 1],
+                "t_limitup_hit": [1, 0],
+                "t1_accept_hit": [1, 0],
+                "t1_close_ret": [0.02, -0.01],
+            }).to_csv(learning / "limitup_probability_training_samples.csv", index=False)
+            pd.DataFrame({
+                "trade_date": ["20260703"],
+                "buy_date": ["20260706"],
+                "target_date": ["20260707"],
+                "ts_code": ["600003.SH"],
+                "t_limitup_verify_ready": [1],
+                "t1_verify_ready": [1],
+                "t_limitup_actual": [1],
+                "t1_accept_hit": [1],
+                "t1_close_ret": [0.03],
+            }).to_csv(root / "premium_verify_20260703.csv", index=False)
+
+            snapshot = module._truth_snapshot(root)
+            self.assertEqual(snapshot["truth_snapshot_version"], 2)
+            self.assertEqual(snapshot["t_days"], {"20260701", "20260702", "20260703"})
+            self.assertEqual(snapshot["t1_days"], {"20260701", "20260702", "20260703"})
+            self.assertEqual(snapshot["fingerprint_files"], 2)
+
     def test_auto_train_skips_when_truth_is_unchanged(self):
         module = _load_maybe_train_module()
         should_train, truth_revision, new_t_days, new_t1_days = module._training_decision(

@@ -287,6 +287,8 @@ jobs:
           truth_fingerprint = str(auto_train_state.get("truth_fingerprint", ""))
           if len(truth_fingerprint) != 64:
               raise SystemExit("Premium auto-train truth fingerprint missing")
+          if int(auto_train_state.get("truth_snapshot_version", 0) or 0) < 2:
+              raise SystemExit("Premium auto-train truth snapshot contract is stale")
 
           for verify_path in sorted(Path("outputs/premium").glob("premium_verify_*.csv")):
               with verify_path.open("r", encoding="utf-8-sig", newline="") as handle:
