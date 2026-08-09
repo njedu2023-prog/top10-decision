@@ -1,0 +1,63 @@
+{
+  "schema_version": "decision_model_freeze_v1",
+  "active": true,
+  "freeze_id": "decision_v12_d20260807_history20260805_20260809",
+  "frozen_at_utc": "2026-08-09T12:39:05Z",
+  "frozen_from_main_commit": "bedce99595b2d7811cb260e9240bd365bcd81ff9",
+  "scope": "Decision subsystem only; premium is excluded",
+  "freeze_reason": "Hold the current production ranking and no-trade policy constant while forward shadow evidence accumulates.",
+  "training_cutoff_signal_date": "20260805",
+  "production": {
+    "model_version": "auction_v12_top10_trade_selector_oos_1",
+    "model_artifact_sha256": "cee3f4145e4f8b447e464be3c3d6f612fb02238ceeee5d339b91d2d84097f71d",
+    "promoted": false,
+    "trade_selector_version": "trade_selector_v2_nested_oos_top10_promotion_rank",
+    "trade_selector_artifact_sha256": "93459d3ccf51a8f1bab6bbc9910a7e17ccdcbbe6d02701ccc65a413ca2ffc25c",
+    "trade_selector_promoted": false,
+    "formal_status": "NO_TRADE_MODEL_NOT_PROMOTED",
+    "formal_buy_count": 0
+  },
+  "learning": {
+    "pfill_anchor_trade_date": "20260806",
+    "eret_anchor_trade_date": "20260805",
+    "allow_truth_and_trainset_updates": true,
+    "allow_production_model_replacement": false,
+    "allow_post_learning_decision_refresh": false
+  },
+  "runtime": {
+    "allow_daily_prediction": true,
+    "allow_shadow_validation": true,
+    "allow_truth_updates": true,
+    "allow_report_and_frontend_updates": true
+  },
+  "release_contract": {
+    "method": "Set active=false in a reviewed manifest update before changing pinned production files or retraining production models.",
+    "automatic_unfreeze": false
+  },
+  "pinned_files": {
+    ".github/workflows/run_auction_v3.yml": "fd9cf2b20b8ffef9ba3898fa6dd838c1a3b5854b9a7411b61653dcfbcbb655f1",
+    ".github/workflows/run_decision_daily.yml": "0c53fc69d25f097063557e0d48759d13b4cdd4134585e50bdcb7584af93fad2e",
+    "models/eret_lgbm.joblib": "81c26cb342059026719dba000fe8176f61a1ef7470f7fc156ff4a695d2c1ac1d",
+    "models/eret_lgbm_20260805.joblib": "81c26cb342059026719dba000fe8176f61a1ef7470f7fc156ff4a695d2c1ac1d",
+    "models/eret_lr.joblib": "6809668f57b32943e3ebfd2a0140b8419a1a1d9710018c928dd723f02cf8f05d",
+    "models/eret_lr_20260805.joblib": "6809668f57b32943e3ebfd2a0140b8419a1a1d9710018c928dd723f02cf8f05d",
+    "models/eret_meta.json": "6e3857ed473f72b7a581a411ea895bd8d1d89d7f79d157e9cc5aa617ee376d6f",
+    "models/eret_meta_20260805.json": "6e3857ed473f72b7a581a411ea895bd8d1d89d7f79d157e9cc5aa617ee376d6f",
+    "models/pfill_lgbm.joblib": "c810c6f39e4104a0363f5a58f1733b9a0ea1a64eec435dc18f531cd161280654",
+    "models/pfill_lgbm_20260806.joblib": "c810c6f39e4104a0363f5a58f1733b9a0ea1a64eec435dc18f531cd161280654",
+    "models/pfill_lr.joblib": "377ebd6db531f8a86a0eb1f32bc9a4d9db64d78636102c7b6413d984ed196f69",
+    "models/pfill_lr_20260806.joblib": "377ebd6db531f8a86a0eb1f32bc9a4d9db64d78636102c7b6413d984ed196f69",
+    "models/pfill_meta.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
+    "models/pfill_meta_20260806.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
+    "scripts/run_auction_v3.py": "a7de6dd0612b1a649674fa6c1cdd9d8b6fbb63f91fbf52812f9ce60a605b6ab4",
+    "scripts/validate_decision_model_freeze.py": "2cf9c9a305d4e6fbe8dcc69c6676235fff313cabc8bb41bdb839dadfe8f6c90b",
+    "src/top10decision/auction_v3/calibration.py": "06890dee4d9c7a6cd007ebdda823b4907774ba372ebe37f3072432335fce79a9",
+    "src/top10decision/auction_v3/config.py": "dec603dae0b17b0a1454fc02eb940a577ed2c9d37204da26e96af288632e3281",
+    "src/top10decision/auction_v3/engine.py": "c55a32757d17aa35b479182da3f13a7093a3835df898a2888e576df81ba12111",
+    "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",
+    "src/top10decision/decision/model_freeze.py": "b669ad2386d5a313475bdf11cc8b15fb89772a9a75b38c022f1389d6065cd8ca",
+    "src/top10decision/decision/trade_selector.py": "f4e12b89645adb77327784b6c1444f1702018f4f7f285cc1203282518e9e29dd",
+    "src/top10decision/engines/eret_engine.py": "346bd65fa0c416c2e8876f92552b66d29f0f4cfe411fb408e95bfb355536c071",
+    "src/top10decision/engines/pfill_engine.py": "ec38a49b51bed7ae3001393ee0b8c6b6fa04bf0a3db0e633cf2bf335c7d91e84"
+  }
+}

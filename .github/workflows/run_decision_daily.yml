@@ -58,6 +58,11 @@ jobs:
           mkdir -p outputs/decision outputs/learning
           mkdir -p models
 
+      - name: Validate frozen Decision production model
+        run: |
+          set -e
+          python scripts/validate_decision_model_freeze.py
+
       - name: Sync pred source snapshot
         env:
           TRADE_DATE: ${{ inputs.trade_date }}
@@ -274,6 +279,35 @@ jobs:
           mkdir -p data/market
           mkdir -p outputs/learning
           mkdir -p models
+
+      - name: Resolve Decision production freeze
+        id: decision_model_freeze
+        run: |
+          set -e
+          python scripts/validate_decision_model_freeze.py
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from top10decision.decision.model_freeze import (
+              load_model_freeze,
+              model_freeze_active,
+          )
+
+          manifest = load_model_freeze(Path('.'), required=True)
+          active = model_freeze_active(manifest)
+          learning = manifest.get('learning', {}) or {}
+          updates_allowed = bool(
+              not active
+              or learning.get('allow_production_model_replacement') is True
+          )
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+              fh.write(f"active={'true' if active else 'false'}\n")
+              fh.write(
+                  f"model_updates_allowed={'true' if updates_allowed else 'false'}\n"
+              )
+          print(f'[model-freeze] active={active}')
+          print(f'[model-freeze] model_updates_allowed={updates_allowed}')
+          PY
 
       - name: Resolve current run date
         id: resolve_current_run_date
@@ -580,7 +614,7 @@ jobs:
           python scripts/build_pfill_trainset.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}"
 
       - name: Train P_fill models
-        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true'
+        if: steps.resolve_pfill_learning_td.outputs.has_trade_date == 'true' && steps.decision_model_freeze.outputs.model_updates_allowed == 'true'
         run: |
           set -e
           python scripts/train_pfill.py --trade-date "${{ steps.resolve_pfill_learning_td.outputs.trade_date }}" --window-size 0 --min-independent-dates 20
@@ -654,7 +688,7 @@ jobs:
           python scripts/build_eret_trainset.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}"
 
       - name: Train E_ret models
-        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true'
+        if: steps.resolve_eret_learning_td.outputs.has_trade_date == 'true' && steps.decision_model_freeze.outputs.model_updates_allowed == 'true'
         run: |
           set -e
           python scripts/train_eret.py --trade-date "${{ steps.resolve_eret_learning_td.outputs.trade_date }}" --window-size 0 --min-independent-dates 20
@@ -910,6 +944,10 @@ jobs:
           from pathlib import Path
           import json
           import os
+          from top10decision.decision.model_freeze import (
+              load_model_freeze,
+              model_freeze_active,
+          )
 
           path = Path('outputs/learning/learning_acceptance_latest.json')
           if not path.exists():
@@ -920,6 +958,17 @@ jobs:
 
           payload = json.loads(path.read_text(encoding='utf-8'))
           passed = payload.get('overall_pass') is True
+          freeze = load_model_freeze(Path('.'), required=True)
+          learning = freeze.get('learning', {}) or {}
+          if (
+              model_freeze_active(freeze)
+              and learning.get('allow_post_learning_decision_refresh') is not True
+          ):
+              passed = False
+              print(
+                  '[learning-gate] production model frozen; '
+                  'keep learning evidence but skip Decision model refresh'
+              )
           eret = payload.get('eret', {}) or {}
           print(f"[learning-gate] overall_pass={passed}")
           print(f"[learning-gate] eret_selected_model={eret.get('selected_model')} pass={eret.get('selected_model_pass')}")
