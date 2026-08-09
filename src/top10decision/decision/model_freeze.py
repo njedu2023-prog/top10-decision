@@ -208,8 +208,41 @@ def validate_runtime_artifacts(
     }
     failed = [name for name, passed in checks.items() if not passed]
     if failed:
+        runtime_values = {
+            "model_version": str(model_meta.get("model_version") or ""),
+            "model_artifact_sha256": str(
+                model_meta.get("model_artifact_sha256") or ""
+            ),
+            "model_promoted": model_meta.get("promoted") is True,
+            "trade_selector_version": str(selector.get("version") or ""),
+            "trade_selector_artifact_sha256": str(
+                selector.get("production_artifact_sha256") or ""
+            ),
+            "trade_selector_promoted": selector.get("promoted") is True,
+        }
+        expected_values = {
+            "model_version": str(expected.get("model_version") or ""),
+            "model_artifact_sha256": str(
+                expected.get("model_artifact_sha256") or ""
+            ),
+            "model_promoted": expected.get("promoted") is True,
+            "trade_selector_version": str(
+                expected.get("trade_selector_version") or ""
+            ),
+            "trade_selector_artifact_sha256": str(
+                expected.get("trade_selector_artifact_sha256") or ""
+            ),
+            "trade_selector_promoted": (
+                expected.get("trade_selector_promoted") is True
+            ),
+        }
         raise DecisionModelFreezeError(
-            "frozen runtime artifact drift detected: " + ", ".join(failed)
+            "frozen runtime artifact drift detected: "
+            + ", ".join(failed)
+            + "; expected="
+            + json.dumps(expected_values, ensure_ascii=True, sort_keys=True)
+            + "; actual="
+            + json.dumps(runtime_values, ensure_ascii=True, sort_keys=True)
         )
 
     action_plan_path = root_path / "outputs/decision/action_plan_latest.json"
