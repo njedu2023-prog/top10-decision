@@ -9,6 +9,8 @@
   "label_ready_fill": 94,
   "label_ready_ret": 94,
   "y_fill_rate": 0.925531914893617,
+  "public_market_buyable_rate": 0.925531914893617,
+  "actual_order_fill_rate": null,
   "quality_counts": {
     "strong_official_opening_auction": 87,
     "strong_opening_auction_limit_up_unconfirmed": 7
@@ -18,6 +20,7 @@
   "broker_connected": false,
   "actual_fill_observed": false,
   "y_fill_semantics": "public_market_fillability_proxy; manual actual fills require explicit feedback",
+  "actual_order_fill_semantics": "unavailable_without_broker_or_manual_order_feedback",
   "universe_eligibility": {
     "rule": "a_share_price_limit_le_10_v2",
     "max_allowed_limit_pct": 10.0,

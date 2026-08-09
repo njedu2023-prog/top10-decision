@@ -2,7 +2,7 @@
   "trade_date": "20260806",
   "rows": 70,
   "fill_truth_ready_only": true,
-  "label_version": "pfill_truth_v6_manual_0925_proxy",
+  "label_version": "pfill_truth_v7_public_buyable_explicit",
   "execution_contract": "manual_guidance_0925_public_market_fillability_proxy",
   "source": {
     "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260806.csv",

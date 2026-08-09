@@ -1,45 +1,39 @@
 {
-  "generated_at_utc": "2026-08-07T14:22:05+00:00",
+  "generated_at_utc": "2026-08-09T10:41:46+00:00",
   "current_run_date": "20260807",
   "pfill": {
     "anchor_trade_date": "20260806",
-    "status": "trained",
-    "loaded_trade_dates": 37,
+    "status": "skipped",
+    "loaded_trade_dates": 1,
     "missing_trade_dates": 1,
     "metrics_valid": {
       "lr": {
-        "auc": 0.8578010065814944,
-        "pr_auc": 0.9734818623766845,
-        "logloss": 0.4024759405848203,
-        "brier": 0.10980209238156681,
-        "baseline_brier_train_rate": 0.06803722128771186,
-        "brier_skill_vs_train_rate": -0.6138532747720851,
-        "valid_dates": 8
+        "auc": null,
+        "pr_auc": null,
+        "logloss": null,
+        "brier": null,
+        "baseline_brier_train_rate": null,
+        "brier_skill_vs_train_rate": null,
+        "valid_dates": 0,
+        "reason": "insufficient_independent_dates:1<20"
       },
       "lgbm": {
-        "auc": 0.8990321331784746,
-        "pr_auc": 0.9899032584125333,
-        "logloss": 0.19460382929535985,
-        "brier": 0.04348062849259754,
-        "baseline_brier_train_rate": 0.06803722128771186,
-        "brier_skill_vs_train_rate": 0.3609288023576217,
-        "valid_dates": 8
+        "auc": null,
+        "pr_auc": null,
+        "logloss": null,
+        "brier": null,
+        "baseline_brier_train_rate": null,
+        "brier_skill_vs_train_rate": null,
+        "valid_dates": 0,
+        "reason": "insufficient_independent_dates:1<20"
       }
     },
-    "selected_model": "lgbm",
-    "label_version": "pfill_truth_v6_manual_0925_proxy",
+    "selected_model": "",
+    "label_version": "pfill_truth_v7_public_buyable_explicit",
     "execution_contract": "manual_guidance_0925_public_market_fillability_proxy",
-    "selected_model_metrics": {
-      "auc": 0.8990321331784746,
-      "pr_auc": 0.9899032584125333,
-      "logloss": 0.19460382929535985,
-      "brier": 0.04348062849259754,
-      "baseline_brier_train_rate": 0.06803722128771186,
-      "brier_skill_vs_train_rate": 0.3609288023576217,
-      "valid_dates": 8
-    },
-    "selected_model_pass": true,
-    "acceptance_pass": true
+    "selected_model_metrics": {},
+    "selected_model_pass": false,
+    "acceptance_pass": false
   },
   "eret": {
     "anchor_trade_date": "20260805",
