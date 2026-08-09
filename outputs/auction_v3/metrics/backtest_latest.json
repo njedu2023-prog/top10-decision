@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-08-07T14:29:32+00:00",
+  "generated_at_utc": "2026-08-09T04:04:01+00:00",
   "model_version": "auction_v12_top10_trade_selector_oos_1",
   "history_dates": 715,
   "oos_dates": 544,
@@ -3885,7 +3885,7 @@
         "beats_constant": true
       }
     },
-    "production_artifact_sha256": "0ea716c6a1d6c30db323f54b6f308c9fefbf7442943ae905a193ded58a140dab",
+    "production_artifact_sha256": "40377feb266f28058e5078e2082a8bebd2925fe5ca2b2e12bda8ab1cb115b5b8",
     "promotion_checks": {
       "production_policy_ready": false,
       "return_model_chronological_skill": false,
@@ -3931,5 +3931,5 @@
   "model_quality_warnings": [
     "first_layer_probability_models_did_not_pass_brier_skill_gate"
   ],
-  "model_artifact_sha256": "6227ffc4489dd0f086897b3389968b544ea11b787a345dacd66003c4caf4ed5e"
+  "model_artifact_sha256": "77db032633a03f670ee7890b9d9862ccfe396153a13e3419fec377ce32893784"
 }
