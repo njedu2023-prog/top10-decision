@@ -268,11 +268,17 @@ def _candidate_records(
 def _validate_frozen_history(current: pd.DataFrame, previous: pd.DataFrame) -> None:
     if current.empty or previous.empty:
         return
+    fresh = current.copy()
     old = previous.copy()
     if not {"d_trade_date", "rank", "ts_code", "candidate_row_sha256", "status"}.issubset(old.columns):
         return
-    old["rank"] = pd.to_numeric(old["rank"], errors="coerce")
-    merged = current.merge(
+    for frame in (fresh, old):
+        frame["d_trade_date"] = (
+            frame["d_trade_date"].astype(str).str.replace(r"\D", "", regex=True).str[:8]
+        )
+        frame["rank"] = pd.to_numeric(frame["rank"], errors="coerce")
+        frame["ts_code"] = frame["ts_code"].map(_normalize_code)
+    merged = fresh.merge(
         old[["d_trade_date", "rank", "ts_code", "candidate_row_sha256", "status"]],
         on=["d_trade_date", "rank"],
         how="inner",

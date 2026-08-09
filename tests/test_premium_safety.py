@@ -391,6 +391,19 @@ class PremiumSafetyTests(unittest.TestCase):
             self.assertEqual(result.backtest["filled_signals"], 1)
             self.assertNotIn("proxy", result.backtest["entry"].lower())
 
+            # CSV readers infer YYYYMMDD as int on the second run. The frozen
+            # history guard must normalize merge keys and remain idempotent.
+            repeated, _ = build_and_write_execution_truth(
+                out_root,
+                market_root,
+                start_date="20260701",
+                end_date="20260701",
+                cost_bps=35.0,
+                fetch_budget=0,
+            )
+            self.assertEqual(repeated.ledger.loc[0, "d_trade_date"], "20260701")
+            self.assertEqual(repeated.ledger.loc[0, "status"], "READY")
+
     def test_execution_truth_rejects_nonconsecutive_trade_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
