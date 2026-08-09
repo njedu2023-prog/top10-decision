@@ -12,6 +12,7 @@ import pandas as pd
 FREEZE_SCHEMA_VERSION = "decision_model_freeze_v1"
 DEFAULT_FREEZE_PATH = Path("models/decision_model_freeze.json")
 DATE_PATTERN = re.compile(r"^20\d{6}$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class DecisionModelFreezeError(RuntimeError):
@@ -57,6 +58,36 @@ def load_model_freeze(
     pinned = payload.get("pinned_files", {})
     if payload["active"] and not isinstance(pinned, dict):
         raise DecisionModelFreezeError("active model freeze requires pinned_files")
+    snapshot = payload.get("history_snapshot")
+    if payload["active"] and not isinstance(snapshot, dict):
+        raise DecisionModelFreezeError(
+            "active model freeze requires history_snapshot metadata"
+        )
+    if isinstance(snapshot, dict):
+        relative_path = str(snapshot.get("path") or "").strip()
+        path = Path(relative_path)
+        if (
+            not relative_path
+            or path.is_absolute()
+            or ".." in path.parts
+            or not relative_path.endswith(".csv.gz")
+        ):
+            raise DecisionModelFreezeError(
+                "history_snapshot.path must be a repository-relative .csv.gz path"
+            )
+        if not isinstance(snapshot.get("bootstrap_mode"), bool):
+            raise DecisionModelFreezeError(
+                "history_snapshot.bootstrap_mode must be boolean"
+            )
+        snapshot_sha = str(snapshot.get("sha256") or "")
+        if (
+            payload["active"]
+            and not snapshot["bootstrap_mode"]
+            and not SHA256_PATTERN.fullmatch(snapshot_sha)
+        ):
+            raise DecisionModelFreezeError(
+                "finalized history snapshot requires sha256"
+            )
     return payload
 
 
@@ -105,6 +136,109 @@ def apply_frozen_history_cutoff(
         "history_end": kept_dates[-1] if kept_dates else "",
     }
     return filtered, audit
+
+
+def history_snapshot_bootstrap_mode(manifest: dict[str, Any]) -> bool:
+    snapshot = manifest.get("history_snapshot", {}) or {}
+    return bool(model_freeze_active(manifest) and snapshot.get("bootstrap_mode"))
+
+
+def _history_snapshot_path(
+    root: Path | str,
+    manifest: dict[str, Any],
+) -> Path:
+    snapshot = manifest.get("history_snapshot", {}) or {}
+    relative_path = str(snapshot.get("path") or "").strip()
+    if not relative_path:
+        raise DecisionModelFreezeError("history snapshot path is missing")
+    return Path(root).resolve() / relative_path
+
+
+def load_frozen_history_snapshot(
+    root: Path | str,
+    manifest: dict[str, Any],
+) -> tuple[pd.DataFrame | None, dict[str, Any]]:
+    if not model_freeze_active(manifest):
+        return None, {"active": False, "source": "live_history"}
+    path = _history_snapshot_path(root, manifest)
+    bootstrap = history_snapshot_bootstrap_mode(manifest)
+    if not path.is_file():
+        if bootstrap:
+            return None, {
+                "active": True,
+                "source": "bootstrap_required",
+                "path": str(path.relative_to(Path(root).resolve())),
+            }
+        raise DecisionModelFreezeError(f"frozen history snapshot missing: {path}")
+
+    actual_sha = _sha256(path)
+    snapshot = manifest.get("history_snapshot", {}) or {}
+    expected_sha = str(snapshot.get("sha256") or "")
+    if expected_sha and actual_sha != expected_sha:
+        raise DecisionModelFreezeError(
+            "frozen history snapshot drift detected: "
+            f"expected={expected_sha} actual={actual_sha}"
+        )
+    try:
+        frame = pd.read_csv(
+            path,
+            compression="gzip",
+            dtype={
+                "signal_date": "string",
+                "buy_date": "string",
+                "target_exit_date": "string",
+                "actual_exit_date": "string",
+                "ts_code": "string",
+            },
+        )
+    except (OSError, ValueError) as exc:
+        raise DecisionModelFreezeError(
+            f"frozen history snapshot unreadable: {path}"
+        ) from exc
+    filtered, cutoff_audit = apply_frozen_history_cutoff(frame, manifest)
+    if int(cutoff_audit.get("rows_removed", 0)) != 0:
+        raise DecisionModelFreezeError(
+            "frozen history snapshot contains rows beyond its cutoff"
+        )
+    return filtered, {
+        **cutoff_audit,
+        "source": "frozen_snapshot",
+        "path": str(path.relative_to(Path(root).resolve())),
+        "sha256": actual_sha,
+        "bootstrap_mode": bootstrap,
+    }
+
+
+def capture_frozen_history_snapshot(
+    root: Path | str,
+    manifest: dict[str, Any],
+    frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    if not history_snapshot_bootstrap_mode(manifest):
+        raise DecisionModelFreezeError(
+            "history snapshot capture is disabled outside bootstrap mode"
+        )
+    existing, audit = load_frozen_history_snapshot(root, manifest)
+    if existing is not None:
+        return existing, audit
+
+    filtered, _ = apply_frozen_history_cutoff(frame, manifest)
+    path = _history_snapshot_path(root, manifest)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    filtered.to_csv(
+        temporary,
+        index=False,
+        encoding="utf-8",
+        lineterminator="\n",
+        compression={"method": "gzip", "compresslevel": 9, "mtime": 0},
+    )
+    temporary.replace(path)
+    captured, captured_audit = load_frozen_history_snapshot(root, manifest)
+    if captured is None:
+        raise DecisionModelFreezeError("history snapshot capture did not persist")
+    captured_audit["source"] = "bootstrap_snapshot_created"
+    return captured, captured_audit
 
 
 def _sha256(path: Path) -> str:
@@ -182,13 +316,27 @@ def validate_runtime_artifacts(
     )
     expected = manifest.get("production", {}) or {}
     selector = backtest.get("trade_selector", {}) or {}
+    bootstrap = history_snapshot_bootstrap_mode(manifest)
+    runtime_values = {
+        "model_version": str(model_meta.get("model_version") or ""),
+        "model_artifact_sha256": str(
+            model_meta.get("model_artifact_sha256") or ""
+        ),
+        "model_promoted": model_meta.get("promoted") is True,
+        "trade_selector_version": str(selector.get("version") or ""),
+        "trade_selector_artifact_sha256": str(
+            selector.get("production_artifact_sha256") or ""
+        ),
+        "trade_selector_promoted": selector.get("promoted") is True,
+    }
     checks = {
         "model_version": (
             str(model_meta.get("model_version") or "")
             == str(expected.get("model_version") or "")
         ),
         "model_artifact_sha256": (
-            str(model_meta.get("model_artifact_sha256") or "")
+            bootstrap
+            or runtime_values["model_artifact_sha256"]
             == str(expected.get("model_artifact_sha256") or "")
         ),
         "model_promoted": (
@@ -200,7 +348,8 @@ def validate_runtime_artifacts(
             == str(expected.get("trade_selector_version") or "")
         ),
         "trade_selector_artifact_sha256": (
-            str(selector.get("production_artifact_sha256") or "")
+            bootstrap
+            or runtime_values["trade_selector_artifact_sha256"]
             == str(expected.get("trade_selector_artifact_sha256") or "")
         ),
         "trade_selector_promoted": (
@@ -210,18 +359,6 @@ def validate_runtime_artifacts(
     }
     failed = [name for name, passed in checks.items() if not passed]
     if failed:
-        runtime_values = {
-            "model_version": str(model_meta.get("model_version") or ""),
-            "model_artifact_sha256": str(
-                model_meta.get("model_artifact_sha256") or ""
-            ),
-            "model_promoted": model_meta.get("promoted") is True,
-            "trade_selector_version": str(selector.get("version") or ""),
-            "trade_selector_artifact_sha256": str(
-                selector.get("production_artifact_sha256") or ""
-            ),
-            "trade_selector_promoted": selector.get("promoted") is True,
-        }
         expected_values = {
             "model_version": str(expected.get("model_version") or ""),
             "model_artifact_sha256": str(
@@ -267,7 +404,8 @@ def validate_runtime_artifacts(
                 == str(expected.get("model_version") or "")
             ),
             "action_model_artifact_sha256": (
-                str(action_model.get("artifact_sha256") or "")
+                bootstrap
+                or str(action_model.get("artifact_sha256") or "")
                 == str(expected.get("model_artifact_sha256") or "")
             ),
             "action_model_promoted": (
@@ -279,7 +417,8 @@ def validate_runtime_artifacts(
                 == str(expected.get("trade_selector_version") or "")
             ),
             "action_selector_artifact_sha256": (
-                str(action_model.get("trade_selector_artifact_sha256") or "")
+                bootstrap
+                or str(action_model.get("trade_selector_artifact_sha256") or "")
                 == str(expected.get("trade_selector_artifact_sha256") or "")
             ),
             "action_selector_promoted": (
@@ -307,6 +446,9 @@ def validate_runtime_artifacts(
         "active": True,
         "freeze_id": str(manifest.get("freeze_id") or ""),
         "validated": True,
+        "bootstrap_mode": bootstrap,
+        "fingerprints_enforced": not bootstrap,
+        "runtime_values": runtime_values,
         "checks": checks,
         "action_plan_checks": action_plan_checks,
         "history_end": history_end,
@@ -317,7 +459,10 @@ def validate_runtime_artifacts(
 __all__ = [
     "DecisionModelFreezeError",
     "apply_frozen_history_cutoff",
+    "capture_frozen_history_snapshot",
+    "history_snapshot_bootstrap_mode",
     "load_model_freeze",
+    "load_frozen_history_snapshot",
     "model_freeze_active",
     "validate_pinned_files",
     "validate_runtime_artifacts",

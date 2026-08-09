@@ -11,7 +11,9 @@ import pandas as pd
 from top10decision.decision.model_freeze import (
     DecisionModelFreezeError,
     apply_frozen_history_cutoff,
+    capture_frozen_history_snapshot,
     load_model_freeze,
+    load_frozen_history_snapshot,
     validate_pinned_files,
     validate_runtime_artifacts,
 )
@@ -58,6 +60,52 @@ class DecisionModelFreezeTest(unittest.TestCase):
         self.assertEqual(frozen["ts_code"].tolist(), ["A", "B"])
         self.assertEqual(audit["rows_removed"], 1)
         self.assertEqual(audit["history_end"], "20260807")
+
+    def test_history_snapshot_bootstrap_round_trips_and_then_locks(self) -> None:
+        manifest = json.loads(json.dumps(self.manifest))
+        manifest["history_snapshot"] = {
+            "path": "models/frozen_history.csv.gz",
+            "sha256": "",
+            "bootstrap_mode": True,
+        }
+        history = pd.DataFrame(
+            {
+                "signal_date": ["20260806", "20260807", "20260810"],
+                "buy_date": ["20260807", "20260810", "20260811"],
+                "target_exit_date": ["20260810", "20260811", "20260812"],
+                "ts_code": ["000001.SZ", "600000.SH", "000002.SZ"],
+                "net_return": [0.01, -0.02, 0.03],
+            }
+        )
+        captured, audit = capture_frozen_history_snapshot(
+            self.root,
+            manifest,
+            history,
+        )
+        self.assertEqual(
+            captured["ts_code"].tolist(),
+            ["000001.SZ", "600000.SH"],
+        )
+        self.assertEqual(audit["source"], "bootstrap_snapshot_created")
+
+        snapshot_path = self.root / "models/frozen_history.csv.gz"
+        snapshot_sha = hashlib.sha256(snapshot_path.read_bytes()).hexdigest()
+        manifest["history_snapshot"].update(
+            {"sha256": snapshot_sha, "bootstrap_mode": False}
+        )
+        loaded, locked_audit = load_frozen_history_snapshot(
+            self.root,
+            manifest,
+        )
+        self.assertEqual(
+            loaded["ts_code"].tolist(),
+            captured["ts_code"].tolist(),
+        )
+        self.assertFalse(locked_audit["bootstrap_mode"])
+
+        snapshot_path.write_bytes(snapshot_path.read_bytes() + b"drift")
+        with self.assertRaises(DecisionModelFreezeError):
+            load_frozen_history_snapshot(self.root, manifest)
 
     def test_pinned_file_drift_fails_closed(self) -> None:
         target = self.root / "models/frozen.bin"

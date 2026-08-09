@@ -16,7 +16,9 @@ if str(SRC) not in sys.path:
 from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E402
 from top10decision.decision.model_freeze import (  # noqa: E402
     apply_frozen_history_cutoff,
+    capture_frozen_history_snapshot,
     load_model_freeze,
+    load_frozen_history_snapshot,
     model_freeze_active,
     validate_pinned_files,
     validate_runtime_artifacts,
@@ -30,10 +32,22 @@ class FreezeAwareAuctionV3Engine(AuctionV3Engine):
         self.model_freeze_history_audit: dict[str, object] = {}
 
     def build_history(self):
+        frozen, audit = load_frozen_history_snapshot(
+            self.config.root,
+            self.model_freeze_manifest,
+        )
+        if frozen is not None:
+            self.model_freeze_history_audit = audit
+            return frozen
         history = super().build_history()
         history, audit = apply_frozen_history_cutoff(
             history,
             self.model_freeze_manifest,
+        )
+        history, audit = capture_frozen_history_snapshot(
+            self.config.root,
+            self.model_freeze_manifest,
+            history,
         )
         self.model_freeze_history_audit = audit
         return history
