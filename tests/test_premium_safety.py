@@ -744,10 +744,10 @@ class PremiumSafetyTests(unittest.TestCase):
                 pd.DataFrame({
                     "trade_date": [f"202604{day:02d}"] * 20,
                     "t_limitup_actual": actual,
-                    "t_limitup_verify_ready": 1,
+                    "t_limitup_verify_ready": True,
                     "t_limitup_prob_model": model_prob,
                     "t_limitup_prob_rule": rule_prob,
-                    "model_can_rank": 1,
+                    "model_can_rank": True,
                 }).to_csv(root / f"premium_verify_202604{day:02d}.csv", index=False)
             ok, reason, metrics = _recent_limitup_model_health(Cfg(root))
             self.assertFalse(ok)

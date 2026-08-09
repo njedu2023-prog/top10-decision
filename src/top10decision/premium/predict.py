@@ -215,7 +215,14 @@ def _bool_like_series(df: pd.DataFrame, names: List[str], default: float = np.na
         if c is None or c in seen:
             continue
         seen.add(c)
+        # Pandas 3 preserves bool dtype here.  The string aliases below then
+        # assign 0.0/1.0, which is invalid for a bool-backed Series.  Normalize
+        # to a numeric buffer before parsing aliases so verification files are
+        # portable across runner pandas versions.
         num = pd.to_numeric(df[c], errors="coerce")
+        num = pd.Series(num, index=df.index).map(
+            lambda value: float(value) if pd.notna(value) else np.nan
+        ).astype("float64")
         parsed = num.clip(lower=0, upper=1)
         raw = df[c].astype(str).str.strip().str.lower()
         parsed.loc[num.isna() & raw.isin({"1", "true", "yes", "y", "是", "命中", "hit", "up"})] = 1.0
