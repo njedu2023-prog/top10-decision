@@ -36,15 +36,20 @@ from top10decision.premium.execution_profit_model import _truth_from_market, sco
 from top10decision.premium.final_decision import build_final_decisions
 from top10decision.premium.limitup_probability_engine import (
     BUNDLE_ARTIFACT_VERSION,
+    FEATURE_CONTRACT_VERSION,
     GATE_VERSION,
+    VALIDATION_MODE,
     _model_gate,
     _target_model_gates,
     _target_probability_gates,
+    audit_point_in_time_contract,
     fit_limitup_probability_engine,
     infer_feature_cols,
     load_bundle as load_limitup_probability_bundle,
+    purged_walk_forward_splits,
     save_bundle as save_limitup_probability_bundle,
     time_split,
+    training_data_fingerprint,
 )
 from top10decision.premium.predict import (
     _apply_adaptive_rank_score,
@@ -67,7 +72,11 @@ from top10decision.premium.shadow_account import (
     build_top1_shadow_ledger,
     summarize_top1_shadow,
 )
-from top10decision.premium.train import _build_ehx_feature_cols, _fit_validated_ehx
+from top10decision.premium.train import (
+    _build_ehx_feature_cols,
+    _collect_limitup_samples_from_verify_outputs,
+    _fit_validated_ehx,
+)
 
 
 def _load_backfill_module():
@@ -306,6 +315,63 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertGreaterEqual(ordered.index(valid_start) - ordered.index(train_end), 3)
         self.assertFalse(set(train["d_trade_date"]).intersection(set(valid["d_trade_date"])))
 
+    def test_walk_forward_folds_are_purged_and_validation_is_disjoint(self):
+        dates = [f"202601{x:02d}" for x in range(1, 31)]
+        frame = pd.DataFrame({
+            "d_trade_date": np.repeat(dates, 2),
+            "d_signal": np.arange(60),
+        })
+        folds = purged_walk_forward_splits(frame, n_splits=3, embargo_days=2)
+        self.assertGreaterEqual(len(folds), 2)
+        ordered = sorted(frame["d_trade_date"].unique())
+        validation_dates = set()
+        for train, valid, boundary in folds:
+            self.assertLess(boundary["train_end"], boundary["valid_start"])
+            self.assertGreaterEqual(
+                ordered.index(boundary["valid_start"]) - ordered.index(boundary["train_end"]),
+                3,
+            )
+            self.assertFalse(set(train["d_trade_date"]).intersection(set(valid["d_trade_date"])))
+            self.assertFalse(validation_dates.intersection(set(valid["d_trade_date"])))
+            validation_dates.update(valid["d_trade_date"])
+
+    def test_training_fingerprint_and_point_in_time_audit_are_deterministic(self):
+        frame = pd.DataFrame({
+            "d_trade_date": ["20260105", "20260106"],
+            "t_trade_date": ["20260106", "20260107"],
+            "t1_trade_date": ["20260107", "20260108"],
+            "feature_as_of_date": ["20260105", "20260106"],
+            "feature_known_at": ["D_CLOSE", "D_CLOSE"],
+            "feature_snapshot_source": ["premium_verify_20260105.csv", "premium_verify_20260106.csv"],
+            "feature_snapshot_sha256": ["a" * 64, "b" * 64],
+            "ts_code": ["600001.SH", "600002.SH"],
+            "d_signal": [0.1, 0.2],
+            "t_limitup_hit": [0, 1],
+        })
+        audit = audit_point_in_time_contract(frame, ["d_signal"])
+        self.assertEqual(audit["status"], "PASS_D_CLOSE_PROVENANCE")
+        first = training_data_fingerprint(frame, ["d_signal"])
+        reordered = training_data_fingerprint(frame.iloc[::-1].reset_index(drop=True), ["d_signal"])
+        self.assertEqual(first, reordered)
+        changed = frame.copy()
+        changed.loc[0, "d_signal"] = 0.11
+        self.assertNotEqual(first[0], training_data_fingerprint(changed, ["d_signal"])[0])
+        blocked = audit_point_in_time_contract(frame, ["d_signal", "t_close_actual"])
+        self.assertEqual(blocked["status"], "FAIL")
+        self.assertIn("t_close_actual", blocked["blocked_features"])
+
+        invalid_known_at = frame.copy()
+        invalid_known_at.loc[0, "feature_known_at"] = "T_CLOSE"
+        rejected = audit_point_in_time_contract(invalid_known_at, ["d_signal"])
+        self.assertEqual(rejected["status"], "FAIL")
+        self.assertEqual(rejected["feature_known_at_invalid_rows"], 1)
+
+        invalid_sha = frame.copy()
+        invalid_sha.loc[0, "feature_snapshot_sha256"] = "not-a-sha"
+        rejected = audit_point_in_time_contract(invalid_sha, ["d_signal"])
+        self.assertEqual(rejected["status"], "FAIL")
+        self.assertEqual(rejected["feature_snapshot_sha256_invalid_rows"], 1)
+
     def test_future_fields_are_excluded(self):
         n = 100
         df = pd.DataFrame({
@@ -356,6 +422,24 @@ class PremiumSafetyTests(unittest.TestCase):
         rows[0]["daily_top10_lift"] = 0.03
         ok, _ = _model_gate(pd.DataFrame(rows), validation_days=20, validation_samples=600)
         self.assertTrue(ok)
+
+        touch_only = pd.DataFrame([
+            {
+                "target": "t_limitup_hit", "samples": 900, "auc": 0.51,
+                "brier_skill": -0.10, "daily_top10_lift": 0.0,
+                "daily_spearman_ic": 0.0, "daily_positive_ic_rate": 0.50,
+                "daily_metric_days": 35,
+            },
+            {
+                "target": "t_touch_limitup", "samples": 900, "auc": 0.58,
+                "brier_skill": -0.05, "daily_top10_lift": 0.06,
+                "daily_spearman_ic": 0.07, "daily_positive_ic_rate": 0.65,
+                "daily_metric_days": 35,
+            },
+        ])
+        ok, reason = _model_gate(touch_only, validation_days=35, validation_samples=900)
+        self.assertTrue(ok)
+        self.assertIn("rank_enabled_touch_active", reason)
 
         rows[0]["brier_skill"] = -0.001
         statuses, _ = _target_model_gates(pd.DataFrame(rows), validation_days=20, validation_samples=600)
@@ -457,6 +541,29 @@ class PremiumSafetyTests(unittest.TestCase):
         scored, _ = _apply_professional_premium_scores(scored)
         self.assertEqual(float(scored.loc[0, "t1_evidence_score"]), 100.0)
         self.assertEqual(float(scored.loc[0, "premium_t1_component_weight"]), 0.35)
+
+    def test_touch_only_model_keeps_an_honest_rank_only_state(self):
+        frame = pd.DataFrame({
+            "t_limitup_prob": [0.60],
+            "t_limitup_strength": [75.0],
+            "t_limitup_rank_score": [60.0],
+            "t_touch_rank_score": [95.0],
+            "t1_continue_up_rate": [0.50],
+            "t_limit_model_can_rank": [0],
+            "t_touch_model_can_rank": [1],
+            "t1_model_can_rank": [0],
+            "t1_return_model_can_rank": [0],
+            "t_limit_gate_status": ["SHADOW"],
+            "t_touch_gate_status": ["ACTIVE"],
+            "t1_gate_status": ["SHADOW"],
+            "t1_return_gate_status": ["SHADOW"],
+            "score_ev": [0.01],
+            "risk_penalty_total": [0.0],
+        })
+        scored, _ = _apply_professional_premium_scores(frame)
+        self.assertEqual(scored.loc[0, "premium_candidate_state"], "RANK_ONLY")
+        self.assertEqual(scored.loc[0, "premium_bucket"], "WATCH")
+        self.assertEqual(scored.loc[0, "premium_rank_mode"], "model_validated_professional_score")
 
     def test_unvalidated_model_has_zero_production_weight(self):
         base = pd.DataFrame({
@@ -633,6 +740,49 @@ class PremiumSafetyTests(unittest.TestCase):
             self.assertEqual(int(pack2.loc[0, "open_times"]), 2)
             self.assertEqual(float(pack2.loc[0, "up_limit"]), 11.0)
 
+    def test_limitup_training_samples_record_frozen_source_provenance(self):
+        class Cfg:
+            def __init__(self, root: Path):
+                self.root = root
+
+            def out_root(self):
+                return self.root
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pd.DataFrame({
+                "trade_date": ["20260105"],
+                "buy_date": ["20260106"],
+                "target_date": ["20260107"],
+                "ts_code": ["600001.SH"],
+                "name": ["A"],
+                "t_limitup_verify_ready": [1],
+                "t1_verify_ready": [1],
+                "label_matured": [1],
+                "t_up_actual": [1],
+                "t_limitup_actual": [1],
+                "t_touch_limitup_actual": [1],
+                "t_close_ret": [0.05],
+                "t_intraday_ret": [0.10],
+                "t1_close_ret": [0.02],
+                "t1_high_ret": [0.04],
+                "d_close": [10.0],
+                "close_t": [99.0],
+            }).to_csv(root / "premium_verify_20260105.csv", index=False)
+            with mock.patch(
+                "top10decision.premium.train._attach_market_sentiment_to_samples",
+                side_effect=lambda cfg, samples: samples,
+            ):
+                samples, stats = _collect_limitup_samples_from_verify_outputs(Cfg(root))
+            self.assertEqual(len(samples), 1)
+            self.assertEqual(samples.loc[0, "feature_as_of_date"], "20260105")
+            self.assertEqual(samples.loc[0, "feature_known_at"], "D_CLOSE")
+            self.assertEqual(samples.loc[0, "feature_snapshot_source"], "premium_verify_20260105.csv")
+            self.assertEqual(len(samples.loc[0, "feature_snapshot_sha256"]), 64)
+            self.assertEqual(float(samples.loc[0, "close_T"]), 10.0)
+            self.assertEqual(stats["used_source_files"], 1)
+            self.assertEqual(len(stats["source_manifest_sha256"]), 64)
+
     def test_training_paths_use_out_of_time_validation(self):
         rng = np.random.default_rng(42)
         dates = [f"202602{x:02d}" for x in range(1, 21)]
@@ -664,6 +814,13 @@ class PremiumSafetyTests(unittest.TestCase):
             pd.DataFrame(rows), feature_cols=["d_signal"], valid_ratio=0.30, min_samples=20
         )
         self.assertGreaterEqual(bundle.validation_days, 5)
+        self.assertEqual(bundle.validation_mode, VALIDATION_MODE)
+        self.assertEqual(bundle.feature_contract_version, FEATURE_CONTRACT_VERSION)
+        self.assertGreaterEqual(bundle.walk_forward_folds, 2)
+        self.assertEqual(bundle.embargo_days, 2)
+        self.assertEqual(len(bundle.data_fingerprint), 64)
+        self.assertEqual(len(bundle.feature_fingerprint), 64)
+        self.assertTrue(str(bundle.point_in_time_audit["status"]).startswith("PASS"))
         self.assertIn("daily_top10_lift", bundle.metrics.columns)
         self.assertIn("brier_skill", bundle.metrics.columns)
 

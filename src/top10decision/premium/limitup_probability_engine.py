@@ -22,6 +22,7 @@ Premium 子系统 — LimitUp Probability Engine（V3.6：专业概率引擎）
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -51,12 +52,15 @@ CLASS_TARGETS = [
     "t1_big_drawdown_hit",
 ]
 REG_TARGETS = ["t_close_ret", "t_intraday_ret", "t1_close_ret", "t1_high_ret"]
-GATE_VERSION = "premium_target_gate_v3_stable_artifact"
-BUNDLE_ARTIFACT_VERSION = 2
+GATE_VERSION = "premium_target_gate_v4_walkforward_provenance"
+BUNDLE_ARTIFACT_VERSION = 3
+FEATURE_CONTRACT_VERSION = "premium_d_close_features_v1"
+VALIDATION_MODE = "purged_expanding_walk_forward_v1"
 RANK_ENABLED_GATE_STATES = {"ACTIVE", "PROVISIONAL"}
 DEFAULT_EXCLUDE = set(CLASS_TARGETS + REG_TARGETS + [
     "ts_code", "code", "symbol", "名称", "name", "trade_date", "d_trade_date", "t_trade_date", "t1_trade_date",
     "label_valid", "label_matured", "calendar_source", "calendar_status", "calendar_reason", "label_as_of",
+    "feature_as_of_date", "feature_known_at", "feature_snapshot_source", "feature_snapshot_sha256",
 ])
 
 FEATURE_ALLOW_PREFIXES = [
@@ -101,6 +105,16 @@ class LimitupModelBundle:
     target_gate_reasons: Dict[str, str] = field(default_factory=dict)
     target_probability_status: Dict[str, str] = field(default_factory=dict)
     target_probability_reasons: Dict[str, str] = field(default_factory=dict)
+    validation_mode: str = VALIDATION_MODE
+    walk_forward_folds: int = 0
+    embargo_days: int = 2
+    feature_contract_version: str = FEATURE_CONTRACT_VERSION
+    data_fingerprint: str = ""
+    feature_fingerprint: str = ""
+    point_in_time_audit: Dict[str, object] = field(default_factory=dict)
+    feature_availability: Dict[str, Dict[str, object]] = field(default_factory=dict)
+    target_train_end_dates: Dict[str, str] = field(default_factory=dict)
+    fold_boundaries: List[Dict[str, object]] = field(default_factory=list)
     artifact_version: int = BUNDLE_ARTIFACT_VERSION
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -178,10 +192,14 @@ class LimitupModelBundle:
         out["t_touch_model_probability_ready"] = t_touch_probability_status in RANK_ENABLED_GATE_STATES
         out["t1_model_probability_ready"] = t1_probability_status in RANK_ENABLED_GATE_STATES
         out["model_gate_version"] = str(getattr(self, "gate_version", GATE_VERSION))
-        out["model_can_rank"] = t_limit_can_rank
+        out["model_can_rank"] = t_limit_can_rank or t_touch_can_rank
         out["model_rank_mode"] = getattr(self, "model_rank_mode", "disabled_validation_not_pass")
         out["model_quality_flag"] = (
-            "ok" if t_limit_can_rank and t1_can_rank else "partial" if t_limit_can_rank else "degraded"
+            "ok"
+            if t_limit_can_rank and t1_can_rank
+            else "partial"
+            if (t_limit_can_rank or t_touch_can_rank)
+            else "degraded"
         )
         return out
 
@@ -273,6 +291,288 @@ def time_split(
     return train, valid, max(train_dates), min(valid_dates)
 
 
+def _blocked_feature_reason(name: object) -> str:
+    cname = str(name).strip()
+    lower = cname.lower()
+    if cname in CLASS_TARGETS or cname in REG_TARGETS:
+        return "target_column"
+    for keyword in FEATURE_DENY_KEYWORDS:
+        if str(keyword).lower() in lower:
+            return f"deny_keyword:{keyword}"
+    return ""
+
+
+def audit_point_in_time_contract(
+    df: pd.DataFrame,
+    feature_cols: Sequence[str],
+    date_col: str = "d_trade_date",
+) -> Dict[str, object]:
+    """Audit that model inputs belong to the D-close information set."""
+    data = df.copy()
+    blocked = {
+        str(col): reason
+        for col in feature_cols
+        if (reason := _blocked_feature_reason(col))
+    }
+    d = _norm_date(data[date_col]) if date_col in data.columns else pd.Series(pd.NA, index=data.index)
+    invalid_d = d.isna()
+
+    invalid_t_order = pd.Series(False, index=data.index, dtype=bool)
+    t_col = next((c for c in ("t_trade_date", "buy_date") if c in data.columns), "")
+    t = pd.Series(pd.NA, index=data.index)
+    if t_col:
+        t = _norm_date(data[t_col])
+        has_t = t.notna()
+        invalid_t_order = has_t & (d.isna() | d.ge(t))
+
+    invalid_t1_order = pd.Series(False, index=data.index, dtype=bool)
+    t1_col = next((c for c in ("t1_trade_date", "target_date") if c in data.columns), "")
+    if t1_col:
+        t1 = _norm_date(data[t1_col])
+        has_t1 = t1.notna()
+        invalid_t1_order = has_t1 & (t.isna() | t.ge(t1))
+
+    as_of_future = pd.Series(False, index=data.index, dtype=bool)
+    as_of_missing = pd.Series(True, index=data.index, dtype=bool)
+    if "feature_as_of_date" in data.columns:
+        as_of = _norm_date(data["feature_as_of_date"])
+        as_of_missing = as_of.isna()
+        as_of_future = as_of.notna() & d.notna() & as_of.gt(d)
+
+    known_at_missing = pd.Series(True, index=data.index, dtype=bool)
+    known_at_invalid = pd.Series(False, index=data.index, dtype=bool)
+    if "feature_known_at" in data.columns:
+        known_at = data["feature_known_at"].astype(str).str.strip().str.upper()
+        known_at_missing = known_at.isin({"", "NAN", "NONE", "<NA>"})
+        known_at_invalid = ~known_at_missing & known_at.ne("D_CLOSE")
+
+    snapshot_source_missing = pd.Series(True, index=data.index, dtype=bool)
+    if "feature_snapshot_source" in data.columns:
+        snapshot_source = data["feature_snapshot_source"].astype(str).str.strip()
+        snapshot_source_missing = snapshot_source.isin({"", "nan", "None", "<NA>"})
+
+    snapshot_sha_invalid = pd.Series(True, index=data.index, dtype=bool)
+    if "feature_snapshot_sha256" in data.columns:
+        snapshot_sha = data["feature_snapshot_sha256"].astype(str).str.strip().str.lower()
+        snapshot_sha_invalid = ~snapshot_sha.str.fullmatch(r"[0-9a-f]{64}", na=False)
+
+    provenance_columns_present = all(
+        col in data.columns
+        for col in (
+            "feature_as_of_date",
+            "feature_known_at",
+            "feature_snapshot_source",
+            "feature_snapshot_sha256",
+        )
+    )
+    provenance_invalid = bool(
+        provenance_columns_present
+        and (
+            known_at_missing.any()
+            or known_at_invalid.any()
+            or snapshot_source_missing.any()
+            or snapshot_sha_invalid.any()
+        )
+    )
+
+    hard_fail = bool(
+        blocked
+        or invalid_d.any()
+        or invalid_t_order.any()
+        or invalid_t1_order.any()
+        or as_of_future.any()
+        or provenance_invalid
+    )
+    complete_provenance = bool(
+        provenance_columns_present
+        and not as_of_missing.any()
+        and not known_at_missing.any()
+        and not known_at_invalid.any()
+        and not snapshot_source_missing.any()
+        and not snapshot_sha_invalid.any()
+    )
+    status = "FAIL" if hard_fail else (
+        "PASS_D_CLOSE_PROVENANCE" if complete_provenance else "PASS_LEGACY_D_CLOSE_ASSUMED"
+    )
+    return {
+        "status": status,
+        "contract_version": FEATURE_CONTRACT_VERSION,
+        "rows": int(len(data)),
+        "feature_count": int(len(feature_cols)),
+        "blocked_features": blocked,
+        "invalid_d_rows": int(invalid_d.sum()),
+        "invalid_t_order_rows": int(invalid_t_order.sum()),
+        "invalid_t1_order_rows": int(invalid_t1_order.sum()),
+        "feature_as_of_missing_rows": int(as_of_missing.sum()),
+        "feature_as_of_future_rows": int(as_of_future.sum()),
+        "feature_known_at_missing_rows": int(known_at_missing.sum()),
+        "feature_known_at_invalid_rows": int(known_at_invalid.sum()),
+        "feature_snapshot_source_missing_rows": int(snapshot_source_missing.sum()),
+        "feature_snapshot_sha256_invalid_rows": int(snapshot_sha_invalid.sum()),
+    }
+
+
+def _stable_text(value: object) -> str:
+    if value is None or value is pd.NA:
+        return "<NA>"
+    try:
+        if pd.isna(value):
+            return "<NA>"
+    except Exception:
+        pass
+    if isinstance(value, (float, np.floating)):
+        if not np.isfinite(float(value)):
+            return "<NA>"
+        return format(float(value), ".17g")
+    if isinstance(value, (int, np.integer, bool, np.bool_)):
+        return str(int(value))
+    return str(value).strip()
+
+
+def training_data_fingerprint(
+    df: pd.DataFrame,
+    feature_cols: Sequence[str],
+    date_col: str = "d_trade_date",
+) -> Tuple[str, str]:
+    """Fingerprint the exact D features and matured targets used by training."""
+    identity_cols = [
+        c for c in (
+            date_col, "t_trade_date", "t1_trade_date", "ts_code",
+            "feature_as_of_date", "feature_known_at", "feature_snapshot_source",
+            "feature_snapshot_sha256",
+        ) if c in df.columns
+    ]
+    target_cols = [c for c in CLASS_TARGETS + REG_TARGETS if c in df.columns]
+    ordered_cols = list(dict.fromkeys([*identity_cols, *feature_cols, *target_cols]))
+    canonical = df.reindex(columns=ordered_cols).copy()
+    for col in canonical.columns:
+        canonical[col] = canonical[col].map(_stable_text)
+    sort_cols = [c for c in (date_col, "ts_code") if c in canonical.columns]
+    if sort_cols:
+        canonical = canonical.sort_values(sort_cols, kind="stable")
+    feature_digest = hashlib.sha256(
+        (FEATURE_CONTRACT_VERSION + "\n" + "\n".join(map(str, feature_cols))).encode("utf-8")
+    ).hexdigest()
+    digest = hashlib.sha256()
+    digest.update(FEATURE_CONTRACT_VERSION.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update("\n".join(ordered_cols).encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(canonical.to_csv(index=False, lineterminator="\n").encode("utf-8"))
+    return digest.hexdigest(), feature_digest
+
+
+def purged_walk_forward_splits(
+    df: pd.DataFrame,
+    date_col: str = "d_trade_date",
+    n_splits: int = 3,
+    embargo_days: int = 2,
+    min_train_days: int = 20,
+    min_valid_days: int = 3,
+) -> List[Tuple[pd.DataFrame, pd.DataFrame, Dict[str, object]]]:
+    """Create disjoint expanding-window validation folds with a date embargo."""
+    data = df.copy()
+    if date_col not in data.columns:
+        raise ValueError(f"缺少时间切分字段 {date_col}")
+    data[date_col] = _norm_date(data[date_col])
+    dates = sorted(data[date_col].dropna().unique())
+    if len(dates) < 12:
+        raise ValueError(f"walk_forward_days_not_enough:{len(dates)}<12")
+
+    embargo = max(0, int(embargo_days))
+    adaptive_min_train = max(6, min(int(min_train_days), len(dates) // 2))
+    validation_start = max(adaptive_min_train + embargo, int(len(dates) * 0.50))
+    validation_dates = dates[validation_start:]
+    possible_splits = max(1, len(validation_dates) // max(1, int(min_valid_days)))
+    split_count = min(max(1, int(n_splits)), possible_splits)
+    chunks = [list(chunk) for chunk in np.array_split(validation_dates, split_count) if len(chunk)]
+
+    folds: List[Tuple[pd.DataFrame, pd.DataFrame, Dict[str, object]]] = []
+    date_position = {date: i for i, date in enumerate(dates)}
+    for fold_no, valid_dates in enumerate(chunks, start=1):
+        first_valid_pos = date_position[valid_dates[0]]
+        train_end_pos = first_valid_pos - embargo - 1
+        if train_end_pos + 1 < adaptive_min_train:
+            continue
+        train_dates = dates[: train_end_pos + 1]
+        train = data[data[date_col].isin(train_dates)].copy()
+        valid = data[data[date_col].isin(valid_dates)].copy()
+        if train.empty or valid.empty:
+            continue
+        boundary = {
+            "fold": int(fold_no),
+            "train_start": str(train_dates[0]),
+            "train_end": str(train_dates[-1]),
+            "valid_start": str(valid_dates[0]),
+            "valid_end": str(valid_dates[-1]),
+            "train_days": int(len(train_dates)),
+            "valid_days": int(len(valid_dates)),
+            "train_rows": int(len(train)),
+            "valid_rows": int(len(valid)),
+            "embargo_days": int(embargo),
+        }
+        folds.append((train, valid, boundary))
+    if len(folds) < 2:
+        raise ValueError(f"walk_forward_folds_not_enough:{len(folds)}<2")
+    return folds
+
+
+def _weighted_fold_mean(rows: Sequence[Dict[str, object]], column: str, weight: str) -> float:
+    values: List[float] = []
+    weights: List[float] = []
+    for row in rows:
+        value = pd.to_numeric(pd.Series([row.get(column)]), errors="coerce").iloc[0]
+        row_weight = pd.to_numeric(pd.Series([row.get(weight)]), errors="coerce").iloc[0]
+        if np.isfinite(value) and np.isfinite(row_weight) and row_weight > 0:
+            values.append(float(value))
+            weights.append(float(row_weight))
+    if not values:
+        return float("nan")
+    return float(np.average(np.asarray(values), weights=np.asarray(weights)))
+
+
+def _aggregate_fold_metrics(
+    rows: Sequence[Dict[str, object]],
+    target: str,
+    metric_type: str,
+) -> Dict[str, object]:
+    usable = [row for row in rows if int(row.get("samples", 0) or 0) > 0]
+    samples = int(sum(int(row.get("samples", 0) or 0) for row in usable))
+    daily_days = int(sum(int(row.get("daily_metric_days", 0) or 0) for row in usable))
+    daily_ic_days = int(sum(int(row.get("daily_ic_days", 0) or 0) for row in usable))
+    out: Dict[str, object] = {
+        "target": target,
+        "type": metric_type,
+        "samples": samples,
+        "daily_metric_days": daily_days,
+        "daily_ic_days": daily_ic_days,
+        "walk_forward_folds": int(len(usable)),
+        "validation_mode": VALIDATION_MODE,
+    }
+    if metric_type == "class":
+        for col in (
+            "positive_rate", "auc", "brier", "baseline_brier", "accuracy",
+            "precision_top10", "recall", "calibration_ece",
+        ):
+            out[col] = _weighted_fold_mean(usable, col, "samples")
+        for col in ("daily_precision_top10", "daily_base_rate", "daily_top10_lift"):
+            out[col] = _weighted_fold_mean(usable, col, "daily_metric_days")
+        for col in ("daily_spearman_ic", "daily_positive_ic_rate"):
+            out[col] = _weighted_fold_mean(usable, col, "daily_ic_days")
+        brier = float(out.get("brier", np.nan))
+        baseline = float(out.get("baseline_brier", np.nan))
+        out["brier_skill"] = 1.0 - brier / baseline if np.isfinite(baseline) and baseline > 0 else np.nan
+    else:
+        for col in ("mae", "spearman_ic", "positive_ic_rate"):
+            out[col] = _weighted_fold_mean(usable, col, "samples")
+        rmse_sq_rows = [dict(row, rmse_sq=float(row.get("rmse", np.nan)) ** 2) for row in usable]
+        rmse_sq = _weighted_fold_mean(rmse_sq_rows, "rmse_sq", "samples")
+        out["rmse"] = float(np.sqrt(rmse_sq)) if np.isfinite(rmse_sq) else np.nan
+        for col in ("daily_spearman_ic", "daily_positive_ic_rate"):
+            out[col] = _weighted_fold_mean(usable, col, "daily_ic_days")
+    return out
+
+
 def _fit_classifier(X: pd.DataFrame, y: pd.Series, min_samples: int = 80):
     yy = pd.to_numeric(y, errors="coerce")
     valid = yy.notna()
@@ -336,6 +636,7 @@ def _daily_rank_metrics(prob: pd.Series, actual: pd.Series, dates: pd.Series) ->
         "daily_spearman_ic": float(np.mean(daily_ics)) if daily_ics else np.nan,
         "daily_positive_ic_rate": float(np.mean(np.asarray(daily_ics) > 0)) if daily_ics else np.nan,
         "daily_metric_days": int(len(top10_rates)),
+        "daily_ic_days": int(len(daily_ics)),
     }
 
 
@@ -426,6 +727,7 @@ def _eval_regressor(
         "daily_spearman_ic": float(np.mean(daily_ics)) if daily_ics else np.nan,
         "daily_positive_ic_rate": float(np.mean(np.asarray(daily_ics) > 0)) if daily_ics else np.nan,
         "daily_metric_days": int(len(daily_ics)),
+        "daily_ic_days": int(len(daily_ics)),
     }
 
 
@@ -666,12 +968,14 @@ def _target_probability_gates(
 
 def _model_gate(metrics: pd.DataFrame, validation_days: int, validation_samples: int) -> Tuple[bool, str]:
     statuses, reasons = _target_model_gates(metrics, validation_days, validation_samples)
-    can_rank = statuses["t_limit"] in RANK_ENABLED_GATE_STATES
-    if can_rank:
+    if statuses["t_limit"] in RANK_ENABLED_GATE_STATES:
         return True, f"rank_enabled_{statuses['t_limit'].lower()}:{reasons['t_limit']}"
+    if statuses["t_touch"] in RANK_ENABLED_GATE_STATES:
+        return True, f"rank_enabled_touch_{statuses['t_touch'].lower()}:{reasons['t_touch']}"
     return False, (
         "disabled_validation_not_pass:"
         f"{reasons['t_limit']};"
+        f"t_touch_status={statuses['t_touch']};"
         f"t1_status={statuses['t1']}"
     )
 
@@ -686,36 +990,118 @@ def fit_limitup_probability_engine(
     for target in CLASS_TARGETS + REG_TARGETS:
         if target not in data.columns:
             data[target] = np.nan
-    train, valid, train_end, valid_start = time_split(data, valid_ratio=valid_ratio)
-    if feature_cols is None:
-        feature_cols = infer_feature_cols(train)
-    feature_cols = list(feature_cols)
+    if "d_trade_date" not in data.columns:
+        raise ValueError("缺少时间切分字段 d_trade_date")
+    data["d_trade_date"] = _norm_date(data["d_trade_date"])
+    folds = purged_walk_forward_splits(
+        data,
+        date_col="d_trade_date",
+        n_splits=3,
+        embargo_days=2,
+        min_train_days=20,
+        min_valid_days=3,
+    )
+    first_train = folds[0][0]
+    inferred_features = feature_cols is None
+    if inferred_features:
+        feature_cols = infer_feature_cols(first_train)
+    requested_features = list(dict.fromkeys(map(str, feature_cols)))
+    feature_cols = []
+    availability_frame = first_train if inferred_features else data
+    for col in requested_features:
+        if col not in availability_frame.columns:
+            continue
+        numeric = pd.to_numeric(availability_frame[col], errors="coerce")
+        if numeric.notna().sum() >= max(5, int(len(availability_frame) * 0.03)):
+            feature_cols.append(col)
     if not feature_cols:
         raise ValueError("没有可用数值特征，无法训练概率引擎")
 
-    X_train = _make_X(train, feature_cols)
-    X_valid = _make_X(valid, feature_cols)
+    point_in_time_audit = audit_point_in_time_contract(data, feature_cols)
+    if str(point_in_time_audit.get("status", "")).upper() == "FAIL":
+        raise ValueError(
+            "point_in_time_contract_fail:"
+            + json.dumps(point_in_time_audit, ensure_ascii=False, sort_keys=True)
+        )
+    data_fingerprint, feature_fingerprint = training_data_fingerprint(data, feature_cols)
+    feature_availability: Dict[str, Dict[str, object]] = {}
+    for col in feature_cols:
+        available = pd.to_numeric(data[col], errors="coerce").notna()
+        available_dates = data.loc[available, "d_trade_date"].dropna().astype(str)
+        feature_availability[col] = {
+            "rows": int(available.sum()),
+            "days": int(available_dates.nunique()),
+            "first_date": str(available_dates.min()) if len(available_dates) else "",
+            "last_date": str(available_dates.max()) if len(available_dates) else "",
+        }
+
+    fold_metrics: Dict[str, List[Dict[str, object]]] = {
+        target: [] for target in CLASS_TARGETS + REG_TARGETS
+    }
+    fold_boundaries: List[Dict[str, object]] = []
+    for train, valid, boundary in folds:
+        X_train = _make_X(train, feature_cols)
+        X_valid = _make_X(valid, feature_cols)
+        fold_boundaries.append(dict(boundary))
+        for target in CLASS_TARGETS:
+            model, prior = _fit_classifier(X_train, train[target], min_samples=min_samples)
+            metric = _eval_classifier(
+                model, prior, X_valid, valid[target], target, valid["d_trade_date"]
+            )
+            metric.update({
+                "fold": int(boundary["fold"]),
+                "fold_train_end": str(boundary["train_end"]),
+                "fold_valid_start": str(boundary["valid_start"]),
+                "fold_valid_end": str(boundary["valid_end"]),
+            })
+            fold_metrics[target].append(metric)
+        for target in REG_TARGETS:
+            model, mean_value = _fit_regressor(X_train, train[target], min_samples=min_samples)
+            metric = _eval_regressor(
+                model, mean_value, X_valid, valid[target], target, valid["d_trade_date"]
+            )
+            metric.update({
+                "fold": int(boundary["fold"]),
+                "fold_train_end": str(boundary["train_end"]),
+                "fold_valid_start": str(boundary["valid_start"]),
+                "fold_valid_end": str(boundary["valid_end"]),
+            })
+            fold_metrics[target].append(metric)
+
+    metric_rows: List[Dict[str, object]] = []
+    for target in CLASS_TARGETS:
+        metric_rows.append(_aggregate_fold_metrics(fold_metrics[target], target, "class"))
+    for target in REG_TARGETS:
+        metric_rows.append(_aggregate_fold_metrics(fold_metrics[target], target, "reg"))
+    metrics = pd.DataFrame(metric_rows)
+
+    # The walk-forward predictions are used only for model selection.  Once a
+    # target passes its independent gate, refit the production candidate on all
+    # currently matured history so the newest lawful evidence is not discarded.
+    X_full = _make_X(data, feature_cols)
     class_models: Dict[str, object] = {}
     reg_models: Dict[str, object] = {}
     class_priors: Dict[str, float] = {}
     reg_means: Dict[str, float] = {}
-    metric_rows = []
-
     for target in CLASS_TARGETS:
-        model, prior = _fit_classifier(X_train, train[target], min_samples=min_samples)
+        model, prior = _fit_classifier(X_full, data[target], min_samples=min_samples)
         class_models[target] = model
         class_priors[target] = prior
-        metric_rows.append(_eval_classifier(model, prior, X_valid, valid[target], target, valid["d_trade_date"]))
-
     for target in REG_TARGETS:
-        model, mean_value = _fit_regressor(X_train, train[target], min_samples=min_samples)
+        model, mean_value = _fit_regressor(X_full, data[target], min_samples=min_samples)
         reg_models[target] = model
         reg_means[target] = mean_value
-        metric_rows.append(_eval_regressor(model, mean_value, X_valid, valid[target], target, valid["d_trade_date"]))
 
-    metrics = pd.DataFrame(metric_rows)
-    validation_days = int(valid["d_trade_date"].nunique()) if "d_trade_date" in valid.columns else 0
-    validation_samples = int(len(valid))
+    target_train_end_dates: Dict[str, str] = {}
+    for target in CLASS_TARGETS + REG_TARGETS:
+        ready = pd.to_numeric(data[target], errors="coerce").notna()
+        target_train_end_dates[target] = (
+            str(data.loc[ready, "d_trade_date"].max()) if ready.any() else ""
+        )
+    validation_days = int(sum(int(item["valid_days"]) for item in fold_boundaries))
+    validation_samples = int(sum(int(item["valid_rows"]) for item in fold_boundaries))
+    train_end = str(data["d_trade_date"].dropna().max())
+    valid_start = str(min(item["valid_start"] for item in fold_boundaries))
     target_gate_status, target_gate_reasons = _target_model_gates(metrics, validation_days, validation_samples)
     target_probability_status, target_probability_reasons = _target_probability_gates(
         metrics, target_gate_status
@@ -740,6 +1126,16 @@ def fit_limitup_probability_engine(
         target_gate_reasons=target_gate_reasons,
         target_probability_status=target_probability_status,
         target_probability_reasons=target_probability_reasons,
+        validation_mode=VALIDATION_MODE,
+        walk_forward_folds=int(len(fold_boundaries)),
+        embargo_days=2,
+        feature_contract_version=FEATURE_CONTRACT_VERSION,
+        data_fingerprint=data_fingerprint,
+        feature_fingerprint=feature_fingerprint,
+        point_in_time_audit=point_in_time_audit,
+        feature_availability=feature_availability,
+        target_train_end_dates=target_train_end_dates,
+        fold_boundaries=fold_boundaries,
     )
 
 

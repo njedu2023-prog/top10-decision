@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import re
 import sys
@@ -47,6 +48,7 @@ from .limitup_probability_engine import (
     BUNDLE_ARTIFACT_VERSION,
     GATE_VERSION,
     fit_limitup_probability_engine,
+    load_bundle as load_limitup_probability_bundle,
     save_bundle as save_limitup_probability_bundle,
 )
 from .market_truth import ensure_daily_cached, load_daily
@@ -105,6 +107,14 @@ def _safe_numeric_series(df: pd.DataFrame, candidates: List[str], default: float
         hit = cols.get(str(name).strip().lower())
         if hit is not None:
             return pd.to_numeric(df[hit], errors="coerce")
+    return pd.Series([default] * len(df), index=df.index, dtype="float64")
+
+
+def _d_close_numeric_series(df: pd.DataFrame, default: float = np.nan) -> pd.Series:
+    """Read the D-close snapshot without conflating close_T with future close_t."""
+    for name in ("close_T", "d_close", "close", "收盘价"):
+        if name in df.columns:
+            return pd.to_numeric(df[name], errors="coerce")
     return pd.Series([default] * len(df), index=df.index, dtype="float64")
 
 
@@ -618,7 +628,7 @@ def _backfill_limitup_truth_from_market(
     out = out.merge(daily_t, on="_join_ts_code", how="left")
     out = out.merge(daily_t1, on="_join_ts_code", how="left")
 
-    d_close = _safe_numeric_series(out, ["close_T", "d_close", "close", "收盘价"], default=np.nan)
+    d_close = _d_close_numeric_series(out, default=np.nan)
     t_open = pd.to_numeric(out["_bf_open_T_actual"], errors="coerce")
     t_high = pd.to_numeric(out["_bf_high_T_actual"], errors="coerce")
     t_low = pd.to_numeric(out.get("_bf_low_T_actual", np.nan), errors="coerce")
@@ -934,6 +944,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         "notes": [],
     }
     rows: List[pd.DataFrame] = []
+    used_sources: List[str] = []
 
     for path in files:
         try:
@@ -946,6 +957,10 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             stats["skipped_files"] += 1
             stats["notes"].append(f"skip {path.name}: empty")
             continue
+        try:
+            source_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        except Exception:
+            source_sha256 = ""
 
         df, backfill_reason = _backfill_limitup_truth_from_market(cfg, df, path)
         if str(backfill_reason).startswith("backfilled:"):
@@ -968,7 +983,7 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         t_touch = _bool_numeric_series(df, ["t_touch_limitup_actual", "t_touch_limitup"], default=np.nan)
         close_ret = _t1_close_ret_from_verify_df(df)
         high_ret = _t1_high_ret_from_verify_df(df, close_ret)
-        d_close = _safe_numeric_series(df, ["close_T", "d_close", "close", "收盘价"], default=np.nan)
+        d_close = _d_close_numeric_series(df, default=np.nan)
         t_open_actual = _safe_numeric_series(df, ["open_T_actual", "open_t", "t_open"], default=np.nan)
         t_high_actual = _safe_numeric_series(df, ["high_T_actual", "high_t", "t_high"], default=np.nan)
         t_close_actual = _safe_numeric_series(df, ["close_T_actual", "close_t", "t_close"], default=np.nan)
@@ -1004,6 +1019,10 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         out["t1_trade_date"] = df[target_col].astype(str).map(_to_yyyymmdd) if target_col else pd.NA
         out["ts_code"] = df[ts_col].astype(str).str.strip()
         out["name"] = df[name_col].astype(str) if name_col else pd.NA
+        out["feature_as_of_date"] = out["d_trade_date"]
+        out["feature_known_at"] = "D_CLOSE"
+        out["feature_snapshot_source"] = path.name
+        out["feature_snapshot_sha256"] = source_sha256
 
         date_order_ok = (
             out["d_trade_date"].notna()
@@ -1044,7 +1063,9 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
 
         feature_candidates = {
             "rank": ["rank", "dec_rank"],
-            "close_T": ["close_T", "close", "close_t", "收盘价"],
+            # close_t is intentionally excluded: historical files can use it
+            # for the future T-day close instead of the D-day snapshot.
+            "close_T": ["close_T", "d_close", "close", "收盘价"],
             "p_premium": ["p_premium", "probability", "pred_prob"],
             "e_premium": ["e_premium", "e_ret", "E_ret", "pred_ret"],
             "score_ev": ["score_ev", "ev", "EV", "final_score", "score"],
@@ -1080,7 +1101,11 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             "mkt_emotion_score": ["mkt_emotion_score"],
         }
         for target, candidates in feature_candidates.items():
-            out[target] = _safe_numeric_series(df, candidates, default=np.nan)
+            out[target] = (
+                _d_close_numeric_series(df, default=np.nan)
+                if target == "close_T"
+                else _safe_numeric_series(df, candidates, default=np.nan)
+            )
 
         point_in_time_factor_cols = [
             "turnover_rate", "turnover_rate_f", "volume_ratio", "circ_mv", "float_mv", "total_mv",
@@ -1135,8 +1160,13 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             continue
 
         stats["ok_files"] += 1
+        used_sources.append(f"{path.name}:{source_sha256}")
         rows.append(out)
 
+    stats["used_source_files"] = int(len(used_sources))
+    stats["source_manifest_sha256"] = hashlib.sha256(
+        "\n".join(sorted(used_sources)).encode("utf-8")
+    ).hexdigest()
     if not rows:
         return pd.DataFrame(), stats
 
@@ -1256,6 +1286,18 @@ def _train_limitup_probability_from_verify(
         promoted = bool(getattr(bundle, "model_can_rank", False))
         if promoted:
             save_limitup_probability_bundle(bundle, model_path)
+        elif model_path.exists():
+            try:
+                active_bundle = load_limitup_probability_bundle(model_path)
+                active_is_current = bool(
+                    str(getattr(active_bundle, "gate_version", "")) == GATE_VERSION
+                    and int(getattr(active_bundle, "artifact_version", 0) or 0)
+                    == BUNDLE_ARTIFACT_VERSION
+                )
+            except Exception:
+                active_is_current = False
+            if not active_is_current:
+                model_path.unlink()
         bundle.metrics.to_csv(metrics_path, index=False, encoding="utf-8-sig")
 
         state.update({
@@ -1277,6 +1319,13 @@ def _train_limitup_probability_from_verify(
             "limitup_target_gate_status": dict(getattr(bundle, "target_gate_status", {}) or {}),
             "limitup_target_probability_status": dict(
                 getattr(bundle, "target_probability_status", {}) or {}
+            ),
+            "limitup_validation_mode": str(getattr(bundle, "validation_mode", "")),
+            "limitup_walk_forward_folds": int(getattr(bundle, "walk_forward_folds", 0) or 0),
+            "limitup_data_fingerprint": str(getattr(bundle, "data_fingerprint", "")),
+            "limitup_feature_fingerprint": str(getattr(bundle, "feature_fingerprint", "")),
+            "limitup_feature_contract_version": str(
+                getattr(bundle, "feature_contract_version", "")
             ),
         })
         _save_limitup_meta(
@@ -1310,6 +1359,26 @@ def _train_limitup_probability_from_verify(
                 "valid_start_date": bundle.valid_start_date,
                 "validation_days": int(bundle.validation_days),
                 "validation_samples": int(bundle.validation_samples),
+                "validation_mode": str(getattr(bundle, "validation_mode", "")),
+                "walk_forward_folds": int(getattr(bundle, "walk_forward_folds", 0) or 0),
+                "embargo_days": int(getattr(bundle, "embargo_days", 0) or 0),
+                "feature_contract_version": str(
+                    getattr(bundle, "feature_contract_version", "")
+                ),
+                "data_fingerprint": str(getattr(bundle, "data_fingerprint", "")),
+                "feature_fingerprint": str(getattr(bundle, "feature_fingerprint", "")),
+                "point_in_time_audit": dict(
+                    getattr(bundle, "point_in_time_audit", {}) or {}
+                ),
+                "feature_availability": dict(
+                    getattr(bundle, "feature_availability", {}) or {}
+                ),
+                "target_train_end_dates": dict(
+                    getattr(bundle, "target_train_end_dates", {}) or {}
+                ),
+                "fold_boundaries": list(getattr(bundle, "fold_boundaries", []) or []),
+                "source_manifest_sha256": str(stats.get("source_manifest_sha256", "")),
+                "used_source_files": int(stats.get("used_source_files", 0) or 0),
                 "candidate_model_path": str(candidate_path),
                 "active_model_path": str(model_path) if model_path.exists() else "",
                 "metrics": bundle.metrics.to_dict(orient="records"),

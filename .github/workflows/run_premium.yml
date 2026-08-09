@@ -275,6 +275,24 @@ jobs:
               raise SystemExit("Premium target-gate model contract was not trained")
           if int(limitup_meta.get("artifact_version", 0) or 0) != BUNDLE_ARTIFACT_VERSION:
               raise SystemExit("Premium stable model artifact contract was not trained")
+          if limitup_meta.get("validation_mode") != "purged_expanding_walk_forward_v1":
+              raise SystemExit("Premium walk-forward validation contract missing")
+          if int(limitup_meta.get("walk_forward_folds", 0) or 0) < 2:
+              raise SystemExit("Premium walk-forward validation has too few folds")
+          if int(limitup_meta.get("embargo_days", 0) or 0) < 2:
+              raise SystemExit("Premium walk-forward embargo is too short")
+          if len(str(limitup_meta.get("data_fingerprint", ""))) != 64:
+              raise SystemExit("Premium training data fingerprint missing")
+          if len(str(limitup_meta.get("feature_fingerprint", ""))) != 64:
+              raise SystemExit("Premium feature fingerprint missing")
+          point_in_time = limitup_meta.get("point_in_time_audit", {})
+          if str(point_in_time.get("status", "")) != "PASS_D_CLOSE_PROVENANCE":
+              raise SystemExit("Premium point-in-time feature audit failed")
+          for fold in limitup_meta.get("fold_boundaries", []):
+              if not str(fold.get("train_end", "")) < str(fold.get("valid_start", "")):
+                  raise SystemExit("Premium walk-forward fold date order invalid")
+              if int(fold.get("embargo_days", 0) or 0) < 2:
+                  raise SystemExit("Premium walk-forward fold embargo invalid")
           target_status = limitup_meta.get("target_gate_status", {})
           if not {"t_limit", "t_touch", "t1", "t_return", "t1_return"}.issubset(target_status):
               raise SystemExit("Premium per-target model gate status missing")

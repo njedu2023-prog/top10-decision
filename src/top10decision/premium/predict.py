@@ -63,9 +63,15 @@ from .premium_views import add_rank_groups, attach_limitup_validation, render_pr
 from .report_md import render_premium_report_md
 
 try:
-    from .limitup_probability_engine import load_bundle as _load_limitup_probability_bundle
+    from .limitup_probability_engine import (
+        BUNDLE_ARTIFACT_VERSION as _LIMITUP_ARTIFACT_VERSION,
+        GATE_VERSION as _LIMITUP_GATE_VERSION,
+        load_bundle as _load_limitup_probability_bundle,
+    )
 except Exception:  # pragma: no cover
     _load_limitup_probability_bundle = None  # type: ignore
+    _LIMITUP_ARTIFACT_VERSION = 0
+    _LIMITUP_GATE_VERSION = ""
 
 _TD_RE = re.compile(r"^\d{8}$")
 _PREMIUM_REPORT_RE = re.compile(r"^premium_(20\d{6})\.html$")
@@ -1093,6 +1099,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     rule_t1_up = _field_01(out, "t1_continue_up_rate", 0.5)
     t_limit_can_rank = _target_gate_flag(out, "t_limit_model_can_rank") >= 0.5
     t_touch_can_rank = _target_gate_flag(out, "t_touch_model_can_rank") >= 0.5
+    t_day_can_rank = t_limit_can_rank | t_touch_can_rank
     t1_can_rank = _target_gate_flag(out, "t1_model_can_rank") >= 0.5
     t1_return_can_rank = _target_gate_flag(out, "t1_return_model_can_rank") >= 0.5
     t1_gate_evidence = _gate_status_evidence(out, "t1_gate_status", "t1_model_can_rank")
@@ -1349,7 +1356,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         default="WATCH",
     )
     out["premium_candidate_state"] = np.select(
-        [force_excluded, eligible, t_limit_can_rank],
+        [force_excluded, eligible, t_day_can_rank],
         ["NO_TRADE", "QUALIFIED", "RANK_ONLY"],
         default="WATCH",
     )
@@ -1393,7 +1400,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         reasons.append(";".join(row_reasons) if row_reasons else "ok")
     out["premium_exclude_reason"] = pd.Series(reasons, index=idx, dtype="object")
     out["premium_rank_mode"] = np.where(
-        t_limit_can_rank,
+        t_day_can_rank,
         "model_validated_professional_score",
         "professional_score_rule_guarded",
     )
@@ -1412,7 +1419,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         "premium_eligible_count": int(eligible.sum()),
         "premium_watch_count": int((out["premium_bucket"] == "WATCH").sum()),
         "premium_excluded_count": int(force_excluded.sum()),
-        "premium_model_can_rank_count": int(t_limit_can_rank.sum()),
+        "premium_model_can_rank_count": int(t_day_can_rank.sum()),
         "premium_t1_model_can_rank_count": int(t1_can_rank.sum()),
         "premium_t1_evidence_avg": float(t1_evidence.mean()) if t1_evidence.notna().any() else 0.0,
         "premium_t1_component_weight_avg": float(t1_component_weight.mean()) if t1_component_weight.notna().any() else 0.08,
@@ -2681,6 +2688,10 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
     stage = "load_bundle"
     try:
         bundle = _load_limitup_probability_bundle(model_path)
+        if str(getattr(bundle, "gate_version", "")) != str(_LIMITUP_GATE_VERSION):
+            raise RuntimeError("limitup_model_gate_contract_stale")
+        if int(getattr(bundle, "artifact_version", 0) or 0) < int(_LIMITUP_ARTIFACT_VERSION):
+            raise RuntimeError("limitup_model_artifact_contract_stale")
         stage = "bundle_predict"
         pred = bundle.predict(out)
         stage = "copy_model_outputs"
@@ -2765,6 +2776,7 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             f"{target_name}={result[1]}" for target_name, result in health_results.items()
         ) or "no_rank_enabled_target"
         model_can_rank = gate_enabled(t_limit_status)
+        t_day_model_can_rank = model_can_rank or gate_enabled(t_touch_status)
 
         stage = "build_target_rank_scores"
         t_limit_rank_alpha = gate_alpha(t_limit_status)
@@ -2853,11 +2865,14 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         out["t_limit_model_probability_ready"] = gate_enabled(t_limit_probability_status)
         out["t_touch_model_probability_ready"] = gate_enabled(t_touch_probability_status)
         out["t1_model_probability_ready"] = gate_enabled(t1_probability_status)
-        out["model_can_rank"] = gate_enabled(t_limit_status)
-        out["model_rank_mode"] = f"t_limit_{t_limit_status.lower()}__t1_{t1_status.lower()}"
+        out["model_can_rank"] = t_day_model_can_rank
+        out["model_rank_mode"] = (
+            f"t_limit_{t_limit_status.lower()}__t_touch_{t_touch_status.lower()}"
+            f"__t1_{t1_status.lower()}"
+        )
         out["model_quality_flag"] = (
             "ok" if gate_enabled(t_limit_status) and gate_enabled(t1_status)
-            else "partial" if gate_enabled(t_limit_status)
+            else "partial" if t_day_model_can_rank
             else "degraded"
         )
         out["model_gate_version"] = str(getattr(bundle, "gate_version", "premium_target_gate_v2"))
@@ -2879,13 +2894,21 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         trace.update({
             "limitup_model_mode": model_mode,
             "limitup_model_reason": (
-                health_reason if health_ok is False else target_reasons.get("t_limit", getattr(bundle, "gate_reason", ""))
+                health_reason
+                if health_ok is False
+                else target_reasons.get(
+                    "t_limit" if gate_enabled(t_limit_status) else "t_touch",
+                    getattr(bundle, "gate_reason", ""),
+                )
             ),
             "limitup_model_feature_n": len(getattr(bundle, "feature_cols", []) or []),
             "limitup_model_train_end_date": getattr(bundle, "train_end_date", ""),
             "limitup_model_valid_start_date": getattr(bundle, "valid_start_date", ""),
-            "limitup_model_can_rank": gate_enabled(t_limit_status),
-            "limitup_model_rank_mode": f"t_limit_{t_limit_status.lower()}__t1_{t1_status.lower()}",
+            "limitup_model_can_rank": t_day_model_can_rank,
+            "limitup_model_rank_mode": (
+                f"t_limit_{t_limit_status.lower()}__t_touch_{t_touch_status.lower()}"
+                f"__t1_{t1_status.lower()}"
+            ),
             "limitup_model_gate_version": str(getattr(bundle, "gate_version", "premium_target_gate_v2")),
             "limitup_model_t_limit_status": t_limit_status,
             "limitup_model_t_touch_status": t_touch_status,
@@ -2907,6 +2930,23 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             "limitup_model_t_limit_probability_reason": probability_reasons.get("t_limit", ""),
             "limitup_model_validation_days": int(getattr(bundle, "validation_days", 0) or 0),
             "limitup_model_validation_samples": int(getattr(bundle, "validation_samples", 0) or 0),
+            "limitup_model_validation_mode": str(getattr(bundle, "validation_mode", "")),
+            "limitup_model_walk_forward_folds": int(
+                getattr(bundle, "walk_forward_folds", 0) or 0
+            ),
+            "limitup_model_embargo_days": int(getattr(bundle, "embargo_days", 0) or 0),
+            "limitup_model_feature_contract_version": str(
+                getattr(bundle, "feature_contract_version", "")
+            ),
+            "limitup_model_data_fingerprint": str(
+                getattr(bundle, "data_fingerprint", "")
+            ),
+            "limitup_model_feature_fingerprint": str(
+                getattr(bundle, "feature_fingerprint", "")
+            ),
+            "limitup_model_point_in_time_status": str(
+                (getattr(bundle, "point_in_time_audit", {}) or {}).get("status", "")
+            ),
             "limitup_model_recent_health": health_reason,
             **{f"limitup_model_recent_{k}": v for k, v in health_metrics.items()},
         })
