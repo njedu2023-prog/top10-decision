@@ -43,9 +43,14 @@ from top10decision.auction_v3.config import (  # noqa: E402
 )
 from top10decision.decision.action_plan import build_action_plan  # noqa: E402
 from top10decision.decision.contracts import (  # noqa: E402
+    ACTUAL_ORDER_FILL_OBSERVED_COLUMN,
+    ACTUAL_ORDER_FILL_TARGET_COLUMN,
     EXIT_LATEST_TIME,
     EXIT_STOP_LOSS_PCT,
     EXIT_TAKE_PROFIT_PCT,
+    PFILL_EXECUTION_CONTRACT,
+    PREOPEN_AUCTION_GATE_AUDIT,
+    PUBLIC_MARKET_BUYABLE_TARGET_COLUMN,
 )
 from top10decision.decision.eligibility import filter_standard_limit_universe  # noqa: E402
 from top10decision.decision.exit_policy import simulate_tplus1_exit  # noqa: E402
@@ -206,6 +211,31 @@ class DecisionCalendarContractTests(unittest.TestCase):
 
         self.assertEqual(result["ts_code"].tolist(), ["600000.SH"])
         sleep.assert_called_once_with(2.0)
+
+
+class DecisionExecutionSemanticsContractTests(unittest.TestCase):
+    def test_public_buyability_is_not_claimed_as_actual_order_fill(self) -> None:
+        self.assertEqual(
+            PUBLIC_MARKET_BUYABLE_TARGET_COLUMN,
+            "y_public_market_buyable",
+        )
+        self.assertEqual(ACTUAL_ORDER_FILL_TARGET_COLUMN, "actual_order_fill")
+        self.assertEqual(
+            ACTUAL_ORDER_FILL_OBSERVED_COLUMN,
+            "actual_order_fill_observed",
+        )
+        self.assertIn("public_market_fillability_proxy", PFILL_EXECUTION_CONTRACT)
+
+    def test_preopen_microstructure_gate_fails_closed_without_snapshots(self) -> None:
+        self.assertFalse(PREOPEN_AUCTION_GATE_AUDIT["enabled"])
+        self.assertEqual(
+            PREOPEN_AUCTION_GATE_AUDIT["decision_deadline"],
+            "T 09:24:50 Asia/Shanghai",
+        )
+        missing = PREOPEN_AUCTION_GATE_AUDIT["required_missing_fields"]
+        self.assertIn("indicative_match_price", missing)
+        self.assertIn("order_imbalance", missing)
+        self.assertIn("cancel_pressure_0920_092450", missing)
 
 
 class DecisionStrictSemanticContractTests(unittest.TestCase):

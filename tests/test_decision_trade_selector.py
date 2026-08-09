@@ -18,6 +18,9 @@ from top10decision.decision.trade_selector import (  # noqa: E402
     TradeProbabilityCalibrator,
     TradeSelectorBundle,
     TradeSelectorConfig,
+    _bundle_hash,
+    _fit_return_model,
+    _promotion_rank_metrics,
     fit_trade_selector,
     prepare_observation_top10,
     score_trade_selector,
@@ -30,6 +33,7 @@ def _constant_bundle(
     return_value: float = 0.03,
     fill_probability: float = 0.80,
     big_loss_probability: float = 0.10,
+    promotion_probability: float = 0.30,
     min_score: float = 0.0,
 ) -> TradeSelectorBundle:
     return TradeSelectorBundle(
@@ -39,6 +43,8 @@ def _constant_bundle(
         fill_constant=fill_probability,
         big_loss_model=None,
         big_loss_constant=big_loss_probability,
+        promotion_model=None,
+        promotion_constant=promotion_probability,
         fill_calibrator=TradeProbabilityCalibrator(
             "constant",
             fill_probability,
@@ -46,6 +52,10 @@ def _constant_bundle(
         big_loss_calibrator=TradeProbabilityCalibrator(
             "constant",
             big_loss_probability,
+        ),
+        promotion_calibrator=TradeProbabilityCalibrator(
+            "constant",
+            promotion_probability,
         ),
         mean_return_margin=0.002,
         residual_q10=-0.05,
@@ -140,6 +150,166 @@ class DecisionTradeSelectorTest(unittest.TestCase):
         )
         self.assertEqual(int(no_trade["trade_selected"].sum()), 0)
 
+    def test_promotion_rank_is_independent_from_observation_rank(self) -> None:
+        class PromotionModel:
+            def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+                probability = features["final_score"].to_numpy(dtype=float)
+                return np.column_stack([1.0 - probability, probability])
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": "20260105",
+                    "ts_code": f"60000{rank}.SH",
+                    "observation_rank": rank,
+                    "final_score": probability,
+                }
+                for rank, probability in ((1, 0.20), (2, 0.90), (3, 0.55))
+            ]
+        )
+        bundle = _constant_bundle()
+        bundle.promotion_model = PromotionModel()
+        bundle.promotion_calibrator = TradeProbabilityCalibrator(
+            "identity",
+            0.30,
+        )
+        scored = score_trade_selector(
+            frame,
+            bundle,
+            globally_promoted=False,
+        )
+        promotion_order = scored.sort_values("promotion_rank")[
+            "observation_rank"
+        ].tolist()
+        self.assertEqual(promotion_order, [2, 3, 1])
+
+    def test_promotion_rank_survives_constant_probability_fallback(self) -> None:
+        class PromotionModel:
+            def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+                probability = features["final_score"].to_numpy(dtype=float)
+                return np.column_stack([1.0 - probability, probability])
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": "20260105",
+                    "ts_code": f"60000{rank}.SH",
+                    "observation_rank": rank,
+                    "final_score": probability,
+                }
+                for rank, probability in ((1, 0.20), (2, 0.90), (3, 0.55))
+            ]
+        )
+        bundle = _constant_bundle()
+        bundle.promotion_model = PromotionModel()
+        bundle.promotion_calibrator = TradeProbabilityCalibrator(
+            "constant",
+            0.30,
+        )
+        scored = score_trade_selector(
+            frame,
+            bundle,
+            globally_promoted=False,
+        )
+        self.assertTrue(
+            scored["predicted_promotion_probability"].eq(0.30).all()
+        )
+        self.assertEqual(
+            scored.sort_values("promotion_rank")["observation_rank"].tolist(),
+            [2, 3, 1],
+        )
+
+    def test_artifact_hash_includes_stage_transition(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": "20260105",
+                    "ts_code": "600001.SH",
+                    "stage": "2→3",
+                    "observation_rank": 1,
+                    "market_fill": 1,
+                    "net_return": 0.01,
+                }
+            ]
+        )
+        changed = frame.copy()
+        changed.loc[0, "stage"] = "3→4"
+        self.assertNotEqual(
+            _bundle_hash(frame, {"ready": False}),
+            _bundle_hash(changed, {"ready": False}),
+        )
+
+    def test_promotion_audit_reports_skill_and_time_segments(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": date,
+                    "ts_code": f"600{date[-2:]}{rank}.SH",
+                    "observation_rank": rank,
+                    "promotion_rank": 3 - rank,
+                    "predicted_promotion_probability": 0.99 if rank == 2 else 0.01,
+                    "continuation_limit_up_hit": int(rank == 2),
+                }
+                for date in (
+                    "20260105",
+                    "20260106",
+                    "20260107",
+                    "20260108",
+                    "20260109",
+                    "20260112",
+                )
+                for rank in (1, 2)
+            ]
+        )
+        metrics = _promotion_rank_metrics(frame)
+        self.assertGreater(metrics["probability_brier_skill"], 0.0)
+        self.assertEqual(metrics["top1_head_to_head"]["promotion_wins"], 6)
+        self.assertEqual(len(metrics["chronological_stability"]), 3)
+        self.assertTrue(metrics["ranking_quality_gate"]["passed"] is False)
+        self.assertTrue(metrics["probability_quality_gate"]["passed"])
+
+    def test_tail_loss_severity_reduces_trade_utility_continuously(self) -> None:
+        class BigLossModel:
+            def predict_proba(self, features: pd.DataFrame) -> np.ndarray:
+                probability = features["final_score"].to_numpy(dtype=float)
+                return np.column_stack([1.0 - probability, probability])
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": "20260105",
+                    "ts_code": "600001.SH",
+                    "observation_rank": 1,
+                    "final_score": 0.10,
+                },
+                {
+                    "signal_date": "20260105",
+                    "ts_code": "600002.SH",
+                    "observation_rank": 2,
+                    "final_score": 0.90,
+                },
+            ]
+        )
+        bundle = _constant_bundle()
+        bundle.big_loss_model = BigLossModel()
+        bundle.big_loss_calibrator = TradeProbabilityCalibrator(
+            "identity",
+            0.10,
+        )
+        bundle.policy["tail_risk_weight"] = 0.75
+        scored = score_trade_selector(
+            frame,
+            bundle,
+            globally_promoted=False,
+        ).set_index("ts_code")
+        self.assertGreater(
+            scored.loc["600001.SH", "trade_score"],
+            scored.loc["600002.SH", "trade_score"],
+        )
+        self.assertTrue(
+            scored["trade_tail_risk_weight"].eq(0.75).all()
+        )
+
     def test_conditional_return_fit_uses_only_market_buyable_rows(self) -> None:
         dates = pd.bdate_range("2025-01-02", periods=120)
         rows = []
@@ -199,6 +369,52 @@ class DecisionTradeSelectorTest(unittest.TestCase):
             "market_fill_eq_1_only",
         )
         self.assertLess(bundle.return_training_rows, bundle.train_rows)
+
+    def test_failed_return_candidate_falls_back_to_constant(self) -> None:
+        fit_rows = []
+        calibration_rows = []
+        for day_index, date in enumerate(pd.bdate_range("2025-01-02", periods=80)):
+            for rank in (1, 2):
+                fit_rows.append(
+                    {
+                        "signal_date": date.strftime("%Y%m%d"),
+                        "ts_code": f"60000{rank}.SH",
+                        "observation_rank": rank,
+                        "market_fill": 1,
+                        "net_return": 0.03 if rank == 1 else -0.03,
+                    }
+                )
+        for day_index, date in enumerate(pd.bdate_range("2025-05-01", periods=20)):
+            for rank in (1, 2):
+                calibration_rows.append(
+                    {
+                        "signal_date": date.strftime("%Y%m%d"),
+                        "ts_code": f"60000{rank}.SH",
+                        "observation_rank": rank,
+                        "market_fill": 1,
+                        "net_return": -0.03 if rank == 1 else 0.03,
+                    }
+                )
+        model, constant, selection, mean_margin, residual_q10 = _fit_return_model(
+            pd.DataFrame(fit_rows),
+            pd.DataFrame(calibration_rows),
+            TradeSelectorConfig(min_fit_buyable_rows=40),
+        )
+        self.assertIsNone(model)
+        self.assertAlmostEqual(constant, 0.0, places=12)
+        self.assertFalse(selection["passed"])
+        self.assertEqual(selection["selected"], "constant")
+        self.assertAlmostEqual(
+            selection["rmse"],
+            selection["constant_rmse"],
+            places=12,
+        )
+        self.assertGreater(mean_margin, 0.0)
+        self.assertAlmostEqual(residual_q10, -0.03, places=12)
+        self.assertIn(
+            selection["rejected_candidate"],
+            {"ridge", "hist_gradient_boosting"},
+        )
 
     def test_zero_trade_model_cannot_be_promoted(self) -> None:
         dates = pd.bdate_range("2025-01-02", periods=100)

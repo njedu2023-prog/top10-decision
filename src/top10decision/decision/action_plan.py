@@ -267,6 +267,19 @@ def _merge_auction_candidates(
                     row.get("first_layer_shadow_selected")
                 ),
                 "trade_rank": _integer(row.get("trade_rank")),
+                "promotion_rank": _integer(row.get("promotion_rank")),
+                "promotion_rank_score": _number(
+                    row.get("promotion_rank_score")
+                ),
+                "predicted_promotion_probability": _number(
+                    row.get("predicted_promotion_probability")
+                ),
+                "promotion_rank_quality_ready": _integer(
+                    row.get("promotion_rank_quality_ready")
+                ),
+                "promotion_probability_quality_ready": _integer(
+                    row.get("promotion_probability_quality_ready")
+                ),
                 "trade_score": _number(row.get("trade_score")),
                 "trade_predicted_conditional_net_return": _number(
                     row.get("trade_predicted_conditional_net_return")
@@ -279,6 +292,15 @@ def _merge_auction_candidates(
                 ),
                 "trade_predicted_big_loss_probability": _number(
                     row.get("trade_predicted_big_loss_probability")
+                ),
+                "trade_predicted_outcome_q10": _number(
+                    row.get("trade_predicted_outcome_q10")
+                ),
+                "trade_tail_loss_proxy": _number(
+                    row.get("trade_tail_loss_proxy")
+                ),
+                "trade_tail_risk_weight": _number(
+                    row.get("trade_tail_risk_weight")
                 ),
                 "trade_gate_pass": _integer(row.get("trade_gate_pass")),
                 "trade_shadow_selected": _integer(

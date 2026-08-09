@@ -18,15 +18,17 @@ from sklearn.preprocessing import StandardScaler
 from .observation import OBSERVATION_TOP_N, rank_observation_rows
 
 
-TRADE_SELECTOR_VERSION = "trade_selector_v1_nested_oos_top10"
+TRADE_SELECTOR_VERSION = "trade_selector_v2_nested_oos_top10_promotion_rank"
 TRADE_SELECTOR_FEATURE_CONTRACT = (
-    "OBSERVATION_TOP10_D_CLOSE_ONLY_CONDITIONAL_FILL_RETURN_NO_T_OR_T1_LEAKAGE"
+    "OBSERVATION_TOP10_D_CLOSE_ONLY_PROMOTION_AND_CONDITIONAL_RETURN_NO_T_OR_T1_LEAKAGE"
 )
 
 # Every feature is frozen at D close. T/T+1 truth, market_fill, actual prices,
 # realized return, and verification fields are intentionally excluded.
 TRADE_SELECTOR_FEATURES: tuple[str, ...] = (
     "observation_rank",
+    "stage_2to3",
+    "stage_3to4",
     "source_rank",
     "prior_probability",
     "strength_score",
@@ -148,6 +150,7 @@ class TradeSelectorConfig:
     promotion_min_bootstrap_probability: float = 0.90
     promotion_min_tail_mean_return: float = -0.10
     big_loss_threshold: float = -0.03
+    tail_risk_weight_grid: tuple[float, ...] = (0.0, 0.25, 0.50, 0.75)
     random_state: int = 20260728
 
 
@@ -177,8 +180,11 @@ class TradeSelectorBundle:
     fill_constant: float
     big_loss_model: Optional[Pipeline]
     big_loss_constant: float
+    promotion_model: Optional[Pipeline]
+    promotion_constant: float
     fill_calibrator: TradeProbabilityCalibrator
     big_loss_calibrator: TradeProbabilityCalibrator
+    promotion_calibrator: TradeProbabilityCalibrator
     mean_return_margin: float
     residual_q10: float
     policy: dict[str, Any]
@@ -207,10 +213,30 @@ def _numeric(frame: pd.DataFrame, name: str, default: float = np.nan) -> pd.Seri
 
 
 def _features(frame: pd.DataFrame) -> pd.DataFrame:
-    return pd.DataFrame(
-        {name: _numeric(frame, name) for name in TRADE_SELECTOR_FEATURES},
-        index=frame.index,
+    values = {
+        name: _numeric(frame, name)
+        for name in TRADE_SELECTOR_FEATURES
+        if name not in {"stage_2to3", "stage_3to4"}
+    }
+    stage = (
+        frame["stage"].astype(str)
+        if "stage" in frame.columns
+        else pd.Series("", index=frame.index, dtype=str)
     )
+    normalized = (
+        stage.str.replace("进", "→", regex=False)
+        .str.replace("->", "→", regex=False)
+        .str.replace("-", "→", regex=False)
+    )
+    values["stage_2to3"] = normalized.str.contains(
+        r"2\s*→\s*3",
+        regex=True,
+    ).astype(float)
+    values["stage_3to4"] = normalized.str.contains(
+        r"3\s*→\s*4",
+        regex=True,
+    ).astype(float)
+    return pd.DataFrame(values, index=frame.index)[list(TRADE_SELECTOR_FEATURES)]
 
 
 def _date_weights(frame: pd.DataFrame) -> np.ndarray:
@@ -598,29 +624,52 @@ def _fit_return_model(
     )
     evaluations.sort(key=lambda item: (item["rmse"], item["mae"], item["name"]))
     best = evaluations[0]
-    residual = calibration_target.to_numpy(dtype=float) - best["prediction"]
-    residual_std = float(np.sqrt(np.average(residual**2, weights=calibration_weights)))
-    effective_dates = max(10, calibration_buyable["signal_date"].astype(str).nunique())
-    mean_margin = max(0.0015, 1.282 * residual_std / math.sqrt(effective_dates))
-    residual_q10 = float(np.quantile(residual, 0.10))
     improvement = (
         (constant_rmse - best["rmse"]) / constant_rmse
         if constant_rmse > 0
         else 0.0
     )
+    passed = bool(improvement >= 0.01)
+    selected_prediction = (
+        best["prediction"]
+        if passed
+        else np.repeat(constant, len(calibration_target))
+    )
+    selected_rmse = best["rmse"] if passed else constant_rmse
+    residual = calibration_target.to_numpy(dtype=float) - selected_prediction
+    residual_std = float(
+        np.sqrt(np.average(residual**2, weights=calibration_weights))
+    )
+    effective_dates = max(
+        10,
+        calibration_buyable["signal_date"].astype(str).nunique(),
+    )
+    mean_margin = max(
+        0.0015,
+        1.282 * residual_std / math.sqrt(effective_dates),
+    )
+    residual_q10 = float(np.quantile(residual, 0.10))
+    selection = {
+        "selected": best["name"] if passed else "constant",
+        "rejected_candidate": None if passed else best["name"],
+        "passed": passed,
+        "reason": (
+            "oos_rmse_skill_passed"
+            if passed
+            else "oos_rmse_skill_below_floor"
+        ),
+        "relative_rmse_improvement": _safe_metric(improvement),
+        "rmse": _safe_metric(selected_rmse),
+        "candidate_rmse": _safe_metric(best["rmse"]),
+        "constant_rmse": _safe_metric(constant_rmse),
+        "fit_rows": int(len(fit_buyable)),
+        "calibration_rows": int(len(calibration_buyable)),
+        "training_scope": "market_fill_eq_1_only",
+    }
     return (
-        best["model"],
+        best["model"] if passed else None,
         constant,
-        {
-            "selected": best["name"],
-            "passed": bool(improvement >= 0.01),
-            "relative_rmse_improvement": _safe_metric(improvement),
-            "rmse": _safe_metric(best["rmse"]),
-            "constant_rmse": _safe_metric(constant_rmse),
-            "fit_rows": int(len(fit_buyable)),
-            "calibration_rows": int(len(calibration_buyable)),
-            "training_scope": "market_fill_eq_1_only",
-        },
+        selection,
         float(mean_margin),
         float(residual_q10),
     )
@@ -639,17 +688,51 @@ def _score_raw(frame: pd.DataFrame, bundle: TradeSelectorBundle) -> pd.DataFrame
         bundle.big_loss_constant,
         out,
     )
+    raw_promotion = _classifier_probability(
+        bundle.promotion_model,
+        bundle.promotion_constant,
+        out,
+    )
     fill_probability = bundle.fill_calibrator.transform(raw_fill)
     big_loss_probability = bundle.big_loss_calibrator.transform(raw_big_loss)
+    promotion_probability = bundle.promotion_calibrator.transform(raw_promotion)
     mean_lcb = conditional_return - bundle.mean_return_margin
-    # Expected cash return of an order: no fill leaves cash unchanged; a fill
-    # realizes the conditional after-cost return. Tail risk is a separate gate.
-    trade_score = fill_probability * mean_lcb
+    outcome_q10 = conditional_return + bundle.residual_q10
+    tail_loss_proxy = np.minimum(outcome_q10, 0.0) * big_loss_probability
+    base_score = fill_probability * mean_lcb
     out["trade_predicted_conditional_net_return"] = conditional_return
     out["trade_predicted_mean_return_lcb"] = mean_lcb
     out["trade_predicted_fill_probability"] = fill_probability
     out["trade_predicted_big_loss_probability"] = big_loss_probability
-    out["trade_score"] = trade_score
+    out["promotion_rank_score"] = raw_promotion
+    out["predicted_promotion_probability"] = promotion_probability
+    out["trade_predicted_outcome_q10"] = outcome_q10
+    out["trade_tail_loss_proxy"] = tail_loss_proxy
+    out["trade_base_score"] = base_score
+    out["trade_score"] = base_score
+    ordered = out.assign(
+        _signal_date=out["signal_date"].astype(str),
+        _promotion_score=raw_promotion,
+        _big_loss_probability=big_loss_probability,
+        _observation_rank=_numeric(
+            out,
+            "observation_rank",
+            999999,
+        ).fillna(999999),
+    ).sort_values(
+        [
+            "_signal_date",
+            "_promotion_score",
+            "_big_loss_probability",
+            "_observation_rank",
+            "ts_code",
+        ],
+        ascending=[True, False, True, True, True],
+        kind="stable",
+    )
+    out.loc[ordered.index, "promotion_rank"] = (
+        ordered.groupby("_signal_date", sort=False).cumcount() + 1
+    ).to_numpy()
     return out
 
 
@@ -660,47 +743,61 @@ def _rank_and_select(
     policy_ready: bool,
 ) -> pd.DataFrame:
     out = scored.copy()
+    tail_risk_weight = float(policy.get("tail_risk_weight") or 0.0)
+    out["trade_tail_risk_weight"] = tail_risk_weight
+    base_score = _numeric(out, "trade_base_score")
+    if base_score.notna().sum() == 0:
+        base_score = _numeric(out, "trade_score")
+    out["trade_score"] = (
+        base_score
+        + tail_risk_weight
+        * _numeric(out, "trade_predicted_fill_probability", 0.0).fillna(0.0)
+        * _numeric(out, "trade_tail_loss_proxy", 0.0).fillna(0.0)
+    )
     thresholds = dict(policy.get("thresholds") or {})
     max_positions = max(1, min(2, int(policy.get("max_positions") or 2)))
     min_score = float(thresholds.get("min_trade_score", -np.inf))
     min_fill = float(thresholds.get("min_fill_probability", 0.0))
     max_big_loss = float(thresholds.get("max_big_loss_probability", 1.0))
     min_lcb = float(thresholds.get("min_mean_return_lcb", -np.inf))
-    if "trade_rank" not in out.columns:
-        out["trade_rank"] = np.nan
+    out["trade_rank"] = np.nan
     out["trade_gate_pass"] = 0
     out["trade_shadow_selected"] = 0
     out["trade_selected"] = 0
     out["trade_model_reason"] = "below_learned_policy"
-    missing_rank = _numeric(out, "trade_rank").isna()
-    if missing_rank.any():
-        ordered = out.assign(
-            _signal_date=out["signal_date"].astype(str),
-            _observation_rank=_numeric(
-                out,
-                "observation_rank",
-                999999,
-            ).fillna(999999),
-            _big_loss=_numeric(
-                out,
-                "trade_predicted_big_loss_probability",
-                1.0,
-            ).fillna(1.0),
-            _score=_numeric(out, "trade_score", -np.inf).fillna(-np.inf),
-        ).sort_values(
-            [
-                "_signal_date",
-                "_score",
-                "_big_loss",
-                "_observation_rank",
-                "ts_code",
-            ],
-            ascending=[True, False, True, True, True],
-            kind="stable",
-        )
-        out.loc[ordered.index, "trade_rank"] = (
-            ordered.groupby("_signal_date", sort=False).cumcount() + 1
-        ).to_numpy()
+    ordered = out.assign(
+        _signal_date=out["signal_date"].astype(str),
+        _observation_rank=_numeric(
+            out,
+            "observation_rank",
+            999999,
+        ).fillna(999999),
+        _big_loss=_numeric(
+            out,
+            "trade_predicted_big_loss_probability",
+            1.0,
+        ).fillna(1.0),
+        _promotion_rank=_numeric(
+            out,
+            "promotion_rank",
+            999999,
+        ).fillna(999999),
+        _score=_numeric(out, "trade_score", -np.inf).fillna(-np.inf),
+    ).sort_values(
+        [
+            "_signal_date",
+            "_score",
+            "_big_loss",
+            "_promotion_rank",
+            "_observation_rank",
+            "ts_code",
+        ],
+        ascending=[True, False, True, True, True, True],
+        kind="stable",
+    )
+    out.loc[ordered.index, "trade_rank"] = (
+        ordered.groupby("_signal_date", sort=False).cumcount() + 1
+    ).to_numpy()
     qualifies = (
         _numeric(out, "trade_score", -np.inf).fillna(-np.inf).ge(min_score)
         & _numeric(
@@ -884,7 +981,11 @@ def _selection_metrics(
     }
 
 
-def _policy_candidates(scored: pd.DataFrame) -> list[dict[str, Any]]:
+def _policy_candidates(
+    scored: pd.DataFrame,
+    *,
+    tail_risk_weight: float,
+) -> list[dict[str, Any]]:
     score = _numeric(scored, "trade_score").dropna()
     lcb = _numeric(scored, "trade_predicted_mean_return_lcb").dropna()
     fill = _numeric(scored, "trade_predicted_fill_probability").dropna()
@@ -902,6 +1003,7 @@ def _policy_candidates(scored: pd.DataFrame) -> list[dict[str, Any]]:
             policies.append(
                 {
                     "max_positions": max_positions,
+                    "tail_risk_weight": float(tail_risk_weight),
                     "thresholds": {
                         "min_trade_score": float(score.quantile(score_q)),
                         "min_mean_return_lcb": float(lcb.quantile(lcb_q)),
@@ -926,23 +1028,31 @@ def _tune_policy(
     cost_rate: float,
 ) -> dict[str, Any]:
     dates = sorted(scored["signal_date"].astype(str).unique())
-    ranked = _rank_and_select(
-        scored,
-        {
-            "max_positions": config.max_positions,
-            "thresholds": {
-                "min_trade_score": -np.inf,
-                "min_mean_return_lcb": -np.inf,
-                "min_fill_probability": 0.0,
-                "max_big_loss_probability": 1.0,
+    candidates: list[dict[str, Any]] = []
+    for tail_risk_weight in config.tail_risk_weight_grid:
+        ranked = _rank_and_select(
+            scored,
+            {
+                "max_positions": config.max_positions,
+                "tail_risk_weight": float(tail_risk_weight),
+                "thresholds": {
+                    "min_trade_score": -np.inf,
+                    "min_mean_return_lcb": -np.inf,
+                    "min_fill_probability": 0.0,
+                    "max_big_loss_probability": 1.0,
+                },
             },
-        },
-        policy_ready=False,
-    )
-    candidates = _policy_candidates(ranked)
+            policy_ready=False,
+        )
+        candidates.extend(
+            _policy_candidates(
+                ranked,
+                tail_risk_weight=float(tail_risk_weight),
+            )
+        )
     evaluated: list[tuple[bool, float, dict[str, Any], dict[str, Any]]] = []
     for policy in candidates:
-        candidate = _rank_and_select(ranked, policy, policy_ready=True)
+        candidate = _rank_and_select(scored, policy, policy_ready=True)
         mask = _numeric(candidate, "trade_selected", 0).fillna(0).eq(1)
         metrics = _selection_metrics(
             candidate,
@@ -1039,6 +1149,7 @@ def _bundle_hash(
         for name in (
             "signal_date",
             "ts_code",
+            "stage",
             "observation_rank",
             "market_fill",
             "net_return",
@@ -1048,7 +1159,7 @@ def _bundle_hash(
     ]))
     stable = frame[columns].copy()
     for column in stable.columns:
-        if column not in {"signal_date", "ts_code"}:
+        if column not in {"signal_date", "ts_code", "stage"}:
             stable[column] = pd.to_numeric(stable[column], errors="coerce")
     digest = hashlib.sha256(
         pd.util.hash_pandas_object(stable, index=False).values.tobytes()
@@ -1101,6 +1212,10 @@ def fit_trade_selector(
         fit_buyable,
         _numeric(fit_buyable, "big_loss_hit", 0),
     )
+    promotion_model, promotion_constant = _fit_classifier(
+        fit,
+        _numeric(fit, "continuation_limit_up_hit", 0),
+    )
     raw_fill = _classifier_probability(
         fill_model,
         fill_constant,
@@ -1126,6 +1241,17 @@ def fit_trade_selector(
         calibration_buyable["signal_date"].astype(str),
         big_loss_constant,
     )
+    raw_promotion = _classifier_probability(
+        promotion_model,
+        promotion_constant,
+        calibration,
+    )
+    promotion_calibrator, promotion_selection = _fit_calibrator(
+        raw_promotion,
+        _numeric(calibration, "continuation_limit_up_hit", 0),
+        calibration["signal_date"].astype(str),
+        promotion_constant,
+    )
     provisional = TradeSelectorBundle(
         return_model=return_model,
         return_constant=return_constant,
@@ -1133,8 +1259,11 @@ def fit_trade_selector(
         fill_constant=fill_constant,
         big_loss_model=big_loss_model,
         big_loss_constant=big_loss_constant,
+        promotion_model=promotion_model,
+        promotion_constant=promotion_constant,
         fill_calibrator=fill_calibrator,
         big_loss_calibrator=big_loss_calibrator,
+        promotion_calibrator=promotion_calibrator,
         mean_return_margin=mean_margin,
         residual_q10=residual_q10,
         policy={},
@@ -1149,6 +1278,7 @@ def fit_trade_selector(
         probability_selection={
             "fill": fill_selection,
             "big_loss": big_loss_selection,
+            "promotion": promotion_selection,
         },
         artifact_sha256="",
     )
@@ -1173,11 +1303,18 @@ def score_trade_selector(
     if bundle is None:
         out = frame.copy()
         out["trade_rank"] = _numeric(out, "observation_rank")
+        out["promotion_rank"] = _numeric(out, "observation_rank")
+        out["promotion_rank_score"] = np.nan
+        out["predicted_promotion_probability"] = np.nan
         out["trade_score"] = np.nan
         out["trade_predicted_conditional_net_return"] = np.nan
         out["trade_predicted_mean_return_lcb"] = np.nan
         out["trade_predicted_fill_probability"] = np.nan
         out["trade_predicted_big_loss_probability"] = np.nan
+        out["trade_predicted_outcome_q10"] = np.nan
+        out["trade_tail_loss_proxy"] = np.nan
+        out["trade_base_score"] = np.nan
+        out["trade_tail_risk_weight"] = np.nan
         out["trade_gate_pass"] = 0
         out["trade_shadow_selected"] = 0
         out["trade_selected"] = 0
@@ -1218,6 +1355,220 @@ def _baseline_metrics(
         dates,
         cost_rate=cost_rate,
     )
+
+
+def _promotion_rank_metrics(audit: pd.DataFrame) -> dict[str, Any]:
+    if audit.empty or "continuation_limit_up_hit" not in audit.columns:
+        return {
+            "target": "T_close_continuation_limit_up_hit",
+            "rows": 0,
+            "dates": 0,
+            "promotion_rank": {},
+            "observation_rank": {},
+        }
+    sample = audit.copy()
+    sample["_truth"] = _numeric(sample, "continuation_limit_up_hit")
+    sample = sample.loc[sample["_truth"].notna()].copy()
+    if sample.empty:
+        return {
+            "target": "T_close_continuation_limit_up_hit",
+            "rows": 0,
+            "dates": 0,
+            "promotion_rank": {},
+            "observation_rank": {},
+        }
+
+    def summarize(rank_field: str, frame: Optional[pd.DataFrame] = None) -> dict[str, Any]:
+        source = sample if frame is None else frame
+        rank = _numeric(source, rank_field)
+        top1 = source.loc[rank.eq(1), "_truth"]
+        top3 = source.loc[rank.between(1, 3, inclusive="both"), "_truth"]
+        ndcg_values: list[float] = []
+        for _, group in source.assign(_rank=rank).groupby(
+            source["signal_date"].astype(str),
+            sort=True,
+        ):
+            ordered = group.sort_values(
+                ["_rank", "ts_code"],
+                kind="stable",
+            ).head(3)
+            truth = ordered["_truth"].to_numpy(dtype=float)
+            discounts = 1.0 / np.log2(np.arange(len(truth), dtype=float) + 2.0)
+            dcg = float(np.sum(truth * discounts))
+            ideal = np.sort(group["_truth"].to_numpy(dtype=float))[::-1][:3]
+            ideal_discounts = 1.0 / np.log2(
+                np.arange(len(ideal), dtype=float) + 2.0
+            )
+            ideal_dcg = float(np.sum(ideal * ideal_discounts))
+            ndcg_values.append(dcg / ideal_dcg if ideal_dcg > 0 else 1.0)
+        return {
+            "top1_promotion_rate": _safe_metric(top1.mean()),
+            "top3_promotion_rate": _safe_metric(top3.mean()),
+            "ndcg_at_3": _safe_metric(np.mean(ndcg_values)),
+        }
+
+    promotion = summarize("promotion_rank")
+    observation = summarize("observation_rank")
+    probability = _numeric(sample, "predicted_promotion_probability")
+    valid_probability = probability.notna()
+    truth = sample.loc[valid_probability, "_truth"].to_numpy(dtype=float)
+    predicted = probability.loc[valid_probability].to_numpy(dtype=float)
+    brier = (
+        float(np.mean((predicted - truth) ** 2))
+        if valid_probability.any()
+        else float("nan")
+    )
+    prevalence = float(np.mean(truth)) if len(truth) else float("nan")
+    constant_brier = (
+        float(np.mean((prevalence - truth) ** 2))
+        if len(truth)
+        else float("nan")
+    )
+    brier_skill = (
+        1.0 - brier / constant_brier
+        if math.isfinite(brier) and constant_brier > 0
+        else float("nan")
+    )
+    calibration_error = float("nan")
+    if len(truth):
+        bins = np.linspace(0.0, 1.0, 6)
+        bucket = np.clip(np.digitize(predicted, bins[1:-1]), 0, 4)
+        calibration_error = float(
+            sum(
+                (mask.sum() / len(truth))
+                * abs(float(np.mean(predicted[mask])) - float(np.mean(truth[mask])))
+                for index in range(5)
+                if (mask := bucket == index).any()
+            )
+        )
+
+    promotion_top1 = sample.loc[
+        _numeric(sample, "promotion_rank").eq(1),
+        ["signal_date", "_truth"],
+    ].drop_duplicates("signal_date")
+    observation_top1 = sample.loc[
+        _numeric(sample, "observation_rank").eq(1),
+        ["signal_date", "_truth"],
+    ].drop_duplicates("signal_date")
+    head_to_head = promotion_top1.merge(
+        observation_top1,
+        on="signal_date",
+        suffixes=("_promotion", "_observation"),
+    )
+    chronological_stability: list[dict[str, Any]] = []
+    unique_dates = np.asarray(sorted(sample["signal_date"].astype(str).unique()))
+    for index, segment_dates in enumerate(np.array_split(unique_dates, 3), start=1):
+        if not len(segment_dates):
+            continue
+        segment = sample.loc[
+            sample["signal_date"].astype(str).isin(segment_dates)
+        ].copy()
+        segment_promotion = summarize("promotion_rank", segment)
+        segment_observation = summarize("observation_rank", segment)
+        chronological_stability.append(
+            {
+                "segment": index,
+                "start": str(segment_dates[0]),
+                "end": str(segment_dates[-1]),
+                "dates": int(len(segment_dates)),
+                "promotion_top1_rate": segment_promotion["top1_promotion_rate"],
+                "observation_top1_rate": segment_observation["top1_promotion_rate"],
+                "promotion_top3_rate": segment_promotion["top3_promotion_rate"],
+                "observation_top3_rate": segment_observation["top3_promotion_rate"],
+            }
+        )
+    stage_breakdown: dict[str, dict[str, Any]] = {}
+    stage_values = sample.get(
+        "stage",
+        pd.Series("", index=sample.index, dtype=str),
+    ).astype(str)
+    for stage in ("2→3", "3→4"):
+        stage_sample = sample.loc[stage_values.eq(stage)].copy()
+        if stage_sample.empty:
+            continue
+        stage_sample["_promotion_stage_rank"] = stage_sample.groupby(
+            stage_sample["signal_date"].astype(str),
+        )["promotion_rank"].rank(method="first", ascending=True)
+        stage_sample["_observation_stage_rank"] = stage_sample.groupby(
+            stage_sample["signal_date"].astype(str),
+        )["observation_rank"].rank(method="first", ascending=True)
+        stage_breakdown[stage] = {
+            "rows": int(len(stage_sample)),
+            "dates": int(stage_sample["signal_date"].astype(str).nunique()),
+            "promotion_rank": summarize(
+                "_promotion_stage_rank",
+                stage_sample,
+            ),
+            "observation_rank": summarize(
+                "_observation_stage_rank",
+                stage_sample,
+            ),
+        }
+
+    chronological_lifts = [
+        float(item["promotion_top1_rate"] or 0.0)
+        - float(item["observation_top1_rate"] or 0.0)
+        for item in chronological_stability
+    ]
+    stage_lifts = [
+        float(item["promotion_rank"]["top1_promotion_rate"] or 0.0)
+        - float(item["observation_rank"]["top1_promotion_rate"] or 0.0)
+        for item in stage_breakdown.values()
+    ]
+    ranking_checks = {
+        "minimum_rows": len(sample) >= 1_000,
+        "minimum_dates": sample["signal_date"].astype(str).nunique() >= 250,
+        "positive_top3_lift": (
+            float(promotion.get("top3_promotion_rate") or 0.0)
+            > float(observation.get("top3_promotion_rate") or 0.0)
+        ),
+        "positive_each_chronological_segment": bool(chronological_lifts)
+        and min(chronological_lifts) > 0.0,
+        "nonnegative_each_stage": bool(stage_lifts) and min(stage_lifts) >= 0.0,
+    }
+    probability_checks = {
+        "positive_brier_skill": math.isfinite(brier_skill) and brier_skill > 0.0,
+        "ece_at_most_8pct": (
+            math.isfinite(calibration_error) and calibration_error <= 0.08
+        ),
+    }
+    return {
+        "target": "T_close_continuation_limit_up_hit",
+        "rows": int(len(sample)),
+        "dates": int(sample["signal_date"].astype(str).nunique()),
+        "probability_brier": _safe_metric(brier),
+        "constant_probability_brier": _safe_metric(constant_brier),
+        "probability_brier_skill": _safe_metric(brier_skill),
+        "probability_ece_5bin": _safe_metric(calibration_error),
+        "promotion_rank": promotion,
+        "observation_rank": observation,
+        "top1_head_to_head": {
+            "dates": int(len(head_to_head)),
+            "promotion_wins": int(
+                (head_to_head["_truth_promotion"] > head_to_head["_truth_observation"]).sum()
+            ),
+            "observation_wins": int(
+                (head_to_head["_truth_promotion"] < head_to_head["_truth_observation"]).sum()
+            ),
+            "ties": int(
+                (head_to_head["_truth_promotion"] == head_to_head["_truth_observation"]).sum()
+            ),
+        },
+        "chronological_stability": chronological_stability,
+        "stage_breakdown": stage_breakdown,
+        "ranking_quality_gate": {
+            "passed": all(ranking_checks.values()),
+            "checks": ranking_checks,
+        },
+        "probability_quality_gate": {
+            "passed": all(probability_checks.values()),
+            "checks": probability_checks,
+        },
+        "top3_rate_lift": _safe_metric(
+            float(promotion.get("top3_promotion_rate") or 0.0)
+            - float(observation.get("top3_promotion_rate") or 0.0)
+        ),
+    }
 
 
 def _selector_metrics(
@@ -1340,6 +1691,7 @@ def _selector_metrics(
         "shadow_policy_oos": shadow,
         "observation_top1_baseline": top1,
         "observation_top2_baseline": top2,
+        "promotion_rank_oos": _promotion_rank_metrics(audit),
         "production_policy": (
             production_bundle.policy if production_bundle is not None else {}
         ),

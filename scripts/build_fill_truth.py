@@ -60,7 +60,13 @@ if str(SRC_DIR) not in sys.path:
 from top10decision.configs import entry_price_proxy_config, fill_truth_config
 from top10decision.data.tushare_minute import opening_auction_price
 from top10decision.decision.eligibility import filter_standard_limit_universe
-from top10decision.decision.contracts import PFILL_EXECUTION_CONTRACT, PFILL_TRUTH_VERSION
+from top10decision.decision.contracts import (
+    ACTUAL_ORDER_FILL_OBSERVED_COLUMN,
+    ACTUAL_ORDER_FILL_TARGET_COLUMN,
+    PFILL_EXECUTION_CONTRACT,
+    PFILL_TRUTH_VERSION,
+    PUBLIC_MARKET_BUYABLE_TARGET_COLUMN,
+)
 
 
 # =========================
@@ -624,6 +630,9 @@ def build_fill_truth(
         "entry_price_proxy_mode",
     ]
     out = pd.concat([out, labels], axis=1)
+    out[PUBLIC_MARKET_BUYABLE_TARGET_COLUMN] = out["y_fill"]
+    out[ACTUAL_ORDER_FILL_OBSERVED_COLUMN] = 0
+    out[ACTUAL_ORDER_FILL_TARGET_COLUMN] = float("nan")
 
     out["sample_maturity"] = sample_maturity
     out["label_ready_fill"] = int(label_ready_fill)
@@ -649,6 +658,9 @@ def build_fill_truth(
         "label_ready_fill",
         "label_ready_ret",
         "y_fill",
+        PUBLIC_MARKET_BUYABLE_TARGET_COLUMN,
+        ACTUAL_ORDER_FILL_OBSERVED_COLUMN,
+        ACTUAL_ORDER_FILL_TARGET_COLUMN,
         "fill_label_quality",
         "entry_price_proxy_t1",
         "entry_price_proxy_mode",
@@ -665,6 +677,12 @@ def build_fill_truth(
     out = out[[c for c in front if c in out.columns] + remain].copy()
 
     out["y_fill"] = out["y_fill"].fillna(0).astype(int)
+    out[PUBLIC_MARKET_BUYABLE_TARGET_COLUMN] = (
+        out[PUBLIC_MARKET_BUYABLE_TARGET_COLUMN].fillna(0).astype(int)
+    )
+    out[ACTUAL_ORDER_FILL_OBSERVED_COLUMN] = (
+        out[ACTUAL_ORDER_FILL_OBSERVED_COLUMN].fillna(0).astype(int)
+    )
     out["label_ready_fill"] = out["label_ready_fill"].fillna(0).astype(int)
     out["label_ready_ret"] = out["label_ready_ret"].fillna(0).astype(int)
     out.attrs["universe_audit"] = universe_audit
@@ -692,6 +710,12 @@ def write_meta(
         "label_ready_fill": int(df["label_ready_fill"].fillna(0).sum()) if "label_ready_fill" in df.columns else 0,
         "label_ready_ret": int(df["label_ready_ret"].fillna(0).sum()) if "label_ready_ret" in df.columns else 0,
         "y_fill_rate": float(df["y_fill"].mean()) if "y_fill" in df.columns and len(df) > 0 else None,
+        "public_market_buyable_rate": (
+            float(df[PUBLIC_MARKET_BUYABLE_TARGET_COLUMN].mean())
+            if PUBLIC_MARKET_BUYABLE_TARGET_COLUMN in df.columns and len(df) > 0
+            else None
+        ),
+        "actual_order_fill_rate": None,
         "quality_counts": (
             df["fill_label_quality"].astype(str).value_counts(dropna=False).to_dict()
             if "fill_label_quality" in df.columns else {}
@@ -701,6 +725,7 @@ def write_meta(
         "broker_connected": False,
         "actual_fill_observed": False,
         "y_fill_semantics": "public_market_fillability_proxy; manual actual fills require explicit feedback",
+        "actual_order_fill_semantics": "unavailable_without_broker_or_manual_order_feedback",
         "universe_eligibility": dict(df.attrs.get("universe_audit", {}) or {}),
         "source": {
             "pred_source": pred_source_path,

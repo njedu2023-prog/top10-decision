@@ -1236,12 +1236,13 @@
         return;
       }
       const headers = [
-        "观察排名", "交易排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "限价",
+        "观察排名", "晋级排名", "交易排名", "状态", "样本性质", "代码", "股票", "行业板块", "晋级", "连板路径", "路径变化", "限价",
         "T开盘", "开盘较限价", "T收盘", "T观察收益", "T晋级结果", "T+1验证状态",
-        "T+1净收益", "继续涨停概率", "大跌概率", "结论"
+        "T+1净收益", "晋级概率", "大跌概率", "结论"
       ];
       const body = rows.map(row => `<tr>
         <td>${escapeHtml(row.stage_watch_rank ?? "-")}</td>
+        <td><span class="truth-badge">${escapeHtml(row.promotion_rank || "-")}</span></td>
         <td><span class="truth-badge">${escapeHtml(row.trade_rank || "-")}</span></td>
         <td class="left"><span class="action ${row.action === "BUY" ? "buy" : "pending"}">${escapeHtml(row.watch_label || "仅观察")}</span></td>
         <td><span class="truth-badge ${timingClass(row.prediction_timing_status)}">${escapeHtml(row.prediction_timing_label || "待审计")}</span></td>
@@ -1259,11 +1260,11 @@
         <td class="${finiteNumber(row.continuation_limit_up_hit) === 1 ? "positive" : ""}">${escapeHtml(continuationLabel(row.continuation_limit_up_hit))}</td>
         <td><span class="truth-badge ${truthClass(row.validation_status)}">${escapeHtml(row.validation_status_label || "待验证")}</span></td>
         <td class="${valueTone(row.actual_net_return)}">${signedPct(row.actual_net_return)}</td>
-        <td>${pct(row.predicted_continuation_limit_up_probability)}</td>
+        <td title="${Number(row.promotion_probability_quality_ready) === 1 ? "独立晋级概率已通过样本外校准门" : "独立晋级排序可用；精确概率未通过校准门，显示原模型概率"}">${pct(Number(row.promotion_probability_quality_ready) === 1 ? row.predicted_promotion_probability : row.predicted_continuation_limit_up_probability)}</td>
         <td>${pct(row.predicted_big_loss_probability)}</td>
         <td class="reason">${row.action === "BUY" ? "允许买入" : "禁止买入"}</td>
       </tr>`).join("");
-      els.stageContent.innerHTML = `<div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[2,4,5,6,8,20].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+      els.stageContent.innerHTML = `<div class="table-wrap"><table class="stage-table"><thead><tr>${headers.map((h, i) => `<th class="${[3,5,6,7,9,21].includes(i) ? "left" : ""}">${escapeHtml(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
     function renderObservationStatistics(plan) {
@@ -1387,7 +1388,7 @@
           <td>${escapeHtml(row.latest_exit_time || "09:30")}</td>
           <td>${pct(row.predicted_fill_probability)}</td>
           <td>${pct(row.predicted_exit_probability)}</td>
-          <td>${pct(row.predicted_continuation_limit_up_probability)}</td>
+          <td title="${Number(row.promotion_probability_quality_ready) === 1 ? "独立晋级概率已通过样本外校准门" : "精确概率未通过校准门，显示原模型概率"}">${pct(Number(row.promotion_probability_quality_ready) === 1 ? row.predicted_promotion_probability : row.predicted_continuation_limit_up_probability)}</td>
           <td>${pct(row.predicted_profit_probability)}</td>
           <td class="${valueTone(row.predicted_net_return)}">${pct(row.predicted_net_return)}</td>
           <td class="${valueTone(row.predicted_return_lcb)}">${pct(row.predicted_return_lcb)}</td>

@@ -24,7 +24,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from top10decision.data.tushare_minute import opening_auction_price_from_snapshot
-from top10decision.decision.contracts import HISTORY_CONTRACT_VERSION
+from top10decision.decision.contracts import (
+    HISTORY_CONTRACT_VERSION,
+    PREOPEN_AUCTION_GATE_AUDIT,
+)
 from top10decision.decision.eligibility import filter_standard_limit_universe
 from top10decision.decision.exit_policy import simulate_tplus1_exit
 from top10decision.decision.observation import (
@@ -2447,6 +2450,9 @@ class AuctionV3Engine:
                         "continuation_limit_up_hit": continuation_hit,
                         "exit_on_time": int(delay_days == 0),
                         "market_fill": market_fill,
+                        "public_market_buyable": market_fill,
+                        "actual_order_fill_observed": 0,
+                        "actual_order_fill": np.nan,
                         "mechanism_limit_pct": mechanism_limit_pct,
                         "fill_reason": fill_reason,
                         "exit_reason": exit_reason,
@@ -6266,12 +6272,19 @@ class AuctionV3Engine:
             errors="coerce",
         ).fillna(0).astype(int)
         trade_fields: dict[str, Any] = {
+            "promotion_rank": np.nan,
+            "promotion_rank_score": np.nan,
+            "predicted_promotion_probability": np.nan,
             "trade_rank": np.nan,
             "trade_score": np.nan,
             "trade_predicted_conditional_net_return": np.nan,
             "trade_predicted_mean_return_lcb": np.nan,
             "trade_predicted_fill_probability": np.nan,
             "trade_predicted_big_loss_probability": np.nan,
+            "trade_predicted_outcome_q10": np.nan,
+            "trade_tail_loss_proxy": np.nan,
+            "trade_base_score": np.nan,
+            "trade_tail_risk_weight": np.nan,
             "trade_gate_pass": 0,
             "trade_shadow_selected": 0,
             "trade_selected": 0,
@@ -6293,6 +6306,18 @@ class AuctionV3Engine:
             for name in trade_fields:
                 if name in trade_scored.columns:
                     scored.loc[trade_scored.index, name] = trade_scored[name]
+        promotion_audit = (
+            ((backtest_metrics.get("trade_selector") or {}).get("promotion_rank_oos"))
+            or {}
+        )
+        scored["promotion_rank_quality_ready"] = int(
+            ((promotion_audit.get("ranking_quality_gate") or {}).get("passed"))
+            is True
+        )
+        scored["promotion_probability_quality_ready"] = int(
+            ((promotion_audit.get("probability_quality_gate") or {}).get("passed"))
+            is True
+        )
         scored["selected"] = pd.to_numeric(
             scored["trade_selected"],
             errors="coerce",
@@ -6307,6 +6332,16 @@ class AuctionV3Engine:
         scored["exit_rule"] = "T+1固定按9:30开盘集合竞价成交价退出；一字跌停无法成交时顺延至首个可成交开盘"
         scored["guidance_only"] = 1
         scored["broker_connected"] = 0
+        scored["predicted_public_market_buyable_probability"] = pd.to_numeric(
+            scored.get("predicted_fill_probability"),
+            errors="coerce",
+        )
+        scored["trade_predicted_public_market_buyable_probability"] = pd.to_numeric(
+            scored.get("trade_predicted_fill_probability"),
+            errors="coerce",
+        )
+        scored["predicted_actual_order_fill_probability"] = np.nan
+        scored["actual_order_fill_probability_available"] = 0
         scored["order_type"] = "LIMIT_ONLY_MANUAL"
         scored["market_order_allowed"] = 0
         scored["max_big_loss_probability"] = pd.to_numeric(
@@ -6414,12 +6449,22 @@ class AuctionV3Engine:
             "observation_risk_label",
             "observation_selected",
             "observation_pool_size",
+            "promotion_rank",
+            "promotion_rank_score",
+            "predicted_promotion_probability",
+            "promotion_rank_quality_ready",
+            "promotion_probability_quality_ready",
             "trade_rank",
             "trade_score",
             "trade_predicted_conditional_net_return",
             "trade_predicted_mean_return_lcb",
             "trade_predicted_fill_probability",
+            "trade_predicted_public_market_buyable_probability",
             "trade_predicted_big_loss_probability",
+            "trade_predicted_outcome_q10",
+            "trade_tail_loss_proxy",
+            "trade_base_score",
+            "trade_tail_risk_weight",
             "trade_gate_pass",
             "trade_shadow_selected",
             "trade_selected",
@@ -6442,6 +6487,9 @@ class AuctionV3Engine:
             "predicted_outcome_q10",
             "predicted_outcome_q90",
             "predicted_fill_probability",
+            "predicted_public_market_buyable_probability",
+            "predicted_actual_order_fill_probability",
+            "actual_order_fill_probability_available",
             "predicted_exit_probability",
             "predicted_profit_probability",
             "predicted_big_loss_probability",
@@ -7868,6 +7916,11 @@ class AuctionV3Engine:
                     "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
                     "metrics": manual_metrics,
                 },
+            },
+            "execution_capabilities": {
+                "preopen_auction_microstructure_gate": dict(
+                    PREOPEN_AUCTION_GATE_AUDIT
+                ),
             },
             "current_market_sentiment": current_sentiment,
             "stage_recent_promotion_rate": (
