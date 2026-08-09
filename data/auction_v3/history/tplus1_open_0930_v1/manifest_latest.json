@@ -1,27 +1,28 @@
 {
   "schema_version": "decision_v11_history_manifest_v1",
-  "generated_at_utc": "2026-08-02T05:43:24+00:00",
+  "generated_at_utc": "2026-08-09T04:00:27+00:00",
   "calendar_source": "tushare:trade_cal:SSE",
   "strict_calendar": true,
   "requested_start_date": "20200101",
-  "requested_end_date": "20260802",
+  "requested_end_date": "20260809",
   "target_signal_dates": [
-    "20260716",
-    "20260717",
-    "20260720",
-    "20260721"
+    "20260722",
+    "20260723",
+    "20260724",
+    "20260727",
+    "20260728"
   ],
-  "target_window_start": "20230828",
-  "target_window_end": "20260721",
+  "target_window_start": "20230904",
+  "target_window_end": "20260728",
   "target_window_open_sessions": 700,
   "target_history_sessions": 700,
   "walkforward_warmup_sessions": 200,
-  "target_signal_date_count": 4,
-  "produced_signal_dates": 4,
-  "produced_rows": 197,
-  "official_auction_truth_rows": 197,
+  "target_signal_date_count": 5,
+  "produced_signal_dates": 5,
+  "produced_rows": 337,
+  "official_auction_truth_rows": 337,
   "auction_truth_coverage": 1.0,
-  "total_compact_signal_dates": 704,
+  "total_compact_signal_dates": 709,
   "target_independent_dates": 500,
   "exit_policy": {
     "version": "tplus1_open_0930_v1",
@@ -30,14 +31,14 @@
     "latest_exit_time": "09:30",
     "requires_intraday_truth": false
   },
-  "output_file": "data/auction_v3/history/tplus1_open_0930_v1/training_20260716_20260721.csv",
-  "output_sha256": "152eb4b7332550a182c404c5f6787e1b00a4c433354837a2105e3118629e6609",
+  "output_file": "data/auction_v3/history/tplus1_open_0930_v1/training_20260722_20260728.csv",
+  "output_sha256": "76218213fefe45975f71dd23bce33ca943cfa9425860560bd643064feac16f88",
   "endpoint_rows": {
-    "daily": 93914,
-    "stk_limit": 130941,
-    "daily_basic": 93914,
-    "limit_list_d": 1205,
-    "stk_auction_o": 93413
+    "daily": 99483,
+    "stk_limit": 138797,
+    "daily_basic": 99483,
+    "limit_list_d": 1397,
+    "stk_auction_o": 98982
   },
   "failures": [],
   "credential_persisted": false
