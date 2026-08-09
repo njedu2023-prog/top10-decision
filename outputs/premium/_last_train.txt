@@ -1,8 +1,8 @@
 trade_date: 20260805
 model_version: premium_v4_a_share_d_t_t1
-run_id: gh_31319535745
-commit_sha: 25301d07fdb9
-created_at_utc: 2026-08-09T15:04:34Z
+run_id: gh_31323686421
+commit_sha: 8402483a1331
+created_at_utc: 2026-08-09T16:37:23Z
 trained: False
 reason: validation_not_pass:days=13;samples=1047;raw_mae=0.058536928823241026;plus_mae=0.07754334242866381;improve_rate=0.32855778414517667;raw_daily_ic=-0.06255346142105712;plus_daily_ic=-0.01679386216233677;bias=0.05274047367979797
 n_samples: 2049
@@ -32,9 +32,14 @@ limitup_promoted: True
 limitup_candidate_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_candidate.joblib
 limitup_trainset_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/learning/limitup_probability_training_samples.csv
 limitup_feature_n: 65
-limitup_train_end_date: 20260625
-limitup_valid_start_date: 20260630
-limitup_gate_version: premium_target_gate_v3_stable_artifact
-limitup_artifact_version: 2
-limitup_target_gate_status: {'t_limit': 'PROVISIONAL', 't_touch': 'PROVISIONAL', 't1': 'SHADOW', 't_return': 'PROVISIONAL', 't1_return': 'SHADOW'}
+limitup_train_end_date: 20260806
+limitup_valid_start_date: 20260602
+limitup_gate_version: premium_target_gate_v4_walkforward_provenance
+limitup_artifact_version: 3
+limitup_target_gate_status: {'t_limit': 'ACTIVE', 't_touch': 'ACTIVE', 't1': 'SHADOW', 't_return': 'ACTIVE', 't1_return': 'SHADOW'}
 limitup_target_probability_status: {'t_limit': 'SHADOW', 't_touch': 'SHADOW', 't1': 'SHADOW'}
+limitup_validation_mode: purged_expanding_walk_forward_v1
+limitup_walk_forward_folds: 3
+limitup_data_fingerprint: 167431570c1021449a46d34e37d8c0dcae24b0ab51994691bdbc9b222dd5f2cc
+limitup_feature_fingerprint: 4627164d3521975130323e28115462ccaceb9bba6abb2091927e5af1f9547f70
+limitup_feature_contract_version: premium_d_close_features_v1
