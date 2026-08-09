@@ -1,7 +1,7 @@
 {
-  "generated_at_utc": "2026-08-09T10:30:11+00:00",
+  "generated_at_utc": "2026-08-09T10:51:53+00:00",
   "model_version": "auction_v12_top10_trade_selector_oos_1",
-  "model_artifact_sha256": "70af75f347e90b6f9ca3ace149294c8a1ab0169f4cf11986c9c0ca83e89da207",
+  "model_artifact_sha256": "cee3f4145e4f8b447e464be3c3d6f612fb02238ceeee5d339b91d2d84097f71d",
   "ready": true,
   "promoted": false,
   "first_layer_promoted": false,
@@ -311,10 +311,10 @@
       "target": "T_close_continuation_limit_up_hit",
       "rows": 3097,
       "dates": 363,
-      "probability_brier": 0.22718644762017404,
+      "probability_brier": 0.22718644762016546,
       "constant_probability_brier": 0.2320870687507956,
-      "probability_brier_skill": 0.02111544239409402,
-      "probability_ece_5bin": 0.1146472823054344,
+      "probability_brier_skill": 0.02111544239413099,
+      "probability_ece_5bin": 0.11464728230541783,
       "promotion_rank": {
         "top1_promotion_rate": 0.650137741046832,
         "top3_promotion_rate": 0.5160697887970616,
@@ -416,10 +416,10 @@
       "max_positions": 2,
       "tail_risk_weight": 0.5,
       "thresholds": {
-        "min_trade_score": -0.014398605353116226,
+        "min_trade_score": -0.014398605353271416,
         "min_mean_return_lcb": -0.026957795555480946,
         "min_fill_probability": 0.0,
-        "max_big_loss_probability": 0.5651228350626936
+        "max_big_loss_probability": 0.5651228350629499
       },
       "ready": false,
       "checks": {
@@ -515,9 +515,9 @@
       "rejected_candidate": "ridge",
       "passed": false,
       "reason": "oos_rmse_skill_below_floor",
-      "relative_rmse_improvement": -0.011481139737679091,
+      "relative_rmse_improvement": -0.011481139737678133,
       "rmse": 0.08696165820598678,
-      "candidate_rmse": 0.08796007715567,
+      "candidate_rmse": 0.08796007715566992,
       "constant_rmse": 0.08696165820598678,
       "fit_rows": 916,
       "calibration_rows": 329,
@@ -527,26 +527,26 @@
       "fill": {
         "method": "identity",
         "rows": 825,
-        "held_out_brier": 0.3073100726779296,
+        "held_out_brier": 0.3073100726808469,
         "constant_brier": 0.3175542195060362,
         "beats_constant": true
       },
       "big_loss": {
         "method": "platt",
         "rows": 329,
-        "held_out_brier": 0.24766420247189253,
+        "held_out_brier": 0.2476642024719141,
         "constant_brier": 0.2503629119986001,
         "beats_constant": true
       },
       "promotion": {
         "method": "isotonic",
         "rows": 825,
-        "held_out_brier": 0.20144399556429124,
+        "held_out_brier": 0.20144399556508563,
         "constant_brier": 0.22861909629723576,
         "beats_constant": true
       }
     },
-    "production_artifact_sha256": "0a105e711ac4f7c14e2a217c27a5698752cbca21413ae6be25c40af61daa2430",
+    "production_artifact_sha256": "93459d3ccf51a8f1bab6bbc9910a7e17ccdcbbe6d02701ccc65a413ca2ffc25c",
     "promotion_checks": {
       "production_policy_ready": false,
       "return_model_chronological_skill": false,
@@ -1745,7 +1745,7 @@
       "max_big_loss_probability": 0.45,
       "min_mean_return_lcb": -0.05,
       "min_conservative_ev": 0.0,
-      "min_selection_score": -0.023150989673030704
+      "min_selection_score": -0.023150989673030767
     },
     "max_positions": 1,
     "diagnostics": {
@@ -1887,7 +1887,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-08-09T10:30:11+00:00",
+        "generated_at_utc": "2026-08-09T10:51:52+00:00",
         "frozen_predictions": 1214,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -1932,7 +1932,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-08-09T10:30:11+00:00",
+        "generated_at_utc": "2026-08-09T10:51:53+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -2563,7 +2563,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-08-09T10:30:11+00:00",
+        "generated_at_utc": "2026-08-09T10:51:52+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -2755,7 +2755,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-08-09T10:28:34+00:00",
+    "generated_at_utc": "2026-08-09T10:49:53+00:00",
     "model_version": "auction_v12_top10_trade_selector_oos_1",
     "history_dates": 715,
     "oos_dates": 544,
@@ -6520,10 +6520,10 @@
         "target": "T_close_continuation_limit_up_hit",
         "rows": 3097,
         "dates": 363,
-        "probability_brier": 0.22718644762017404,
+        "probability_brier": 0.22718644762016546,
         "constant_probability_brier": 0.2320870687507956,
-        "probability_brier_skill": 0.02111544239409402,
-        "probability_ece_5bin": 0.1146472823054344,
+        "probability_brier_skill": 0.02111544239413099,
+        "probability_ece_5bin": 0.11464728230541783,
         "promotion_rank": {
           "top1_promotion_rate": 0.650137741046832,
           "top3_promotion_rate": 0.5160697887970616,
@@ -6625,10 +6625,10 @@
         "max_positions": 2,
         "tail_risk_weight": 0.5,
         "thresholds": {
-          "min_trade_score": -0.014398605353116226,
+          "min_trade_score": -0.014398605353271416,
           "min_mean_return_lcb": -0.026957795555480946,
           "min_fill_probability": 0.0,
-          "max_big_loss_probability": 0.5651228350626936
+          "max_big_loss_probability": 0.5651228350629499
         },
         "ready": false,
         "checks": {
@@ -6724,9 +6724,9 @@
         "rejected_candidate": "ridge",
         "passed": false,
         "reason": "oos_rmse_skill_below_floor",
-        "relative_rmse_improvement": -0.011481139737679091,
+        "relative_rmse_improvement": -0.011481139737678133,
         "rmse": 0.08696165820598678,
-        "candidate_rmse": 0.08796007715567,
+        "candidate_rmse": 0.08796007715566992,
         "constant_rmse": 0.08696165820598678,
         "fit_rows": 916,
         "calibration_rows": 329,
@@ -6736,26 +6736,26 @@
         "fill": {
           "method": "identity",
           "rows": 825,
-          "held_out_brier": 0.3073100726779296,
+          "held_out_brier": 0.3073100726808469,
           "constant_brier": 0.3175542195060362,
           "beats_constant": true
         },
         "big_loss": {
           "method": "platt",
           "rows": 329,
-          "held_out_brier": 0.24766420247189253,
+          "held_out_brier": 0.2476642024719141,
           "constant_brier": 0.2503629119986001,
           "beats_constant": true
         },
         "promotion": {
           "method": "isotonic",
           "rows": 825,
-          "held_out_brier": 0.20144399556429124,
+          "held_out_brier": 0.20144399556508563,
           "constant_brier": 0.22861909629723576,
           "beats_constant": true
         }
       },
-      "production_artifact_sha256": "0a105e711ac4f7c14e2a217c27a5698752cbca21413ae6be25c40af61daa2430",
+      "production_artifact_sha256": "93459d3ccf51a8f1bab6bbc9910a7e17ccdcbbe6d02701ccc65a413ca2ffc25c",
       "promotion_checks": {
         "production_policy_ready": false,
         "return_model_chronological_skill": false,
@@ -6800,7 +6800,7 @@
     "model_quality_warnings": [
       "first_layer_probability_models_did_not_pass_brier_skill_gate"
     ],
-    "model_artifact_sha256": "70af75f347e90b6f9ca3ace149294c8a1ab0169f4cf11986c9c0ca83e89da207"
+    "model_artifact_sha256": "cee3f4145e4f8b447e464be3c3d6f612fb02238ceeee5d339b91d2d84097f71d"
   },
   "universe_eligibility": {
     "rule": "a_share_price_limit_le_10_v2",
