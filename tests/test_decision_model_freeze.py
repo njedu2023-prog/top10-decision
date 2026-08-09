@@ -136,6 +136,11 @@ class DecisionModelFreezeTest(unittest.TestCase):
                 "model_version": "auction_v12",
                 "model_artifact_sha256": "main-sha",
                 "promoted": False,
+                "trade_selector": {
+                    "version": "selector-v2",
+                    "production_artifact_sha256": "selector-sha",
+                    "promoted": False,
+                },
                 "data_coverage": {"history_end": "20260807"},
             },
         )
@@ -163,6 +168,11 @@ class DecisionModelFreezeTest(unittest.TestCase):
                 "model_version": "auction_v12",
                 "model_artifact_sha256": "main-sha",
                 "promoted": False,
+                "trade_selector": {
+                    "version": "selector-v2",
+                    "production_artifact_sha256": "selector-sha",
+                    "promoted": False,
+                },
                 "data_coverage": {"history_end": "20260805"},
             },
         )
@@ -185,6 +195,9 @@ class DecisionModelFreezeTest(unittest.TestCase):
                     "version": "auction_v12",
                     "artifact_sha256": "main-sha",
                     "promoted": False,
+                    "artifact_versions_match": True,
+                    "artifact_fingerprints_match": True,
+                    "trade_selector_artifacts_match": True,
                     "trade_selector_artifact_sha256": "selector-sha",
                     "trade_selector": {
                         "version": "selector-v2",
@@ -199,6 +212,15 @@ class DecisionModelFreezeTest(unittest.TestCase):
         action_plan = json.loads(
             (self.root / "outputs/decision/action_plan_latest.json").read_text()
         )
+        action_plan["model"]["trade_selector_artifacts_match"] = False
+        _write_json(
+            self.root / "outputs/decision/action_plan_latest.json",
+            action_plan,
+        )
+        with self.assertRaises(DecisionModelFreezeError):
+            validate_runtime_artifacts(self.root, self.manifest)
+
+        action_plan["model"]["trade_selector_artifacts_match"] = True
         action_plan["formal_buy_count"] = 1
         _write_json(
             self.root / "outputs/decision/action_plan_latest.json",

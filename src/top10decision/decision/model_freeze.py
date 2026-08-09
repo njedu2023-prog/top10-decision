@@ -316,6 +316,7 @@ def validate_runtime_artifacts(
     )
     expected = manifest.get("production", {}) or {}
     selector = backtest.get("trade_selector", {}) or {}
+    meta_selector = model_meta.get("trade_selector", {}) or {}
     bootstrap = history_snapshot_bootstrap_mode(manifest)
     runtime_values = {
         "model_version": str(model_meta.get("model_version") or ""),
@@ -328,6 +329,11 @@ def validate_runtime_artifacts(
             selector.get("production_artifact_sha256") or ""
         ),
         "trade_selector_promoted": selector.get("promoted") is True,
+        "meta_trade_selector_version": str(meta_selector.get("version") or ""),
+        "meta_trade_selector_artifact_sha256": str(
+            meta_selector.get("production_artifact_sha256") or ""
+        ),
+        "meta_trade_selector_promoted": meta_selector.get("promoted") is True,
     }
     checks = {
         "model_version": (
@@ -354,6 +360,19 @@ def validate_runtime_artifacts(
         ),
         "trade_selector_promoted": (
             (selector.get("promoted") is True)
+            == (expected.get("trade_selector_promoted") is True)
+        ),
+        "meta_trade_selector_version": (
+            str(meta_selector.get("version") or "")
+            == str(expected.get("trade_selector_version") or "")
+        ),
+        "meta_trade_selector_artifact_sha256": (
+            bootstrap
+            or str(meta_selector.get("production_artifact_sha256") or "")
+            == str(expected.get("trade_selector_artifact_sha256") or "")
+        ),
+        "meta_trade_selector_promoted": (
+            (meta_selector.get("promoted") is True)
             == (expected.get("trade_selector_promoted") is True)
         ),
     }
@@ -424,6 +443,15 @@ def validate_runtime_artifacts(
             "action_selector_promoted": (
                 (action_selector.get("promoted") is True)
                 == (expected.get("trade_selector_promoted") is True)
+            ),
+            "action_artifact_versions_match": (
+                action_model.get("artifact_versions_match") is True
+            ),
+            "action_artifact_fingerprints_match": (
+                action_model.get("artifact_fingerprints_match") is True
+            ),
+            "action_selector_artifacts_match": (
+                action_model.get("trade_selector_artifacts_match") is True
             ),
         }
         failed_action_plan = [

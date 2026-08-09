@@ -74,6 +74,17 @@ def _read_csv(path: Path) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def _unique_nonempty_column_value(frame: pd.DataFrame, name: str) -> str:
+    if frame.empty or name not in frame.columns:
+        return ""
+    values = {
+        value
+        for value in (_text(item) for item in frame[name].tolist())
+        if value
+    }
+    return next(iter(values)) if len(values) == 1 else ""
+
+
 def _json_safe(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _json_safe(item) for key, item in value.items()}
@@ -727,15 +738,9 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     ) == 1 if not prediction.empty else False
     backtest_selector = backtest.get("trade_selector") or {}
     meta_selector = model_meta.get("trade_selector") or {}
-    prediction_selector_artifact = (
-        _text(
-            prediction.get(
-                "trade_selector_artifact_sha256",
-                pd.Series([""]),
-            ).iloc[0]
-        )
-        if not prediction.empty
-        else ""
+    prediction_selector_artifact = _unique_nonempty_column_value(
+        prediction,
+        "trade_selector_artifact_sha256",
     )
     backtest_selector_artifact = _text(
         backtest_selector.get("production_artifact_sha256")

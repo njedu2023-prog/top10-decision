@@ -879,6 +879,25 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertFalse(plan["model"]["artifact_fingerprints_match"])
         self.assertEqual(plan["formal_buy_count"], 0)
 
+    def test_selector_fingerprint_ignores_non_top10_blank_rows(self) -> None:
+        self._write_model_artifacts(promoted=True)
+        prediction_path = (
+            self.root
+            / "outputs"
+            / "auction_v3"
+            / "predictions"
+            / "pred_latest.csv"
+        )
+        prediction = pd.read_csv(prediction_path)
+        prediction.loc[0, "trade_selector_artifact_sha256"] = ""
+        prediction.to_csv(prediction_path, index=False)
+
+        plan = build_action_plan(self.root)
+
+        self.assertTrue(plan["model"]["trade_selector_artifacts_match"])
+        self.assertTrue(plan["model"]["promoted"])
+        self.assertEqual(plan["formal_buy_count"], 1)
+
 
 class DecisionWorkflowSerializationTests(unittest.TestCase):
     def test_all_decision_main_writers_share_one_non_cancelling_lock(self) -> None:
