@@ -97,6 +97,8 @@ class ExecutionProfitDiagnostics:
     profit_rank_ic: float = float("nan")
     top_quintile_mean_net_return: float = float("nan")
     top_quintile_lift: float = float("nan")
+    error_type: str = ""
+    error_message: str = ""
 
     def as_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -290,16 +292,19 @@ def _truth_from_market(
     out = out.merge(t, on=["t_date", "ts_code"], how="left")
     out = out.merge(t1, on=["t1_date", "ts_code"], how="left")
 
+    out = out.drop(columns=["t_up_limit_exec"], errors="ignore")
     if "up_limit" in limit.columns:
-        t_limit = limit[["d_date", "ts_code", "up_limit"]].rename(columns={"d_date": "t_date"})
+        t_limit = limit[["d_date", "ts_code", "up_limit"]].rename(
+            columns={"d_date": "t_date", "up_limit": "t_up_limit_exec"}
+        )
         out = out.merge(t_limit, on=["t_date", "ts_code"], how="left")
     else:
-        out["up_limit"] = np.nan
+        out["t_up_limit_exec"] = np.nan
 
     cap_col = _first_col(out, ["t_max_buy_price", "T日可接受买入价", "max_buy_price"])
     cap = _parse_price(out[cap_col]) if cap_col else pd.Series(np.nan, index=out.index)
     prices_ready = out[["t_open", "t_high", "t_low", "t_close", "t1_close"]].notna().all(axis=1)
-    official_limit = pd.to_numeric(out["up_limit"], errors="coerce")
+    official_limit = pd.to_numeric(out["t_up_limit_exec"], errors="coerce")
     limit_hit = prices_ready & official_limit.notna() & (out["t_close"] >= official_limit * 0.9985)
     one_price_limit = limit_hit & ((out["t_high"] - out["t_low"]).abs() <= 0.001)
     under_cap = cap.isna() | (out["t_open"] <= cap * 1.0015)
@@ -611,10 +616,16 @@ def score_execution_candidates(
         current["exec_holdout_top_net"] = top_mean
         return current, diagnostics
     except Exception as exc:
+        error_message = re.sub(r"\s+", " ", str(exc)).strip()[:240]
+        reason = f"execution_model_error:{type(exc).__name__}"
+        if error_message:
+            reason = f"{reason}:{error_message}"
         diagnostics = ExecutionProfitDiagnostics(
             trade_date=trade_date,
             cost_bps=cost_bps,
-            reason=f"execution_model_error:{type(exc).__name__}",
+            reason=reason,
+            error_type=type(exc).__name__,
+            error_message=error_message,
         )
         return _failed_frame(candidates, diagnostics)
 

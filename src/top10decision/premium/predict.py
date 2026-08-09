@@ -147,8 +147,13 @@ def _ensure_dirs(cfg: PremiumConfig) -> None:
 
 def _write_csv(path: Path, df: pd.DataFrame) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, encoding="utf-8-sig")
+    clean = df.loc[:, ~df.columns.duplicated()].copy()
+    clean.to_csv(path, index=False, encoding="utf-8-sig")
     return path
+
+
+def _unique_column_names(names: Sequence[str]) -> List[str]:
+    return list(dict.fromkeys(names))
 
 
 def _write_text(path: Path, text: str) -> Path:
@@ -2880,6 +2885,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "rank_limitup_continuation", "rank_eret_plus", "rank_r_p50", "p_premium", "e_premium", "score_ev", "risk_flags", "confidence", "data_quality",
         "dec_rank", "dec_weight", "dec_can_buy", "dec_p_fill", "dec_reason",
     ]
+    out_cols = _unique_column_names(out_cols)
 
     for c in out_cols:
         if c not in df_top.columns:
@@ -2933,6 +2939,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t1_big_drawdown_hit", "t1_limitdown_risk_hit",
         "t_limitup_verify_reason", "t_limitup_verify_trade_date", "d_analysis_trade_date",
     ]
+    verify_cols = _unique_column_names(verify_cols)
 
     # Persist the full candidate universe. Training only the published Top30
     # creates selection bias and prevents the model from learning what it

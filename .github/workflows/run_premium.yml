@@ -250,8 +250,26 @@ jobs:
           grep -q '<h1>Premium TOP 10</h1>' docs/reports/premium_latest.html
           grep -q 'TOP10: T日涨停概率最高 · D ' docs/reports/premium_latest.html
           python - <<'PY'
+          import csv
+          import json
           import pandas as pd
           from pathlib import Path
+
+          execution_meta = json.loads(
+              Path("outputs/premium/models/execution_profit_model_meta.json").read_text(encoding="utf-8")
+          )
+          execution_reason = str(execution_meta.get("reason", ""))
+          if execution_reason.startswith("execution_model_error:"):
+              raise SystemExit(f"Premium execution model crashed: {execution_reason}")
+
+          for verify_path in sorted(Path("outputs/premium").glob("premium_verify_*.csv")):
+              with verify_path.open("r", encoding="utf-8-sig", newline="") as handle:
+                  header = next(csv.reader(handle), [])
+              duplicates = sorted({name for name in header if header.count(name) > 1})
+              if duplicates:
+                  raise SystemExit(
+                      f"Premium verification schema has duplicate columns: {verify_path}: {duplicates}"
+                  )
 
           paths = [
               Path("outputs/premium/premium_final_buy_latest.csv"),

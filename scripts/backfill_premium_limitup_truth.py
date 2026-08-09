@@ -10,7 +10,9 @@ to board heuristics when that source is unavailable.
 from __future__ import annotations
 
 import argparse
+import csv
 import math
+import re
 from io import StringIO
 from pathlib import Path
 from typing import Iterable
@@ -109,13 +111,46 @@ def _limit_rate_for_code(x: object) -> float:
     return 0.10
 
 
+def _duplicate_header_names(path: Path) -> set[str]:
+    for encoding in ("utf-8-sig", "utf-8", "gbk"):
+        try:
+            with path.open("r", encoding=encoding, newline="") as handle:
+                header = next(csv.reader(handle), [])
+            seen: set[str] = set()
+            duplicates: set[str] = set()
+            for name in header:
+                if name in seen:
+                    duplicates.add(name)
+                seen.add(name)
+            return duplicates
+        except UnicodeDecodeError:
+            continue
+    return set()
+
+
+def _drop_mangled_duplicate_columns(df: pd.DataFrame, duplicate_names: set[str]) -> pd.DataFrame:
+    out = df.loc[:, ~df.columns.duplicated()].copy()
+    if not duplicate_names:
+        return out
+    drop: list[str] = []
+    for col in out.columns:
+        name = str(col)
+        for base in duplicate_names:
+            if name != base and re.fullmatch(rf"{re.escape(base)}\.\d+", name):
+                drop.append(col)
+                break
+    return out.drop(columns=drop, errors="ignore")
+
+
 def _read_csv(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path, dtype={"ts_code": str}, encoding="utf-8-sig")
+    frame = pd.read_csv(path, dtype={"ts_code": str}, encoding="utf-8-sig")
+    return _drop_mangled_duplicate_columns(frame, _duplicate_header_names(path))
 
 
 def _write_csv(path: Path, df: pd.DataFrame) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, encoding="utf-8-sig")
+    clean = df.loc[:, ~df.columns.duplicated()].copy()
+    clean.to_csv(path, index=False, encoding="utf-8-sig")
 
 
 def _remote_daily_url(trade_date: str) -> str:
@@ -370,17 +405,24 @@ def backfill(root: Path, verbose: bool = False) -> int:
     files = sorted(out_dir.glob("premium_verify_*.csv"))
     changed = 0
     for path in files:
+        schema_dirty = bool(_duplicate_header_names(path))
         df = _read_csv(path)
         trade_date = _clean_date(_first_value(df, "trade_date")) or path.stem.rsplit("_", 1)[-1]
         buy_date = _clean_date(_first_value(df, "buy_date"))
         target_date = _clean_date(_first_value(df, "target_date"))
         if not buy_date:
+            if schema_dirty:
+                _write_csv(path, df)
+                changed += 1
             if verbose:
                 print(f"[skip] {path.name}: missing buy_date")
             continue
 
         daily, source = _load_daily(root, buy_date)
         if daily is None or daily.empty:
+            if schema_dirty:
+                _write_csv(path, df)
+                changed += 1
             if verbose:
                 print(f"[skip] {path.name}: T daily not ready {buy_date}: {source}")
             continue
@@ -397,11 +439,14 @@ def backfill(root: Path, verbose: bool = False) -> int:
         after_ready = _ready_rows(fixed)
         after_t1_ready = _ready_t1_rows(fixed)
         if after_ready <= 0:
+            if schema_dirty:
+                _write_csv(path, fixed)
+                changed += 1
             if verbose:
                 print(f"[skip] {path.name}: no matched rows after attach, source={source}")
             continue
 
-        if not fixed.equals(df):
+        if schema_dirty or not fixed.equals(df):
             _write_csv(path, fixed)
             changed += 1
             if verbose:

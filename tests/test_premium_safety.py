@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import importlib.util
 import json
 import sys
@@ -31,7 +32,7 @@ sys.modules.setdefault("top10decision.premium", premium_pkg)
 sys.modules.setdefault("top10decision.premium.report_md", report_stub)
 
 from top10decision.premium.factor_builders import build_pack1_tushare_basic, build_pack2_limit_micro
-from top10decision.premium.execution_profit_model import score_execution_candidates
+from top10decision.premium.execution_profit_model import _truth_from_market, score_execution_candidates
 from top10decision.premium.final_decision import build_final_decisions
 from top10decision.premium.limitup_probability_engine import (
     _model_gate,
@@ -46,6 +47,7 @@ from top10decision.premium.predict import (
     _historical_limitup_stats_from_df,
     _load_validated_platt_calibrator,
     _recent_limitup_model_health,
+    _write_csv as _predict_write_csv,
 )
 from top10decision.premium.premium_views import (
     _display_table,
@@ -394,6 +396,57 @@ class PremiumSafetyTests(unittest.TestCase):
         )
         self.assertEqual(int(invalid.loc[0, "label_matured"]), 0)
         self.assertEqual(invalid.loc[0, "t1_verify_reason"], "invalid_D_T_T1_order")
+
+    def test_execution_truth_keeps_d_limit_and_uses_t_limit(self):
+        history = pd.DataFrame({
+            "d_date": ["20260105"],
+            "ts_code": ["600000.SH"],
+            "up_limit": [10.0],
+            "t_max_buy_price": [10.9],
+        })
+        daily = pd.DataFrame({
+            "d_date": ["20260105", "20260106", "20260107"],
+            "ts_code": ["600000.SH"] * 3,
+            "open": [9.5, 10.8, 11.1],
+            "high": [10.0, 11.0, 12.0],
+            "low": [9.4, 10.7, 10.9],
+            "close": [10.0, 11.0, 11.8],
+        })
+        limits = pd.DataFrame({
+            "d_date": ["20260105", "20260106"],
+            "ts_code": ["600000.SH", "600000.SH"],
+            "up_limit": [10.0, 11.0],
+        })
+        out = _truth_from_market(
+            history,
+            daily,
+            limits,
+            ["20260105", "20260106", "20260107"],
+            "20260107",
+            0.0035,
+        )
+        self.assertEqual(float(out.loc[0, "up_limit"]), 10.0)
+        self.assertEqual(float(out.loc[0, "t_up_limit_exec"]), 11.0)
+        self.assertEqual(int(out.loc[0, "t_limitup_hit_exec"]), 1)
+
+    def test_premium_csv_writers_remove_duplicate_headers(self):
+        module = _load_backfill_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "duplicate.csv"
+            source.write_text(
+                "ts_code,intraday_hard_risk_flag,intraday_hard_risk_flag\n"
+                "600000.SH,0,0\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(module._duplicate_header_names(source), {"intraday_hard_risk_flag"})
+            cleaned = module._read_csv(source)
+            self.assertEqual(list(cleaned.columns), ["ts_code", "intraday_hard_risk_flag"])
+
+            target = Path(tmp) / "writer.csv"
+            duplicate_frame = pd.DataFrame([[1, 1]], columns=["risk", "risk"])
+            _predict_write_csv(target, duplicate_frame)
+            with target.open("r", encoding="utf-8-sig", newline="") as handle:
+                self.assertEqual(next(csv.reader(handle)), ["risk"])
 
     def test_actual_feature_files_are_consumed(self):
         class Cfg:
