@@ -33,6 +33,11 @@ sys.modules.setdefault("top10decision.premium.report_md", report_stub)
 
 from top10decision.premium.factor_builders import build_pack1_tushare_basic, build_pack2_limit_micro
 from top10decision.premium.execution_profit_model import _truth_from_market, score_execution_candidates
+from top10decision.premium.execution_truth import (
+    build_actual_top1_backtest,
+    build_and_write_execution_truth,
+    build_execution_truth_ledger,
+)
 from top10decision.premium.final_decision import build_final_decisions
 from top10decision.premium.limitup_probability_engine import (
     BUNDLE_ARTIFACT_VERSION,
@@ -305,6 +310,116 @@ class PremiumSafetyTests(unittest.TestCase):
                     end_date="20200101",
                 )
             self.assertEqual(historical.loc[0, "status"], "MISSING_T1_1100")
+
+    def test_execution_truth_uses_frozen_rank_auction_cap_and_exact_1100(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out_root = root / "outputs" / "premium"
+            market_root = root / "data" / "market"
+            out_root.mkdir(parents=True)
+            market_root.mkdir(parents=True)
+            pd.DataFrame({
+                "cal_date": ["20260701", "20260702", "20260703"],
+                "is_open": [1, 1, 1],
+            }).to_csv(market_root / "trade_cal_sse.csv", index=False)
+            pd.DataFrame({
+                "rank": [1, 2],
+                "ts_code": ["600001.SH", "000002.SZ"],
+                "name": ["TOP1", "TOP2"],
+                "buy_date": ["20260702", "20260702"],
+                "target_date": ["20260703", "20260703"],
+                "t_max_buy_price": ["≤10.50", "≤9.50"],
+            }).to_csv(out_root / "premium_top10_20260701.csv", index=False)
+
+            auction_dir = market_root / "raw" / "2026" / "20260702"
+            auction_dir.mkdir(parents=True)
+            pd.DataFrame({
+                "ts_code": ["600001.SH", "000002.SZ"],
+                "trade_date": ["20260702", "20260702"],
+                "vol": [100000, 200000],
+                "price": [10.0, 10.0],
+                "amount": [1000000, 2000000],
+            }).to_csv(auction_dir / "stk_auction.csv", index=False)
+            pd.DataFrame({
+                "ts_code": ["600001.SH", "000002.SZ"],
+                "up_limit": [11.0, 11.0],
+            }).to_csv(market_root / "features_limit_20260702.csv", index=False)
+
+            minute_dir = market_root / "minute_1m" / "2026" / "20260703"
+            minute_dir.mkdir(parents=True)
+            pd.DataFrame({
+                "ts_code": ["600001.SH", "600001.SH"],
+                "time": ["2026-07-03 10:59:00", "2026-07-03 11:00:00"],
+                "open": [10.8, 11.0],
+                "vol": [1000, 2000],
+            }).to_csv(minute_dir / "600001_SH.csv", index=False)
+
+            result, paths = build_and_write_execution_truth(
+                out_root,
+                market_root,
+                start_date="20260701",
+                end_date="20260701",
+                cost_bps=35.0,
+                fetch_budget=0,
+            )
+            ledger = result.ledger
+            top1 = ledger.loc[ledger["rank"].eq(1)].iloc[0]
+            top2 = ledger.loc[ledger["rank"].eq(2)].iloc[0]
+            self.assertEqual(top1["status"], "READY")
+            self.assertEqual(int(top1["model_eligible"]), 1)
+            self.assertAlmostEqual(float(top1["auction_price"]), 10.0)
+            self.assertAlmostEqual(float(top1["sell_price"]), 11.0)
+            self.assertAlmostEqual(float(top1["net_return"]), 0.0965)
+            self.assertEqual(top2["status"], "NO_FILL_PRICE_CAP")
+            self.assertEqual(int(top2["fill_observed"]), 0)
+            self.assertTrue(str(top1["candidate_source_sha256"]))
+            self.assertTrue(str(top1["sell_source_sha256"]))
+            self.assertTrue(paths["ledger"].exists())
+            self.assertEqual(result.summary["ready_records"], 1)
+            self.assertEqual(result.backtest["filled_signals"], 1)
+            self.assertNotIn("proxy", result.backtest["entry"].lower())
+
+    def test_execution_truth_rejects_nonconsecutive_trade_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out_root = root / "outputs" / "premium"
+            market_root = root / "data" / "market"
+            out_root.mkdir(parents=True)
+            market_root.mkdir(parents=True)
+            pd.DataFrame({
+                "cal_date": ["20260701", "20260702", "20260703"],
+                "is_open": [1, 1, 1],
+            }).to_csv(market_root / "trade_cal_sse.csv", index=False)
+            pd.DataFrame({
+                "rank": [1],
+                "ts_code": ["600001.SH"],
+                "buy_date": ["20260703"],
+                "target_date": ["20260702"],
+            }).to_csv(out_root / "premium_top10_20260701.csv", index=False)
+            ledger, runtime = build_execution_truth_ledger(
+                out_root,
+                market_root,
+                start_date="20260701",
+                end_date="20260701",
+                fetch_budget=0,
+            )
+            self.assertEqual(ledger.loc[0, "status"], "BAD_TRADING_DATES")
+            self.assertEqual(runtime["api_requests"], 0)
+
+    def test_execution_truth_top1_backtest_is_actual_fixed_rank(self):
+        ledger = pd.DataFrame({
+            "d_trade_date": ["20260701", "20260701", "20260702"],
+            "rank": [1, 2, 1],
+            "status": ["READY", "READY", "READY"],
+            "net_return": [0.10, 0.50, -0.05],
+            "cost_bps": [35.0, 35.0, 35.0],
+        })
+        meta = build_actual_top1_backtest(ledger)
+        self.assertEqual(meta["signals"], 2)
+        self.assertEqual(meta["filled_signals"], 2)
+        self.assertEqual(meta["winning_filled_signals"], 1)
+        self.assertAlmostEqual(meta["ten_percent_position_compound_return"], 0.00495)
+        self.assertIn("original Rank 1", meta["validation"])
 
     def test_time_split_has_two_day_embargo(self):
         dates = [f"202601{x:02d}" for x in range(1, 21)]

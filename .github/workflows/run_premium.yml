@@ -8,6 +8,7 @@ on:
       - "scripts/run_premium.py"
       - "scripts/backfill_premium_limitup_truth.py"
       - "scripts/backfill_premium_top1_shadow.py"
+      - "scripts/backfill_premium_execution_truth.py"
       - "scripts/maybe_train_premium.py"
       - "scripts/rebuild_premium_reports.py"
       - "scripts/build_premium_final.py"
@@ -171,6 +172,19 @@ jobs:
           set -e
           python scripts/backfill_premium_top1_shadow.py --start-date 20260701 --verbose
 
+      - name: Backfill TOP10 executable market truth
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
+          TUSHARE_TOKEN: "${{ secrets.TUSHARE_TOKEN }}"
+          PYTHONDONTWRITEBYTECODE: "1"
+          PREMIUM_EXECUTION_TRUTH_FETCH_BUDGET: "120"
+        run: |
+          set -e
+          python scripts/backfill_premium_execution_truth.py \
+            --start-date 20260610 \
+            --fetch-budget "$PREMIUM_EXECUTION_TRUTH_FETCH_BUDGET" \
+            --verbose
+
       - name: Rebuild Premium HTML report archive
         env:
           PYTHONPATH: "${{ github.workspace }}/src"
@@ -229,11 +243,14 @@ jobs:
           test -f outputs/premium/verification/premium_top1_shadow_ledger.csv
           test -f outputs/premium/verification/premium_top1_shadow_summary.json
           test -f outputs/premium/verification/premium_top1_shadow_202607.csv
+          test -f outputs/premium/verification/premium_execution_truth_ledger.csv
+          test -f outputs/premium/verification/premium_execution_truth_summary.json
           test -f docs/reports/premium_final_latest.html
           test -f docs/reports/premium_latest.html
           python -m json.tool outputs/premium/models/execution_profit_model_meta.json >/dev/null
           python -m json.tool outputs/premium/models/execution_profit_backtest_meta.json >/dev/null
           python -m json.tool outputs/premium/verification/premium_top1_shadow_summary.json >/dev/null
+          python -m json.tool outputs/premium/verification/premium_execution_truth_summary.json >/dev/null
           ! grep -q '净收益执行名单' docs/reports/premium_latest.html
           ! grep -q 'TOP20 观察名单' docs/reports/premium_latest.html
           grep -q '<th>排名</th>' docs/reports/premium_latest.html
@@ -431,6 +448,37 @@ jobs:
               raise SystemExit("Premium TOP1 shadow ledger has duplicate D dates")
           if not pd.to_numeric(shadow["rank"], errors="coerce").dropna().eq(1).all():
               raise SystemExit("Premium TOP1 shadow ledger contains non-TOP1 rows")
+
+          execution_truth = pd.read_csv(
+              "outputs/premium/verification/premium_execution_truth_ledger.csv"
+          )
+          execution_truth_required = {
+              "schema_version",
+              "d_trade_date",
+              "t_trade_date",
+              "t1_trade_date",
+              "rank",
+              "ts_code",
+              "candidate_row_sha256",
+              "auction_price",
+              "sell_price",
+              "net_return",
+              "model_eligible",
+              "status",
+          }
+          if not execution_truth_required.issubset(execution_truth.columns):
+              raise SystemExit("Premium execution-truth ledger contract missing")
+          if execution_truth.duplicated(["d_trade_date", "rank"]).any():
+              raise SystemExit("Premium execution-truth ledger has duplicate frozen rank slots")
+          execution_backtest = json.loads(
+              Path("outputs/premium/models/execution_profit_backtest_meta.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          if "proxy" in str(execution_backtest.get("entry", "")).lower():
+              raise SystemExit("Premium execution backtest still uses a proxy entry")
+          if "11:00" not in str(execution_backtest.get("exit", "")):
+              raise SystemExit("Premium execution backtest does not use the fixed T+1 11:00 exit")
           PY
           head -n 5 outputs/premium/premium_final_buy_latest.csv || true
 
