@@ -2466,13 +2466,17 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         out["limitup_model_src"] = "rule_fallback:model_missing"
         return out, trace
 
+    stage = "load_bundle"
     try:
         bundle = _load_limitup_probability_bundle(model_path)
+        stage = "bundle_predict"
         pred = bundle.predict(out)
+        stage = "copy_model_outputs"
         for c in model_cols:
             if c in pred.columns:
                 out[c] = pred[c]
 
+        stage = "prepare_rank_inputs"
         rule_t_limitup = pd.to_numeric(out.get("t_limitup_prob_rule", out.get("t_limitup_prob")), errors="coerce").fillna(0.5).clip(0.0, 1.0)
         rule_t_strength = pd.to_numeric(out.get("t_limitup_strength_rule", out.get("t_limitup_strength")), errors="coerce").fillna(50.0).clip(0.0, 100.0)
         rule_t1_continue = pd.to_numeric(out.get("t1_continue_up_rate_rule", out.get("t1_continue_up_rate")), errors="coerce").fillna(0.5).clip(0.0, 1.0)
@@ -2512,6 +2516,7 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         health_reason = "bundle_gate_disabled"
         health_metrics: Dict[str, float] = {}
         if model_can_rank:
+            stage = "recent_model_health"
             health_ok, health_reason, health_metrics = _recent_limitup_model_health(cfg)
             if health_ok is False:
                 model_can_rank = False
@@ -2520,6 +2525,7 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
                 t_limit_probability_status = "DISABLED_RECENT_HEALTH"
                 t_touch_probability_status = "DISABLED_RECENT_HEALTH"
 
+        stage = "build_target_rank_scores"
         t_limit_rank_alpha = gate_alpha(t_limit_status)
         t_touch_rank_alpha = gate_alpha(t_touch_status)
         t1_rank_alpha = gate_alpha(t1_status)
@@ -2604,6 +2610,7 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             out["limitup_model_src"] = "limitup_probability_engine:shadow_gate_failed"
             model_mode = "shadow_only_validation_not_pass"
 
+        stage = "build_model_trace"
         trace.update({
             "limitup_model_mode": model_mode,
             "limitup_model_reason": (
@@ -2639,6 +2646,9 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
     except Exception as e:
         out["limitup_model_src"] = f"rule_fallback:predict_error:{type(e).__name__}"
         trace["limitup_model_reason"] = f"limitup_model_predict_error:{type(e).__name__}"
+        trace["limitup_model_error_type"] = type(e).__name__
+        trace["limitup_model_error_message"] = str(e)
+        trace["limitup_model_error_stage"] = stage
         return out, trace
 
 

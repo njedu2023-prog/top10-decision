@@ -44,6 +44,7 @@ from .io import (
 )
 from .labels import build_premium_labels
 from .limitup_probability_engine import (
+    BUNDLE_ARTIFACT_VERSION,
     GATE_VERSION,
     fit_limitup_probability_engine,
     save_bundle as save_limitup_probability_bundle,
@@ -1270,6 +1271,9 @@ def _train_limitup_probability_from_verify(
             "limitup_train_end_date": str(bundle.train_end_date),
             "limitup_valid_start_date": str(bundle.valid_start_date),
             "limitup_gate_version": str(getattr(bundle, "gate_version", GATE_VERSION)),
+            "limitup_artifact_version": int(
+                getattr(bundle, "artifact_version", BUNDLE_ARTIFACT_VERSION)
+            ),
             "limitup_target_gate_status": dict(getattr(bundle, "target_gate_status", {}) or {}),
             "limitup_target_probability_status": dict(
                 getattr(bundle, "target_probability_status", {}) or {}
@@ -1286,6 +1290,9 @@ def _train_limitup_probability_from_verify(
                 "model_can_rank": promoted,
                 "gate_reason": str(bundle.gate_reason),
                 "gate_version": str(getattr(bundle, "gate_version", GATE_VERSION)),
+                "artifact_version": int(
+                    getattr(bundle, "artifact_version", BUNDLE_ARTIFACT_VERSION)
+                ),
                 "target_gate_status": dict(getattr(bundle, "target_gate_status", {}) or {}),
                 "target_gate_reasons": dict(getattr(bundle, "target_gate_reasons", {}) or {}),
                 "target_probability_status": dict(

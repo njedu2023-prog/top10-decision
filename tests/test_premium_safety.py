@@ -35,11 +35,15 @@ from top10decision.premium.factor_builders import build_pack1_tushare_basic, bui
 from top10decision.premium.execution_profit_model import _truth_from_market, score_execution_candidates
 from top10decision.premium.final_decision import build_final_decisions
 from top10decision.premium.limitup_probability_engine import (
+    BUNDLE_ARTIFACT_VERSION,
+    GATE_VERSION,
     _model_gate,
     _target_model_gates,
     _target_probability_gates,
     fit_limitup_probability_engine,
     infer_feature_cols,
+    load_bundle as load_limitup_probability_bundle,
+    save_bundle as save_limitup_probability_bundle,
     time_split,
 )
 from top10decision.premium.predict import (
@@ -585,6 +589,18 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertGreaterEqual(bundle.validation_days, 5)
         self.assertIn("daily_top10_lift", bundle.metrics.columns)
         self.assertIn("brier_skill", bundle.metrics.columns)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            model_path = Path(tmp) / "limitup.joblib"
+            save_limitup_probability_bundle(bundle, model_path)
+            raw = model_path.read_bytes()
+            self.assertNotIn(b"pandas.core.internals", raw)
+            self.assertNotIn(b"StringDtype", raw)
+            restored = load_limitup_probability_bundle(model_path)
+            self.assertEqual(restored.artifact_version, BUNDLE_ARTIFACT_VERSION)
+            self.assertEqual(restored.gate_version, GATE_VERSION)
+            self.assertIsInstance(restored.metrics, pd.DataFrame)
+            self.assertListEqual(list(restored.metrics.columns), list(bundle.metrics.columns))
 
         partial = pd.DataFrame(rows)
         t_only_dates = set(dates[-3:])

@@ -199,6 +199,8 @@ jobs:
           python scripts/build_premium_final.py --link-only --verbose
 
       - name: Sanity check outputs
+        env:
+          PYTHONPATH: "${{ github.workspace }}/src"
         run: |
           set -e
           test -f outputs/premium/_last_run.txt
@@ -254,6 +256,10 @@ jobs:
           import json
           import pandas as pd
           from pathlib import Path
+          from top10decision.premium.limitup_probability_engine import (
+              BUNDLE_ARTIFACT_VERSION,
+              GATE_VERSION,
+          )
 
           execution_meta = json.loads(
               Path("outputs/premium/models/execution_profit_model_meta.json").read_text(encoding="utf-8")
@@ -265,8 +271,10 @@ jobs:
           limitup_meta = json.loads(
               Path("outputs/premium/models/limitup_probability_engine_meta.json").read_text(encoding="utf-8")
           )
-          if limitup_meta.get("gate_version") != "premium_target_gate_v2":
+          if limitup_meta.get("gate_version") != GATE_VERSION:
               raise SystemExit("Premium target-gate model contract was not trained")
+          if int(limitup_meta.get("artifact_version", 0) or 0) != BUNDLE_ARTIFACT_VERSION:
+              raise SystemExit("Premium stable model artifact contract was not trained")
           target_status = limitup_meta.get("target_gate_status", {})
           if not {"t_limit", "t_touch", "t1", "t_return", "t1_return"}.issubset(target_status):
               raise SystemExit("Premium per-target model gate status missing")
@@ -289,6 +297,22 @@ jobs:
               Path("outputs/premium/premium_final_reject_latest.csv"),
           ]
           frames = [pd.read_csv(path) for path in paths]
+          last_run_path = Path("outputs/premium/_last_run.txt")
+          last_run_text = last_run_path.read_text(encoding="utf-8")
+          last_run = {}
+          for line in last_run_text.splitlines():
+              if ":" in line:
+                  key, value = line.split(":", 1)
+                  last_run[key.strip()] = value.strip()
+          model_src = last_run.get("limitup_model_src", "")
+          model_reason = last_run.get("limitup_model_reason", "")
+          if "rule_fallback:predict_error" in model_src or model_reason.startswith("limitup_model_predict_error"):
+              raise SystemExit(
+                  "Premium limit-up model application failed: "
+                  f"stage={last_run.get('limitup_model_error_stage', '-')}; "
+                  f"type={last_run.get('limitup_model_error_type', '-')}; "
+                  f"message={last_run.get('limitup_model_error_message', '-')}"
+              )
           required = {
               "exec_model_ready",
               "exec_trade_eligible",
@@ -302,6 +326,16 @@ jobs:
               raise SystemExit("Premium execution-profit output contract missing")
           main_prefixes = ("000", "001", "002", "003", "600", "601", "603", "605")
           for path, frame in zip(paths, frames):
+              active_raw = frame["t_limit_model_can_rank"]
+              active = (
+                  pd.to_numeric(active_raw, errors="coerce").fillna(0).eq(1)
+                  | active_raw.astype(str).str.strip().str.lower().isin({"true", "yes", "y"})
+              )
+              rank_score = pd.to_numeric(frame["t_limitup_rank_score"], errors="coerce")
+              if active.any() and rank_score.loc[active].isna().any():
+                  raise SystemExit(
+                      f"Premium active limit-up model rows are missing rank scores: {path}"
+                  )
               if "premium_limit_regime" not in frame.columns:
                   raise SystemExit(f"Premium 10pct universe marker missing: {path}")
               if not frame["premium_limit_regime"].dropna().eq("MAIN_BOARD_10PCT").all():

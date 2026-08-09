@@ -22,7 +22,8 @@ Premium 子系统 — LimitUp Probability Engine（V3.6：专业概率引擎）
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+import json
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -50,7 +51,8 @@ CLASS_TARGETS = [
     "t1_big_drawdown_hit",
 ]
 REG_TARGETS = ["t_close_ret", "t_intraday_ret", "t1_close_ret", "t1_high_ret"]
-GATE_VERSION = "premium_target_gate_v2"
+GATE_VERSION = "premium_target_gate_v3_stable_artifact"
+BUNDLE_ARTIFACT_VERSION = 2
 RANK_ENABLED_GATE_STATES = {"ACTIVE", "PROVISIONAL"}
 DEFAULT_EXCLUDE = set(CLASS_TARGETS + REG_TARGETS + [
     "ts_code", "code", "symbol", "名称", "name", "trade_date", "d_trade_date", "t_trade_date", "t1_trade_date",
@@ -99,6 +101,7 @@ class LimitupModelBundle:
     target_gate_reasons: Dict[str, str] = field(default_factory=dict)
     target_probability_status: Dict[str, str] = field(default_factory=dict)
     target_probability_reasons: Dict[str, str] = field(default_factory=dict)
+    artifact_version: int = BUNDLE_ARTIFACT_VERSION
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
         X = _make_X(df, self.feature_cols)
@@ -742,14 +745,39 @@ def fit_limitup_probability_engine(
 
 def save_bundle(bundle: LimitupModelBundle, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(bundle, path)
+    metrics = bundle.metrics if isinstance(bundle.metrics, pd.DataFrame) else pd.DataFrame(bundle.metrics)
+    # A pandas DataFrame in a joblib artifact is not stable across pandas minor
+    # versions (notably StringDtype's constructor). Keep only JSON primitives in
+    # the persisted payload and rebuild the frame after loading.
+    metric_records = json.loads(metrics.to_json(orient="records"))
+    stable_bundle = replace(
+        bundle,
+        metrics=[],
+        artifact_version=BUNDLE_ARTIFACT_VERSION,
+    )
+    payload = {
+        "kind": "premium_limitup_model_bundle",
+        "artifact_version": BUNDLE_ARTIFACT_VERSION,
+        "bundle": stable_bundle,
+        "metric_records": metric_records,
+    }
+    joblib.dump(payload, path)
 
 
 def load_bundle(path: Path) -> LimitupModelBundle:
     obj = joblib.load(path)
-    if not isinstance(obj, LimitupModelBundle):
-        raise TypeError(f"模型文件类型不对: {type(obj)}")
-    return obj
+    if isinstance(obj, dict) and obj.get("kind") == "premium_limitup_model_bundle":
+        bundle = obj.get("bundle")
+        if not isinstance(bundle, LimitupModelBundle):
+            raise TypeError(f"模型文件 bundle 类型不对: {type(bundle)}")
+        bundle.metrics = pd.DataFrame(obj.get("metric_records") or [])
+        bundle.artifact_version = int(obj.get("artifact_version", BUNDLE_ARTIFACT_VERSION))
+        return bundle
+    if isinstance(obj, LimitupModelBundle):
+        # Legacy same-environment artifact. Contract upgrades force a new stable
+        # artifact before production prediction, but retain local compatibility.
+        return obj
+    raise TypeError(f"模型文件类型不对: {type(obj)}")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
