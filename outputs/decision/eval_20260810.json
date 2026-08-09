@@ -9,14 +9,14 @@
   "guardrail_reason": "CAUTION:tail_risk_mean=0.3083,volatility_mean=0.0567",
   "topk": 59,
   "picked": 0,
-  "cost_est_mean": 0.0015755171186440677,
+  "cost_est_mean": 0.001575517118644068,
   "cost_est_min": 0.0011030274999999999,
   "cost_est_max": 0.00241295,
   "risk_penalty_mean": 0.018014780533446073,
   "risk_penalty_min": 0.011340098990114969,
   "risk_penalty_max": 0.024,
-  "ev_base_mean": -0.013298287675535522,
-  "ev_final_mean": -0.013298287675535522,
+  "ev_base_mean": -0.014155936347026329,
+  "ev_final_mean": -0.014155936347026329,
   "pfill_penalty_extra_mean": 0.0,
   "risk_penalty_extra_mean": 0.0,
   "intraday_penalty_extra_mean": 0.0,
@@ -37,8 +37,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260807",
-      "created_at_utc": "2026-08-07T14:20:20+00:00",
-      "commit_sha": "b2e38c52dae522e01af83bc62ce396b15b5ecf6f",
+      "created_at_utc": "2026-08-09T10:40:17+00:00",
+      "commit_sha": "25539e6d8265bff1b77925478aefeccd29095d0d",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -246,7 +246,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260807",
-            "created_at_utc": "2026-08-07T14:18:19+00:00",
+            "created_at_utc": "2026-08-09T10:38:50+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -990,7 +990,7 @@
     "risk_intraday_soft_penalty_sum": 0.0,
     "risk_intraday_confidence_penalty_mean": 0.0010065789830508475,
     "risk_intraday_confidence_penalty_max": 0.0011775000000000002,
-    "risk_intraday_confidence_penalty_sum": 0.059388159999999995,
+    "risk_intraday_confidence_penalty_sum": 0.05938816,
     "risk_intraday_missing_penalty_mean": 0.002,
     "risk_intraday_missing_penalty_max": 0.002,
     "risk_intraday_missing_penalty_sum": 0.11800000000000001,
@@ -1020,7 +1020,7 @@
         "intraday_execution_penalty": 0.007450227272727273,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.01545808575617338
+        "ev_pred": -0.016167808287887657
       },
       {
         "ts_code": "603567.SH",
@@ -1029,7 +1029,7 @@
         "intraday_execution_penalty": 0.007406810191981933,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.014983744876866316
+        "ev_pred": -0.015927358945749977
       },
       {
         "ts_code": "002589.SZ",
@@ -1038,7 +1038,7 @@
         "intraday_execution_penalty": 0.007279407444811036,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.012333071641094769
+        "ev_pred": -0.013239035969305868
       },
       {
         "ts_code": "000506.SZ",
@@ -1047,7 +1047,7 @@
         "intraday_execution_penalty": 0.007103967502206535,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.009559803765361266
+        "ev_pred": -0.010232866090588825
       },
       {
         "ts_code": "000831.SZ",
@@ -1056,7 +1056,7 @@
         "intraday_execution_penalty": 0.0070836713452761945,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.00507943405899516
+        "ev_pred": -0.006836290570617765
       },
       {
         "ts_code": "603758.SH",
@@ -1065,7 +1065,7 @@
         "intraday_execution_penalty": 0.007081489824000764,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.014707639254142792
+        "ev_pred": -0.015114568269610813
       },
       {
         "ts_code": "603459.SH",
@@ -1074,7 +1074,7 @@
         "intraday_execution_penalty": 0.00707297981075603,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.015541163570255966
+        "ev_pred": -0.016817211896892996
       },
       {
         "ts_code": "600449.SH",
@@ -1083,7 +1083,7 @@
         "intraday_execution_penalty": 0.007017722514678366,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.009029912364482518
+        "ev_pred": -0.009661638528867166
       },
       {
         "ts_code": "002762.SZ",
@@ -1092,7 +1092,7 @@
         "intraday_execution_penalty": 0.007016289855852396,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.014891252970214128
+        "ev_pred": -0.015412620430914833
       },
       {
         "ts_code": "000739.SZ",
@@ -1101,7 +1101,7 @@
         "intraday_execution_penalty": 0.006993941302118936,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.009612481202446555
+        "ev_pred": -0.010983499153771862
       }
     ]
   },
@@ -1110,21 +1110,21 @@
     "selected_rows": 0,
     "risk_budget": 0.7,
     "stop_reason": "",
-    "p_fill_pred_min": 0.5434290855312046,
-    "p_fill_pred_max": 0.9017491810945113,
-    "p_fill_pred_mean": 0.7970989110532606,
+    "p_fill_pred_min": 0.5627044720544232,
+    "p_fill_pred_max": 0.8161214251677168,
+    "p_fill_pred_mean": 0.6866310756376293,
     "e_ret_pred_min": 0.005198428814645107,
     "e_ret_pred_max": 0.014040327990488098,
-    "e_ret_pred_mean": 0.007931426307246634,
+    "e_ret_pred_mean": 0.007931426307246636,
     "cost_est_min": 0.0011030274999999999,
     "cost_est_max": 0.00241295,
-    "cost_est_mean": 0.0015755171186440677,
+    "cost_est_mean": 0.001575517118644068,
     "risk_penalty_min": 0.011340098990114969,
     "risk_penalty_max": 0.024,
     "risk_penalty_mean": 0.018014780533446073,
-    "ev_base_min": -0.020084852754003603,
-    "ev_base_max": -0.00507943405899516,
-    "ev_base_mean": -0.013298287675535522,
+    "ev_base_min": -0.020381656756742077,
+    "ev_base_max": -0.006836290570617765,
+    "ev_base_mean": -0.014155936347026329,
     "pfill_penalty_extra_min": 0.0,
     "pfill_penalty_extra_max": 0.0,
     "pfill_penalty_extra_mean": 0.0,
@@ -1140,16 +1140,16 @@
     "ev_penalty_total_extra_min": 0.0,
     "ev_penalty_total_extra_max": 0.0,
     "ev_penalty_total_extra_mean": 0.0,
-    "ev_final_min": -0.020084852754003603,
-    "ev_final_max": -0.00507943405899516,
-    "ev_final_mean": -0.013298287675535522,
-    "ev_pred_min": -0.020084852754003603,
-    "ev_pred_max": -0.00507943405899516,
-    "ev_pred_mean": -0.013298287675535522,
+    "ev_final_min": -0.020381656756742077,
+    "ev_final_max": -0.006836290570617765,
+    "ev_final_mean": -0.014155936347026329,
+    "ev_pred_min": -0.020381656756742077,
+    "ev_pred_max": -0.006836290570617765,
+    "ev_pred_mean": -0.014155936347026329,
     "positive_ev_rows": 0,
     "positive_ev_base_rows": 0,
     "positive_e_ret_rows": 59,
-    "high_pfill_rows": 1,
+    "high_pfill_rows": 0,
     "low_risk_rows": 0,
     "top_mean_penalty_drivers": [
       {
@@ -1158,7 +1158,7 @@
       },
       {
         "name": "cost_est",
-        "mean": 0.0015755171186440677
+        "mean": 0.001575517118644068
       }
     ],
     "primary_no_trade_reason": "positive_e_ret_cannot_cover_cost_and_risk",
@@ -1166,9 +1166,9 @@
       {
         "ts_code": "000831.SZ",
         "name": "中国稀土",
-        "ev_pred": -0.00507943405899516,
-        "ev_base": -0.00507943405899516,
-        "p_fill_pred": 0.7779023324964676,
+        "ev_pred": -0.006836290570617765,
+        "ev_base": -0.006836290570617765,
+        "p_fill_pred": 0.6014857659752535,
         "e_ret_pred": 0.009958568779941328,
         "cost_est": 0.0011794465,
         "risk_penalty": 0.01164678144123802,
@@ -1176,11 +1176,23 @@
         "intraday_ev_bonus": 0.0
       },
       {
+        "ts_code": "600664.SH",
+        "name": "哈药股份",
+        "ev_pred": -0.0074220415413412165,
+        "ev_base": -0.0074220415413412165,
+        "p_fill_pred": 0.5934335074741964,
+        "e_ret_pred": 0.008615746135629305,
+        "cost_est": 0.0011948150000000001,
+        "risk_penalty": 0.011340098990114969,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
         "ts_code": "600206.SH",
         "name": "有研新材",
-        "ev_pred": -0.006116598215519394,
-        "ev_base": -0.006116598215519394,
-        "p_fill_pred": 0.8077343701512697,
+        "ev_pred": -0.007850493917099565,
+        "ev_base": -0.007850493917099565,
+        "p_fill_pred": 0.6208989879450267,
         "e_ret_pred": 0.009280339093727793,
         "cost_est": 0.001199169,
         "risk_penalty": 0.012413478068181818,
@@ -1190,9 +1202,9 @@
       {
         "ts_code": "603936.SH",
         "name": "博敏电子",
-        "ev_pred": -0.006223205912404154,
-        "ev_base": -0.006223205912404154,
-        "p_fill_pred": 0.8189694547185946,
+        "ev_pred": -0.007933091053335069,
+        "ev_base": -0.007933091053335069,
+        "p_fill_pred": 0.6581998407396847,
         "e_ret_pred": 0.010635623850880314,
         "cost_est": 0.001138836,
         "risk_penalty": 0.013794620978151685,
@@ -1200,23 +1212,11 @@
         "intraday_ev_bonus": 0.0
       },
       {
-        "ts_code": "600664.SH",
-        "name": "哈药股份",
-        "ev_pred": -0.00624101662179649,
-        "ev_base": -0.00624101662179649,
-        "p_fill_pred": 0.7305110049947827,
-        "e_ret_pred": 0.008615746135629305,
-        "cost_est": 0.0011948150000000001,
-        "risk_penalty": 0.011340098990114969,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
         "ts_code": "600744.SH",
         "name": "华银电力",
-        "ev_pred": -0.007097224465455279,
-        "ev_base": -0.007097224465455279,
-        "p_fill_pred": 0.8291793828596992,
+        "ev_pred": -0.008675859800091628,
+        "ev_base": -0.008675859800091628,
+        "p_fill_pred": 0.6631429313985961,
         "e_ret_pred": 0.009507763631085379,
         "cost_est": 0.0011697865,
         "risk_penalty": 0.013811079545454547,
@@ -1226,11 +1226,11 @@
     ]
   },
   "engine_status": {
-    "p_fill_pred_src": "model:lgbm",
+    "p_fill_pred_src": "rule",
     "p_fill_model_loaded": true,
     "p_fill_model_kind": "lgbm",
     "p_fill_model_path": "/home/runner/work/top10-decision/top10-decision/models/pfill_lgbm.joblib",
-    "p_fill_degrade_reason": "",
+    "p_fill_degrade_reason": "model_rejected_by_learning_acceptance:pfill_truth_version_mismatch",
     "eret_pred_src": "rule",
     "eret_model_loaded": true,
     "eret_model_kind": "",
