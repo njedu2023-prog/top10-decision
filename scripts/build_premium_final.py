@@ -30,7 +30,10 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from top10decision.premium.config import PremiumConfig  # noqa: E402
-from top10decision.premium.execution_profit_model import score_execution_candidates  # noqa: E402
+from top10decision.premium.execution_profit_model import (  # noqa: E402
+    execution_backtest_payload,
+    score_execution_candidates,
+)
 from top10decision.premium.final_decision import build_final_decisions, final_display_columns  # noqa: E402
 
 
@@ -62,9 +65,26 @@ def _write_text(path: Path, text: str) -> Path:
     return path
 
 
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (np.floating, float)):
+        return float(value) if np.isfinite(value) else None
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    return value
+
+
 def _write_json(path: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(_json_safe(payload), ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -425,7 +445,8 @@ def build(cfg: PremiumConfig, trade_date: str, verbose: bool = False) -> int:
     _write_json(out_root / "models" / f"execution_profit_model_meta_{trade_date}.json", meta_payload)
     _write_json(out_root / "models" / "execution_profit_model_meta.json", meta_payload)
 
-    backtest_meta = _read_json(out_root / "models" / "execution_profit_backtest_meta.json")
+    backtest_meta = execution_backtest_payload(execution_diagnostics)
+    _write_json(out_root / "models" / "execution_profit_backtest_meta.json", backtest_meta)
     html_text = _render_html(trade_date, buy, watch, reject, stats, _utc_now_iso(), backtest_meta)
     p_html = _write_text(report_root / f"premium_final_{trade_date}.html", html_text)
     _write_text(report_root / "premium_final_latest.html", html_text)

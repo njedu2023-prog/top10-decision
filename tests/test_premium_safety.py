@@ -32,7 +32,18 @@ sys.modules.setdefault("top10decision.premium", premium_pkg)
 sys.modules.setdefault("top10decision.premium.report_md", report_stub)
 
 from top10decision.premium.factor_builders import build_pack1_tushare_basic, build_pack2_limit_micro
-from top10decision.premium.execution_profit_model import _truth_from_market, score_execution_candidates
+from top10decision.premium.execution_profit_model import (
+    EMBARGO_DAYS,
+    MODEL_RELEASE_D_DATE,
+    TRUTH_SCHEMA_VERSION,
+    ExecutionProfitDiagnostics,
+    _load_execution_truth,
+    _policy_returns,
+    _purged_date_folds,
+    _truth_from_market,
+    execution_backtest_payload,
+    score_execution_candidates,
+)
 from top10decision.premium.execution_truth import (
     build_actual_top1_backtest,
     build_and_write_execution_truth,
@@ -375,6 +386,7 @@ class PremiumSafetyTests(unittest.TestCase):
             self.assertTrue(str(top1["candidate_source_sha256"]))
             self.assertTrue(str(top1["sell_source_sha256"]))
             self.assertTrue(paths["ledger"].exists())
+            self.assertEqual(paths["backtest"].name, "execution_actual_top1_backtest_meta.json")
             self.assertEqual(result.summary["ready_records"], 1)
             self.assertEqual(result.backtest["filled_signals"], 1)
             self.assertNotIn("proxy", result.backtest["entry"].lower())
@@ -1372,6 +1384,74 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn("execution_model_guard", watch.loc[0, "final_reason"])
         self.assertEqual(stats.execution_model_mode, "PROFIT_GUARDED")
 
+    def test_execution_profit_walk_forward_is_purged_and_embargoed(self):
+        dates = pd.bdate_range("2026-01-05", periods=42).strftime("%Y%m%d").tolist()
+        folds = _purged_date_folds(dates, n_splits=3, embargo_days=EMBARGO_DAYS)
+        self.assertEqual(len(folds), 3)
+        positions = {date: index for index, date in enumerate(dates)}
+        for train_dates, valid_dates in folds:
+            self.assertTrue(train_dates.isdisjoint(valid_dates))
+            train_end = max(positions[date] for date in train_dates)
+            valid_start = min(positions[date] for date in valid_dates)
+            self.assertGreaterEqual(valid_start - train_end - 1, EMBARGO_DAYS)
+
+    def test_execution_truth_loader_uses_only_settled_actual_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_root = Path(tmp)
+            verify = out_root / "verification"
+            verify.mkdir(parents=True)
+            ledger = pd.DataFrame({
+                "schema_version": [TRUTH_SCHEMA_VERSION] * 3,
+                "d_trade_date": ["20260701", "20260702", "20260703"],
+                "rank": [1, 1, 1],
+                "ts_code": ["600001.SH", "600002.SH", "600003.SH"],
+                "fill_observed": [1, 0, np.nan],
+                "net_return": [0.02, np.nan, np.nan],
+                "model_eligible": [1, 0, 0],
+                "status": ["READY", "NO_FILL_PRICE_CAP", "PENDING_T1"],
+            })
+            ledger.to_csv(verify / "premium_execution_truth_ledger.csv", index=False)
+            loaded = _load_execution_truth(out_root, "20260710")
+            self.assertEqual(loaded["d_date"].tolist(), ["20260701", "20260702"])
+            self.assertEqual(loaded["fill_actual"].tolist(), [1.0, 0.0])
+
+            ledger.loc[0, "schema_version"] = "wrong_schema"
+            ledger.to_csv(verify / "premium_execution_truth_ledger.csv", index=False)
+            with self.assertRaisesRegex(RuntimeError, "schema mismatch"):
+                _load_execution_truth(out_root, "20260710")
+
+    def test_execution_backtest_separates_policy_from_forced_top_audit(self):
+        diagnostics = ExecutionProfitDiagnostics(
+            trade_date="20260810",
+            reason="guarded:post_release_days",
+            history_days=40,
+            policy_trade_days=0,
+            policy_filled_days=0,
+            forced_top_days=22,
+            forced_top_filled_days=11,
+            forced_top_mean_net_return=-0.001,
+            release_d_date=MODEL_RELEASE_D_DATE,
+        )
+        payload = execution_backtest_payload(diagnostics)
+        self.assertEqual(payload["schema_version"], "premium_execution_profit_walk_forward_v2")
+        self.assertEqual(payload["signals"], 0)
+        self.assertEqual(payload["forced_top_days"], 22)
+        self.assertEqual(payload["truth_source"], "premium_execution_truth_ledger.csv")
+        self.assertNotIn("proxy", payload["entry"].lower())
+        self.assertIn("11:00", payload["exit"])
+
+    def test_execution_policy_does_not_turn_missing_sell_truth_into_zero(self):
+        frame = pd.DataFrame({
+            "d_date": ["20260701"],
+            "candidate_gate": [True],
+            "execution_score_oof": [1.0],
+            "fill_actual": [1.0],
+            "net_ret": [np.nan],
+        })
+        returns, trades, fills, wins = _policy_returns(frame)
+        self.assertEqual(len(returns), 0)
+        self.assertEqual((trades, fills, wins), (0, 0, 0))
+
     def test_execution_profit_model_requires_real_history(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1390,7 +1470,7 @@ class PremiumSafetyTests(unittest.TestCase):
                 trade_date="20260710",
             )
             self.assertFalse(diagnostics.ready)
-            self.assertEqual(diagnostics.reason, "market_history_insufficient")
+            self.assertEqual(diagnostics.reason, "actual_execution_truth_missing")
             self.assertEqual(int(scored.loc[0, "exec_trade_eligible"]), 0)
 
 

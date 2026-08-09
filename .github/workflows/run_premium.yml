@@ -240,6 +240,7 @@ jobs:
           test -f outputs/premium/premium_final_reject_latest.csv
           test -f outputs/premium/models/execution_profit_model_meta.json
           test -f outputs/premium/models/execution_profit_backtest_meta.json
+          test -f outputs/premium/models/execution_actual_top1_backtest_meta.json
           test -f outputs/premium/verification/premium_top1_shadow_ledger.csv
           test -f outputs/premium/verification/premium_top1_shadow_summary.json
           test -f outputs/premium/verification/premium_top1_shadow_202607.csv
@@ -249,6 +250,7 @@ jobs:
           test -f docs/reports/premium_latest.html
           python -m json.tool outputs/premium/models/execution_profit_model_meta.json >/dev/null
           python -m json.tool outputs/premium/models/execution_profit_backtest_meta.json >/dev/null
+          python -m json.tool outputs/premium/models/execution_actual_top1_backtest_meta.json >/dev/null
           python -m json.tool outputs/premium/verification/premium_top1_shadow_summary.json >/dev/null
           python -m json.tool outputs/premium/verification/premium_execution_truth_summary.json >/dev/null
           ! grep -q '净收益执行名单' docs/reports/premium_latest.html
@@ -277,6 +279,12 @@ jobs:
               BUNDLE_ARTIFACT_VERSION,
               GATE_VERSION,
           )
+          from top10decision.premium.execution_profit_model import (
+              EMBARGO_DAYS as EXECUTION_EMBARGO_DAYS,
+              MODEL_VERSION as EXECUTION_MODEL_VERSION,
+              TRUTH_SCHEMA_VERSION as EXECUTION_TRUTH_SCHEMA_VERSION,
+              VALIDATION_MODE as EXECUTION_VALIDATION_MODE,
+          )
 
           execution_meta = json.loads(
               Path("outputs/premium/models/execution_profit_model_meta.json").read_text(encoding="utf-8")
@@ -284,6 +292,23 @@ jobs:
           execution_reason = str(execution_meta.get("reason", ""))
           if execution_reason.startswith("execution_model_error:"):
               raise SystemExit(f"Premium execution model crashed: {execution_reason}")
+          if execution_meta.get("model_version") != EXECUTION_MODEL_VERSION:
+              raise SystemExit("Premium execution-profit model version mismatch")
+          if execution_meta.get("validation_mode") != EXECUTION_VALIDATION_MODE:
+              raise SystemExit("Premium execution-profit validation contract missing")
+          if execution_meta.get("truth_source") != "premium_execution_truth_ledger.csv":
+              raise SystemExit("Premium execution-profit model is not bound to actual truth")
+          if int(execution_meta.get("embargo_days", 0) or 0) != EXECUTION_EMBARGO_DAYS:
+              raise SystemExit("Premium execution-profit embargo mismatch")
+          if int(execution_meta.get("history_days", 0) or 0) >= 30 and int(execution_meta.get("return_rows", 0) or 0) >= 150:
+              if len(str(execution_meta.get("data_fingerprint", ""))) != 64:
+                  raise SystemExit("Premium execution-profit data fingerprint missing")
+              if len(str(execution_meta.get("feature_fingerprint", ""))) != 64:
+                  raise SystemExit("Premium execution-profit feature fingerprint missing")
+          if not bool(execution_meta.get("ready", False)):
+              final_buy = pd.read_csv("outputs/premium/premium_final_buy_latest.csv")
+              if not final_buy.empty:
+                  raise SystemExit("Premium execution model is guarded but buy list is non-empty")
 
           limitup_meta = json.loads(
               Path("outputs/premium/models/limitup_probability_engine_meta.json").read_text(encoding="utf-8")
@@ -470,6 +495,8 @@ jobs:
               raise SystemExit("Premium execution-truth ledger contract missing")
           if execution_truth.duplicated(["d_trade_date", "rank"]).any():
               raise SystemExit("Premium execution-truth ledger has duplicate frozen rank slots")
+          if not execution_truth["schema_version"].astype(str).eq(EXECUTION_TRUTH_SCHEMA_VERSION).all():
+              raise SystemExit("Premium execution-truth ledger schema mismatch")
           execution_backtest = json.loads(
               Path("outputs/premium/models/execution_profit_backtest_meta.json").read_text(
                   encoding="utf-8"
@@ -479,6 +506,19 @@ jobs:
               raise SystemExit("Premium execution backtest still uses a proxy entry")
           if "11:00" not in str(execution_backtest.get("exit", "")):
               raise SystemExit("Premium execution backtest does not use the fixed T+1 11:00 exit")
+          if execution_backtest.get("schema_version") != "premium_execution_profit_walk_forward_v2":
+              raise SystemExit("Premium execution walk-forward backtest contract missing")
+          if execution_backtest.get("truth_source") != "premium_execution_truth_ledger.csv":
+              raise SystemExit("Premium execution walk-forward backtest truth source mismatch")
+          actual_top1 = json.loads(
+              Path("outputs/premium/models/execution_actual_top1_backtest_meta.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          if actual_top1.get("schema_version") != "premium_execution_actual_top1_backtest_v1":
+              raise SystemExit("Premium actual TOP1 baseline contract missing")
+          if "proxy" in str(actual_top1.get("entry", "")).lower():
+              raise SystemExit("Premium actual TOP1 baseline still uses a proxy entry")
           PY
           head -n 5 outputs/premium/premium_final_buy_latest.csv || true
 

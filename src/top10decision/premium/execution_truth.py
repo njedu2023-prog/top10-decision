@@ -744,6 +744,8 @@ def _json_safe(value: object) -> object:
         return {str(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
     if isinstance(value, (np.floating, float)):
         return float(value) if np.isfinite(value) else None
     if isinstance(value, (np.integer, int)):
@@ -762,7 +764,7 @@ def write_execution_truth_artifacts(
     models_root.mkdir(parents=True, exist_ok=True)
     ledger_path = verify_root / "premium_execution_truth_ledger.csv"
     summary_path = verify_root / "premium_execution_truth_summary.json"
-    backtest_path = models_root / "execution_profit_backtest_meta.json"
+    backtest_path = models_root / "execution_actual_top1_backtest_meta.json"
     result.ledger.to_csv(ledger_path, index=False, encoding="utf-8-sig")
     summary_path.write_text(
         json.dumps(_json_safe(result.summary), ensure_ascii=False, indent=2, allow_nan=False),
