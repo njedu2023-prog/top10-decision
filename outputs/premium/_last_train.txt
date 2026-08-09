@@ -1,8 +1,8 @@
 trade_date: 20260805
 model_version: premium_v4_a_share_d_t_t1
-run_id: gh_31176613997
-commit_sha: 1cb4ef81c6ea
-created_at_utc: 2026-08-07T12:22:27Z
+run_id: gh_31316310787
+commit_sha: 3059da6c2623
+created_at_utc: 2026-08-09T13:51:18Z
 trained: False
 reason: validation_not_pass:days=13;samples=1047;raw_mae=0.058536928823241026;plus_mae=0.07754334242866381;improve_rate=0.32855778414517667;raw_daily_ic=-0.06255346142105712;plus_daily_ic=-0.01679386216233677;bias=0.05274047367979797
 n_samples: 2049
@@ -19,18 +19,21 @@ delta_rmse: 0.09914882431720712
 plus_improve_rate: 0.32855778414517667
 ehx_validation_pass: False
 ehx_plus_daily_rank_ic: -0.01679386216233677
-limitup_trained: False
-limitup_reason: disabled_validation_not_pass:days=13;samples=1047;t_limit_auc=0.6632898224060636;t_limit_brier_skill=0.029046589505355214;t_limit_top10_lift=0.1305274441415145;t_limit_daily_ic=0.2107273382510577;t1_accept_auc=0.5016785791639593;t1_accept_brier_skill=-0.4433144628544059;t1_ret_daily_ic=0.011589695732717441
-limitup_n_samples: 2049
-limitup_n_days: 41
+limitup_trained: True
+limitup_reason: ok_promoted
+limitup_n_samples: 3612
+limitup_n_days: 92
 limitup_min_samples: 20
-limitup_model_path: 
+limitup_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine.joblib
 limitup_metrics_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_metrics.csv
 limitup_meta_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_meta.json
 limitup_candidate_trained: True
-limitup_promoted: False
+limitup_promoted: True
 limitup_candidate_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_candidate.joblib
 limitup_trainset_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/learning/limitup_probability_training_samples.csv
-limitup_feature_n: 66
-limitup_train_end_date: 20260715
-limitup_valid_start_date: 20260720
+limitup_feature_n: 65
+limitup_train_end_date: 20260625
+limitup_valid_start_date: 20260630
+limitup_gate_version: premium_target_gate_v2
+limitup_target_gate_status: {'t_limit': 'PROVISIONAL', 't_touch': 'PROVISIONAL', 't1': 'SHADOW', 't_return': 'PROVISIONAL', 't1_return': 'SHADOW'}
+limitup_target_probability_status: {'t_limit': 'SHADOW', 't_touch': 'SHADOW', 't1': 'SHADOW'}
