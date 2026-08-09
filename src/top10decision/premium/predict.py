@@ -894,6 +894,21 @@ def _apply_adaptive_rank_score(df: pd.DataFrame, history: Dict[str, object]) -> 
     t_touch_can_rank = _target_gate_flag(out, "t_touch_model_can_rank") >= 0.5
     t1_can_rank = _target_gate_flag(out, "t1_model_can_rank") >= 0.5
     t1_return_can_rank = _target_gate_flag(out, "t1_return_model_can_rank") >= 0.5
+    t1_gate_evidence = _gate_status_evidence(out, "t1_gate_status", "t1_model_can_rank")
+    t1_return_gate_evidence = _gate_status_evidence(
+        out, "t1_return_gate_status", "t1_return_model_can_rank"
+    )
+    t1_evidence = (0.60 * t1_gate_evidence + 0.40 * t1_return_gate_evidence).clip(0.0, 1.0)
+    t1_evidence_mean = float(t1_evidence.mean()) if len(t1_evidence) else 0.0
+    raw_t1_weight = float(weights["t1"])
+    # A historical rule IC alone must not keep a large T+1 weight when the
+    # actual T+1 targets are still SHADOW.  Reallocate the unsupported weight
+    # to the validated T-limit rank and execution quality components.
+    t1_weight_cap = 0.05 + 0.25 * t1_evidence_mean
+    weights["t1"] = min(raw_t1_weight, t1_weight_cap)
+    released_t1_weight = max(0.0, raw_t1_weight - weights["t1"])
+    weights["limitup"] += 0.72 * released_t1_weight
+    weights["execution"] += 0.28 * released_t1_weight
     limitup_rank_signal = _score_01_from_percent_or_rank(out, "t_limitup_rank_score", "t_limitup_prob", default=0.5)
     touch_rank_signal = _score_01_from_percent_or_rank(out, "t_touch_rank_score", "t_limitup_strength", default=0.5)
     strength = pd.to_numeric(out.get("t_limitup_strength", out.get("t_limitup_strength_rule", pd.Series([50.0] * len(out), index=idx))), errors="coerce").fillna(50.0).clip(0.0, 100.0) / 100.0
@@ -945,10 +960,19 @@ def _apply_adaptive_rank_score(df: pd.DataFrame, history: Dict[str, object]) -> 
         "adaptive_weight_execution": round(weights["execution"], 6),
         "adaptive_limitup_ic": "" if not np.isfinite(limitup_ic) else round(float(limitup_ic), 6),
         "adaptive_t1_ret_ic": "" if not np.isfinite(t1_ic) else round(float(t1_ic), 6),
+        "adaptive_t1_raw_weight": round(raw_t1_weight, 6),
+        "adaptive_t1_evidence": round(t1_evidence_mean, 6),
+        "adaptive_t1_weight_cap": round(t1_weight_cap, 6),
         "adaptive_t_limit_model_active": int(t_limit_can_rank.sum()),
         "adaptive_t_touch_model_active": int(t_touch_can_rank.sum()),
         "adaptive_t1_model_active": int(t1_can_rank.sum()),
-        "adaptive_reason": "t1_downweighted_negative_ic" if np.isfinite(t1_ic) and t1_ic < 0 else "ok",
+        "adaptive_reason": (
+            "t1_gate_shadow_downweighted"
+            if t1_evidence_mean <= 0.0 and weights["t1"] < raw_t1_weight
+            else "t1_downweighted_negative_ic"
+            if np.isfinite(t1_ic) and t1_ic < 0
+            else "ok"
+        ),
     }
     return out, trace
 
@@ -969,6 +993,16 @@ def _target_gate_flag(df: pd.DataFrame, name: str, legacy: bool = True) -> pd.Se
     if legacy:
         return _field_01(df, "model_can_rank", 0.0)
     return pd.Series([0.0] * len(df), index=df.index, dtype="float64")
+
+
+def _gate_status_evidence(df: pd.DataFrame, status_col: str, flag_col: str) -> pd.Series:
+    """Convert a per-target gate into conservative 0-1 ranking evidence."""
+    flag = _target_gate_flag(df, flag_col, legacy=False)
+    if status_col not in df.columns:
+        return flag.clip(0.0, 1.0).astype(float)
+    status = df[status_col].astype(str).str.strip().str.upper()
+    evidence = status.map({"ACTIVE": 1.0, "PROVISIONAL": 0.65}).fillna(0.0)
+    return evidence.where(flag >= 0.5, 0.0).clip(0.0, 1.0).astype(float)
 
 
 def _score_01_from_percent_or_rank(df: pd.DataFrame, *names: str, default: float = 0.5) -> pd.Series:
@@ -1061,6 +1095,11 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     t_touch_can_rank = _target_gate_flag(out, "t_touch_model_can_rank") >= 0.5
     t1_can_rank = _target_gate_flag(out, "t1_model_can_rank") >= 0.5
     t1_return_can_rank = _target_gate_flag(out, "t1_return_model_can_rank") >= 0.5
+    t1_gate_evidence = _gate_status_evidence(out, "t1_gate_status", "t1_model_can_rank")
+    t1_return_gate_evidence = _gate_status_evidence(
+        out, "t1_return_gate_status", "t1_return_model_can_rank"
+    )
+    t1_evidence = (0.60 * t1_gate_evidence + 0.40 * t1_return_gate_evidence).clip(0.0, 1.0)
     t_limit_probability_ready = _target_gate_flag(
         out, "t_limit_model_probability_ready", legacy=False
     ) >= 0.5
@@ -1224,12 +1263,23 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         + 0.07 * intraday_execution_edge
         + 0.04 * stage_quality_score
     ).clip(0.0, 1.0)
+    # Keep an unsupported T+1 estimate close to neutral.  As the independent
+    # T+1 gates progress from SHADOW to PROVISIONAL/ACTIVE, its full
+    # cross-sectional information is restored automatically.
+    t1_accept_evidence_adjusted = (
+        0.50 + t1_evidence * (t1_accept_raw - 0.50)
+    ).clip(0.0, 1.0)
+    t1_component_weight = (0.08 + 0.27 * t1_evidence).clip(0.08, 0.35)
+    released_t1_weight = 0.35 - t1_component_weight
+    attack_component_weight = 0.30 + 0.60 * released_t1_weight
+    execution_component_weight = 0.10 + 0.25 * released_t1_weight
+    market_component_weight = 0.05 + 0.15 * released_t1_weight
     premium_final_raw = (
-        0.30 * t_up_attack_raw
-        + 0.35 * t1_accept_raw
+        attack_component_weight * t_up_attack_raw
+        + t1_component_weight * t1_accept_evidence_adjusted
         + 0.20 * eret_plus_score
-        + 0.10 * execution_score
-        + 0.05 * market_score
+        + execution_component_weight * execution_score
+        + market_component_weight * market_score
         - risk_penalty_score
     ).clip(0.0, 1.0)
     adaptive_raw = _score_01_from_percent_or_rank(out, "premium_adaptive_score", default=0.5)
@@ -1253,7 +1303,13 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     out["t1_close_ret_pred_score"] = (100.0 * t1_close_ret_pred_score).round(4)
     out["t1_high_ret_pred_score"] = (100.0 * t1_high_ret_pred_score).round(4)
     out["t_up_attack_score"] = (100.0 * t_up_attack_raw).round(4)
-    out["t1_accept_score"] = (100.0 * t1_accept_raw).round(4)
+    out["t1_accept_score_raw"] = (100.0 * t1_accept_raw).round(4)
+    out["t1_accept_score"] = (100.0 * t1_accept_evidence_adjusted).round(4)
+    out["t1_evidence_score"] = (100.0 * t1_evidence).round(4)
+    out["premium_t1_component_weight"] = t1_component_weight.round(6)
+    out["premium_attack_component_weight"] = attack_component_weight.round(6)
+    out["premium_execution_component_weight"] = execution_component_weight.round(6)
+    out["premium_market_component_weight"] = market_component_weight.round(6)
     out["premium_final_score"] = (100.0 * premium_final_raw).round(4)
     out["premium_final_score_raw"] = premium_final_raw.round(6)
     out["premium_rank_score"] = (100.0 * premium_rank_raw).round(4)
@@ -1268,7 +1324,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         dec_can_buy.eq(0)
         | (score_ev < -0.002)
         | (eret_gate < -0.008)
-        | (t1_accept_raw < 0.45)
+        | (t1_accept_evidence_adjusted < 0.45)
         | (t1_big_drawdown_prob >= 0.35)
         | (risk_penalty_score >= 0.75)
         | intraday_block
@@ -1279,8 +1335,9 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         & (score_ev >= 0.0)
         & (eret_gate >= -0.003)
         & (t_up_attack_raw >= 0.55)
-        & (t1_accept_raw >= 0.52)
+        & (t1_accept_evidence_adjusted >= 0.52)
         & (t1_high_profit_prob >= 0.50)
+        & (t1_evidence >= 0.35)
         & (risk_penalty_score <= 0.60)
         & (intraday_risk_penalty <= 0.70)
     )
@@ -1289,6 +1346,11 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     out["premium_bucket"] = np.select(
         [force_excluded, eligible],
         ["EXCLUDED", "ELIGIBLE"],
+        default="WATCH",
+    )
+    out["premium_candidate_state"] = np.select(
+        [force_excluded, eligible, t_limit_can_rank],
+        ["NO_TRADE", "QUALIFIED", "RANK_ONLY"],
         default="WATCH",
     )
 
@@ -1301,7 +1363,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
             row_reasons.append("score_ev<-0.002")
         if eret_gate.loc[i] < -0.008:
             row_reasons.append("eret_plus<-0.008")
-        if t1_accept_raw.loc[i] < 0.45:
+        if t1_accept_evidence_adjusted.loc[i] < 0.45:
             row_reasons.append("t1_accept<0.45")
         if t1_big_drawdown_prob.loc[i] >= 0.35:
             row_reasons.append("big_drawdown_prob>=0.35")
@@ -1318,20 +1380,26 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
                 row_reasons.append("eret_plus<-0.003")
             if t_up_attack_raw.loc[i] < 0.55:
                 row_reasons.append("t_attack<0.55")
-            if t1_accept_raw.loc[i] < 0.52:
+            if t1_accept_evidence_adjusted.loc[i] < 0.52:
                 row_reasons.append("t1_accept<0.52")
             if t1_high_profit_prob.loc[i] < 0.50:
                 row_reasons.append("t1_high_profit<0.50")
+            if t1_evidence.loc[i] < 0.35:
+                row_reasons.append("t1_evidence<0.35")
             if risk_penalty_score.loc[i] > 0.60:
                 row_reasons.append("risk_penalty>0.60")
             if intraday_risk_penalty.loc[i] > 0.70:
                 row_reasons.append("intraday_risk>0.70")
         reasons.append(";".join(row_reasons) if row_reasons else "ok")
     out["premium_exclude_reason"] = pd.Series(reasons, index=idx, dtype="object")
-    out["premium_rank_mode"] = np.where(t_limit_can_rank, "model_validated_professional_score", "professional_score_rule_guarded")
+    out["premium_rank_mode"] = np.where(
+        t_limit_can_rank,
+        "model_validated_professional_score",
+        "professional_score_rule_guarded",
+    )
 
     trace = {
-        "premium_score_mode": "t_attack_t1_accept_final_v1",
+        "premium_score_mode": "target_evidence_weighted_v2",
         "premium_intraday_mode": "intraday_weighted_v1",
         "premium_intraday_avg_attack_edge": float(intraday_attack_edge.mean()) if intraday_attack_edge.notna().any() else "",
         "premium_intraday_avg_execution_edge": float(intraday_execution_edge.mean()) if intraday_execution_edge.notna().any() else "",
@@ -1346,6 +1414,11 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         "premium_excluded_count": int(force_excluded.sum()),
         "premium_model_can_rank_count": int(t_limit_can_rank.sum()),
         "premium_t1_model_can_rank_count": int(t1_can_rank.sum()),
+        "premium_t1_evidence_avg": float(t1_evidence.mean()) if t1_evidence.notna().any() else 0.0,
+        "premium_t1_component_weight_avg": float(t1_component_weight.mean()) if t1_component_weight.notna().any() else 0.08,
+        "premium_rank_only_count": int((out["premium_candidate_state"] == "RANK_ONLY").sum()),
+        "premium_qualified_count": int((out["premium_candidate_state"] == "QUALIFIED").sum()),
+        "premium_no_trade_count": int((out["premium_candidate_state"] == "NO_TRADE").sum()),
         "premium_ehx_validated_count": int(ehx_validated.sum()),
         "premium_rank_blend": "professional_75_adaptive_25",
     }
@@ -2402,6 +2475,138 @@ def _recent_limitup_model_health(
     return ok, "recent_health_pass" if ok else "recent_health_fail", metrics
 
 
+def _recent_target_model_health(
+    cfg: PremiumConfig,
+    target: str,
+    lookback_days: int = 20,
+) -> Tuple[Optional[bool], str, Dict[str, float]]:
+    """Evaluate recent realized rank skill for one target without cross-disabling others."""
+    if target == "t_limit":
+        return _recent_limitup_model_health(cfg, lookback_days=lookback_days)
+
+    specs = {
+        "t_touch": {
+            "kind": "class",
+            "actual": ["t_touch_limitup_actual", "t_touch_limitup"],
+            "score": ["t_touch_rank_score", "t_touch_limitup_prob_model"],
+            "rule": ["t_limitup_strength_rule", "t_limitup_strength"],
+            "active": ["t_touch_model_can_rank"],
+        },
+        "t1": {
+            "kind": "class",
+            "actual": ["t1_accept_hit", "t1_up_hit"],
+            "score": ["t1_rank_score", "t1_accept_prob_model", "t1_up_prob_model"],
+            "rule": ["t1_continue_up_rate_rule", "t1_continue_up_rate"],
+            "active": ["t1_model_can_rank"],
+        },
+        "t_return": {
+            "kind": "reg",
+            "actual": ["t_close_ret"],
+            "score": ["t_close_ret_pred"],
+            "rule": [],
+            "active": ["t_return_model_can_rank"],
+        },
+        "t1_return": {
+            "kind": "reg",
+            "actual": ["t1_close_ret"],
+            "score": ["t1_close_ret_pred"],
+            "rule": [],
+            "active": ["t1_return_model_can_rank"],
+        },
+    }
+    spec = specs.get(str(target))
+    if spec is None:
+        raise ValueError(f"unknown_recent_health_target:{target}")
+
+    rows: List[pd.DataFrame] = []
+    files = sorted(cfg.out_root().glob("premium_verify_*.csv"))[-max(1, int(lookback_days)):]
+    for path in files:
+        try:
+            df = _read_csv_smart(path)
+        except Exception:
+            continue
+        if df.empty:
+            continue
+        if spec["kind"] == "class":
+            actual = _bool_like_series(df, list(spec["actual"]), default=np.nan)
+            score = _prob_series(df, list(spec["score"]), default=np.nan)
+            rule = _prob_series(df, list(spec["rule"]), default=np.nan)
+        else:
+            actual = _num_series(df, *list(spec["actual"]), default=np.nan)
+            score = _num_series(df, *list(spec["score"]), default=np.nan)
+            rule = pd.Series(np.nan, index=df.index, dtype="float64")
+        active = _bool_like_series(df, list(spec["active"]), default=0.0).fillna(0).ge(0.5)
+        valid = active & actual.notna() & score.notna()
+        if not valid.any():
+            continue
+        date_col = _first_existing_col(df, "trade_date", "d_analysis_trade_date", "base_date")
+        day = (
+            df[date_col].astype(str).map(_to_yyyymmdd)
+            if date_col
+            else pd.Series(path.stem[-8:], index=df.index)
+        )
+        rows.append(pd.DataFrame({
+            "date": day[valid],
+            "actual": actual[valid],
+            "score": score[valid],
+            "rule": rule[valid],
+        }))
+
+    if not rows:
+        return None, f"recent_health_no_active_rows:{target}", {}
+    frame = pd.concat(rows, ignore_index=True).dropna(subset=["date", "actual", "score"])
+    n_days = int(frame["date"].nunique())
+    if n_days < 8 or len(frame) < 150:
+        return None, f"recent_health_not_enough:{target}:days={n_days};rows={len(frame)}", {}
+
+    top_lifts: List[float] = []
+    rule_lifts: List[float] = []
+    daily_ics: List[float] = []
+    for _, day in frame.groupby("date", sort=True):
+        if len(day) < 3 or day["actual"].nunique() < 2:
+            continue
+        top_n = min(10, len(day))
+        model_top = day.nlargest(top_n, "score")
+        top_lifts.append(float(model_top["actual"].mean() - day["actual"].mean()))
+        if day["rule"].notna().sum() >= top_n:
+            rule_top = day.nlargest(top_n, "rule")
+            rule_lifts.append(float(model_top["actual"].mean() - rule_top["actual"].mean()))
+        ic = day["score"].rank(method="average").corr(
+            day["actual"].rank(method="average"), method="pearson"
+        )
+        if np.isfinite(ic):
+            daily_ics.append(float(ic))
+
+    top10_lift = float(np.mean(top_lifts)) if top_lifts else float("nan")
+    versus_rule_lift = float(np.mean(rule_lifts)) if rule_lifts else float("nan")
+    daily_ic = float(np.mean(daily_ics)) if daily_ics else float("nan")
+    positive_ic_rate = (
+        float(np.mean(np.asarray(daily_ics) > 0)) if daily_ics else float("nan")
+    )
+    metrics = {
+        "days": float(n_days),
+        "samples": float(len(frame)),
+        "top10_lift": top10_lift,
+        "versus_rule_top10_lift": versus_rule_lift,
+        "daily_rank_ic": daily_ic,
+        "positive_ic_rate": positive_ic_rate,
+    }
+    ok = bool(
+        np.isfinite(top10_lift)
+        and top10_lift > 0
+        and np.isfinite(daily_ic)
+        and daily_ic > 0
+        and np.isfinite(positive_ic_rate)
+        and positive_ic_rate >= 0.50
+        and (not np.isfinite(versus_rule_lift) or versus_rule_lift >= -0.01)
+    )
+    return (
+        ok,
+        f"recent_health_{'pass' if ok else 'fail'}:{target}",
+        metrics,
+    )
+
+
 def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, object]]:
     """
     接入 limitup_probability_engine.py。
@@ -2518,19 +2723,48 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
                 return 0.30
             return 0.0
 
-        model_can_rank = gate_enabled(t_limit_status)
-        health_ok: Optional[bool] = None
-        health_reason = "bundle_gate_disabled"
+        rank_statuses = {
+            "t_limit": t_limit_status,
+            "t_touch": t_touch_status,
+            "t1": t1_status,
+            "t_return": t_return_status,
+            "t1_return": t1_return_status,
+        }
+        probability_statuses = {
+            "t_limit": t_limit_probability_status,
+            "t_touch": t_touch_probability_status,
+            "t1": t1_probability_status,
+        }
+        health_results: Dict[str, Tuple[Optional[bool], str, Dict[str, float]]] = {}
         health_metrics: Dict[str, float] = {}
-        if model_can_rank:
-            stage = "recent_model_health"
-            health_ok, health_reason, health_metrics = _recent_limitup_model_health(cfg)
-            if health_ok is False:
-                model_can_rank = False
-                t_limit_status = "DISABLED_RECENT_HEALTH"
-                t_touch_status = "DISABLED_RECENT_HEALTH"
-                t_limit_probability_status = "DISABLED_RECENT_HEALTH"
-                t_touch_probability_status = "DISABLED_RECENT_HEALTH"
+        stage = "recent_target_model_health"
+        for target_name, status in list(rank_statuses.items()):
+            if not gate_enabled(status):
+                continue
+            target_health = _recent_target_model_health(cfg, target_name)
+            health_results[target_name] = target_health
+            target_ok, _, target_metrics = target_health
+            health_metrics.update({
+                f"{target_name}_{key}": value for key, value in target_metrics.items()
+            })
+            if target_ok is False:
+                rank_statuses[target_name] = "DISABLED_RECENT_HEALTH"
+                if target_name in probability_statuses:
+                    probability_statuses[target_name] = "DISABLED_RECENT_HEALTH"
+
+        t_limit_status = rank_statuses["t_limit"]
+        t_touch_status = rank_statuses["t_touch"]
+        t1_status = rank_statuses["t1"]
+        t_return_status = rank_statuses["t_return"]
+        t1_return_status = rank_statuses["t1_return"]
+        t_limit_probability_status = probability_statuses["t_limit"]
+        t_touch_probability_status = probability_statuses["t_touch"]
+        t1_probability_status = probability_statuses["t1"]
+        health_ok = health_results.get("t_limit", (None, "", {}))[0]
+        health_reason = ";".join(
+            f"{target_name}={result[1]}" for target_name, result in health_results.items()
+        ) or "no_rank_enabled_target"
+        model_can_rank = gate_enabled(t_limit_status)
 
         stage = "build_target_rank_scores"
         t_limit_rank_alpha = gate_alpha(t_limit_status)
@@ -2573,10 +2807,34 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         ).clip(0.01, 0.99).round(6)
         out["t1_continue_up_rate_engine"] = out["t1_continue_up_rate"]
         out["T+1延续上涨率"] = out["t1_continue_up_rate"]
-        rank_composite = (0.50 * t_limit_rank + 0.25 * t_touch_rank + 0.25 * t1_rank).clip(0.0, 1.0)
+        t1_relay_weight = 0.25 if gate_enabled(t1_status) else 0.05
+        released_relay_weight = 0.25 - t1_relay_weight
+        t_limit_relay_weight = 0.50 + 0.70 * released_relay_weight
+        t_touch_relay_weight = 0.25 + 0.30 * released_relay_weight
+        rank_composite = (
+            t_limit_relay_weight * t_limit_rank
+            + t_touch_relay_weight * t_touch_rank
+            + t1_relay_weight * t1_rank
+        ).clip(0.0, 1.0)
+        rule_strength_ratio = (rule_t_strength / 100.0).clip(0.0, 1.0)
+        rule_exec_residual = (
+            rule_score / 100.0
+            - 0.40 * rule_t_limitup
+            - 0.25 * rule_strength_ratio
+            - 0.25 * rule_t1_continue
+        ).div(0.10).clip(0.0, 1.0)
+        rule_limit_weight = 0.40 + 0.70 * released_relay_weight
+        rule_strength_weight = 0.25 + 0.30 * released_relay_weight
+        rule_score_guarded = 100.0 * (
+            rule_limit_weight * rule_t_limitup
+            + rule_strength_weight * rule_strength_ratio
+            + t1_relay_weight * rule_t1_continue
+            + 0.10 * rule_exec_residual
+        ).clip(0.0, 1.0)
         composite_alpha = max(t_limit_rank_alpha, t_touch_rank_alpha, t1_rank_alpha)
         out["limitup_continuation_score"] = (
-            composite_alpha * (100.0 * rank_composite) + (1.0 - composite_alpha) * rule_score
+            composite_alpha * (100.0 * rank_composite)
+            + (1.0 - composite_alpha) * rule_score_guarded
         ).clip(0.0, 100.0).round(4)
         out["涨停接力评分"] = out["limitup_continuation_score"]
         out["t_limit_gate_status"] = t_limit_status
@@ -2643,6 +2901,9 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             "limitup_model_t_limit_probability_alpha": t_limit_probability_alpha,
             "limitup_model_t_touch_probability_alpha": t_touch_probability_alpha,
             "limitup_model_t1_probability_alpha": t1_probability_alpha,
+            "limitup_model_t_limit_relay_weight": t_limit_relay_weight,
+            "limitup_model_t_touch_relay_weight": t_touch_relay_weight,
+            "limitup_model_t1_relay_weight": t1_relay_weight,
             "limitup_model_t_limit_probability_reason": probability_reasons.get("t_limit", ""),
             "limitup_model_validation_days": int(getattr(bundle, "validation_days", 0) or 0),
             "limitup_model_validation_samples": int(getattr(bundle, "validation_samples", 0) or 0),
@@ -3042,9 +3303,13 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "eret_plus_score", "market_score", "intraday_attack_edge", "intraday_execution_edge",
         "intraday_risk_penalty", "intraday_hard_risk_flag", "execution_safety_score", "execution_score",
         "risk_penalty_score", "t1_close_ret_pred_score", "t1_high_ret_pred_score",
-        "t_up_attack_score", "t1_accept_score", "premium_final_score", "premium_final_score_raw",
+        "t_up_attack_score", "t1_accept_score_raw", "t1_accept_score", "t1_evidence_score",
+        "premium_t1_component_weight", "premium_attack_component_weight",
+        "premium_execution_component_weight", "premium_market_component_weight",
+        "premium_final_score", "premium_final_score_raw",
         "premium_rank_score", "premium_rank_score_raw",
-        "premium_eligible", "premium_force_excluded", "premium_bucket", "premium_exclude_reason",
+        "premium_eligible", "premium_force_excluded", "premium_bucket",
+        "premium_candidate_state", "premium_exclude_reason",
         "premium_rank_mode", "rank_premium_final", "rank_premium_score",
     ]
     market_cols = [
@@ -3303,7 +3568,7 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
             **professional_trace,
             "exec_fields": "buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨停接力评分|T日建议买入方式|T日可接受买入价|T+1卖出计划",
             "limitup_model_fields": "t_up_prob_model|t_high_profit_prob_model|t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_accept_prob_model|t1_fail_prob_model|t1_big_drawdown_prob_model|t_close_ret_pred|t_intraday_ret_pred|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score",
-            "premium_professional_fields": "t_up_attack_score|t1_accept_score|premium_final_score|premium_bucket|premium_exclude_reason",
+            "premium_professional_fields": "t_up_attack_score|t1_accept_score|t1_evidence_score|premium_final_score|premium_bucket|premium_candidate_state|premium_exclude_reason",
             "rank_groups": "TOP10|TOP20",
             "limitup_truth_reason": limitup_truth_reason,
             **limitup_validation.as_dict(),

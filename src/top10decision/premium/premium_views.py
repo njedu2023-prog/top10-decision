@@ -276,6 +276,21 @@ def _fmt_truth_return(row: pd.Series) -> str:
     return "0.00% →"
 
 
+def _candidate_state_text(row: pd.Series) -> str:
+    raw = _clean_text(
+        row.get("premium_candidate_state", row.get("premium_bucket", "WATCH")),
+        "WATCH",
+    ).upper()
+    return {
+        "QUALIFIED": "合格",
+        "RANK_ONLY": "仅排名",
+        "WATCH": "观察",
+        "NO_TRADE": "不交易",
+        "ELIGIBLE": "合格",
+        "EXCLUDED": "不交易",
+    }.get(raw, raw)
+
+
 def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
@@ -300,7 +315,7 @@ def _display_table(df: pd.DataFrame, n: int) -> pd.DataFrame:
                 ),
                 "D Close": _fmt_num(r.get("close_T"), 2),
                 "T收盘": _fmt_truth_return(r),
-                "Bucket": _clean_text(r.get("premium_bucket"), "WATCH"),
+                "Bucket": _candidate_state_text(r),
                 "T-Up": _fmt_pct(r.get("t_limitup_prob"), 2),
                 "T-Strength": _fmt_num(r.get("t_limitup_strength"), 2),
                 "T-Attack": _fmt_num(r.get("t_up_attack_score"), 2),
@@ -622,6 +637,13 @@ def render_premium_report_html(
     bucket_eligible = int((buckets == "ELIGIBLE").sum()) if len(buckets) else 0
     bucket_watch = int((buckets == "WATCH").sum()) if len(buckets) else 0
     bucket_excluded = int((buckets == "EXCLUDED").sum()) if len(buckets) else 0
+    candidate_states = df_top.get(
+        "premium_candidate_state", pd.Series([], dtype="object")
+    ).astype(str) if df_top is not None else pd.Series([], dtype="object")
+    state_qualified = int((candidate_states == "QUALIFIED").sum()) if len(candidate_states) else bucket_eligible
+    state_rank_only = int((candidate_states == "RANK_ONLY").sum()) if len(candidate_states) else 0
+    state_watch = int((candidate_states == "WATCH").sum()) if len(candidate_states) else bucket_watch
+    state_no_trade = int((candidate_states == "NO_TRADE").sum()) if len(candidate_states) else bucket_excluded
     rank_mode_s = df_top.get("premium_rank_mode", pd.Series([], dtype="object")).dropna() if df_top is not None else pd.Series([], dtype="object")
     rank_mode = _clean_text(rank_mode_s.iloc[0] if len(rank_mode_s) else "-", "-")
     model_mode_s = df_top.get("model_rank_mode", pd.Series([], dtype="object")).dropna() if df_top is not None else pd.Series([], dtype="object")
@@ -684,8 +706,8 @@ def render_premium_report_html(
         ),
         _metric_card(
             "Professional Gate",
-            f"{bucket_eligible} eligible / {bucket_watch} watch",
-            f"Excluded {bucket_excluded}; rank {rank_mode}; model {model_mode}",
+            f"{state_qualified} 合格 / {state_rank_only} 仅排名",
+            f"观察 {state_watch}；不交易 {state_no_trade}；rank {rank_mode}；model {model_mode}",
         ),
         _metric_card(
             "Tier Effectiveness",

@@ -281,6 +281,12 @@ jobs:
           probability_status = limitup_meta.get("target_probability_status", {})
           if not {"t_limit", "t_touch", "t1"}.issubset(probability_status):
               raise SystemExit("Premium per-target probability gate status missing")
+          auto_train_state = json.loads(
+              Path("outputs/premium/models/auto_train_state.json").read_text(encoding="utf-8")
+          )
+          truth_fingerprint = str(auto_train_state.get("truth_fingerprint", ""))
+          if len(truth_fingerprint) != 64:
+              raise SystemExit("Premium auto-train truth fingerprint missing")
 
           for verify_path in sorted(Path("outputs/premium").glob("premium_verify_*.csv")):
               with verify_path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -321,6 +327,11 @@ jobs:
               "t_limit_model_can_rank",
               "t_limit_model_probability_ready",
               "t1_model_can_rank",
+              "t1_return_model_can_rank",
+              "adaptive_weight_t1",
+              "t1_evidence_score",
+              "premium_t1_component_weight",
+              "premium_candidate_state",
           }
           if not all(required.issubset(set(frame.columns)) for frame in frames):
               raise SystemExit("Premium execution-profit output contract missing")
@@ -336,6 +347,30 @@ jobs:
                   raise SystemExit(
                       f"Premium active limit-up model rows are missing rank scores: {path}"
                   )
+              def flag(name):
+                  raw = frame[name]
+                  return (
+                      pd.to_numeric(raw, errors="coerce").fillna(0).eq(1)
+                      | raw.astype(str).str.strip().str.lower().isin({"true", "yes", "y"})
+                  )
+              t1_shadow = ~(flag("t1_model_can_rank") | flag("t1_return_model_can_rank"))
+              t1_evidence = pd.to_numeric(frame["t1_evidence_score"], errors="coerce")
+              t1_component = pd.to_numeric(
+                  frame["premium_t1_component_weight"], errors="coerce"
+              )
+              adaptive_t1 = pd.to_numeric(frame["adaptive_weight_t1"], errors="coerce")
+              if t1_shadow.any() and (
+                  (t1_evidence.loc[t1_shadow] > 1e-9).any()
+                  or (t1_component.loc[t1_shadow] > 0.080001).any()
+                  or (adaptive_t1.loc[t1_shadow] > 0.050001).any()
+              ):
+                  raise SystemExit(f"Premium SHADOW T+1 evidence was not downweighted: {path}")
+              states = frame["premium_candidate_state"].dropna().astype(str)
+              if not states.isin({"QUALIFIED", "RANK_ONLY", "WATCH", "NO_TRADE"}).all():
+                  raise SystemExit(f"Premium candidate state contract invalid: {path}")
+              qualified = states.eq("QUALIFIED")
+              if qualified.any() and (t1_evidence.loc[qualified.index[qualified]] < 35.0).any():
+                  raise SystemExit(f"Premium candidate qualified without T+1 evidence: {path}")
               if "premium_limit_regime" not in frame.columns:
                   raise SystemExit(f"Premium 10pct universe marker missing: {path}")
               if not frame["premium_limit_regime"].dropna().eq("MAIN_BOARD_10PCT").all():

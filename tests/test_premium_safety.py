@@ -53,6 +53,7 @@ from top10decision.premium.predict import (
     _historical_limitup_stats_from_df,
     _load_validated_platt_calibrator,
     _recent_limitup_model_health,
+    _recent_target_model_health,
     _write_csv as _predict_write_csv,
 )
 from top10decision.premium.premium_views import (
@@ -81,6 +82,15 @@ def _load_backfill_module():
 def _load_apple_style_module():
     path = ROOT / "scripts" / "apple_style_premium_reports.py"
     spec = importlib.util.spec_from_file_location("premium_apple_style", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_maybe_train_module():
+    path = ROOT / "scripts" / "maybe_train_premium.py"
+    spec = importlib.util.spec_from_file_location("premium_maybe_train", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(module)
@@ -380,6 +390,73 @@ class PremiumSafetyTests(unittest.TestCase):
             float(scored.loc[0, "premium_adaptive_score"]),
             float(scored.loc[1, "premium_adaptive_score"]),
         )
+
+    def test_report_translates_candidate_state_without_changing_rank(self):
+        table = _display_table(pd.DataFrame({
+            "rank": [1, 2, 3, 4],
+            "ts_code": ["600001.SH", "600002.SH", "600003.SH", "600004.SH"],
+            "name": ["A", "B", "C", "D"],
+            "premium_candidate_state": ["QUALIFIED", "RANK_ONLY", "WATCH", "NO_TRADE"],
+        }), 4)
+        self.assertEqual(table["Rank"].tolist(), ["1", "2", "3", "4"])
+        self.assertEqual(table["Bucket"].tolist(), ["合格", "仅排名", "观察", "不交易"])
+
+    def test_shadow_t1_gate_is_downweighted_and_cannot_be_qualified(self):
+        frame = pd.DataFrame({
+            "t_limitup_prob": [0.60, 0.60],
+            "t_limitup_strength": [75.0, 75.0],
+            "t_limitup_rank_score": [90.0, 80.0],
+            "t_touch_rank_score": [88.0, 78.0],
+            "t1_continue_up_rate": [0.95, 0.05],
+            "t_limit_model_can_rank": [1, 1],
+            "t_touch_model_can_rank": [1, 1],
+            "t1_model_can_rank": [0, 0],
+            "t1_return_model_can_rank": [0, 0],
+            "t_limit_gate_status": ["PROVISIONAL", "PROVISIONAL"],
+            "t_touch_gate_status": ["PROVISIONAL", "PROVISIONAL"],
+            "t1_gate_status": ["SHADOW", "SHADOW"],
+            "t1_return_gate_status": ["SHADOW", "SHADOW"],
+            "score_ev": [0.01, 0.01],
+            "risk_penalty_total": [0.0, 0.0],
+        })
+        history = {
+            "limitup_spearman_ic_20d": 0.12,
+            "limitup_ic_days": 20,
+            "t1_ret_spearman_ic_20d": 0.20,
+            "t1_ret_ic_days": 20,
+        }
+        scored, trace = _apply_adaptive_rank_score(frame, history)
+        self.assertLessEqual(float(scored["adaptive_weight_t1"].iloc[0]), 0.05)
+        self.assertEqual(trace["adaptive_reason"], "t1_gate_shadow_downweighted")
+        scored, _ = _apply_professional_premium_scores(scored)
+        self.assertTrue(scored["t1_evidence_score"].eq(0.0).all())
+        self.assertTrue(scored["premium_t1_component_weight"].eq(0.08).all())
+        self.assertTrue(scored["premium_candidate_state"].eq("RANK_ONLY").all())
+        self.assertTrue(scored["premium_bucket"].eq("WATCH").all())
+
+    def test_active_t1_gate_restores_t1_evidence_weight(self):
+        frame = pd.DataFrame({
+            "t_limitup_prob": [0.60],
+            "t_limitup_strength": [75.0],
+            "t_limitup_rank_score": [90.0],
+            "t_touch_rank_score": [88.0],
+            "t1_continue_up_rate": [0.70],
+            "t1_rank_score": [85.0],
+            "t_limit_model_can_rank": [1],
+            "t_touch_model_can_rank": [1],
+            "t1_model_can_rank": [1],
+            "t1_return_model_can_rank": [1],
+            "t_limit_gate_status": ["ACTIVE"],
+            "t_touch_gate_status": ["ACTIVE"],
+            "t1_gate_status": ["ACTIVE"],
+            "t1_return_gate_status": ["ACTIVE"],
+            "score_ev": [0.01],
+            "risk_penalty_total": [0.0],
+        })
+        scored, _ = _apply_adaptive_rank_score(frame, {})
+        scored, _ = _apply_professional_premium_scores(scored)
+        self.assertEqual(float(scored.loc[0, "t1_evidence_score"]), 100.0)
+        self.assertEqual(float(scored.loc[0, "premium_t1_component_weight"]), 0.35)
 
     def test_unvalidated_model_has_zero_production_weight(self):
         base = pd.DataFrame({
@@ -753,6 +830,131 @@ class PremiumSafetyTests(unittest.TestCase):
             self.assertFalse(ok)
             self.assertEqual(reason, "recent_health_fail")
             self.assertLess(metrics["top10_lift"], 0)
+
+    def test_recent_health_rolls_back_targets_independently(self):
+        class Cfg:
+            def __init__(self, root: Path):
+                self.root = root
+
+            def out_root(self):
+                return self.root
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for day in range(1, 9):
+                actual = np.array([1] * 4 + [0] * 16)
+                good = np.linspace(0.95, 0.10, 20)
+                bad = good[::-1]
+                pd.DataFrame({
+                    "trade_date": [f"202605{day:02d}"] * 20,
+                    "t_touch_limitup_actual": actual,
+                    "t1_accept_hit": actual,
+                    "t_touch_rank_score": good * 100.0,
+                    "t1_rank_score": bad * 100.0,
+                    "t_limitup_strength_rule": 50.0,
+                    "t1_continue_up_rate_rule": 0.50,
+                    "t_touch_model_can_rank": True,
+                    "t1_model_can_rank": True,
+                }).to_csv(root / f"premium_verify_202605{day:02d}.csv", index=False)
+            touch_ok, touch_reason, touch_metrics = _recent_target_model_health(
+                Cfg(root), "t_touch"
+            )
+            t1_ok, t1_reason, t1_metrics = _recent_target_model_health(Cfg(root), "t1")
+            self.assertTrue(touch_ok)
+            self.assertIn("pass:t_touch", touch_reason)
+            self.assertGreater(touch_metrics["daily_rank_ic"], 0)
+            self.assertFalse(t1_ok)
+            self.assertIn("fail:t1", t1_reason)
+            self.assertLess(t1_metrics["daily_rank_ic"], 0)
+
+    def test_auto_train_truth_fingerprint_tracks_t1_maturation_and_corrections(self):
+        module = _load_maybe_train_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "premium_verify_20260701.csv"
+            base = pd.DataFrame({
+                "trade_date": ["20260701"],
+                "buy_date": ["20260702"],
+                "target_date": ["20260703"],
+                "ts_code": ["600000.SH"],
+                "t_limitup_verify_ready": [True],
+                "t_limitup_actual": [1],
+                "t1_accept_hit": [np.nan],
+                "t1_close_ret": [np.nan],
+            })
+            base.to_csv(path, index=False)
+            first = module._truth_snapshot(root)
+            self.assertEqual(first["t_days"], {"20260701"})
+            self.assertEqual(first["t1_days"], set())
+
+            base.loc[0, "t1_accept_hit"] = 1
+            base.loc[0, "t1_close_ret"] = 0.03
+            base.to_csv(path, index=False)
+            matured = module._truth_snapshot(root)
+            self.assertEqual(matured["t1_days"], {"20260701"})
+            self.assertNotEqual(first["truth_fingerprint"], matured["truth_fingerprint"])
+
+            base.loc[0, "t_limitup_actual"] = 0
+            base.to_csv(path, index=False)
+            corrected = module._truth_snapshot(root)
+            self.assertNotEqual(matured["truth_fingerprint"], corrected["truth_fingerprint"])
+
+    def test_auto_train_skips_when_truth_is_unchanged(self):
+        module = _load_maybe_train_module()
+        should_train, truth_revision, new_t_days, new_t1_days = module._training_decision(
+            force=False,
+            current_t_days=41,
+            previous_t_days=41,
+            current_t1_days=39,
+            previous_t1_days=39,
+            min_new_days=5,
+            has_candidate=True,
+            contract_upgrade=False,
+            truth_fingerprint="stable",
+            previous_fingerprint="stable",
+        )
+        self.assertFalse(should_train)
+        self.assertFalse(truth_revision)
+        self.assertEqual(new_t_days, 0)
+        self.assertEqual(new_t1_days, 0)
+
+    def test_auto_train_uses_new_t1_truth_as_a_training_trigger(self):
+        module = _load_maybe_train_module()
+        should_train, truth_revision, new_t_days, new_t1_days = module._training_decision(
+            force=False,
+            current_t_days=41,
+            previous_t_days=41,
+            current_t1_days=39,
+            previous_t1_days=34,
+            min_new_days=5,
+            has_candidate=True,
+            contract_upgrade=False,
+            truth_fingerprint="new-t1-truth",
+            previous_fingerprint="old-truth",
+        )
+        self.assertTrue(should_train)
+        self.assertFalse(truth_revision)
+        self.assertEqual(new_t_days, 0)
+        self.assertEqual(new_t1_days, 5)
+
+    def test_auto_train_retrains_after_truth_correction(self):
+        module = _load_maybe_train_module()
+        should_train, truth_revision, new_t_days, new_t1_days = module._training_decision(
+            force=False,
+            current_t_days=41,
+            previous_t_days=41,
+            current_t1_days=39,
+            previous_t1_days=39,
+            min_new_days=5,
+            has_candidate=True,
+            contract_upgrade=False,
+            truth_fingerprint="corrected-truth",
+            previous_fingerprint="old-truth",
+        )
+        self.assertTrue(should_train)
+        self.assertTrue(truth_revision)
+        self.assertEqual(new_t_days, 0)
+        self.assertEqual(new_t1_days, 0)
 
     def test_history_stats_coalesce_training_and_verify_aliases(self):
         history = pd.DataFrame({
