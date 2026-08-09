@@ -22,7 +22,7 @@ Premium 子系统 — LimitUp Probability Engine（V3.6：专业概率引擎）
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -50,6 +50,8 @@ CLASS_TARGETS = [
     "t1_big_drawdown_hit",
 ]
 REG_TARGETS = ["t_close_ret", "t_intraday_ret", "t1_close_ret", "t1_high_ret"]
+GATE_VERSION = "premium_target_gate_v2"
+RANK_ENABLED_GATE_STATES = {"ACTIVE", "PROVISIONAL"}
 DEFAULT_EXCLUDE = set(CLASS_TARGETS + REG_TARGETS + [
     "ts_code", "code", "symbol", "名称", "name", "trade_date", "d_trade_date", "t_trade_date", "t1_trade_date",
     "label_valid", "label_matured", "calendar_source", "calendar_status", "calendar_reason", "label_as_of",
@@ -92,6 +94,11 @@ class LimitupModelBundle:
     validation_days: int = 0
     validation_samples: int = 0
     gate_reason: str = ""
+    gate_version: str = GATE_VERSION
+    target_gate_status: Dict[str, str] = field(default_factory=dict)
+    target_gate_reasons: Dict[str, str] = field(default_factory=dict)
+    target_probability_status: Dict[str, str] = field(default_factory=dict)
+    target_probability_reasons: Dict[str, str] = field(default_factory=dict)
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
         X = _make_X(df, self.feature_cols)
@@ -137,9 +144,42 @@ class LimitupModelBundle:
             + 0.14 * out.get("t1_up_prob_model", 0)
             + 0.14 * out.get("t1_high_profit_prob_model", 0)
         )
-        out["model_can_rank"] = bool(getattr(self, "model_can_rank", False))
+        legacy_state = "ACTIVE" if bool(getattr(self, "model_can_rank", False)) else "SHADOW"
+        target_status = getattr(self, "target_gate_status", {}) or {}
+        t_limit_status = str(target_status.get("t_limit", legacy_state)).upper()
+        t_touch_status = str(target_status.get("t_touch", legacy_state)).upper()
+        t1_status = str(target_status.get("t1", legacy_state)).upper()
+        t_return_status = str(target_status.get("t_return", legacy_state)).upper()
+        t1_return_status = str(target_status.get("t1_return", legacy_state)).upper()
+        probability_status = getattr(self, "target_probability_status", {}) or {}
+        t_limit_probability_status = str(probability_status.get("t_limit", "SHADOW")).upper()
+        t_touch_probability_status = str(probability_status.get("t_touch", "SHADOW")).upper()
+        t1_probability_status = str(probability_status.get("t1", "SHADOW")).upper()
+        t_limit_can_rank = t_limit_status in RANK_ENABLED_GATE_STATES
+        t_touch_can_rank = t_touch_status in RANK_ENABLED_GATE_STATES
+        t1_can_rank = t1_status in RANK_ENABLED_GATE_STATES
+        out["t_limit_gate_status"] = t_limit_status
+        out["t_touch_gate_status"] = t_touch_status
+        out["t1_gate_status"] = t1_status
+        out["t_return_gate_status"] = t_return_status
+        out["t1_return_gate_status"] = t1_return_status
+        out["t_limit_prob_gate_status"] = t_limit_probability_status
+        out["t_touch_prob_gate_status"] = t_touch_probability_status
+        out["t1_prob_gate_status"] = t1_probability_status
+        out["t_limit_model_can_rank"] = t_limit_can_rank
+        out["t_touch_model_can_rank"] = t_touch_can_rank
+        out["t1_model_can_rank"] = t1_can_rank
+        out["t_return_model_can_rank"] = t_return_status in RANK_ENABLED_GATE_STATES
+        out["t1_return_model_can_rank"] = t1_return_status in RANK_ENABLED_GATE_STATES
+        out["t_limit_model_probability_ready"] = t_limit_probability_status in RANK_ENABLED_GATE_STATES
+        out["t_touch_model_probability_ready"] = t_touch_probability_status in RANK_ENABLED_GATE_STATES
+        out["t1_model_probability_ready"] = t1_probability_status in RANK_ENABLED_GATE_STATES
+        out["model_gate_version"] = str(getattr(self, "gate_version", GATE_VERSION))
+        out["model_can_rank"] = t_limit_can_rank
         out["model_rank_mode"] = getattr(self, "model_rank_mode", "disabled_validation_not_pass")
-        out["model_quality_flag"] = "ok" if bool(getattr(self, "model_can_rank", False)) else "degraded"
+        out["model_quality_flag"] = (
+            "ok" if t_limit_can_rank and t1_can_rank else "partial" if t_limit_can_rank else "degraded"
+        )
         return out
 
 
@@ -419,34 +459,217 @@ def _metric_value(metrics: pd.DataFrame, target: str, col: str) -> float:
     return float(pd.to_numeric(sub[col], errors="coerce").iloc[0])
 
 
-def _model_gate(metrics: pd.DataFrame, validation_days: int, validation_samples: int) -> Tuple[bool, str]:
+def _metric_count(metrics: pd.DataFrame, target: str, col: str) -> int:
+    value = _metric_value(metrics, target, col)
+    return int(value) if np.isfinite(value) and value > 0 else 0
+
+
+def _gate_state(quality_ok: bool, metric_days: int, samples: int) -> str:
+    if not quality_ok:
+        return "SHADOW"
+    if metric_days >= 30 and samples >= 600:
+        return "ACTIVE"
+    if metric_days >= 12 and samples >= 250:
+        return "PROVISIONAL"
+    return "SHADOW"
+
+
+def _target_model_gates(
+    metrics: pd.DataFrame,
+    validation_days: int,
+    validation_samples: int,
+) -> Tuple[Dict[str, str], Dict[str, str]]:
     t_limit_auc = _metric_value(metrics, "t_limitup_hit", "auc")
     t_limit_brier_skill = _metric_value(metrics, "t_limitup_hit", "brier_skill")
     t_limit_top10_lift = _metric_value(metrics, "t_limitup_hit", "daily_top10_lift")
     t_limit_daily_ic = _metric_value(metrics, "t_limitup_hit", "daily_spearman_ic")
+    t_limit_positive_ic = _metric_value(metrics, "t_limitup_hit", "daily_positive_ic_rate")
+    t_limit_days = _metric_count(metrics, "t_limitup_hit", "daily_metric_days")
+    t_limit_samples = _metric_count(metrics, "t_limitup_hit", "samples")
+
+    t_touch_auc = _metric_value(metrics, "t_touch_limitup", "auc")
+    t_touch_brier_skill = _metric_value(metrics, "t_touch_limitup", "brier_skill")
+    t_touch_top10_lift = _metric_value(metrics, "t_touch_limitup", "daily_top10_lift")
+    t_touch_daily_ic = _metric_value(metrics, "t_touch_limitup", "daily_spearman_ic")
+    t_touch_days = _metric_count(metrics, "t_touch_limitup", "daily_metric_days")
+    t_touch_samples = _metric_count(metrics, "t_touch_limitup", "samples")
+
     t1_accept_auc = _metric_value(metrics, "t1_accept_hit", "auc")
     t1_accept_brier_skill = _metric_value(metrics, "t1_accept_hit", "brier_skill")
     t1_ret_ic = _metric_value(metrics, "t1_close_ret", "daily_spearman_ic")
-    ok = (
-        int(validation_days) >= 12
-        and int(validation_samples) >= 250
-        and np.isfinite(t_limit_auc) and t_limit_auc >= 0.52
-        and np.isfinite(t_limit_brier_skill) and t_limit_brier_skill > 0
-        and np.isfinite(t_limit_top10_lift) and t_limit_top10_lift >= 0.015
-        and np.isfinite(t_limit_daily_ic) and t_limit_daily_ic > 0
-        and np.isfinite(t1_accept_auc) and t1_accept_auc >= 0.51
-        and np.isfinite(t1_accept_brier_skill) and t1_accept_brier_skill > -0.02
-        and np.isfinite(t1_ret_ic) and t1_ret_ic > 0
+    t1_positive_ic = _metric_value(metrics, "t1_close_ret", "daily_positive_ic_rate")
+    t1_days = min(
+        _metric_count(metrics, "t1_accept_hit", "daily_metric_days"),
+        _metric_count(metrics, "t1_close_ret", "daily_metric_days"),
     )
-    if ok:
-        return True, "rank_enabled_validation_pass"
+    t1_samples = min(
+        _metric_count(metrics, "t1_accept_hit", "samples"),
+        _metric_count(metrics, "t1_close_ret", "samples"),
+    )
+
+    t_ret_ic = _metric_value(metrics, "t_close_ret", "daily_spearman_ic")
+    t_ret_positive_ic = _metric_value(metrics, "t_close_ret", "daily_positive_ic_rate")
+    t_intraday_ic = _metric_value(metrics, "t_intraday_ret", "daily_spearman_ic")
+    t_intraday_positive_ic = _metric_value(metrics, "t_intraday_ret", "daily_positive_ic_rate")
+    t_ret_days = min(
+        _metric_count(metrics, "t_close_ret", "daily_metric_days"),
+        _metric_count(metrics, "t_intraday_ret", "daily_metric_days"),
+    )
+    t_ret_samples = min(
+        _metric_count(metrics, "t_close_ret", "samples"),
+        _metric_count(metrics, "t_intraday_ret", "samples"),
+    )
+    t1_high_ret_ic = _metric_value(metrics, "t1_high_ret", "daily_spearman_ic")
+    t1_high_positive_ic = _metric_value(metrics, "t1_high_ret", "daily_positive_ic_rate")
+    t1_ret_days = min(
+        _metric_count(metrics, "t1_close_ret", "daily_metric_days"),
+        _metric_count(metrics, "t1_high_ret", "daily_metric_days"),
+    )
+    t1_ret_samples = min(
+        _metric_count(metrics, "t1_close_ret", "samples"),
+        _metric_count(metrics, "t1_high_ret", "samples"),
+    )
+
+    t_limit_ok = (
+        np.isfinite(t_limit_auc) and t_limit_auc >= 0.52
+        and np.isfinite(t_limit_top10_lift) and t_limit_top10_lift >= 0.015
+        and np.isfinite(t_limit_daily_ic) and t_limit_daily_ic >= 0.03
+        and np.isfinite(t_limit_positive_ic) and t_limit_positive_ic >= 0.55
+    )
+    t_touch_ok = (
+        np.isfinite(t_touch_auc) and t_touch_auc >= 0.52
+        and np.isfinite(t_touch_top10_lift) and t_touch_top10_lift >= 0.015
+        and np.isfinite(t_touch_daily_ic) and t_touch_daily_ic >= 0.03
+    )
+    t1_ok = (
+        np.isfinite(t1_accept_auc) and t1_accept_auc >= 0.52
+        and np.isfinite(t1_ret_ic) and t1_ret_ic >= 0.03
+        and np.isfinite(t1_positive_ic) and t1_positive_ic >= 0.55
+    )
+    t_return_ok = (
+        np.isfinite(t_ret_ic) and t_ret_ic >= 0.03
+        and np.isfinite(t_ret_positive_ic) and t_ret_positive_ic >= 0.55
+        and np.isfinite(t_intraday_ic) and t_intraday_ic >= 0.03
+        and np.isfinite(t_intraday_positive_ic) and t_intraday_positive_ic >= 0.55
+    )
+    t1_return_ok = (
+        np.isfinite(t1_ret_ic) and t1_ret_ic >= 0.03
+        and np.isfinite(t1_positive_ic) and t1_positive_ic >= 0.55
+        and np.isfinite(t1_high_ret_ic) and t1_high_ret_ic >= 0.02
+        and np.isfinite(t1_high_positive_ic) and t1_high_positive_ic >= 0.55
+    )
+
+    statuses = {
+        "t_limit": _gate_state(t_limit_ok, t_limit_days, t_limit_samples),
+        "t_touch": _gate_state(t_touch_ok, t_touch_days, t_touch_samples),
+        "t1": _gate_state(t1_ok, t1_days, t1_samples),
+        "t_return": _gate_state(t_return_ok, t_ret_days, t_ret_samples),
+        "t1_return": _gate_state(t1_return_ok, t1_ret_days, t1_ret_samples),
+    }
+    reasons = {
+        "t_limit": (
+            f"status={statuses['t_limit']};days={t_limit_days};samples={t_limit_samples};"
+            f"validation_days={validation_days};validation_samples={validation_samples};"
+            f"t_limit_auc={t_limit_auc};t_limit_brier_skill={t_limit_brier_skill};"
+            f"t_limit_top10_lift={t_limit_top10_lift};t_limit_daily_ic={t_limit_daily_ic};"
+            f"t_limit_positive_ic_rate={t_limit_positive_ic}"
+        ),
+        "t_touch": (
+            f"status={statuses['t_touch']};days={t_touch_days};samples={t_touch_samples};"
+            f"auc={t_touch_auc};brier_skill={t_touch_brier_skill};"
+            f"top10_lift={t_touch_top10_lift};daily_ic={t_touch_daily_ic}"
+        ),
+        "t1": (
+            f"status={statuses['t1']};days={t1_days};samples={t1_samples};"
+            f"t1_accept_auc={t1_accept_auc};t1_accept_brier_skill={t1_accept_brier_skill};"
+            f"t1_ret_daily_ic={t1_ret_ic};t1_positive_ic_rate={t1_positive_ic}"
+        ),
+        "t_return": (
+            f"status={statuses['t_return']};days={t_ret_days};samples={t_ret_samples};"
+            f"close_daily_ic={t_ret_ic};close_positive_ic_rate={t_ret_positive_ic};"
+            f"intraday_daily_ic={t_intraday_ic};intraday_positive_ic_rate={t_intraday_positive_ic}"
+        ),
+        "t1_return": (
+            f"status={statuses['t1_return']};days={t1_ret_days};samples={t1_ret_samples};"
+            f"close_daily_ic={t1_ret_ic};close_positive_ic_rate={t1_positive_ic};"
+            f"high_daily_ic={t1_high_ret_ic};high_positive_ic_rate={t1_high_positive_ic}"
+        ),
+    }
+    return statuses, reasons
+
+
+def _target_probability_gates(
+    metrics: pd.DataFrame,
+    rank_statuses: Dict[str, str],
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Gate probability levels separately from cross-sectional ranking skill."""
+    t_limit_brier_skill = _metric_value(metrics, "t_limitup_hit", "brier_skill")
+    t_limit_days = _metric_count(metrics, "t_limitup_hit", "daily_metric_days")
+    t_limit_samples = _metric_count(metrics, "t_limitup_hit", "samples")
+
+    t_touch_brier_skill = _metric_value(metrics, "t_touch_limitup", "brier_skill")
+    t_touch_days = _metric_count(metrics, "t_touch_limitup", "daily_metric_days")
+    t_touch_samples = _metric_count(metrics, "t_touch_limitup", "samples")
+
+    t1_auc = _metric_value(metrics, "t1_up_hit", "auc")
+    t1_brier_skill = _metric_value(metrics, "t1_up_hit", "brier_skill")
+    t1_top10_lift = _metric_value(metrics, "t1_up_hit", "daily_top10_lift")
+    t1_daily_ic = _metric_value(metrics, "t1_up_hit", "daily_spearman_ic")
+    t1_positive_ic = _metric_value(metrics, "t1_up_hit", "daily_positive_ic_rate")
+    t1_days = _metric_count(metrics, "t1_up_hit", "daily_metric_days")
+    t1_samples = _metric_count(metrics, "t1_up_hit", "samples")
+
+    def rank_enabled(target: str) -> bool:
+        return str(rank_statuses.get(target, "SHADOW")).upper() in RANK_ENABLED_GATE_STATES
+
+    statuses = {
+        "t_limit": _gate_state(
+            rank_enabled("t_limit") and np.isfinite(t_limit_brier_skill) and t_limit_brier_skill > 0,
+            t_limit_days,
+            t_limit_samples,
+        ),
+        "t_touch": _gate_state(
+            rank_enabled("t_touch") and np.isfinite(t_touch_brier_skill) and t_touch_brier_skill > 0,
+            t_touch_days,
+            t_touch_samples,
+        ),
+        "t1": _gate_state(
+            np.isfinite(t1_auc) and t1_auc >= 0.52
+            and np.isfinite(t1_brier_skill) and t1_brier_skill > 0
+            and np.isfinite(t1_top10_lift) and t1_top10_lift >= 0.01
+            and np.isfinite(t1_daily_ic) and t1_daily_ic >= 0.02
+            and np.isfinite(t1_positive_ic) and t1_positive_ic >= 0.55,
+            t1_days,
+            t1_samples,
+        ),
+    }
+    reasons = {
+        "t_limit": (
+            f"status={statuses['t_limit']};rank_status={rank_statuses.get('t_limit', 'SHADOW')};"
+            f"days={t_limit_days};samples={t_limit_samples};brier_skill={t_limit_brier_skill}"
+        ),
+        "t_touch": (
+            f"status={statuses['t_touch']};rank_status={rank_statuses.get('t_touch', 'SHADOW')};"
+            f"days={t_touch_days};samples={t_touch_samples};brier_skill={t_touch_brier_skill}"
+        ),
+        "t1": (
+            f"status={statuses['t1']};days={t1_days};samples={t1_samples};auc={t1_auc};"
+            f"brier_skill={t1_brier_skill};top10_lift={t1_top10_lift};"
+            f"daily_ic={t1_daily_ic};positive_ic_rate={t1_positive_ic}"
+        ),
+    }
+    return statuses, reasons
+
+
+def _model_gate(metrics: pd.DataFrame, validation_days: int, validation_samples: int) -> Tuple[bool, str]:
+    statuses, reasons = _target_model_gates(metrics, validation_days, validation_samples)
+    can_rank = statuses["t_limit"] in RANK_ENABLED_GATE_STATES
+    if can_rank:
+        return True, f"rank_enabled_{statuses['t_limit'].lower()}:{reasons['t_limit']}"
     return False, (
         "disabled_validation_not_pass:"
-        f"days={validation_days};samples={validation_samples};"
-        f"t_limit_auc={t_limit_auc};t_limit_brier_skill={t_limit_brier_skill};"
-        f"t_limit_top10_lift={t_limit_top10_lift};t_limit_daily_ic={t_limit_daily_ic};"
-        f"t1_accept_auc={t1_accept_auc};t1_accept_brier_skill={t1_accept_brier_skill};"
-        f"t1_ret_daily_ic={t1_ret_ic}"
+        f"{reasons['t_limit']};"
+        f"t1_status={statuses['t1']}"
     )
 
 
@@ -457,8 +680,6 @@ def fit_limitup_probability_engine(
     min_samples: int = 80,
 ) -> LimitupModelBundle:
     data = df.copy()
-    if "label_matured" in data.columns:
-        data = data[pd.to_numeric(data["label_matured"], errors="coerce").fillna(0).astype(int) == 1].copy()
     for target in CLASS_TARGETS + REG_TARGETS:
         if target not in data.columns:
             data[target] = np.nan
@@ -492,6 +713,10 @@ def fit_limitup_probability_engine(
     metrics = pd.DataFrame(metric_rows)
     validation_days = int(valid["d_trade_date"].nunique()) if "d_trade_date" in valid.columns else 0
     validation_samples = int(len(valid))
+    target_gate_status, target_gate_reasons = _target_model_gates(metrics, validation_days, validation_samples)
+    target_probability_status, target_probability_reasons = _target_probability_gates(
+        metrics, target_gate_status
+    )
     model_can_rank, model_rank_mode = _model_gate(metrics, validation_days, validation_samples)
     return LimitupModelBundle(
         feature_cols=feature_cols,
@@ -507,6 +732,11 @@ def fit_limitup_probability_engine(
         validation_days=validation_days,
         validation_samples=validation_samples,
         gate_reason=model_rank_mode,
+        gate_version=GATE_VERSION,
+        target_gate_status=target_gate_status,
+        target_gate_reasons=target_gate_reasons,
+        target_probability_status=target_probability_status,
+        target_probability_reasons=target_probability_reasons,
     )
 
 

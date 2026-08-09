@@ -262,6 +262,18 @@ jobs:
           if execution_reason.startswith("execution_model_error:"):
               raise SystemExit(f"Premium execution model crashed: {execution_reason}")
 
+          limitup_meta = json.loads(
+              Path("outputs/premium/models/limitup_probability_engine_meta.json").read_text(encoding="utf-8")
+          )
+          if limitup_meta.get("gate_version") != "premium_target_gate_v2":
+              raise SystemExit("Premium target-gate model contract was not trained")
+          target_status = limitup_meta.get("target_gate_status", {})
+          if not {"t_limit", "t_touch", "t1", "t_return", "t1_return"}.issubset(target_status):
+              raise SystemExit("Premium per-target model gate status missing")
+          probability_status = limitup_meta.get("target_probability_status", {})
+          if not {"t_limit", "t_touch", "t1"}.issubset(probability_status):
+              raise SystemExit("Premium per-target probability gate status missing")
+
           for verify_path in sorted(Path("outputs/premium").glob("premium_verify_*.csv")):
               with verify_path.open("r", encoding="utf-8-sig", newline="") as handle:
                   header = next(csv.reader(handle), [])
@@ -277,7 +289,15 @@ jobs:
               Path("outputs/premium/premium_final_reject_latest.csv"),
           ]
           frames = [pd.read_csv(path) for path in paths]
-          required = {"exec_model_ready", "exec_trade_eligible", "exec_expected_net_return"}
+          required = {
+              "exec_model_ready",
+              "exec_trade_eligible",
+              "exec_expected_net_return",
+              "t_limitup_rank_score",
+              "t_limit_model_can_rank",
+              "t_limit_model_probability_ready",
+              "t1_model_can_rank",
+          }
           if not all(required.issubset(set(frame.columns)) for frame in frames):
               raise SystemExit("Premium execution-profit output contract missing")
           main_prefixes = ("000", "001", "002", "003", "600", "601", "603", "605")

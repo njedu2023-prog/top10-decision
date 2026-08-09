@@ -44,6 +44,7 @@ from .io import (
 )
 from .labels import build_premium_labels
 from .limitup_probability_engine import (
+    GATE_VERSION,
     fit_limitup_probability_engine,
     save_bundle as save_limitup_probability_bundle,
 )
@@ -1025,8 +1026,10 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         out["t1_close_ret"] = close_ret
         out["t1_high_ret"] = high_ret
         out["t1_low_ret"] = t1_low_ret
-        out["t1_up_hit"] = (pd.to_numeric(close_ret, errors="coerce") > 0).astype(float)
-        out["t1_high_profit_hit"] = (pd.to_numeric(high_ret, errors="coerce") >= 0.02).astype(float)
+        close_ret_num = pd.to_numeric(close_ret, errors="coerce")
+        high_ret_num = pd.to_numeric(high_ret, errors="coerce")
+        out["t1_up_hit"] = (close_ret_num > 0).where(close_ret_num.notna(), np.nan).astype(float)
+        out["t1_high_profit_hit"] = (high_ret_num >= 0.02).where(high_ret_num.notna(), np.nan).astype(float)
         out["t1_accept_hit"] = (
             (pd.to_numeric(high_ret, errors="coerce") >= 0.015)
             & (pd.to_numeric(close_ret, errors="coerce") >= -0.015)
@@ -1053,6 +1056,12 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             "t_limitup_strength_rule": ["t_limitup_strength_rule", "t_limitup_strength", "T日涨停强度"],
             "t1_continue_up_rate_rule": ["t1_continue_up_rate_rule", "t1_continue_up_rate", "T+1延续上涨率"],
             "limitup_continuation_score_rule": ["limitup_continuation_score_rule", "limitup_continuation_score", "涨停接力评分"],
+            "t_limitup_prob_model": ["t_limitup_prob_model"],
+            "t_limitup_prob_engine": ["t_limitup_prob_engine"],
+            "t_limit_model_probability_ready": ["t_limit_model_probability_ready"],
+            "t1_up_prob_model": ["t1_up_prob_model"],
+            "t1_continue_up_rate_engine": ["t1_continue_up_rate_engine"],
+            "t1_model_probability_ready": ["t1_model_probability_ready"],
             "eret_pred_raw": ["eret_pred_raw", "e_ret_pred_raw", "raw_eret_pred", "E_ret"],
             "eret_plus_value": ["eret_plus_value", "eret_plus", "E_ret_plus"],
             "eret_plus_delta": ["eret_plus_delta"],
@@ -1100,9 +1109,16 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
         out["is_top10"] = (pd.to_numeric(out["rank"], errors="coerce") <= 10).astype(float)
         out["is_top20"] = (pd.to_numeric(out["rank"], errors="coerce") <= 20).astype(float)
 
-        valid = (
-            pd.to_numeric(out["label_matured"], errors="coerce").fillna(0).eq(1)
-            & pd.to_numeric(out["t_verify_ready"], errors="coerce").fillna(0).eq(1)
+        t1_ready_mask = pd.to_numeric(out["label_matured"], errors="coerce").fillna(0).eq(1)
+        t1_target_cols = [
+            "t1_open_ret", "t1_close_ret", "t1_high_ret", "t1_low_ret",
+            "t1_up_hit", "t1_high_profit_hit", "t1_accept_hit", "t1_fail_hit",
+            "t1_big_drawdown_hit", "t1_limitdown_risk_hit",
+        ]
+        out.loc[~t1_ready_mask, t1_target_cols] = np.nan
+
+        t_valid = (
+            pd.to_numeric(out["t_verify_ready"], errors="coerce").fillna(0).eq(1)
             & pd.to_numeric(out["date_order_valid"], errors="coerce").fillna(0).eq(1)
             & out["t_up_hit"].notna()
             & out["t_high_profit_hit"].notna()
@@ -1110,15 +1126,11 @@ def _collect_limitup_samples_from_verify_outputs(cfg: PremiumConfig) -> Tuple[pd
             & out["t_touch_limitup"].notna()
             & out["t_close_ret"].notna()
             & out["t_intraday_ret"].notna()
-            & out["t1_close_ret"].notna()
-            & out["t1_high_ret"].notna()
-            & out["t1_accept_hit"].notna()
-            & out["t1_fail_hit"].notna()
         )
-        out = out.loc[valid].reset_index(drop=True)
+        out = out.loc[t_valid].reset_index(drop=True)
         if out.empty:
             stats["skipped_files"] += 1
-            stats["notes"].append(f"skip {path.name}: no matured limitup rows")
+            stats["notes"].append(f"skip {path.name}: no verified T/T+1 rows")
             continue
 
         stats["ok_files"] += 1
@@ -1257,6 +1269,11 @@ def _train_limitup_probability_from_verify(
             "limitup_feature_n": int(len(feature_cols)),
             "limitup_train_end_date": str(bundle.train_end_date),
             "limitup_valid_start_date": str(bundle.valid_start_date),
+            "limitup_gate_version": str(getattr(bundle, "gate_version", GATE_VERSION)),
+            "limitup_target_gate_status": dict(getattr(bundle, "target_gate_status", {}) or {}),
+            "limitup_target_probability_status": dict(
+                getattr(bundle, "target_probability_status", {}) or {}
+            ),
         })
         _save_limitup_meta(
             meta_path,
@@ -1268,6 +1285,15 @@ def _train_limitup_probability_from_verify(
                 "promoted": promoted,
                 "model_can_rank": promoted,
                 "gate_reason": str(bundle.gate_reason),
+                "gate_version": str(getattr(bundle, "gate_version", GATE_VERSION)),
+                "target_gate_status": dict(getattr(bundle, "target_gate_status", {}) or {}),
+                "target_gate_reasons": dict(getattr(bundle, "target_gate_reasons", {}) or {}),
+                "target_probability_status": dict(
+                    getattr(bundle, "target_probability_status", {}) or {}
+                ),
+                "target_probability_reasons": dict(
+                    getattr(bundle, "target_probability_reasons", {}) or {}
+                ),
                 "source": "premium_verify",
                 "feature_cols": feature_cols,
                 "n_samples": n_samples,

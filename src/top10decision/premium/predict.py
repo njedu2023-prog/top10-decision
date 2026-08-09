@@ -619,17 +619,29 @@ def _load_validated_platt_calibrator(
 
     if target == "t1_up":
         actual_names = ["t1_up_hit"]
-        prob_names = ["t1_continue_up_rate", "t1_up_prob_model", "t1_continue_up_rate_rule", "t1_up_rate", "T+1延续上涨率"]
+        prob_names = (
+            ["t1_continue_up_rate_engine", "t1_up_prob_model"]
+            if model_enabled
+            else ["t1_continue_up_rate_rule", "t1_continue_up_rate", "t1_up_rate", "T+1延续上涨率"]
+        )
         ready_names = ["t1_verify_ready", "label_matured"]
+        probability_ready_names = ["t1_model_probability_ready"]
     else:
         actual_names = ["t_limitup_hit", "t_limitup_actual"]
-        prob_names = ["t_limitup_prob", "t_limitup_prob_model", "t_limitup_prob_rule", "T日涨停概率"]
+        prob_names = (
+            ["t_limitup_prob_engine", "t_limitup_prob_model"]
+            if model_enabled
+            else ["t_limitup_prob_rule", "t_limitup_prob", "T日涨停概率"]
+        )
         ready_names = ["t_limitup_verify_ready", "label_matured"]
+        probability_ready_names = ["t_limit_model_probability_ready"]
     actual = _bool_like_series(df, actual_names, default=np.nan)
     prob = _prob_series(df, prob_names, default=np.nan)
     ready = _bool_like_series(df, ready_names, default=np.nan)
-    sample_mode = _bool_like_series(df, ["model_can_rank"], default=0.0).fillna(0).ge(0.5)
-    valid = actual.notna() & prob.notna() & ready.fillna(0).eq(1) & sample_mode.eq(bool(model_enabled))
+    valid = actual.notna() & prob.notna() & ready.fillna(0).eq(1)
+    if model_enabled:
+        probability_ready = _bool_like_series(df, probability_ready_names, default=np.nan)
+        valid = valid & probability_ready.fillna(0).eq(1)
 
     date_s = pd.Series("", index=df.index, dtype="object")
     for date_col in ("d_trade_date", "trade_date", "base_date", "d_analysis_trade_date"):
@@ -723,7 +735,7 @@ def _apply_limitup_probability_calibration(cfg: PremiumConfig, df: pd.DataFrame)
             "limitup_calibration_reason": "probability_missing",
         }
 
-    model_enabled = bool((_field_01(out, "model_can_rank", 0.0) >= 0.5).any())
+    model_enabled = bool((_target_gate_flag(out, "t_limit_model_probability_ready", legacy=False) >= 0.5).any())
     platt, platt_reason, platt_metrics = _load_validated_platt_calibrator(cfg, model_enabled)
     trace: Dict[str, object] = {
         "limitup_calibration_mode": "off",
@@ -797,7 +809,7 @@ def _apply_t1_probability_calibration(cfg: PremiumConfig, df: pd.DataFrame) -> T
         out["t1_calibration_src"] = "none:probability_missing"
         return out, {"t1_calibration_mode": "off", "t1_calibration_reason": "probability_missing"}
 
-    model_enabled = bool((_field_01(out, "model_can_rank", 0.0) >= 0.5).any())
+    model_enabled = bool((_target_gate_flag(out, "t1_model_probability_ready", legacy=False) >= 0.5).any())
     platt, reason, metrics = _load_validated_platt_calibrator(cfg, model_enabled, target="t1_up")
     trace: Dict[str, object] = {
         "t1_calibration_mode": "off",
@@ -871,22 +883,29 @@ def _apply_adaptive_rank_score(df: pd.DataFrame, history: Dict[str, object]) -> 
     idx = out.index
 
     limitup_prob = pd.to_numeric(out.get("t_limitup_prob", pd.Series([0.5] * len(out), index=idx)), errors="coerce").fillna(0.5).clip(0.0, 1.0)
-    model_can_rank = _field_01(out, "model_can_rank", 0.0) >= 0.5
-    touch_model = pd.to_numeric(out.get("t_touch_limitup_prob_model", limitup_prob), errors="coerce").fillna(limitup_prob).clip(0.0, 1.0)
-    touch_prob = touch_model.where(model_can_rank, limitup_prob)
+    t_limit_can_rank = _target_gate_flag(out, "t_limit_model_can_rank") >= 0.5
+    t_touch_can_rank = _target_gate_flag(out, "t_touch_model_can_rank") >= 0.5
+    t1_can_rank = _target_gate_flag(out, "t1_model_can_rank") >= 0.5
+    t1_return_can_rank = _target_gate_flag(out, "t1_return_model_can_rank") >= 0.5
+    limitup_rank_signal = _score_01_from_percent_or_rank(out, "t_limitup_rank_score", "t_limitup_prob", default=0.5)
+    touch_rank_signal = _score_01_from_percent_or_rank(out, "t_touch_rank_score", "t_limitup_strength", default=0.5)
     strength = pd.to_numeric(out.get("t_limitup_strength", out.get("t_limitup_strength_rule", pd.Series([50.0] * len(out), index=idx))), errors="coerce").fillna(50.0).clip(0.0, 100.0) / 100.0
     t1_prob = pd.to_numeric(out.get("t1_continue_up_rate", out.get("t1_up_rate", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
-    t1_model_raw = pd.to_numeric(out.get("t1_up_prob_model", t1_prob), errors="coerce").fillna(t1_prob).clip(0.0, 1.0)
-    t1_model_prob = t1_model_raw.where(model_can_rank, t1_prob)
-    t1_ret_pred = pd.to_numeric(out.get("t1_close_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce").where(model_can_rank, np.nan)
-    t1_high_pred = pd.to_numeric(out.get("t1_high_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce").where(model_can_rank, np.nan)
+    t1_rank_signal = _score_01_from_percent_or_rank(out, "t1_rank_score", "t1_continue_up_rate", default=0.5)
+    t1_ret_pred = pd.to_numeric(out.get("t1_close_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce").where(t1_return_can_rank, np.nan)
+    t1_high_pred = pd.to_numeric(out.get("t1_high_ret_pred", pd.Series([np.nan] * len(out), index=idx)), errors="coerce").where(t1_return_can_rank, np.nan)
     p_fill = pd.to_numeric(out.get("dec_p_fill", out.get("p_fill_pred", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
     conf_score = pd.to_numeric(out.get("eret_plus_conf_score", out.get("confidence", pd.Series([0.5] * len(out), index=idx))), errors="coerce").fillna(0.5).clip(0.0, 1.0)
 
-    limitup_alpha = (0.72 * limitup_prob + 0.18 * touch_prob + 0.10 * strength).clip(0.0, 1.0)
+    limitup_alpha = (
+        0.58 * limitup_rank_signal
+        + 0.20 * touch_rank_signal
+        + 0.12 * limitup_prob
+        + 0.10 * strength
+    ).clip(0.0, 1.0)
     t1_return_rank = _rank_pct(t1_ret_pred, neutral=0.50)
     t1_high_rank = _rank_pct(t1_high_pred, neutral=0.50)
-    t1_alpha = (0.50 * t1_model_prob + 0.25 * t1_prob + 0.18 * t1_return_rank + 0.07 * t1_high_rank).clip(0.0, 1.0)
+    t1_alpha = (0.50 * t1_rank_signal + 0.25 * t1_prob + 0.18 * t1_return_rank + 0.07 * t1_high_rank).clip(0.0, 1.0)
     strength_alpha = (0.60 * strength + 0.40 * _rank_pct(out.get("limitup_continuation_score", pd.Series([50.0] * len(out), index=idx)), neutral=0.50)).clip(0.0, 1.0)
     execution_alpha = (0.65 * p_fill + 0.35 * conf_score).clip(0.0, 1.0)
 
@@ -919,6 +938,9 @@ def _apply_adaptive_rank_score(df: pd.DataFrame, history: Dict[str, object]) -> 
         "adaptive_weight_execution": round(weights["execution"], 6),
         "adaptive_limitup_ic": "" if not np.isfinite(limitup_ic) else round(float(limitup_ic), 6),
         "adaptive_t1_ret_ic": "" if not np.isfinite(t1_ic) else round(float(t1_ic), 6),
+        "adaptive_t_limit_model_active": int(t_limit_can_rank.sum()),
+        "adaptive_t_touch_model_active": int(t_touch_can_rank.sum()),
+        "adaptive_t1_model_active": int(t1_can_rank.sum()),
         "adaptive_reason": "t1_downweighted_negative_ic" if np.isfinite(t1_ic) and t1_ic < 0 else "ok",
     }
     return out, trace
@@ -930,6 +952,16 @@ def _field_01(df: pd.DataFrame, name: str, default: float = 0.5) -> pd.Series:
     else:
         s = pd.Series([default] * len(df), index=df.index, dtype="float64")
     return s.fillna(default).clip(0.0, 1.0).astype(float)
+
+
+def _target_gate_flag(df: pd.DataFrame, name: str, legacy: bool = True) -> pd.Series:
+    if name in df.columns:
+        value = pd.to_numeric(df[name], errors="coerce")
+        if value.notna().any():
+            return value.fillna(0.0).clip(0.0, 1.0).astype(float)
+    if legacy:
+        return _field_01(df, "model_can_rank", 0.0)
+    return pd.Series([0.0] * len(df), index=df.index, dtype="float64")
 
 
 def _score_01_from_percent_or_rank(df: pd.DataFrame, *names: str, default: float = 0.5) -> pd.Series:
@@ -1018,8 +1050,24 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     rule_t_limit = _field_01(out, "t_limitup_prob", 0.5)
     rule_touch = _field_01(out, "t_touch_limitup_prob_rule", float("nan")).fillna(rule_t_limit)
     rule_t1_up = _field_01(out, "t1_continue_up_rate", 0.5)
-    model_can_rank = _field_01(out, "model_can_rank", 0.0) >= 0.5
-    model_alpha = pd.Series(np.where(model_can_rank, 0.72, 0.0), index=idx, dtype="float64")
+    t_limit_can_rank = _target_gate_flag(out, "t_limit_model_can_rank") >= 0.5
+    t_touch_can_rank = _target_gate_flag(out, "t_touch_model_can_rank") >= 0.5
+    t1_can_rank = _target_gate_flag(out, "t1_model_can_rank") >= 0.5
+    t1_return_can_rank = _target_gate_flag(out, "t1_return_model_can_rank") >= 0.5
+    t_limit_probability_ready = _target_gate_flag(
+        out, "t_limit_model_probability_ready", legacy=False
+    ) >= 0.5
+    t_touch_probability_ready = _target_gate_flag(
+        out, "t_touch_model_probability_ready", legacy=False
+    ) >= 0.5
+    t1_probability_ready = _target_gate_flag(
+        out, "t1_model_probability_ready", legacy=False
+    ) >= 0.5
+    t_model_alpha = pd.Series(np.where(t_limit_probability_ready, 0.72, 0.0), index=idx, dtype="float64")
+    touch_model_alpha = pd.Series(np.where(t_touch_probability_ready, 0.72, 0.0), index=idx, dtype="float64")
+    t1_model_alpha = pd.Series(np.where(t1_probability_ready, 0.72, 0.0), index=idx, dtype="float64")
+    t_limit_rank_signal = _score_01_from_percent_or_rank(out, "t_limitup_rank_score", "t_limitup_prob", default=0.5)
+    t_touch_rank_signal = _score_01_from_percent_or_rank(out, "t_touch_rank_score", "t_limitup_strength", default=0.5)
 
     t_up_model = _field_01(out, "t_up_prob_model", float("nan"))
     t_high_profit_model = _field_01(out, "t_high_profit_prob_model", float("nan"))
@@ -1098,23 +1146,23 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     ).fillna(0.0).clip(0.0, 1.0)
 
     rule_t_up = (0.55 * rule_touch + 0.45 * rule_t_limit).clip(0.0, 1.0)
-    t_up_prob = (model_alpha * t_up_model.fillna(rule_t_up) + (1.0 - model_alpha) * rule_t_up).clip(0.0, 1.0)
+    t_up_prob = (t_model_alpha * t_up_model.fillna(rule_t_up) + (1.0 - t_model_alpha) * rule_t_up).clip(0.0, 1.0)
     t_high_profit_prob = (
-        model_alpha * t_high_profit_model.fillna((rule_touch + rule_t_limit) / 2.0)
-        + (1.0 - model_alpha) * ((rule_touch + rule_t_limit) / 2.0)
+        t_model_alpha * t_high_profit_model.fillna((rule_touch + rule_t_limit) / 2.0)
+        + (1.0 - t_model_alpha) * ((rule_touch + rule_t_limit) / 2.0)
     ).clip(0.0, 1.0)
-    t_limit_prob = (model_alpha * t_limit_model.fillna(rule_t_limit) + (1.0 - model_alpha) * rule_t_limit).clip(0.0, 1.0)
-    t_touch_prob = (model_alpha * touch_model.fillna(rule_touch) + (1.0 - model_alpha) * rule_touch).clip(0.0, 1.0)
+    t_limit_prob = (t_model_alpha * t_limit_model.fillna(rule_t_limit) + (1.0 - t_model_alpha) * rule_t_limit).clip(0.0, 1.0)
+    t_touch_prob = (touch_model_alpha * touch_model.fillna(rule_touch) + (1.0 - touch_model_alpha) * rule_touch).clip(0.0, 1.0)
 
-    t1_close_ret_pred = _num_series(out, "t1_close_ret_pred", default=np.nan).where(model_can_rank, np.nan)
-    t1_high_ret_pred = _num_series(out, "t1_high_ret_pred", default=np.nan).where(model_can_rank, np.nan)
+    t1_close_ret_pred = _num_series(out, "t1_close_ret_pred", default=np.nan).where(t1_return_can_rank, np.nan)
+    t1_high_ret_pred = _num_series(out, "t1_high_ret_pred", default=np.nan).where(t1_return_can_rank, np.nan)
     t1_close_ret_pred_score = _ret_score_01(t1_close_ret_pred, neutral=0.50)
     t1_high_ret_pred_score = _ret_score_01(t1_high_ret_pred, neutral=0.50)
     fallback_t1_high_profit = (0.45 * rule_t1_up + 0.35 * t1_high_ret_pred_score + 0.20 * eret_plus_score).clip(0.0, 1.0)
-    t1_up_prob = (model_alpha * t1_up_model.fillna(rule_t1_up) + (1.0 - model_alpha) * rule_t1_up).clip(0.0, 1.0)
+    t1_up_prob = (t1_model_alpha * t1_up_model.fillna(rule_t1_up) + (1.0 - t1_model_alpha) * rule_t1_up).clip(0.0, 1.0)
     t1_high_profit_prob = (
-        model_alpha * t1_high_profit_model.fillna(fallback_t1_high_profit)
-        + (1.0 - model_alpha) * fallback_t1_high_profit
+        t1_model_alpha * t1_high_profit_model.fillna(fallback_t1_high_profit)
+        + (1.0 - t1_model_alpha) * fallback_t1_high_profit
     ).clip(0.0, 1.0)
     fallback_t1_accept = (
         0.40 * t1_up_prob
@@ -1123,15 +1171,15 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         + 0.15 * eret_plus_score
     ).clip(0.0, 1.0)
     t1_accept_prob = (
-        model_alpha * t1_accept_model.fillna(fallback_t1_accept)
-        + (1.0 - model_alpha) * fallback_t1_accept
+        t1_model_alpha * t1_accept_model.fillna(fallback_t1_accept)
+        + (1.0 - t1_model_alpha) * fallback_t1_accept
     ).clip(0.0, 1.0)
     fallback_fail = (1.0 - 0.55 * t1_accept_prob - 0.25 * t1_up_prob - 0.20 * eret_plus_score).clip(0.0, 1.0)
-    t1_fail_prob = (model_alpha * t1_fail_model.fillna(fallback_fail) + (1.0 - model_alpha) * fallback_fail).clip(0.0, 1.0)
+    t1_fail_prob = (t1_model_alpha * t1_fail_model.fillna(fallback_fail) + (1.0 - t1_model_alpha) * fallback_fail).clip(0.0, 1.0)
     fallback_big_dd = (0.55 * risk_raw + 0.30 * t1_fail_prob + 0.15 * (1.0 - conf_score)).clip(0.0, 1.0)
     t1_big_drawdown_prob = (
-        model_alpha * t1_big_dd_model.fillna(fallback_big_dd)
-        + (1.0 - model_alpha) * fallback_big_dd
+        t1_model_alpha * t1_big_dd_model.fillna(fallback_big_dd)
+        + (1.0 - t1_model_alpha) * fallback_big_dd
     ).clip(0.0, 1.0)
 
     execution_safety_score = (
@@ -1151,8 +1199,8 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
 
     t_up_attack_raw = (
         0.17 * t_up_prob
-        + 0.21 * t_touch_prob
-        + 0.21 * t_limit_prob
+        + 0.21 * t_touch_rank_signal
+        + 0.21 * t_limit_rank_signal
         + 0.11 * strength
         + 0.08 * eret_plus_score
         + 0.05 * market_score
@@ -1273,7 +1321,7 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
                 row_reasons.append("intraday_risk>0.70")
         reasons.append(";".join(row_reasons) if row_reasons else "ok")
     out["premium_exclude_reason"] = pd.Series(reasons, index=idx, dtype="object")
-    out["premium_rank_mode"] = np.where(model_can_rank, "model_validated_professional_score", "professional_score_rule_guarded")
+    out["premium_rank_mode"] = np.where(t_limit_can_rank, "model_validated_professional_score", "professional_score_rule_guarded")
 
     trace = {
         "premium_score_mode": "t_attack_t1_accept_final_v1",
@@ -1289,7 +1337,8 @@ def _apply_professional_premium_scores(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
         "premium_eligible_count": int(eligible.sum()),
         "premium_watch_count": int((out["premium_bucket"] == "WATCH").sum()),
         "premium_excluded_count": int(force_excluded.sum()),
-        "premium_model_can_rank_count": int(model_can_rank.sum()),
+        "premium_model_can_rank_count": int(t_limit_can_rank.sum()),
+        "premium_t1_model_can_rank_count": int(t1_can_rank.sum()),
         "premium_ehx_validated_count": int(ehx_validated.sum()),
         "premium_rank_blend": "professional_75_adaptive_25",
     }
@@ -1306,6 +1355,7 @@ def _sort_professional_premium(df: pd.DataFrame) -> pd.DataFrame:
         "_premium_bucket_order",
         "premium_rank_score",
         "premium_final_score",
+        "t_limitup_rank_score",
         "t1_accept_score",
         "t_up_attack_score",
         "eret_plus_value",
@@ -1317,7 +1367,7 @@ def _sort_professional_premium(df: pd.DataFrame) -> pd.DataFrame:
             out[c] = pd.NA
     out = out.sort_values(
         by=sort_cols,
-        ascending=[True, False, False, False, False, False, False, False],
+        ascending=[True, False, False, False, False, False, False, False, False],
         na_position="last",
     ).drop(columns=["_premium_bucket_order"], errors="ignore")
     return out.reset_index(drop=True)
@@ -2278,7 +2328,11 @@ def _recent_limitup_model_health(
         ready = _bool_like_series(df, ["t_limitup_verify_ready"], default=np.nan)
         model_prob = _prob_series(df, ["t_limitup_prob_model"], default=np.nan)
         rule_prob = _prob_series(df, ["t_limitup_prob_rule"], default=np.nan)
-        active = _bool_like_series(df, ["model_can_rank"], default=0.0).fillna(0).ge(0.5)
+        active = _bool_like_series(
+            df,
+            ["t_limit_model_can_rank", "model_can_rank"],
+            default=0.0,
+        ).fillna(0).ge(0.5)
         valid = ready.fillna(0).eq(1) & active & actual.notna() & model_prob.notna() & rule_prob.notna()
         if not valid.any():
             continue
@@ -2303,24 +2357,40 @@ def _recent_limitup_model_health(
     rule_prob = frame["rule_prob"].to_numpy(dtype=float)
     model_brier = float(np.mean((model_prob - actual) ** 2))
     rule_brier = float(np.mean((rule_prob - actual) ** 2))
-    lifts: List[float] = []
+    base_lifts: List[float] = []
+    rule_lifts: List[float] = []
+    daily_ics: List[float] = []
     for _, day in frame.groupby("date", sort=True):
-        top = day.nlargest(min(10, len(day)), "model_prob")
-        lifts.append(float(top["actual"].mean() - day["actual"].mean()))
-    top10_lift = float(np.mean(lifts)) if lifts else float("nan")
+        top_n = min(10, len(day))
+        model_top = day.nlargest(top_n, "model_prob")
+        rule_top = day.nlargest(top_n, "rule_prob")
+        base_lifts.append(float(model_top["actual"].mean() - day["actual"].mean()))
+        rule_lifts.append(float(model_top["actual"].mean() - rule_top["actual"].mean()))
+        ic = day["model_prob"].rank(method="average").corr(
+            day["actual"].rank(method="average"), method="pearson"
+        )
+        if np.isfinite(ic):
+            daily_ics.append(float(ic))
+    top10_lift = float(np.mean(base_lifts)) if base_lifts else float("nan")
+    versus_rule_lift = float(np.mean(rule_lifts)) if rule_lifts else float("nan")
+    daily_ic = float(np.mean(daily_ics)) if daily_ics else float("nan")
     metrics = {
         "days": float(n_days),
         "samples": float(len(frame)),
         "model_brier": model_brier,
         "rule_brier": rule_brier,
         "top10_lift": top10_lift,
+        "versus_rule_top10_lift": versus_rule_lift,
+        "daily_rank_ic": daily_ic,
+        "probability_brier_pass": float(model_brier <= rule_brier * 1.02),
     }
     ok = bool(
-        np.isfinite(model_brier)
-        and np.isfinite(rule_brier)
-        and model_brier <= rule_brier * 1.02
-        and np.isfinite(top10_lift)
+        np.isfinite(top10_lift)
         and top10_lift > 0
+        and np.isfinite(versus_rule_lift)
+        and versus_rule_lift >= -0.01
+        and np.isfinite(daily_ic)
+        and daily_ic > 0
     )
     return ok, "recent_health_pass" if ok else "recent_health_fail", metrics
 
@@ -2357,6 +2427,28 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         "t1_close_ret_pred",
         "t1_high_ret_pred",
         "limitup_model_score",
+        "t_limitup_prob_engine",
+        "t1_continue_up_rate_engine",
+        "t_limitup_rank_score",
+        "t_touch_rank_score",
+        "t1_rank_score",
+        "t_limit_model_can_rank",
+        "t_touch_model_can_rank",
+        "t1_model_can_rank",
+        "t_return_model_can_rank",
+        "t1_return_model_can_rank",
+        "t_limit_gate_status",
+        "t_touch_gate_status",
+        "t1_gate_status",
+        "t_return_gate_status",
+        "t1_return_gate_status",
+        "t_limit_prob_gate_status",
+        "t_touch_prob_gate_status",
+        "t1_prob_gate_status",
+        "t_limit_model_probability_ready",
+        "t_touch_model_probability_ready",
+        "t1_model_probability_ready",
+        "model_gate_version",
         "model_can_rank",
         "model_rank_mode",
         "model_quality_flag",
@@ -2391,11 +2483,31 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
         m_t1_up = pd.to_numeric(out["t1_up_prob_model"], errors="coerce").fillna(rule_t1_continue).clip(0.0, 1.0)
         m_high_profit = pd.to_numeric(out["t1_high_profit_prob_model"], errors="coerce").fillna(m_t1_up).clip(0.0, 1.0)
         m_t1_accept = pd.to_numeric(out.get("t1_accept_prob_model", m_t1_up), errors="coerce").fillna(m_t1_up).clip(0.0, 1.0)
-        m_score = pd.to_numeric(out["limitup_model_score"], errors="coerce").fillna(
-            0.30 * m_t_limitup + 0.20 * m_touch + 0.20 * m_t1_up + 0.20 * m_t1_accept + 0.10 * m_high_profit
-        ).clip(0.0, 1.0)
+        target_status = dict(getattr(bundle, "target_gate_status", {}) or {})
+        target_reasons = dict(getattr(bundle, "target_gate_reasons", {}) or {})
+        probability_status = dict(getattr(bundle, "target_probability_status", {}) or {})
+        probability_reasons = dict(getattr(bundle, "target_probability_reasons", {}) or {})
+        legacy_status = "ACTIVE" if bool(getattr(bundle, "model_can_rank", False)) else "SHADOW"
+        t_limit_status = str(target_status.get("t_limit", legacy_status)).upper()
+        t_touch_status = str(target_status.get("t_touch", legacy_status)).upper()
+        t1_status = str(target_status.get("t1", legacy_status)).upper()
+        t_return_status = str(target_status.get("t_return", legacy_status)).upper()
+        t1_return_status = str(target_status.get("t1_return", legacy_status)).upper()
+        t_limit_probability_status = str(probability_status.get("t_limit", "SHADOW")).upper()
+        t_touch_probability_status = str(probability_status.get("t_touch", "SHADOW")).upper()
+        t1_probability_status = str(probability_status.get("t1", "SHADOW")).upper()
 
-        model_can_rank = bool(getattr(bundle, "model_can_rank", False))
+        def gate_enabled(status: str) -> bool:
+            return status in {"ACTIVE", "PROVISIONAL"}
+
+        def gate_alpha(status: str) -> float:
+            if status == "ACTIVE":
+                return 0.70
+            if status == "PROVISIONAL":
+                return 0.30
+            return 0.0
+
+        model_can_rank = gate_enabled(t_limit_status)
         health_ok: Optional[bool] = None
         health_reason = "bundle_gate_disabled"
         health_metrics: Dict[str, float] = {}
@@ -2403,57 +2515,121 @@ def _apply_limitup_probability_engine(cfg: PremiumConfig, df: pd.DataFrame) -> T
             health_ok, health_reason, health_metrics = _recent_limitup_model_health(cfg)
             if health_ok is False:
                 model_can_rank = False
-                out["model_can_rank"] = False
-                out["model_rank_mode"] = "disabled_recent_health_fail"
-                out["model_quality_flag"] = "degraded"
-        if not model_can_rank:
-            # Keep every model field for shadow evaluation, but do not let an
-            # unvalidated challenger alter production probabilities or order.
-            out["t_limitup_prob"] = rule_t_limitup.round(6)
-            out["T日涨停概率"] = out["t_limitup_prob"]
-            out["t_limitup_strength"] = rule_t_strength.round(4)
-            out["T日涨停强度"] = out["t_limitup_strength"]
-            out["t1_continue_up_rate"] = rule_t1_continue.round(6)
-            out["T+1延续上涨率"] = out["t1_continue_up_rate"]
-            out["limitup_continuation_score"] = rule_score.round(4)
-            out["涨停接力评分"] = out["limitup_continuation_score"]
-            out["limitup_model_src"] = "limitup_probability_engine:shadow_gate_failed"
-            trace.update({
-                "limitup_model_mode": "shadow_only_validation_not_pass",
-                "limitup_model_reason": (
-                    health_reason if health_ok is False else str(getattr(bundle, "gate_reason", "validation_not_pass"))
-                ),
-                "limitup_model_feature_n": len(getattr(bundle, "feature_cols", []) or []),
-                "limitup_model_train_end_date": getattr(bundle, "train_end_date", ""),
-                "limitup_model_valid_start_date": getattr(bundle, "valid_start_date", ""),
-                "limitup_model_can_rank": False,
-                "limitup_model_rank_mode": getattr(bundle, "model_rank_mode", "disabled_validation_not_pass"),
-                "limitup_model_validation_days": int(getattr(bundle, "validation_days", 0) or 0),
-                "limitup_model_validation_samples": int(getattr(bundle, "validation_samples", 0) or 0),
-                "limitup_model_recent_health": health_reason,
-                **{f"limitup_model_recent_{k}": v for k, v in health_metrics.items()},
-            })
-            return out, trace
+                t_limit_status = "DISABLED_RECENT_HEALTH"
+                t_touch_status = "DISABLED_RECENT_HEALTH"
+                t_limit_probability_status = "DISABLED_RECENT_HEALTH"
+                t_touch_probability_status = "DISABLED_RECENT_HEALTH"
 
-        # 最终生产字段：模型为主、规则为辅，避免模型早期样本不足时突然漂移。
-        out["t_limitup_prob"] = (0.70 * m_t_limitup + 0.30 * rule_t_limitup).clip(0.01, 0.99).round(6)
+        t_limit_rank_alpha = gate_alpha(t_limit_status)
+        t_touch_rank_alpha = gate_alpha(t_touch_status)
+        t1_rank_alpha = gate_alpha(t1_status)
+        t_limit_probability_alpha = gate_alpha(t_limit_probability_status)
+        t_touch_probability_alpha = gate_alpha(t_touch_probability_status)
+        t1_probability_alpha = gate_alpha(t1_probability_status)
+        t_limit_rank = (
+            t_limit_rank_alpha * _rank_pct(m_t_limitup)
+            + (1.0 - t_limit_rank_alpha) * _rank_pct(rule_t_limitup)
+        ).clip(0.0, 1.0)
+        t_touch_rank = (
+            t_touch_rank_alpha * _rank_pct(m_touch)
+            + (1.0 - t_touch_rank_alpha) * _rank_pct(rule_t_strength)
+        ).clip(0.0, 1.0)
+        t1_model_signal = (0.55 * m_t1_up + 0.25 * m_t1_accept + 0.20 * m_high_profit).clip(0.0, 1.0)
+        t1_rank = (
+            t1_rank_alpha * _rank_pct(t1_model_signal)
+            + (1.0 - t1_rank_alpha) * _rank_pct(rule_t1_continue)
+        ).clip(0.0, 1.0)
+
+        out["t_limitup_rank_score"] = (100.0 * t_limit_rank).round(4)
+        out["t_touch_rank_score"] = (100.0 * t_touch_rank).round(4)
+        out["t1_rank_score"] = (100.0 * t1_rank).round(4)
+        out["t_limitup_prob"] = (
+            t_limit_probability_alpha * m_t_limitup
+            + (1.0 - t_limit_probability_alpha) * rule_t_limitup
+        ).clip(0.01, 0.99).round(6)
+        out["t_limitup_prob_engine"] = out["t_limitup_prob"]
         out["T日涨停概率"] = out["t_limitup_prob"]
-        out["t_limitup_strength"] = (0.60 * (100.0 * m_touch) + 0.40 * rule_t_strength).clip(0.0, 100.0).round(4)
+        out["t_limitup_strength"] = (
+            t_touch_probability_alpha * (100.0 * m_touch)
+            + (1.0 - t_touch_probability_alpha) * rule_t_strength
+        ).clip(0.0, 100.0).round(4)
         out["T日涨停强度"] = out["t_limitup_strength"]
-        out["t1_continue_up_rate"] = (0.55 * m_t1_up + 0.25 * m_t1_accept + 0.20 * rule_t1_continue).clip(0.01, 0.99).round(6)
+        out["t1_continue_up_rate"] = (
+            t1_probability_alpha * t1_model_signal
+            + (1.0 - t1_probability_alpha) * rule_t1_continue
+        ).clip(0.01, 0.99).round(6)
+        out["t1_continue_up_rate_engine"] = out["t1_continue_up_rate"]
         out["T+1延续上涨率"] = out["t1_continue_up_rate"]
-        out["limitup_continuation_score"] = (0.70 * (100.0 * m_score) + 0.30 * rule_score).clip(0.0, 100.0).round(4)
+        rank_composite = (0.50 * t_limit_rank + 0.25 * t_touch_rank + 0.25 * t1_rank).clip(0.0, 1.0)
+        composite_alpha = max(t_limit_rank_alpha, t_touch_rank_alpha, t1_rank_alpha)
+        out["limitup_continuation_score"] = (
+            composite_alpha * (100.0 * rank_composite) + (1.0 - composite_alpha) * rule_score
+        ).clip(0.0, 100.0).round(4)
         out["涨停接力评分"] = out["limitup_continuation_score"]
-        out["limitup_model_src"] = "limitup_probability_engine:model_v1"
+        out["t_limit_gate_status"] = t_limit_status
+        out["t_touch_gate_status"] = t_touch_status
+        out["t1_gate_status"] = t1_status
+        out["t_return_gate_status"] = t_return_status
+        out["t1_return_gate_status"] = t1_return_status
+        out["t_limit_prob_gate_status"] = t_limit_probability_status
+        out["t_touch_prob_gate_status"] = t_touch_probability_status
+        out["t1_prob_gate_status"] = t1_probability_status
+        out["t_limit_model_can_rank"] = gate_enabled(t_limit_status)
+        out["t_touch_model_can_rank"] = gate_enabled(t_touch_status)
+        out["t1_model_can_rank"] = gate_enabled(t1_status)
+        out["t_return_model_can_rank"] = gate_enabled(t_return_status)
+        out["t1_return_model_can_rank"] = gate_enabled(t1_return_status)
+        out["t_limit_model_probability_ready"] = gate_enabled(t_limit_probability_status)
+        out["t_touch_model_probability_ready"] = gate_enabled(t_touch_probability_status)
+        out["t1_model_probability_ready"] = gate_enabled(t1_probability_status)
+        out["model_can_rank"] = gate_enabled(t_limit_status)
+        out["model_rank_mode"] = f"t_limit_{t_limit_status.lower()}__t1_{t1_status.lower()}"
+        out["model_quality_flag"] = (
+            "ok" if gate_enabled(t_limit_status) and gate_enabled(t1_status)
+            else "partial" if gate_enabled(t_limit_status)
+            else "degraded"
+        )
+        out["model_gate_version"] = str(getattr(bundle, "gate_version", "premium_target_gate_v2"))
+        if any(gate_enabled(status) for status in (
+            t_limit_status,
+            t_touch_status,
+            t1_status,
+            t_limit_probability_status,
+            t_touch_probability_status,
+            t1_probability_status,
+        )):
+            out["limitup_model_src"] = "limitup_probability_engine:model_v2_target_gated"
+            model_mode = "model_v2_target_gated"
+        else:
+            out["limitup_model_src"] = "limitup_probability_engine:shadow_gate_failed"
+            model_mode = "shadow_only_validation_not_pass"
 
         trace.update({
-            "limitup_model_mode": "model_v1_blend_rule",
-            "limitup_model_reason": "ok",
+            "limitup_model_mode": model_mode,
+            "limitup_model_reason": (
+                health_reason if health_ok is False else target_reasons.get("t_limit", getattr(bundle, "gate_reason", ""))
+            ),
             "limitup_model_feature_n": len(getattr(bundle, "feature_cols", []) or []),
             "limitup_model_train_end_date": getattr(bundle, "train_end_date", ""),
             "limitup_model_valid_start_date": getattr(bundle, "valid_start_date", ""),
-            "limitup_model_can_rank": model_can_rank,
-            "limitup_model_rank_mode": getattr(bundle, "model_rank_mode", "disabled_validation_not_pass"),
+            "limitup_model_can_rank": gate_enabled(t_limit_status),
+            "limitup_model_rank_mode": f"t_limit_{t_limit_status.lower()}__t1_{t1_status.lower()}",
+            "limitup_model_gate_version": str(getattr(bundle, "gate_version", "premium_target_gate_v2")),
+            "limitup_model_t_limit_status": t_limit_status,
+            "limitup_model_t_touch_status": t_touch_status,
+            "limitup_model_t1_status": t1_status,
+            "limitup_model_t_return_status": t_return_status,
+            "limitup_model_t1_return_status": t1_return_status,
+            "limitup_model_t_limit_probability_status": t_limit_probability_status,
+            "limitup_model_t_touch_probability_status": t_touch_probability_status,
+            "limitup_model_t1_probability_status": t1_probability_status,
+            "limitup_model_t_limit_rank_alpha": t_limit_rank_alpha,
+            "limitup_model_t_touch_rank_alpha": t_touch_rank_alpha,
+            "limitup_model_t1_rank_alpha": t1_rank_alpha,
+            "limitup_model_t_limit_probability_alpha": t_limit_probability_alpha,
+            "limitup_model_t_touch_probability_alpha": t_touch_probability_alpha,
+            "limitup_model_t1_probability_alpha": t1_probability_alpha,
+            "limitup_model_t_limit_probability_reason": probability_reasons.get("t_limit", ""),
             "limitup_model_validation_days": int(getattr(bundle, "validation_days", 0) or 0),
             "limitup_model_validation_samples": int(getattr(bundle, "validation_samples", 0) or 0),
             "limitup_model_recent_health": health_reason,
@@ -2827,6 +3003,15 @@ def predict_latest(cfg: Optional[PremiumConfig] = None) -> PredictResult:
         "t1_up_prob_model", "t1_high_profit_prob_model", "t1_accept_prob_model", "t1_fail_prob_model",
         "t1_big_drawdown_prob_model", "t_close_ret_pred", "t_intraday_ret_pred",
         "t1_close_ret_pred", "t1_high_ret_pred", "limitup_model_score", "limitup_model_src",
+        "t_limitup_prob_engine", "t1_continue_up_rate_engine",
+        "t_limitup_rank_score", "t_touch_rank_score", "t1_rank_score",
+        "t_limit_model_can_rank", "t_touch_model_can_rank", "t1_model_can_rank",
+        "t_return_model_can_rank", "t1_return_model_can_rank",
+        "t_limit_gate_status", "t_touch_gate_status", "t1_gate_status",
+        "t_return_gate_status", "t1_return_gate_status",
+        "t_limit_prob_gate_status", "t_touch_prob_gate_status", "t1_prob_gate_status",
+        "t_limit_model_probability_ready", "t_touch_model_probability_ready", "t1_model_probability_ready",
+        "model_gate_version",
         "model_can_rank", "model_rank_mode", "model_quality_flag",
         "t_limitup_prob_raw_before_calibration", "t_limitup_prob_calibrated", "limitup_calibration_src",
         "t1_continue_up_rate_raw_before_calibration", "t1_continue_up_rate_calibrated", "t1_calibration_src",

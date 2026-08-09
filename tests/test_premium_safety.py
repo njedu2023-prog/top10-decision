@@ -36,6 +36,8 @@ from top10decision.premium.execution_profit_model import _truth_from_market, sco
 from top10decision.premium.final_decision import build_final_decisions
 from top10decision.premium.limitup_probability_engine import (
     _model_gate,
+    _target_model_gates,
+    _target_probability_gates,
     fit_limitup_probability_engine,
     infer_feature_cols,
     time_split,
@@ -317,9 +319,21 @@ class PremiumSafetyTests(unittest.TestCase):
 
     def test_primary_model_gate_requires_real_lift(self):
         rows = [
-            {"target": "t_limitup_hit", "auc": 0.60, "brier_skill": 0.10, "daily_top10_lift": 0.0, "daily_spearman_ic": 0.08},
-            {"target": "t1_accept_hit", "auc": 0.55, "brier_skill": 0.03},
-            {"target": "t1_close_ret", "daily_spearman_ic": 0.05},
+            {
+                "target": "t_limitup_hit", "samples": 600, "auc": 0.60,
+                "brier_skill": 0.10, "daily_top10_lift": 0.0,
+                "daily_spearman_ic": 0.08, "daily_positive_ic_rate": 0.70,
+                "daily_metric_days": 20,
+            },
+            {
+                "target": "t1_accept_hit", "samples": 600, "auc": 0.55,
+                "brier_skill": 0.03, "daily_metric_days": 20,
+            },
+            {
+                "target": "t1_close_ret", "samples": 600,
+                "daily_spearman_ic": 0.05, "daily_positive_ic_rate": 0.70,
+                "daily_metric_days": 20,
+            },
         ]
         ok, reason = _model_gate(pd.DataFrame(rows), validation_days=20, validation_samples=600)
         self.assertFalse(ok)
@@ -328,6 +342,40 @@ class PremiumSafetyTests(unittest.TestCase):
         rows[0]["daily_top10_lift"] = 0.03
         ok, _ = _model_gate(pd.DataFrame(rows), validation_days=20, validation_samples=600)
         self.assertTrue(ok)
+
+        rows[0]["brier_skill"] = -0.001
+        statuses, _ = _target_model_gates(pd.DataFrame(rows), validation_days=20, validation_samples=600)
+        probability_statuses, _ = _target_probability_gates(pd.DataFrame(rows), statuses)
+        self.assertEqual(statuses["t_limit"], "PROVISIONAL")
+        self.assertEqual(probability_statuses["t_limit"], "SHADOW")
+        ok, _ = _model_gate(pd.DataFrame(rows), validation_days=20, validation_samples=600)
+        self.assertTrue(ok)
+
+        rows[1]["auc"] = 0.49
+        rows[2]["daily_spearman_ic"] = -0.05
+        statuses, _ = _target_model_gates(pd.DataFrame(rows), validation_days=20, validation_samples=600)
+        self.assertEqual(statuses["t_limit"], "PROVISIONAL")
+        self.assertEqual(statuses["t1"], "SHADOW")
+        ok, _ = _model_gate(pd.DataFrame(rows), validation_days=20, validation_samples=600)
+        self.assertTrue(ok)
+
+    def test_rank_signal_is_independent_from_display_probability(self):
+        frame = pd.DataFrame({
+            "t_limitup_prob": [0.25, 0.25],
+            "t_limitup_rank_score": [90.0, 10.0],
+            "t_touch_rank_score": [85.0, 15.0],
+            "t_limitup_strength": [70.0, 70.0],
+            "t1_continue_up_rate": [0.50, 0.50],
+            "t_limit_model_can_rank": [1, 1],
+            "t_touch_model_can_rank": [1, 1],
+            "t1_model_can_rank": [0, 0],
+            "t1_return_model_can_rank": [0, 0],
+        })
+        scored, _ = _apply_adaptive_rank_score(frame, {})
+        self.assertGreater(
+            float(scored.loc[0, "premium_adaptive_score"]),
+            float(scored.loc[1, "premium_adaptive_score"]),
+        )
 
     def test_unvalidated_model_has_zero_production_weight(self):
         base = pd.DataFrame({
@@ -364,6 +412,34 @@ class PremiumSafetyTests(unittest.TestCase):
             float(low_model.loc[0, "premium_rank_score"]),
             places=6,
         )
+
+    def test_rank_enabled_model_cannot_bypass_probability_gate(self):
+        frame = pd.DataFrame({
+            "t_limitup_prob": [0.40],
+            "t_limitup_strength": [60.0],
+            "t1_continue_up_rate": [0.45],
+            "t_limit_model_can_rank": [1],
+            "t_touch_model_can_rank": [1],
+            "t1_model_can_rank": [0],
+            "t1_return_model_can_rank": [0],
+            "t_limit_model_probability_ready": [0],
+            "t_touch_model_probability_ready": [0],
+            "t1_model_probability_ready": [0],
+            "t_up_prob_model": [0.99],
+            "t_high_profit_prob_model": [0.99],
+            "t_limitup_prob_model": [0.99],
+            "t_touch_limitup_prob_model": [0.99],
+            "t1_up_prob_model": [0.99],
+            "t1_high_profit_prob_model": [0.99],
+            "t1_accept_prob_model": [0.99],
+            "t1_fail_prob_model": [0.01],
+            "t1_big_drawdown_prob_model": [0.01],
+            "t_limitup_rank_score": [90.0],
+            "t_touch_rank_score": [85.0],
+        })
+        out, _ = _apply_professional_premium_scores(frame)
+        self.assertAlmostEqual(float(out.loc[0, "t_up_prob_model_blend"]), 0.40, places=6)
+        self.assertEqual(out.loc[0, "premium_rank_mode"], "model_validated_professional_score")
 
     def test_truth_uses_official_limit_and_t_open_proxy(self):
         module = _load_backfill_module()
@@ -509,6 +585,24 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertGreaterEqual(bundle.validation_days, 5)
         self.assertIn("daily_top10_lift", bundle.metrics.columns)
         self.assertIn("brier_skill", bundle.metrics.columns)
+
+        partial = pd.DataFrame(rows)
+        t_only_dates = set(dates[-3:])
+        t_only = partial["d_trade_date"].isin(t_only_dates)
+        partial.loc[t_only, "label_matured"] = 0
+        for col in [
+            "t1_up_hit", "t1_high_profit_hit", "t1_accept_hit", "t1_fail_hit",
+            "t1_big_drawdown_hit", "t1_close_ret", "t1_high_ret",
+        ]:
+            partial.loc[t_only, col] = np.nan
+        partial_bundle = fit_limitup_probability_engine(
+            partial, feature_cols=["d_signal"], valid_ratio=0.30, min_samples=20
+        )
+        metric_rows = partial_bundle.metrics.set_index("target")
+        self.assertGreater(
+            int(metric_rows.loc["t_limitup_hit", "samples"]),
+            int(metric_rows.loc["t1_accept_hit", "samples"]),
+        )
 
         ehx_rows = []
         for date in dates:
