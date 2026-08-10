@@ -263,6 +263,8 @@ jobs:
           ! grep -q '表格可横向滚动' docs/reports/premium_latest.html
           grep -q 'T收盘' docs/reports/premium_latest.html
           grep -q 'TOP1 影子验证' docs/reports/premium_latest.html
+          grep -q 'TOP1 涨停统计' docs/reports/premium_latest.html
+          grep -q '个可验证交易日；T日收盘涨停率' docs/reports/premium_latest.html
           grep -q 'TOP1 总收益' docs/reports/premium_latest.html
           grep -Fq '<details class="shadow-details" aria-label="TOP1 影子验证">' docs/reports/premium_latest.html
           ! grep -Fq '<details class="shadow-details" open' docs/reports/premium_latest.html

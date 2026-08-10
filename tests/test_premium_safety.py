@@ -1021,11 +1021,21 @@ class PremiumSafetyTests(unittest.TestCase):
         html = render_premium_report_html(
             "20260105", "20260106", "20260107", rows, rows,
             True, "pending", "now", "test",
+            historical_limitup_stats={
+                "ready": True,
+                "n_days": 43,
+                "top1_hits": 23,
+                "top1_total": 43,
+                "top1_hit_rate": 23 / 43,
+            },
         )
         self.assertIn("<title>Premium TOP 10 20260105</title>", html)
         self.assertIn("<h1>Premium TOP 10</h1>", html)
         self.assertIn("<h2>TOP1 影子验证</h2>", html)
         self.assertIn('<details class="shadow-details" aria-label="TOP1 影子验证">', html)
+        self.assertIn("<span>TOP1 涨停统计</span>", html)
+        self.assertIn("<strong>23 / 43</strong>", html)
+        self.assertIn("过去 43 个可验证交易日；T日收盘涨停率 53.49%", html)
         self.assertNotIn('<details class="shadow-details" open', html)
         self.assertIn('class="shadow-summary-actions"', html)
         self.assertIn("<h2>TOP10: T日涨停概率最高 · D 20260105</h2>", html)
@@ -1037,6 +1047,7 @@ class PremiumSafetyTests(unittest.TestCase):
         self.assertIn('class="metrics-toggle"', html)
 
         styled = _load_apple_style_module().restyle_html(html)
+        self.assertIn("过去 43 个可验证交易日；T日收盘涨停率 53.49%", styled)
         self.assertIn(".metrics-toggle::before{content:\"+\"", styled)
         self.assertIn('.shadow-details[open] .metrics-toggle::before{content:"−"', styled)
         self.assertIn('<details class="shadow-details" aria-label="TOP1 影子验证">', styled)

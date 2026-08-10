@@ -452,9 +452,11 @@ def _shadow_status_text(status: object) -> str:
 def _shadow_report_html(
     record: Optional[Dict[str, object]],
     summary: Optional[Dict[str, object]],
+    historical_limitup_stats: Optional[Dict[str, object]] = None,
 ) -> str:
     current = record or {}
     cumulative = summary or {}
+    limitup_stats = historical_limitup_stats or {}
     status = _clean_text(current.get("status"), "PENDING")
     buy_price = _shadow_number(current, "buy_price")
     sell_price = _shadow_number(current, "sell_price")
@@ -474,6 +476,26 @@ def _shadow_report_html(
     max_drawdown = pd.to_numeric(
         pd.Series([cumulative.get("unit_max_drawdown", np.nan)]), errors="coerce"
     ).iloc[0]
+    top1_limitup_hits = int(limitup_stats.get("top1_hits", 0) or 0)
+    top1_limitup_total = int(limitup_stats.get("top1_total", 0) or 0)
+    top1_limitup_days = int(limitup_stats.get("n_days", 0) or 0)
+    top1_limitup_rate = pd.to_numeric(
+        pd.Series([limitup_stats.get("top1_hit_rate", np.nan)]), errors="coerce"
+    ).iloc[0]
+    top1_limitup_ready = (
+        bool(limitup_stats.get("ready", False))
+        and top1_limitup_total > 0
+        and np.isfinite(top1_limitup_rate)
+    )
+    top1_limitup_count = (
+        f"{top1_limitup_hits} / {top1_limitup_total}" if top1_limitup_ready else "-"
+    )
+    top1_limitup_note = (
+        f"过去 {top1_limitup_days or top1_limitup_total} 个可验证交易日；"
+        f"T日收盘涨停率 {_fmt_pct(top1_limitup_rate)}"
+        if top1_limitup_ready
+        else "历史涨停真值尚未就绪"
+    )
     result_class = "truth-up" if np.isfinite(net_return) and net_return > 0 else (
         "truth-down" if np.isfinite(net_return) and net_return < 0 else "truth-flat"
     )
@@ -501,6 +523,7 @@ def _shadow_report_html(
         <div class="shadow-item"><span>T+1卖出</span><strong>{_html_escape('-' if not np.isfinite(sell_price) else f'{sell_price:.2f}')}</strong><small>{_html_escape(current.get('sell_time', '等待11:00真值'))}</small></div>
         <div class="shadow-item"><span>单笔净收益</span><strong class="{result_class}">{_html_escape('-' if not np.isfinite(net_return) else _fmt_pct(net_return))}</strong><small>{_html_escape('-' if not np.isfinite(pnl) else f'每万元 {pnl:+.2f} 元')}</small></div>
         <div class="shadow-item"><span>累计验证</span><strong>{completed} 笔 / {wins} 胜</strong><small>胜率 {_html_escape('-' if not np.isfinite(win_rate) else _fmt_pct(win_rate))}；待验证 {pending}；缺失 {missing}</small></div>
+        <div class="shadow-item"><span>TOP1 涨停统计</span><strong>{_html_escape(top1_limitup_count)}</strong><small>{_html_escape(top1_limitup_note)}</small></div>
         <div class="shadow-item"><span>TOP1 总收益</span><strong class="{total_class}">{_html_escape('-' if not np.isfinite(total_return) else _fmt_pct(total_return))}</strong><small>等额单笔累计，已扣成本</small></div>
         <div class="shadow-item"><span>逐笔复合</span><strong>{_html_escape('-' if not np.isfinite(compound) else _fmt_pct(compound))}</strong><small>单位资金影子指数</small></div>
         <div class="shadow-item"><span>Max Drawdown</span><strong>{_html_escape('-' if not np.isfinite(max_drawdown) else _fmt_pct(max_drawdown))}</strong><small>已完成影子交易</small></div>
@@ -723,7 +746,7 @@ def render_premium_report_html(
     notes = "".join(f"<li>{_html_escape(x)}</li>" for x in (audit_notes or []))
     verify_badge = "PENDING" if verify_pending else "READY"
     nav = _report_nav_html(str(trade_date), report_dates)
-    shadow_panel = _shadow_report_html(shadow_record, shadow_summary)
+    shadow_panel = _shadow_report_html(shadow_record, shadow_summary, hist)
 
     return f"""<!doctype html>
 <html lang="en">
