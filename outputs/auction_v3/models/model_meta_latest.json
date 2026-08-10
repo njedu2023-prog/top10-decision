@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-08-09T15:17:25+00:00",
+  "generated_at_utc": "2026-08-10T11:41:21+00:00",
   "model_version": "auction_v12_top10_trade_selector_oos_1",
   "model_artifact_sha256": "68f58e6e66de381129ec09769e95aa2aeefafb2727c31f8fca2b05316db354af",
   "ready": true,
@@ -1887,8 +1887,8 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-08-09T15:15:50+00:00",
-        "frozen_predictions": 1214,
+        "generated_at_utc": "2026-08-10T11:41:20+00:00",
+        "frozen_predictions": 1308,
         "selected_predictions": 0,
         "verified_trades": 0,
         "pending_or_no_fill": 0,
@@ -1906,8 +1906,8 @@
         "forecast_mae": null,
         "direction_accuracy": null,
         "risk_prediction_accuracy": null,
-        "correct_rejection_rate": 0.5479704797,
-        "missed_opportunity_rate": 0.4501845018,
+        "correct_rejection_rate": 0.554592721,
+        "missed_opportunity_rate": 0.4436741768,
         "rolling_trade_windows": {
           "20": {
             "trades": 0,
@@ -1932,7 +1932,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-08-09T15:15:50+00:00",
+        "generated_at_utc": "2026-08-10T11:41:21+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -1940,50 +1940,50 @@
         "performance_scope": "premarket_valid_predictions_only",
         "prediction_deadline": "T 09:25 Asia/Shanghai",
         "top_n": 10,
-        "observation_dates": 15,
-        "observation_rows": 127,
-        "t_validated_rows": 119,
-        "t_pending_rows": 8,
-        "premarket_valid_rows": 119,
-        "premarket_validated_rows": 111,
+        "observation_dates": 16,
+        "observation_rows": 136,
+        "t_validated_rows": 127,
+        "t_pending_rows": 9,
+        "premarket_valid_rows": 128,
+        "premarket_validated_rows": 119,
         "retrospective_truth_rows": 8,
         "unknown_timing_truth_rows": 0,
-        "official_auction_truth_rows": 67,
+        "official_auction_truth_rows": 75,
         "minute_proxy_truth_rows": 0,
         "daily_open_proxy_truth_rows": 0,
-        "market_positive_rate": 0.6666666667,
-        "mean_market_daily_return": 0.0320631622,
-        "median_market_daily_return": 0.04321,
-        "fillable_rows": 111,
-        "market_filled_rows": 111,
+        "market_positive_rate": 0.6638655462,
+        "mean_market_daily_return": 0.0308695798,
+        "median_market_daily_return": 0.043192,
+        "fillable_rows": 119,
+        "market_filled_rows": 119,
         "observation_fill_rate": 1.0,
-        "display_limit_met_rows": 33,
-        "above_display_limit_rows": 78,
-        "display_limit_met_rate": 0.2972972973,
-        "mean_open_vs_display_limit": 0.0389364655,
-        "mean_t_observation_return": 0.0046647415,
-        "median_t_observation_return": 0.0015267176,
-        "continuation_hits": 37,
-        "continuation_samples": 111,
-        "continuation_hit_rate": 0.3333333333,
-        "continuation_hit_rate_95ci_low": 0.252511375,
-        "continuation_hit_rate_95ci_high": 0.4253053265,
-        "final_verified_trades": 100,
-        "final_win_rate": 0.49,
-        "final_win_rate_95ci_low": 0.3942199893,
-        "final_win_rate_95ci_high": 0.5865198807,
-        "mean_final_net_return": -0.0062883194,
-        "median_final_net_return": -0.0037069786,
+        "display_limit_met_rows": 34,
+        "above_display_limit_rows": 85,
+        "display_limit_met_rate": 0.2857142857,
+        "mean_open_vs_display_limit": 0.0401661521,
+        "mean_t_observation_return": 0.0036981894,
+        "median_t_observation_return": 0.0008658009,
+        "continuation_hits": 39,
+        "continuation_samples": 119,
+        "continuation_hit_rate": 0.3277310924,
+        "continuation_hit_rate_95ci_low": 0.2499382757,
+        "continuation_hit_rate_95ci_high": 0.4162981856,
+        "final_verified_trades": 110,
+        "final_win_rate": 0.5181818182,
+        "final_win_rate_95ci_low": 0.4257793754,
+        "final_win_rate_95ci_high": 0.6093572087,
+        "mean_final_net_return": -0.0025822543,
+        "median_final_net_return": 0.0023968798,
         "worst_final_net_return": -0.2039514107,
-        "tail_10pct_mean_return": -0.1466268775,
-        "profit_factor": 0.8266375514,
-        "matured_portfolio_dates": 12,
-        "equal_slot_cumulative_return": -0.0991420026,
+        "tail_10pct_mean_return": -0.14284971,
+        "profit_factor": 0.9237738863,
+        "matured_portfolio_dates": 13,
+        "equal_slot_cumulative_return": -0.0680818635,
         "equal_slot_max_drawdown": -0.2251880573,
-        "equal_slot_mean_daily_return": -0.0073647488,
-        "latest_t_validated_exec_date": "20260807",
-        "latest_all_truth_exec_date": "20260807",
-        "latest_final_exec_date": "20260806",
+        "equal_slot_mean_daily_return": -0.0041460453,
+        "latest_t_validated_exec_date": "20260810",
+        "latest_all_truth_exec_date": "20260810",
+        "latest_final_exec_date": "20260807",
         "daily_portfolio": [
           {
             "exec_date": "20260722",
@@ -2068,72 +2068,79 @@
             "filled_slots": 10,
             "equal_slot_net_return": 0.0662647203,
             "nav": 0.9008579974
+          },
+          {
+            "exec_date": "20260807",
+            "observation_slots": 10,
+            "filled_slots": 10,
+            "equal_slot_net_return": 0.0344783964,
+            "nav": 0.9319181365
           }
         ],
         "all_truth_summary": {
-          "t_validated_rows": 119,
-          "fillable_rows": 119,
-          "final_verified_trades": 108,
-          "final_win_rate": 0.462962963,
-          "mean_final_net_return": -0.0093551061
+          "t_validated_rows": 127,
+          "fillable_rows": 127,
+          "final_verified_trades": 118,
+          "final_win_rate": 0.4915254237,
+          "mean_final_net_return": -0.0056404025
         },
         "stage_2_to_3": {
-          "samples": 89,
-          "hits": 24,
-          "hit_rate": 0.2696629213
+          "samples": 95,
+          "hits": 26,
+          "hit_rate": 0.2736842105
         },
         "stage_3_to_4": {
-          "samples": 22,
+          "samples": 24,
           "hits": 13,
-          "hit_rate": 0.5909090909
+          "hit_rate": 0.5416666667
         },
         "top1_continuation": {
-          "samples": 13,
-          "hits": 2,
-          "hit_rate": 0.1538461538
+          "samples": 14,
+          "hits": 3,
+          "hit_rate": 0.2142857143
         },
         "top3_continuation": {
-          "samples": 39,
-          "hits": 7,
-          "hit_rate": 0.1794871795
+          "samples": 42,
+          "hits": 8,
+          "hit_rate": 0.1904761905
         },
         "top10_continuation": {
-          "samples": 111,
-          "hits": 37,
-          "hit_rate": 0.3333333333
+          "samples": 119,
+          "hits": 39,
+          "hit_rate": 0.3277310924
         },
         "path_performance": {
           "ACCELERATION_CONSENSUS": {
             "label": "加速一致",
-            "t_validated_rows": 20,
-            "continuation_hit_rate": 0.35,
+            "t_validated_rows": 24,
+            "continuation_hit_rate": 0.2916666667,
             "final_verified_trades": 20,
             "mean_final_net_return": -0.0124281866,
             "win_rate": 0.4
           },
           "DIVERGENCE_RESEAL": {
             "label": "分歧回封",
-            "t_validated_rows": 33,
-            "continuation_hit_rate": 0.3333333333,
-            "final_verified_trades": 27,
-            "mean_final_net_return": 0.0146909493,
-            "win_rate": 0.6296296296
+            "t_validated_rows": 35,
+            "continuation_hit_rate": 0.3428571429,
+            "final_verified_trades": 33,
+            "mean_final_net_return": 0.0166533004,
+            "win_rate": 0.6363636364
           },
           "MIXED": {
             "label": "路径混合",
             "t_validated_rows": 6,
             "continuation_hit_rate": 0.3333333333,
-            "final_verified_trades": 5,
-            "mean_final_net_return": -0.00957882,
-            "win_rate": 0.4
+            "final_verified_trades": 6,
+            "mean_final_net_return": 0.0070383465,
+            "win_rate": 0.5
           },
           "STABLE_STRONG": {
             "label": "持续强势",
-            "t_validated_rows": 15,
-            "continuation_hit_rate": 0.4666666667,
-            "final_verified_trades": 13,
-            "mean_final_net_return": 0.0124905116,
-            "win_rate": 0.5384615385
+            "t_validated_rows": 16,
+            "continuation_hit_rate": 0.4375,
+            "final_verified_trades": 15,
+            "mean_final_net_return": 0.0166670172,
+            "win_rate": 0.6
           },
           "STRONG_TO_WEAK": {
             "label": "强转弱",
@@ -2145,11 +2152,11 @@
           },
           "WEAK_TO_STRONG": {
             "label": "弱转强",
-            "t_validated_rows": 5,
-            "continuation_hit_rate": 0.0,
-            "final_verified_trades": 4,
-            "mean_final_net_return": -0.0031981189,
-            "win_rate": 0.5
+            "t_validated_rows": 6,
+            "continuation_hit_rate": 0.1666666667,
+            "final_verified_trades": 5,
+            "mean_final_net_return": 0.0002670841,
+            "win_rate": 0.6
           },
           "INSUFFICIENT": {
             "label": "路径数据不足",
@@ -2162,25 +2169,25 @@
         },
         "trading_date_windows": {
           "20": {
-            "portfolio_dates": 12,
-            "filled_trades": 100,
-            "mean_net_return": -0.0062883194,
-            "win_rate": 0.49,
-            "equal_slot_cumulative_return": -0.0991420026
+            "portfolio_dates": 13,
+            "filled_trades": 110,
+            "mean_net_return": -0.0025822543,
+            "win_rate": 0.5181818182,
+            "equal_slot_cumulative_return": -0.0680818635
           },
           "60": {
-            "portfolio_dates": 12,
-            "filled_trades": 100,
-            "mean_net_return": -0.0062883194,
-            "win_rate": 0.49,
-            "equal_slot_cumulative_return": -0.0991420026
+            "portfolio_dates": 13,
+            "filled_trades": 110,
+            "mean_net_return": -0.0025822543,
+            "win_rate": 0.5181818182,
+            "equal_slot_cumulative_return": -0.0680818635
           },
           "all": {
-            "portfolio_dates": 12,
-            "filled_trades": 100,
-            "mean_net_return": -0.0062883194,
-            "win_rate": 0.49,
-            "equal_slot_cumulative_return": -0.0991420026
+            "portfolio_dates": 13,
+            "filled_trades": 110,
+            "mean_net_return": -0.0025822543,
+            "win_rate": 0.5181818182,
+            "equal_slot_cumulative_return": -0.0680818635
           }
         },
         "forward_shadow": {
@@ -2188,35 +2195,35 @@
           "start_signal_date": "20260728",
           "performance_scope": "premarket_frozen_trade_shadow_selected_only",
           "minimum_final_trades": 20,
-          "observed_signal_dates": 9,
-          "shadow_signal_dates": 9,
+          "observed_signal_dates": 10,
+          "shadow_signal_dates": 10,
           "shadow_signal_rate": 1.0,
-          "shadow_entries": 15,
-          "t_validated_entries": 13,
+          "shadow_entries": 17,
+          "t_validated_entries": 15,
           "pending_t_entries": 2,
           "pending_t1_entries": 2,
-          "finalized_entries": 11,
-          "final_verified_trades": 11,
+          "finalized_entries": 13,
+          "final_verified_trades": 13,
           "market_buyable_entries": 8,
-          "mean_final_net_return": -0.0023148962,
-          "median_final_net_return": 0.0001130952,
-          "final_win_rate": 0.5454545455,
-          "final_win_rate_95ci_low": 0.2800915374,
-          "final_win_rate_95ci_high": 0.7872872838,
-          "profit_factor": 0.8918586595,
+          "mean_final_net_return": 0.0098934135,
+          "median_final_net_return": 0.0047879257,
+          "final_win_rate": 0.6153846154,
+          "final_win_rate_95ci_low": 0.3552289151,
+          "final_win_rate_95ci_high": 0.822902922,
+          "profit_factor": 1.5462067347,
           "worst_final_net_return": -0.0787753623,
           "tail_10pct_mean_return": -0.074504814,
-          "realized_big_loss_rate": 0.2727272727,
-          "continuation_samples": 13,
-          "continuation_hits": 4,
-          "continuation_hit_rate": 0.3076923077,
-          "matured_portfolio_dates": 7,
-          "equal_slot_cumulative_return": -0.0001173912,
+          "realized_big_loss_rate": 0.2307692308,
+          "continuation_samples": 15,
+          "continuation_hits": 5,
+          "continuation_hit_rate": 0.3333333333,
+          "matured_portfolio_dates": 8,
+          "equal_slot_cumulative_return": 0.0769126821,
           "equal_slot_max_drawdown": -0.0676559159,
-          "equal_slot_mean_daily_return": 0.0007490329,
+          "equal_slot_mean_daily_return": 0.0102852934,
           "longest_no_signal_streak": 0,
-          "latest_signal_date": "20260807",
-          "latest_final_signal_date": "20260805",
+          "latest_signal_date": "20260810",
+          "latest_final_signal_date": "20260806",
           "sample_sufficient": false,
           "daily_portfolio": [
             {
@@ -2267,19 +2274,45 @@
               "verified_trades": 2,
               "equal_slot_net_return": 0.0673291914,
               "nav": 0.9998826088
+            },
+            {
+              "signal_date": "20260806",
+              "shadow_slots": 2,
+              "verified_trades": 2,
+              "equal_slot_net_return": 0.077039117,
+              "nav": 1.0769126821
             }
           ],
           "rows": [
             {
-              "signal_date": "20260807",
-              "expected_buy_date": "20260810",
-              "expected_exit_date": "20260811",
+              "signal_date": "20260810",
+              "expected_buy_date": "20260811",
+              "expected_exit_date": "20260812",
               "trade_rank": 1,
-              "ts_code": "002792.SZ",
-              "name": "通宇通讯",
-              "industry": "通信设备",
+              "ts_code": "002900.SZ",
+              "name": "哈三联",
+              "industry": "化学制药",
               "stage_transition": "2→3",
-              "path_label": "持续强势",
+              "path_label": "强转弱",
+              "actual_open_price": null,
+              "actual_t_close": null,
+              "observation_t_return": null,
+              "continuation_limit_up_hit": null,
+              "actual_net_return": null,
+              "market_buyable_diagnostic": null,
+              "validation_status": "PENDING_T",
+              "validation_status_label": "等待T日收盘"
+            },
+            {
+              "signal_date": "20260810",
+              "expected_buy_date": "20260811",
+              "expected_exit_date": "20260812",
+              "trade_rank": 2,
+              "ts_code": "002437.SZ",
+              "name": "誉衡药业",
+              "industry": "化学制药",
+              "stage_transition": "2→3",
+              "path_label": "强转弱",
               "actual_open_price": null,
               "actual_t_close": null,
               "observation_t_return": null,
@@ -2293,20 +2326,39 @@
               "signal_date": "20260807",
               "expected_buy_date": "20260810",
               "expected_exit_date": "20260811",
+              "trade_rank": 1,
+              "ts_code": "002792.SZ",
+              "name": "通宇通讯",
+              "industry": "通信设备",
+              "stage_transition": "2→3",
+              "path_label": "持续强势",
+              "actual_open_price": 36.49,
+              "actual_t_close": 34.1,
+              "observation_t_return": -0.0654973965,
+              "continuation_limit_up_hit": 0.0,
+              "actual_net_return": null,
+              "market_buyable_diagnostic": 0.0,
+              "validation_status": "PENDING_T1",
+              "validation_status_label": "等待T+1"
+            },
+            {
+              "signal_date": "20260807",
+              "expected_buy_date": "20260810",
+              "expected_exit_date": "20260811",
               "trade_rank": 2,
               "ts_code": "002827.SZ",
               "name": "高争民爆",
               "industry": "化学制品",
               "stage_transition": "2→3",
               "path_label": "分歧回封",
-              "actual_open_price": null,
-              "actual_t_close": null,
-              "observation_t_return": null,
-              "continuation_limit_up_hit": null,
+              "actual_open_price": 57.0,
+              "actual_t_close": 59.58,
+              "observation_t_return": 0.0452631579,
+              "continuation_limit_up_hit": 1.0,
               "actual_net_return": null,
-              "market_buyable_diagnostic": null,
-              "validation_status": "PENDING_T",
-              "validation_status_label": "等待T日收盘"
+              "market_buyable_diagnostic": 0.0,
+              "validation_status": "PENDING_T1",
+              "validation_status_label": "等待T+1"
             },
             {
               "signal_date": "20260806",
@@ -2322,10 +2374,10 @@
               "actual_t_close": 48.17,
               "observation_t_return": 0.047173913,
               "continuation_limit_up_hit": 1.0,
-              "actual_net_return": null,
+              "actual_net_return": 0.0824565217,
               "market_buyable_diagnostic": 1.0,
-              "validation_status": "PENDING_T1",
-              "validation_status_label": "等待T+1"
+              "validation_status": "FINAL_VERIFIED",
+              "validation_status_label": "已完成"
             },
             {
               "signal_date": "20260806",
@@ -2341,10 +2393,10 @@
               "actual_t_close": 100.08,
               "observation_t_return": 0.0322846828,
               "continuation_limit_up_hit": 1.0,
-              "actual_net_return": null,
+              "actual_net_return": 0.0716217122,
               "market_buyable_diagnostic": 0.0,
-              "validation_status": "PENDING_T1",
-              "validation_status_label": "等待T+1"
+              "validation_status": "FINAL_VERIFIED",
+              "validation_status_label": "已完成"
             },
             {
               "signal_date": "20260805",
@@ -2563,7 +2615,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-08-09T15:15:50+00:00",
+        "generated_at_utc": "2026-08-10T11:41:20+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -2598,138 +2650,138 @@
     }
   },
   "current_market_sentiment": {
-    "market_equal_weight_return": 0.0030954457,
-    "market_down_ratio": 0.5448210326,
-    "market_strong_up_ratio": 0.0547988597,
-    "market_strong_down_ratio": 0.0085524232,
-    "market_limit_up_count_log": 4.1108738642,
-    "market_limit_down_count_log": 1.6094379124,
-    "market_limit_up_down_log_ratio": 2.5014359517,
-    "market_failed_limit_up_rate": 0.2771084337,
-    "market_reseal_rate": 0.5423728814,
-    "market_prev_limit_up_mean_return": 0.0081707397,
-    "market_prev_limit_up_positive_rate": 0.5342465753,
-    "market_prev_limit_up_open_gap_mean": 0.0171008514,
-    "market_focus_promotion_rate": 0.4117647059,
-    "market_limit_up_industry_concentration": 0.0600402183,
-    "market_limit_up_amount_top3_share": 0.346922043,
-    "market_amount_ratio_5d": 1.0986699226,
-    "market_sentiment_score": 0.5656598986,
-    "market_sentiment_delta": -0.0614274298,
+    "market_equal_weight_return": 0.0171953198,
+    "market_down_ratio": 0.1802030457,
+    "market_strong_up_ratio": 0.0742385787,
+    "market_strong_down_ratio": 0.0063451777,
+    "market_limit_up_count_log": 4.5951198501,
+    "market_limit_down_count_log": 1.9459101491,
+    "market_limit_up_down_log_ratio": 2.6492097011,
+    "market_failed_limit_up_rate": 0.1833333333,
+    "market_reseal_rate": 0.5744680851,
+    "market_prev_limit_up_mean_return": 0.0156771667,
+    "market_prev_limit_up_positive_rate": 0.55,
+    "market_prev_limit_up_open_gap_mean": 0.0218893067,
+    "market_focus_promotion_rate": 0.25,
+    "market_limit_up_industry_concentration": 0.0285196922,
+    "market_limit_up_amount_top3_share": 0.145570143,
+    "market_amount_ratio_5d": 1.0570504302,
+    "market_sentiment_score": 0.5998080996,
+    "market_sentiment_delta": 0.034148201,
     "market_sentiment_coverage": 1.0,
-    "market_sentiment_acceleration": -0.0156335293,
-    "market_sentiment_regime_code": "EBB",
-    "market_sentiment_regime_label": "退潮",
-    "market_sentiment_breadth_score": 0.508205454,
-    "market_sentiment_limit_ecology_score": 0.7533143985,
-    "market_sentiment_promotion_score": 0.4117647059,
-    "market_sentiment_profit_effect_score": 0.5627230685,
-    "market_sentiment_liquidity_score": 0.6973398453,
-    "market_eligible_stock_count": 3157.0,
-    "market_limit_up_count": 60.0,
-    "market_limit_down_count": 4.0,
-    "market_touched_up_count": 83.0,
-    "market_failed_limit_up_count": 23.0,
-    "market_reseal_count": 32.0,
-    "market_prev_limit_up_sample": 73.0,
-    "market_2_to_3_promotion_rate": 0.25,
-    "market_2_to_3_promotion_samples": 8.0,
-    "market_3_to_4_promotion_rate": 0.5555555556,
-    "market_3_to_4_promotion_samples": 9.0,
-    "market_focus_promotion_samples": 17.0,
-    "market_max_streak": 4.0,
+    "market_sentiment_acceleration": 0.0955756308,
+    "market_sentiment_regime_code": "EXPANSION",
+    "market_sentiment_regime_label": "发酵",
+    "market_sentiment_breadth_score": 0.8015323942,
+    "market_sentiment_limit_ecology_score": 0.8103789238,
+    "market_sentiment_promotion_score": 0.25,
+    "market_sentiment_profit_effect_score": 0.614063,
+    "market_sentiment_liquidity_score": 0.6141008604,
+    "market_eligible_stock_count": 3152.0,
+    "market_limit_up_count": 98.0,
+    "market_limit_down_count": 6.0,
+    "market_touched_up_count": 120.0,
+    "market_failed_limit_up_count": 22.0,
+    "market_reseal_count": 54.0,
+    "market_prev_limit_up_sample": 60.0,
+    "market_2_to_3_promotion_rate": 0.3333333333,
+    "market_2_to_3_promotion_samples": 6.0,
+    "market_3_to_4_promotion_rate": 0.0,
+    "market_3_to_4_promotion_samples": 2.0,
+    "market_focus_promotion_samples": 8.0,
+    "market_max_streak": 5.0,
     "market_limit_up_industry_top10": [
       {
         "rank": 1,
-        "industry": "元件",
-        "limit_up_count": 9,
-        "share": 0.15254237288135594
+        "industry": "电网设备",
+        "limit_up_count": 6,
+        "share": 0.06382978723404255
       },
       {
         "rank": 2,
-        "industry": "化学制药",
-        "limit_up_count": 6,
-        "share": 0.1016949152542373
+        "industry": "化学制品",
+        "limit_up_count": 5,
+        "share": 0.05319148936170213
       },
       {
         "rank": 3,
-        "industry": "化学制品",
-        "limit_up_count": 4,
-        "share": 0.06779661016949153
+        "industry": "化学制药",
+        "limit_up_count": 5,
+        "share": 0.05319148936170213
       },
       {
         "rank": 4,
-        "industry": "通信设备",
+        "industry": "医疗服务",
         "limit_up_count": 4,
-        "share": 0.06779661016949153
+        "share": 0.0425531914893617
       },
       {
         "rank": 5,
-        "industry": "医疗服务",
-        "limit_up_count": 3,
-        "share": 0.05084745762711865
+        "industry": "汽车零部件",
+        "limit_up_count": 4,
+        "share": 0.0425531914893617
       },
       {
         "rank": 6,
-        "industry": "汽车零部件",
-        "limit_up_count": 3,
-        "share": 0.05084745762711865
+        "industry": "电力",
+        "limit_up_count": 4,
+        "share": 0.0425531914893617
       },
       {
         "rank": 7,
         "industry": "医药商业",
-        "limit_up_count": 2,
-        "share": 0.03389830508474576
+        "limit_up_count": 3,
+        "share": 0.031914893617021274
       },
       {
         "rank": 8,
-        "industry": "半导体",
-        "limit_up_count": 2,
-        "share": 0.03389830508474576
+        "industry": "塑料",
+        "limit_up_count": 3,
+        "share": 0.031914893617021274
       },
       {
         "rank": 9,
-        "industry": "小金属",
-        "limit_up_count": 2,
-        "share": 0.03389830508474576
+        "industry": "饮料乳品",
+        "limit_up_count": 3,
+        "share": 0.031914893617021274
       },
       {
         "rank": 10,
-        "industry": "装修装饰",
+        "industry": "IT服务Ⅱ",
         "limit_up_count": 2,
-        "share": 0.03389830508474576
+        "share": 0.02127659574468085
       }
     ],
     "market_limit_up_industry_top5": [
       {
         "rank": 1,
-        "industry": "元件",
-        "limit_up_count": 9,
-        "share": 0.15254237288135594
+        "industry": "电网设备",
+        "limit_up_count": 6,
+        "share": 0.06382978723404255
       },
       {
         "rank": 2,
-        "industry": "化学制药",
-        "limit_up_count": 6,
-        "share": 0.1016949152542373
+        "industry": "化学制品",
+        "limit_up_count": 5,
+        "share": 0.05319148936170213
       },
       {
         "rank": 3,
-        "industry": "化学制品",
-        "limit_up_count": 4,
-        "share": 0.06779661016949153
+        "industry": "化学制药",
+        "limit_up_count": 5,
+        "share": 0.05319148936170213
       },
       {
         "rank": 4,
-        "industry": "通信设备",
+        "industry": "医疗服务",
         "limit_up_count": 4,
-        "share": 0.06779661016949153
+        "share": 0.0425531914893617
       },
       {
         "rank": 5,
-        "industry": "医疗服务",
-        "limit_up_count": 3,
-        "share": 0.05084745762711865
+        "industry": "汽车零部件",
+        "limit_up_count": 4,
+        "share": 0.0425531914893617
       }
     ]
   },
@@ -2755,7 +2807,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-08-09T15:13:34+00:00",
+    "generated_at_utc": "2026-08-10T11:37:24+00:00",
     "model_version": "auction_v12_top10_trade_selector_oos_1",
     "history_dates": 715,
     "oos_dates": 544,
@@ -6805,12 +6857,12 @@
   "universe_eligibility": {
     "rule": "a_share_price_limit_le_10_v2",
     "max_allowed_limit_pct": 10.0,
-    "input_rows": 75,
-    "eligible_rows": 59,
-    "rejected_rows": 16,
+    "input_rows": 99,
+    "eligible_rows": 94,
+    "rejected_rows": 5,
     "rejected_reasons": {
-      "excluded_limit_gt_10:20.00%:growth_board_20pct": 9,
-      "excluded_limit_gt_10:20.00%:star_market_20pct": 7
+      "excluded_limit_gt_10:20.00%:growth_board_20pct": 4,
+      "excluded_limit_gt_10:20.00%:star_market_20pct": 1
     }
   },
   "contract": {
