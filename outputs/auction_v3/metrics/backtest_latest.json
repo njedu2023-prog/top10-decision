@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-08-11T12:11:23+00:00",
+  "generated_at_utc": "2026-08-11T13:51:26+00:00",
   "model_version": "auction_v12_top10_trade_selector_oos_1",
   "history_dates": 715,
   "oos_dates": 544,
@@ -4045,5 +4045,5 @@
   "model_quality_warnings": [
     "first_layer_probability_models_did_not_pass_brier_skill_gate"
   ],
-  "model_artifact_sha256": "68f58e6e66de381129ec09769e95aa2aeefafb2727c31f8fca2b05316db354af"
+  "model_artifact_sha256": "6377cc95813ab63d3810fbbe7949986c7d6b09bba8a92eedaf25ef28fd16a94e"
 }

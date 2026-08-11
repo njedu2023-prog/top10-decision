@@ -1,7 +1,7 @@
 {
   "schema_version": "decision_observation_validation_v4_auction_truth",
   "status": "ok",
-  "generated_at_utc": "2026-08-11T12:15:28+00:00",
+  "generated_at_utc": "2026-08-11T13:54:43+00:00",
   "validation_start_exec_date": "20260721",
   "validation_mode": "market_at_open_proxy",
   "market_open_fill_assumption": true,
@@ -171,9 +171,12 @@
     "hit_rate": 0.5384615385
   },
   "top1_continuation": {
-    "samples": 15,
-    "hits": 3,
-    "hit_rate": 0.2
+    "start_signal_date": "20260807",
+    "rank_field": "promotion_rank",
+    "rank_value": 1,
+    "samples": 2,
+    "hits": 1,
+    "hit_rate": 0.5
   },
   "top3_continuation": {
     "samples": 45,
