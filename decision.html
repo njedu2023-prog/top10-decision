@@ -1045,7 +1045,12 @@
         metric("T日晋级率", pct(stats.continuation_hit_rate)),
         metric("2→3晋级率", pct(stats?.stage_2_to_3?.hit_rate)),
         metric("3→4晋级率", pct(stats?.stage_3_to_4?.hit_rate)),
-        metric("Top1晋级率", pct(stats?.top1_continuation?.hit_rate)),
+        metric(
+          stats?.top1_continuation?.start_signal_date
+            ? `Top1晋级率（D${String(stats.top1_continuation.start_signal_date).slice(4)}起）`
+            : "Top1晋级率",
+          pct(stats?.top1_continuation?.hit_rate)
+        ),
         metric("Top3晋级率", pct(stats?.top3_continuation?.hit_rate)),
         metric("T+1胜率", pct(stats.final_win_rate)),
         metric("T+1平均净收益", signedPct(stats.mean_final_net_return), valueTone(stats.mean_final_net_return)),

@@ -35,6 +35,14 @@
     "allow_truth_updates": true,
     "allow_report_and_frontend_updates": true
   },
+  "maintenance_history": [
+    {
+      "at_utc": "2026-08-11T13:02:03Z",
+      "scope": "Decision statistics only",
+      "change": "Top1 promotion rate starts at D 20260807 and uses promotion_rank=1.",
+      "production_model_artifacts_changed": false
+    }
+  ],
   "release_contract": {
     "method": "Set active=false in a reviewed manifest update before changing pinned production files or retraining production models.",
     "automatic_unfreeze": false
@@ -59,8 +67,8 @@
     "scripts/run_auction_v3.py": "7f1c6138a89d34979df3c46f828b543399a5f132ccdeeae73cf2d104871c93e3",
     "scripts/validate_decision_model_freeze.py": "2cf9c9a305d4e6fbe8dcc69c6676235fff313cabc8bb41bdb839dadfe8f6c90b",
     "src/top10decision/auction_v3/calibration.py": "06890dee4d9c7a6cd007ebdda823b4907774ba372ebe37f3072432335fce79a9",
-    "src/top10decision/auction_v3/config.py": "dec603dae0b17b0a1454fc02eb940a577ed2c9d37204da26e96af288632e3281",
-    "src/top10decision/auction_v3/engine.py": "c55a32757d17aa35b479182da3f13a7093a3835df898a2888e576df81ba12111",
+    "src/top10decision/auction_v3/config.py": "defd571ebb35fae75b694f419554ec3347c3b5f300e0e094882a8c1da1c48704",
+    "src/top10decision/auction_v3/engine.py": "60786d430b5c861070588175d43a62235587debdd945fcf1d8f1175668c24688",
     "src/top10decision/decision/action_plan.py": "0bb529461eb72be99a6fe313bbcec9c212e1a6c3e846e47ebb66dd387c678c8b",
     "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",
     "src/top10decision/decision/model_freeze.py": "e3dce81f9664484934b1e8268e8571b578a4329f9091a0d375cc9c644ab35d69",

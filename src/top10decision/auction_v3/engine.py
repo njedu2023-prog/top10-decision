@@ -7202,6 +7202,13 @@ class AuctionV3Engine:
         frame["signal_date"] = frame["signal_date"].map(_normal_date)
         frame["expected_buy_date"] = frame["expected_buy_date"].map(_normal_date)
         frame["observation_rank"] = pd.to_numeric(frame.get("observation_rank"), errors="coerce")
+        frame["promotion_rank"] = pd.to_numeric(
+            frame.get(
+                "promotion_rank",
+                pd.Series(np.nan, index=frame.index, dtype=float),
+            ),
+            errors="coerce",
+        )
         timing_valid = pd.to_numeric(
             frame.get("prediction_timing_valid"), errors="coerce"
         ).fillna(0).eq(1)
@@ -7414,6 +7421,29 @@ class AuctionV3Engine:
                 "hits": int(hits.sum()) if len(hits) else 0,
                 "hit_rate": _safe_metric(hits.mean()),
             }
+        top1_start_signal_date = _normal_date(
+            self.config.top1_promotion_start_signal_date
+        )
+        top1_sample = t_validated[
+            t_validated["signal_date"].ge(top1_start_signal_date)
+            & t_validated["promotion_rank"].eq(1)
+        ].copy()
+        top1_sample = top1_sample.sort_values(
+            ["signal_date", "ts_code"],
+            kind="stable",
+        ).drop_duplicates("signal_date", keep="first")
+        top1_hits = pd.to_numeric(
+            top1_sample.get("continuation_limit_up_hit"),
+            errors="coerce",
+        ).dropna()
+        payload["top1_continuation"] = {
+            "start_signal_date": top1_start_signal_date,
+            "rank_field": "promotion_rank",
+            "rank_value": 1,
+            "samples": int(len(top1_hits)),
+            "hits": int(top1_hits.sum()) if len(top1_hits) else 0,
+            "hit_rate": _safe_metric(top1_hits.mean()),
+        }
         path_performance: dict[str, Any] = {}
         if "path_label_code" in t_validated.columns:
             for label_code, group in t_validated.groupby("path_label_code", dropna=False):

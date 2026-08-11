@@ -1265,6 +1265,89 @@ class AuctionV3Test(unittest.TestCase):
         self.assertEqual(metrics["latest_signal_date"], "20260731")
         self.assertEqual(metrics["rows"][0]["signal_date"], "20260731")
 
+    def test_top1_continuation_uses_promotion_rank_from_20260807(self) -> None:
+        rows = [
+            {
+                "signal_date": "20260806",
+                "expected_buy_date": "20260807",
+                "ts_code": "600001.SH",
+                "observation_rank": 1,
+                "promotion_rank": 1,
+                "prediction_timing_valid": 1,
+                "prediction_timing_status": "PREMARKET_VALID",
+                "validation_status": "T_VERIFIED_FILLED",
+                "continuation_limit_up_hit": 1,
+                "stage_transition": "2→3",
+            },
+            {
+                "signal_date": "20260807",
+                "expected_buy_date": "20260810",
+                "ts_code": "600002.SH",
+                "observation_rank": 2,
+                "promotion_rank": 1,
+                "prediction_timing_valid": 1,
+                "prediction_timing_status": "PREMARKET_VALID",
+                "validation_status": "T_VERIFIED_FILLED",
+                "continuation_limit_up_hit": 1,
+                "stage_transition": "2→3",
+            },
+            {
+                "signal_date": "20260807",
+                "expected_buy_date": "20260810",
+                "ts_code": "600003.SH",
+                "observation_rank": 1,
+                "promotion_rank": 2,
+                "prediction_timing_valid": 1,
+                "prediction_timing_status": "PREMARKET_VALID",
+                "validation_status": "T_VERIFIED_FILLED",
+                "continuation_limit_up_hit": 0,
+                "stage_transition": "2→3",
+            },
+            {
+                "signal_date": "20260810",
+                "expected_buy_date": "20260811",
+                "ts_code": "600004.SH",
+                "observation_rank": 3,
+                "promotion_rank": 1,
+                "prediction_timing_valid": 1,
+                "prediction_timing_status": "PREMARKET_VALID",
+                "validation_status": "T_VERIFIED_FILLED",
+                "continuation_limit_up_hit": 0,
+                "stage_transition": "3→4",
+            },
+            {
+                "signal_date": "20260811",
+                "expected_buy_date": "20260812",
+                "ts_code": "600005.SH",
+                "observation_rank": 1,
+                "promotion_rank": 1,
+                "prediction_timing_valid": 1,
+                "prediction_timing_status": "PREMARKET_VALID",
+                "validation_status": "PENDING_T",
+                "continuation_limit_up_hit": 1,
+                "stage_transition": "2→3",
+            },
+        ]
+
+        ledger = pd.DataFrame(rows).assign(
+            market_daily_return=0.0,
+            observation_fill=1,
+            observation_limit_accept=1,
+            observation_price_vs_cap=0.0,
+            observation_t_return=0.0,
+            actual_net_return=np.nan,
+            truth_source="tushare_stk_auction_o",
+        )
+        metrics = AuctionV3Engine(self.config)._observation_metrics(ledger)
+        top1 = metrics["top1_continuation"]
+
+        self.assertEqual(top1["start_signal_date"], "20260807")
+        self.assertEqual(top1["rank_field"], "promotion_rank")
+        self.assertEqual(top1["rank_value"], 1)
+        self.assertEqual(top1["samples"], 2)
+        self.assertEqual(top1["hits"], 1)
+        self.assertEqual(top1["hit_rate"], 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()
