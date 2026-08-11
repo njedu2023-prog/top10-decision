@@ -17,7 +17,7 @@
     "model_artifact_sha256": "6377cc95813ab63d3810fbbe7949986c7d6b09bba8a92eedaf25ef28fd16a94e",
     "promoted": false,
     "trade_selector_version": "trade_selector_v2_nested_oos_top10_promotion_rank",
-    "trade_selector_artifact_sha256": "494aec7c31dae2a2c04f9f0a0ae8aa18f7aca354fe1e07e879a8299e3ffb583c",
+    "trade_selector_artifact_sha256": "18fdcf5f62951d380d498978882be5e1a2cb6c0583d419659713a83cffa26157",
     "trade_selector_promoted": false,
     "formal_status": "NO_TRADE_MODEL_NOT_PROMOTED",
     "formal_buy_count": 0
@@ -42,7 +42,7 @@
       "change": "Top1 promotion rate starts at D 20260807 and uses promotion_rank=1.",
       "production_model_artifacts_changed": true,
       "production_model_behavior_changed": false,
-      "reason": "The frozen artifact fingerprint includes engine.py and the complete AuctionV3Config. The statistics-only Top1 definition therefore rotates both reproducible fingerprints without changing ranking, selection, or prediction behavior. Values are pinned from the frozen-history GitHub Actions runtime."
+      "reason": "The frozen model fingerprint includes engine.py and the complete AuctionV3Config. The statistics-only Top1 definition therefore rotates the model fingerprint without changing ranking, selection, or prediction behavior. The independently reproducible trade-selector fingerprint remains unchanged."
     }
   ],
   "release_contract": {
