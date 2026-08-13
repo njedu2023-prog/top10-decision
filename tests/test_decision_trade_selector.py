@@ -119,7 +119,7 @@ class DecisionTradeSelectorTest(unittest.TestCase):
             [1, 2, 3, 4],
         )
 
-    def test_trade_selector_chooses_at_most_two_and_allows_zero(self) -> None:
+    def test_trade_selector_always_shadows_best_two_but_formal_can_be_zero(self) -> None:
         frame = pd.DataFrame(
             [
                 {
@@ -136,6 +136,7 @@ class DecisionTradeSelectorTest(unittest.TestCase):
             globally_promoted=True,
         )
         self.assertEqual(int(selected["trade_selected"].sum()), 2)
+        self.assertEqual(int(selected["trade_shadow_selected"].sum()), 2)
         self.assertEqual(
             selected.loc[
                 selected["trade_selected"].eq(1),
@@ -149,6 +150,77 @@ class DecisionTradeSelectorTest(unittest.TestCase):
             globally_promoted=True,
         )
         self.assertEqual(int(no_trade["trade_selected"].sum()), 0)
+        self.assertEqual(int(no_trade["trade_shadow_selected"].sum()), 2)
+        self.assertEqual(
+            no_trade.loc[
+                no_trade["trade_shadow_selected"].eq(1),
+                "trade_rank",
+            ].tolist(),
+            [1.0, 2.0],
+        )
+        self.assertTrue(
+            no_trade.loc[
+                no_trade["trade_shadow_selected"].eq(1),
+                "trade_model_reason",
+            ].eq("relative_best_two_only").all()
+        )
+        strict_oos = score_trade_selector(
+            frame,
+            _constant_bundle(min_score=0.50),
+            globally_promoted=True,
+            force_relative_best_two=False,
+        )
+        self.assertEqual(int(strict_oos["trade_shadow_selected"].sum()), 0)
+
+    def test_trade_selector_fallback_still_selects_relative_best_two(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": "20260105",
+                    "ts_code": code,
+                    "observation_rank": observation_rank,
+                    "promotion_rank": promotion_rank,
+                    "predicted_big_loss_probability": big_loss_probability,
+                    "predicted_return_lcb": return_lcb,
+                    "predicted_continuation_limit_up_probability": continuation,
+                }
+                for code, observation_rank, promotion_rank, big_loss_probability, return_lcb, continuation in (
+                    ("600001.SH", 1, 3, 0.05, 0.03, 0.70),
+                    ("600002.SH", 2, 1, 0.20, 0.01, 0.60),
+                    ("600003.SH", 3, 1, 0.08, 0.00, 0.80),
+                )
+            ]
+        )
+        scored = score_trade_selector(
+            frame,
+            None,
+            globally_promoted=False,
+        )
+        selected = scored.loc[
+            scored["trade_shadow_selected"].eq(1)
+        ].sort_values("trade_rank")
+        self.assertEqual(selected["ts_code"].tolist(), ["600003.SH", "600002.SH"])
+        self.assertEqual(int(scored["trade_selected"].sum()), 0)
+        self.assertTrue(
+            selected["trade_model_reason"].eq("relative_best_two_fallback").all()
+        )
+
+    def test_trade_selector_never_pads_beyond_available_candidates(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": "20260105",
+                    "ts_code": "600001.SH",
+                    "observation_rank": 1,
+                }
+            ]
+        )
+        scored = score_trade_selector(
+            frame,
+            _constant_bundle(min_score=0.50),
+            globally_promoted=False,
+        )
+        self.assertEqual(int(scored["trade_shadow_selected"].sum()), 1)
 
     def test_promotion_rank_is_independent_from_observation_rank(self) -> None:
         class PromotionModel:

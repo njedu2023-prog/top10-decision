@@ -208,6 +208,22 @@ def _pending_candidates(frame: pd.DataFrame, limit: int = 20) -> list[dict[str, 
                 "ts_code": _text(row.get("ts_code")),
                 "name": _text(row.get("name")),
                 "industry": _industry(row),
+                "stage_transition": _text(row.get("stage_transition"))
+                or _text(row.get("stage"))
+                or _text(row.get("advance_stage")),
+                "stage_focus": _integer(row.get("stage_focus"), 1),
+                "trade_rank": _integer(row.get("trade_rank")) or None,
+                "promotion_rank": _integer(row.get("promotion_rank")) or None,
+                "mechanism_limit_pct": _number(
+                    row.get("mechanism_limit_pct", row.get("decision_limit_pct"))
+                ),
+                "predicted_big_loss_probability": _number(
+                    row.get("predicted_big_loss_probability")
+                ),
+                "predicted_return_lcb": _number(row.get("predicted_return_lcb")),
+                "predicted_continuation_limit_up_probability": _number(
+                    row.get("predicted_continuation_limit_up_probability")
+                ),
                 "target_weight": 0.0,
                 "decision_p_fill": _number(row.get("p_fill_pred")),
                 "decision_e_ret": _number(row.get("e_ret_pred")),
@@ -229,7 +245,12 @@ def _merge_auction_candidates(
 ) -> list[dict[str, Any]]:
     lookup = _decision_lookup(decision)
     prediction = annotate_standard_limit_universe(prediction, code_col="ts_code", name_col="name")
-    selected_mask = pd.to_numeric(prediction.get("selected"), errors="coerce").fillna(0).eq(1)
+    selected_source = (
+        prediction["trade_selected"]
+        if "trade_selected" in prediction.columns
+        else prediction.get("selected")
+    )
+    selected_mask = pd.to_numeric(selected_source, errors="coerce").fillna(0).eq(1)
     eligible_mask = pd.to_numeric(prediction["decision_universe_eligible"], errors="coerce").fillna(0).eq(1)
     selected_count = int((selected_mask & eligible_mask).sum())
     per_position_weight = min(0.12, max(0.0, risk_budget) / max(selected_count, 1)) if promoted else 0.0
@@ -238,7 +259,10 @@ def _merge_auction_candidates(
         code = _text(row.get("ts_code"))
         old = lookup.get(code, pd.Series(dtype=object))
         universe_eligible = _integer(row.get("decision_universe_eligible")) == 1
-        selected = _integer(row.get("selected")) == 1 and universe_eligible
+        selected = (
+            _integer(row.get("trade_selected")) == 1
+            and universe_eligible
+        )
         shadow_selected = (
             _integer(row.get("trade_shadow_selected")) == 1
             and universe_eligible
@@ -248,7 +272,7 @@ def _merge_auction_candidates(
             if promoted and selected
             else "SHADOW_ONLY"
             if selected or shadow_selected
-            else _text(row.get("action")) or "REJECT"
+            else "REJECT"
         )
         reason = ""
         if not universe_eligible:
@@ -427,6 +451,76 @@ def _stage_watchlist(
     limit: int = OBSERVATION_TOP_N,
 ) -> tuple[list[dict[str, Any]], int]:
     return rank_observation_rows(rows, limit=limit)
+
+
+def _ensure_relative_best_two(
+    rows: list[dict[str, Any]],
+    *,
+    limit: int = 2,
+) -> list[dict[str, Any]]:
+    def eligible_candidate(row: dict[str, Any]) -> bool:
+        mechanism_limit = _number(row.get("mechanism_limit_pct"))
+        transition = _text(row.get("stage_transition"))
+        return (
+            _integer(row.get("decision_universe_eligible"), 1) == 1
+            and (mechanism_limit is None or mechanism_limit <= 10.0)
+            and transition in {"2→3", "3→4"}
+        )
+
+    eligible = [
+        row
+        for row in rows
+        if eligible_candidate(row) and _integer(row.get("stage_focus"), 1) == 1
+    ]
+    if not eligible:
+        eligible = [row for row in rows if eligible_candidate(row)]
+    if not eligible:
+        return rows
+
+    def ascending(value: Any, default: float) -> float:
+        number = _number(value)
+        return number if number is not None else default
+
+    def descending(value: Any, default: float) -> float:
+        number = _number(value)
+        return -number if number is not None else default
+
+    ordered = sorted(
+        eligible,
+        key=lambda row: (
+            ascending(row.get("trade_rank"), 999999.0),
+            ascending(row.get("promotion_rank"), 999999.0),
+            ascending(
+                row.get("trade_predicted_big_loss_probability"),
+                ascending(row.get("predicted_big_loss_probability"), 1.0),
+            ),
+            descending(
+                row.get("trade_predicted_mean_return_lcb"),
+                descending(row.get("predicted_return_lcb"), 999999.0),
+            ),
+            descending(
+                row.get("predicted_continuation_limit_up_probability"),
+                999999.0,
+            ),
+            ascending(row.get("rank"), 999999.0),
+            _text(row.get("ts_code")),
+        ),
+    )
+    for fallback_rank, row in enumerate(ordered, start=1):
+        if _integer(row.get("trade_rank")) <= 0:
+            row["trade_rank"] = fallback_rank
+    selected_ids = {id(row) for row in ordered[: min(limit, len(ordered))]}
+    for row in rows:
+        selected = id(row) in selected_ids
+        row["trade_shadow_selected"] = int(selected)
+        if selected and _text(row.get("action")) != "BUY":
+            row["action"] = "SHADOW_ONLY"
+            row["rejection_reason"] = (
+                "二筛相对优选入选；正式样本外盈利门槛独立审计"
+            )
+        elif not selected and _text(row.get("action")) == "SHADOW_ONLY":
+            row["action"] = "REJECT"
+    return rows
 
 
 def _observation_status_label(value: Any) -> str:
@@ -791,6 +885,7 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             status_code = "ACTIONABLE_BUY"
             status_label = "人工参考：按竞价上限自行挂单"
 
+    action_rows = _ensure_relative_best_two(action_rows)
     formal_count = sum(row["action"] == "BUY" for row in action_rows)
     shadow_count = sum(row["action"] == "SHADOW_ONLY" for row in action_rows)
     stage_watchlist, stage_watch_total = _stage_watchlist(action_rows)

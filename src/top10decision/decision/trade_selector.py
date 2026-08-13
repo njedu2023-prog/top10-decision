@@ -1297,13 +1297,58 @@ def score_trade_selector(
     bundle: Optional[TradeSelectorBundle],
     *,
     globally_promoted: bool,
+    force_relative_best_two: bool = True,
 ) -> pd.DataFrame:
     if frame.empty:
         return frame.copy()
     if bundle is None:
         out = frame.copy()
-        out["trade_rank"] = _numeric(out, "observation_rank")
-        out["promotion_rank"] = _numeric(out, "observation_rank")
+        fallback = out.assign(
+            _signal_date=out["signal_date"].astype(str),
+            _promotion_rank=_numeric(
+                out,
+                "promotion_rank",
+                999999,
+            ).fillna(999999),
+            _big_loss=_numeric(
+                out,
+                "predicted_big_loss_probability",
+                1.0,
+            ).fillna(1.0),
+            _return_lcb=_numeric(
+                out,
+                "predicted_return_lcb",
+                -np.inf,
+            ).fillna(-np.inf),
+            _continuation=_numeric(
+                out,
+                "predicted_continuation_limit_up_probability",
+                -np.inf,
+            ).fillna(-np.inf),
+            _observation_rank=_numeric(
+                out,
+                "observation_rank",
+                999999,
+            ).fillna(999999),
+        ).sort_values(
+            [
+                "_signal_date",
+                "_promotion_rank",
+                "_big_loss",
+                "_return_lcb",
+                "_continuation",
+                "_observation_rank",
+                "ts_code",
+            ],
+            ascending=[True, True, True, False, False, True, True],
+            kind="stable",
+        )
+        out["trade_rank"] = np.nan
+        out.loc[fallback.index, "trade_rank"] = (
+            fallback.groupby("_signal_date", sort=False).cumcount() + 1
+        ).to_numpy()
+        if "promotion_rank" not in out.columns:
+            out["promotion_rank"] = _numeric(out, "observation_rank")
         out["promotion_rank_score"] = np.nan
         out["predicted_promotion_probability"] = np.nan
         out["trade_score"] = np.nan
@@ -1317,12 +1362,21 @@ def score_trade_selector(
         out["trade_tail_risk_weight"] = np.nan
         out["trade_gate_pass"] = 0
         out["trade_shadow_selected"] = 0
+        if force_relative_best_two:
+            shadow_selected = fallback.loc[
+                fallback.groupby("_signal_date", sort=False).cumcount() < 2
+            ]
+            out.loc[shadow_selected.index, "trade_shadow_selected"] = 1
         out["trade_selected"] = 0
         out["trade_selector_policy_ready"] = 0
         out["trade_selector_promoted"] = 0
         out["trade_selector_version"] = TRADE_SELECTOR_VERSION
         out["trade_selector_artifact_sha256"] = ""
         out["trade_model_reason"] = "insufficient_nested_oos_history"
+        out.loc[
+            out["trade_shadow_selected"].eq(1),
+            "trade_model_reason",
+        ] = "relative_best_two_fallback"
         return out
     scored = _score_raw(frame, bundle)
     policy_ready = bool(bundle.policy.get("ready") is True)
@@ -1335,6 +1389,30 @@ def score_trade_selector(
         formal = _numeric(out, "trade_selected", 0).fillna(0).eq(1)
         out.loc[formal, "trade_model_reason"] = "selector_not_promoted"
         out["trade_selected"] = 0
+    if force_relative_best_two:
+        ranked = out.assign(
+            _signal_date=out["signal_date"].astype(str),
+            _trade_rank=_numeric(out, "trade_rank", 999999).fillna(999999),
+            _observation_rank=_numeric(
+                out,
+                "observation_rank",
+                999999,
+            ).fillna(999999),
+        ).sort_values(
+            ["_signal_date", "_trade_rank", "_observation_rank", "ts_code"],
+            ascending=[True, True, True, True],
+            kind="stable",
+        )
+        relative_best = ranked.loc[
+            ranked.groupby("_signal_date", sort=False).cumcount() < 2
+        ]
+        out["trade_shadow_selected"] = 0
+        out.loc[relative_best.index, "trade_shadow_selected"] = 1
+        shadow_only = (
+            out["trade_shadow_selected"].eq(1)
+            & out["trade_selected"].eq(0)
+        )
+        out.loc[shadow_only, "trade_model_reason"] = "relative_best_two_only"
     out["trade_selector_promoted"] = int(globally_promoted)
     out["trade_selector_artifact_sha256"] = bundle.artifact_sha256
     return out
@@ -1771,6 +1849,7 @@ def walkforward_trade_selector(
             test,
             bundle,
             globally_promoted=True,
+            force_relative_best_two=False,
         )
         scored["trade_oos_train_end"] = train_dates[-1]
         scored["trade_oos_train_dates"] = int(len(train_dates))

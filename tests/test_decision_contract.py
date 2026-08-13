@@ -767,9 +767,10 @@ class DecisionActionPlanTests(unittest.TestCase):
         plan = build_action_plan(self.root)
         self.assertEqual(plan["status_code"], "NO_TRADE_MODEL_NOT_PROMOTED")
         self.assertEqual(plan["formal_buy_count"], 0)
+        self.assertEqual(plan["shadow_count"], 1)
         self.assertFalse(any(row["action"] == "BUY" for row in plan["candidates"]))
         self.assertEqual(plan["stage_watch_count"], 1)
-        self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "仅观察")
+        self.assertEqual(plan["stage_watchlist"][0]["watch_label"], "二筛影子")
         self.assertEqual(
             plan["schema_version"],
             "decision_action_plan_v12_top10_trade_selector",
@@ -801,6 +802,95 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertIn("market_close_comparison", plan)
         self.assertFalse(plan["market_close_comparison"]["model_input"])
         self.assertFalse(plan["market_close_comparison"]["t"]["available"])
+
+    def test_unpromoted_plan_selects_exactly_two_relative_best_candidates(self) -> None:
+        self._write_model_artifacts(promoted=False)
+        prediction_path = (
+            self.root
+            / "outputs"
+            / "auction_v3"
+            / "predictions"
+            / "pred_latest.csv"
+        )
+        prediction = pd.read_csv(prediction_path)
+        template = prediction.iloc[0].copy()
+        additions = []
+        for code, name, trade_rank, big_loss in (
+            ("600002.SH", "主板二", 2, 0.06),
+            ("600003.SH", "主板三", 3, 0.07),
+        ):
+            row = template.copy()
+            row["ts_code"] = code
+            row["name"] = name
+            row["trade_rank"] = trade_rank
+            row["trade_shadow_selected"] = 0
+            row["trade_selected"] = 0
+            row["selected"] = 0
+            row["predicted_big_loss_probability"] = big_loss
+            additions.append(row)
+        pd.concat([prediction, pd.DataFrame(additions)], ignore_index=True).to_csv(
+            prediction_path,
+            index=False,
+        )
+
+        plan = build_action_plan(self.root)
+
+        shadow = sorted(
+            [
+                row
+                for row in plan["candidates"]
+                if row["action"] == "SHADOW_ONLY"
+            ],
+            key=lambda row: row["trade_rank"],
+        )
+        self.assertEqual(plan["formal_buy_count"], 0)
+        self.assertEqual(plan["shadow_count"], 2)
+        self.assertEqual(
+            [row["ts_code"] for row in shadow],
+            ["600001.SH", "600002.SH"],
+        )
+
+    def test_pending_plan_uses_relative_best_two_without_formal_buy(self) -> None:
+        pd.DataFrame(
+            [
+                {
+                    "ts_code": code,
+                    "name": name,
+                    "industry": "银行",
+                    "advance_stage": "2→3",
+                    "decision_limit_pct": 10.0,
+                    "promotion_rank": promotion_rank,
+                    "predicted_big_loss_probability": big_loss,
+                    "predicted_return_lcb": return_lcb,
+                }
+                for code, name, promotion_rank, big_loss, return_lcb in (
+                    ("600001.SH", "主板一", 3, 0.05, 0.03),
+                    ("600002.SH", "主板二", 1, 0.20, 0.01),
+                    ("600003.SH", "主板三", 1, 0.08, 0.00),
+                )
+            ]
+        ).to_csv(
+            self.root / "data" / "decision" / "decision_candidates_20260720.csv",
+            index=False,
+        )
+
+        plan = build_action_plan(self.root)
+
+        shadow = sorted(
+            [
+                row
+                for row in plan["candidates"]
+                if row["action"] == "SHADOW_ONLY"
+            ],
+            key=lambda row: row["trade_rank"],
+        )
+        self.assertEqual(plan["status_code"], "PENDING_AUCTION_MODEL")
+        self.assertEqual(plan["formal_buy_count"], 0)
+        self.assertEqual(plan["shadow_count"], 2)
+        self.assertEqual(
+            [row["ts_code"] for row in shadow],
+            ["600003.SH", "600002.SH"],
+        )
 
     def test_market_close_comparison_waits_for_complete_t_snapshot(self) -> None:
         self._write_model_artifacts(promoted=False)
