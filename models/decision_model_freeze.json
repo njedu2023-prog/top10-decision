@@ -47,7 +47,7 @@
     {
       "at_utc": "2026-08-13T16:42:07Z",
       "scope": "Decision second-filter live shadow selection only",
-      "change": "For each live D-day pool, mark the relative-best two eligible 2-to-3 or 3-to-4 candidates as second-filter shadows; keep formal selection gates and strict out-of-sample statistics unchanged.",
+      "change": "For each live D-day frozen observation Top10, mark the relative-best two eligible 2-to-3 or 3-to-4 candidates as second-filter shadows; diagnostic rows outside Top10 cannot enter; keep formal selection gates and strict out-of-sample statistics unchanged.",
       "production_model_artifacts_changed": false,
       "production_model_behavior_changed": true,
       "reason": "User-approved operational contract. Frozen training history, estimators, model fingerprints, formal promotion gates, statistics start dates, and existing cumulative metric definitions remain unchanged."
@@ -79,7 +79,7 @@
     "src/top10decision/auction_v3/calibration.py": "06890dee4d9c7a6cd007ebdda823b4907774ba372ebe37f3072432335fce79a9",
     "src/top10decision/auction_v3/config.py": "defd571ebb35fae75b694f419554ec3347c3b5f300e0e094882a8c1da1c48704",
     "src/top10decision/auction_v3/engine.py": "60786d430b5c861070588175d43a62235587debdd945fcf1d8f1175668c24688",
-    "src/top10decision/decision/action_plan.py": "5acff5ee8a2e3c5c35f82462d4979dfb0a3df2315f06b0b99e3a0bb5afa9b90e",
+    "src/top10decision/decision/action_plan.py": "bb3ea8274b545c1df098d9da157abcaec2df1e7b30bf277d313d16cbcc6677f8",
     "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",
     "src/top10decision/decision/model_freeze.py": "e3dce81f9664484934b1e8268e8571b578a4329f9091a0d375cc9c644ab35d69",
     "src/top10decision/decision/trade_selector.py": "90f3317dd602f822714c89b2592b4a8b878bd1f013552ec625b019617db4ef2d",

@@ -477,6 +477,15 @@ def _ensure_relative_best_two(
     if not eligible:
         return rows
 
+    # A positive trade rank means the selector admitted the row into its
+    # frozen Top10.  Unranked rows may still be present for diagnostics, but
+    # must not displace the selector's two live shadow choices.  Pending plans
+    # have no trade ranks yet and continue to use the deterministic fallback.
+    ranked_pool = [row for row in eligible if _integer(row.get("trade_rank")) > 0]
+    uses_selector_ranks = bool(ranked_pool)
+    if uses_selector_ranks:
+        eligible = ranked_pool
+
     def ascending(value: Any, default: float) -> float:
         number = _number(value)
         return number if number is not None else default
@@ -506,9 +515,10 @@ def _ensure_relative_best_two(
             _text(row.get("ts_code")),
         ),
     )
-    for fallback_rank, row in enumerate(ordered, start=1):
-        if _integer(row.get("trade_rank")) <= 0:
-            row["trade_rank"] = fallback_rank
+    if not uses_selector_ranks:
+        for fallback_rank, row in enumerate(ordered, start=1):
+            if _integer(row.get("trade_rank")) <= 0:
+                row["trade_rank"] = fallback_rank
     selected_ids = {id(row) for row in ordered[: min(limit, len(ordered))]}
     for row in rows:
         selected = id(row) in selected_ids

@@ -818,6 +818,7 @@ class DecisionActionPlanTests(unittest.TestCase):
         for code, name, trade_rank, big_loss in (
             ("600002.SH", "主板二", 2, 0.06),
             ("600003.SH", "主板三", 3, 0.07),
+            ("600004.SH", "Top10外诊断票", None, 0.01),
         ):
             row = template.copy()
             row["ts_code"] = code
@@ -849,6 +850,11 @@ class DecisionActionPlanTests(unittest.TestCase):
             [row["ts_code"] for row in shadow],
             ["600001.SH", "600002.SH"],
         )
+        outside = next(
+            row for row in plan["candidates"] if row["ts_code"] == "600004.SH"
+        )
+        self.assertEqual(outside["action"], "REJECT")
+        self.assertEqual(outside["trade_rank"], 0)
 
     def test_pending_plan_uses_relative_best_two_without_formal_buy(self) -> None:
         pd.DataFrame(
