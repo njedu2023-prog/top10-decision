@@ -1,9 +1,9 @@
 {
-  "source": "tushare:stk_mins",
+  "source": "tushare:rt_min_daily",
   "trade_date": "20260813",
   "ts_code": "000802.SZ",
   "frequency": "1MIN",
-  "rows": 91,
+  "rows": 241,
   "fields": [
     "ts_code",
     "time",
