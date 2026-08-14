@@ -1,7 +1,7 @@
 {
   "schema_version": "decision_observation_validation_v4_auction_truth",
   "status": "ok",
-  "generated_at_utc": "2026-08-14T10:41:34+00:00",
+  "generated_at_utc": "2026-08-14T12:21:06+00:00",
   "validation_start_exec_date": "20260721",
   "validation_mode": "market_at_open_proxy",
   "market_open_fill_assumption": true,
@@ -9,15 +9,15 @@
   "performance_scope": "premarket_valid_predictions_only",
   "prediction_deadline": "T 09:25 Asia/Shanghai",
   "top_n": 10,
-  "observation_dates": 19,
-  "observation_rows": 166,
+  "observation_dates": 20,
+  "observation_rows": 175,
   "t_validated_rows": 166,
-  "t_pending_rows": 0,
-  "premarket_valid_rows": 158,
+  "t_pending_rows": 9,
+  "premarket_valid_rows": 167,
   "premarket_validated_rows": 158,
   "retrospective_truth_rows": 8,
   "unknown_timing_truth_rows": 0,
-  "official_auction_truth_rows": 102,
+  "official_auction_truth_rows": 112,
   "minute_proxy_truth_rows": 0,
   "daily_open_proxy_truth_rows": 0,
   "market_positive_rate": 0.6392405063,
@@ -29,8 +29,8 @@
   "display_limit_met_rows": 49,
   "above_display_limit_rows": 109,
   "display_limit_met_rate": 0.3101265823,
-  "mean_open_vs_display_limit": 0.034047389,
-  "mean_t_observation_return": 0.001934869,
+  "mean_open_vs_display_limit": 0.0340074915,
+  "mean_t_observation_return": 0.0019666028,
   "median_t_observation_return": 0.0,
   "continuation_hits": 52,
   "continuation_samples": 158,
@@ -41,15 +41,15 @@
   "final_win_rate": 0.5238095238,
   "final_win_rate_95ci_low": 0.4434996787,
   "final_win_rate_95ci_high": 0.6029066611,
-  "mean_final_net_return": 0.0017303955,
+  "mean_final_net_return": 0.0017328331,
   "median_final_net_return": 0.0024444444,
   "worst_final_net_return": -0.2039514107,
-  "tail_10pct_mean_return": -0.1304444242,
-  "profit_factor": 1.0566904615,
+  "tail_10pct_mean_return": -0.1306184042,
+  "profit_factor": 1.0567748556,
   "matured_portfolio_dates": 17,
-  "equal_slot_cumulative_return": -0.021031024,
+  "equal_slot_cumulative_return": -0.0209959597,
   "equal_slot_max_drawdown": -0.2251880573,
-  "equal_slot_mean_daily_return": -0.0001622514,
+  "equal_slot_mean_daily_return": -0.0001601436,
   "latest_t_validated_exec_date": "20260814",
   "latest_all_truth_exec_date": "20260814",
   "latest_final_exec_date": "20260813",
@@ -170,8 +170,8 @@
       "exec_date": "20260813",
       "observation_slots": 10,
       "filled_slots": 10,
-      "equal_slot_net_return": 0.0004296514,
-      "nav": 0.978968976
+      "equal_slot_net_return": 0.0004654843,
+      "nav": 0.9790040403
     }
   ],
   "all_truth_summary": {
@@ -179,7 +179,7 @@
     "fillable_rows": 166,
     "final_verified_trades": 155,
     "final_win_rate": 0.5032258065,
-    "mean_final_net_return": -0.0008203315
+    "mean_final_net_return": -0.0008180197
   },
   "stage_2_to_3": {
     "samples": 127,
@@ -215,7 +215,7 @@
       "t_validated_rows": 34,
       "continuation_hit_rate": 0.3529411765,
       "final_verified_trades": 31,
-      "mean_final_net_return": -0.0030936821,
+      "mean_final_net_return": -0.0030702898,
       "win_rate": 0.4516129032
     },
     "DIVERGENCE_RESEAL": {
@@ -223,7 +223,7 @@
       "t_validated_rows": 41,
       "continuation_hit_rate": 0.3414634146,
       "final_verified_trades": 41,
-      "mean_final_net_return": 0.0163433659,
+      "mean_final_net_return": 0.0163225196,
       "win_rate": 0.6097560976
     },
     "MIXED": {
@@ -239,7 +239,7 @@
       "t_validated_rows": 21,
       "continuation_hit_rate": 0.4285714286,
       "final_verified_trades": 20,
-      "mean_final_net_return": 0.0117072708,
+      "mean_final_net_return": 0.0113551581,
       "win_rate": 0.55
     },
     "STRONG_TO_WEAK": {
@@ -255,7 +255,7 @@
       "t_validated_rows": 10,
       "continuation_hit_rate": 0.2,
       "final_verified_trades": 9,
-      "mean_final_net_return": -0.005157582,
+      "mean_final_net_return": -0.0043209019,
       "win_rate": 0.5555555556
     },
     "INSUFFICIENT": {
@@ -271,23 +271,23 @@
     "20": {
       "portfolio_dates": 17,
       "filled_trades": 147,
-      "mean_net_return": 0.0017303955,
+      "mean_net_return": 0.0017328331,
       "win_rate": 0.5238095238,
-      "equal_slot_cumulative_return": -0.021031024
+      "equal_slot_cumulative_return": -0.0209959597
     },
     "60": {
       "portfolio_dates": 17,
       "filled_trades": 147,
-      "mean_net_return": 0.0017303955,
+      "mean_net_return": 0.0017328331,
       "win_rate": 0.5238095238,
-      "equal_slot_cumulative_return": -0.021031024
+      "equal_slot_cumulative_return": -0.0209959597
     },
     "all": {
       "portfolio_dates": 17,
       "filled_trades": 147,
-      "mean_net_return": 0.0017303955,
+      "mean_net_return": 0.0017328331,
       "win_rate": 0.5238095238,
-      "equal_slot_cumulative_return": -0.021031024
+      "equal_slot_cumulative_return": -0.0209959597
     }
   },
   "forward_shadow": {
@@ -295,16 +295,16 @@
     "start_signal_date": "20260728",
     "performance_scope": "premarket_frozen_trade_shadow_selected_only",
     "minimum_final_trades": 20,
-    "observed_signal_dates": 13,
-    "shadow_signal_dates": 13,
+    "observed_signal_dates": 14,
+    "shadow_signal_dates": 14,
     "shadow_signal_rate": 1.0,
-    "shadow_entries": 23,
+    "shadow_entries": 25,
     "t_validated_entries": 23,
-    "pending_t_entries": 0,
+    "pending_t_entries": 2,
     "pending_t1_entries": 2,
     "finalized_entries": 21,
     "final_verified_trades": 21,
-    "market_buyable_entries": 10,
+    "market_buyable_entries": 9,
     "mean_final_net_return": 0.0203386833,
     "median_final_net_return": 0.0158846154,
     "final_win_rate": 0.6666666667,
@@ -322,7 +322,7 @@
     "equal_slot_max_drawdown": -0.0676559159,
     "equal_slot_mean_daily_return": 0.0192942779,
     "longest_no_signal_streak": 0,
-    "latest_signal_date": "20260813",
+    "latest_signal_date": "20260814",
     "latest_final_signal_date": "20260812",
     "sample_sufficient": true,
     "daily_portfolio": [
@@ -413,6 +413,44 @@
     ],
     "rows": [
       {
+        "signal_date": "20260814",
+        "expected_buy_date": "20260817",
+        "expected_exit_date": "20260818",
+        "trade_rank": 1,
+        "ts_code": "001260.SZ",
+        "name": "坤泰股份",
+        "industry": "汽车零部件",
+        "stage_transition": "3→4",
+        "path_label": "持续强势",
+        "actual_open_price": null,
+        "actual_t_close": null,
+        "observation_t_return": null,
+        "continuation_limit_up_hit": null,
+        "actual_net_return": null,
+        "market_buyable_diagnostic": null,
+        "validation_status": "PENDING_T",
+        "validation_status_label": "等待T日收盘"
+      },
+      {
+        "signal_date": "20260814",
+        "expected_buy_date": "20260817",
+        "expected_exit_date": "20260818",
+        "trade_rank": 2,
+        "ts_code": "002172.SZ",
+        "name": "澳洋健康",
+        "industry": "医疗服务",
+        "stage_transition": "3→4",
+        "path_label": "持续强势",
+        "actual_open_price": null,
+        "actual_t_close": null,
+        "observation_t_return": null,
+        "continuation_limit_up_hit": null,
+        "actual_net_return": null,
+        "market_buyable_diagnostic": null,
+        "validation_status": "PENDING_T",
+        "validation_status_label": "等待T日收盘"
+      },
+      {
         "signal_date": "20260813",
         "expected_buy_date": "20260814",
         "expected_exit_date": "20260817",
@@ -422,12 +460,12 @@
         "industry": "数字媒体",
         "stage_transition": "2→3",
         "path_label": "强转弱",
-        "actual_open_price": 13.72,
+        "actual_open_price": 13.82,
         "actual_t_close": 12.57,
-        "observation_t_return": -0.083819242,
+        "observation_t_return": -0.0904486252,
         "continuation_limit_up_hit": 0.0,
         "actual_net_return": null,
-        "market_buyable_diagnostic": 1.0,
+        "market_buyable_diagnostic": 0.0,
         "validation_status": "PENDING_T1",
         "validation_status_label": "等待T+1"
       },
@@ -441,9 +479,9 @@
         "industry": "装修装饰",
         "stage_transition": "2→3",
         "path_label": "路径混合",
-        "actual_open_price": 5.29,
+        "actual_open_price": 5.26,
         "actual_t_close": 5.29,
-        "observation_t_return": 0.0,
+        "observation_t_return": 0.0057034221,
         "continuation_limit_up_hit": 1.0,
         "actual_net_return": null,
         "market_buyable_diagnostic": 0.0,
