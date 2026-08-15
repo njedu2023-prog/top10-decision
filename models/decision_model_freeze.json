@@ -14,13 +14,13 @@
   },
   "production": {
     "model_version": "auction_v13_five_year_promotion_blend_oos_1",
-    "model_artifact_sha256": "69461c840a2190bf2fd686cf7e568d7b08b397df86daa9cf661cdae5c6bf7c6b",
+    "model_artifact_sha256": "d59d4b6eeea9858836ff987aa9354766e69c34dd4ba432a731a21818215f064a",
     "promoted": false,
     "promotion_probability_promoted": true,
     "promotion_probability_head": "five_year_validated_promotion_blend",
     "promotion_probability_validation": "models/decision_promotion_v13_validation.json",
     "trade_selector_version": "trade_selector_v2_nested_oos_top10_promotion_rank",
-    "trade_selector_artifact_sha256": "18fdcf5f62951d380d498978882be5e1a2cb6c0583d419659713a83cffa26157",
+    "trade_selector_artifact_sha256": "2b41b4db772940d32d8fb5699a653ea3c1246a44b32efee81e8f17176f4206bf",
     "trade_selector_promoted": false,
     "formal_status": "NO_TRADE_MODEL_NOT_PROMOTED",
     "formal_buy_count": 0
@@ -90,6 +90,14 @@
       "production_model_artifacts_changed": true,
       "production_model_behavior_changed": true,
       "reason": "The user authorized direct deployment only after verified superiority. Risk, return, P_fill, second-filter selection, formal no-trade gates, cumulative statistics, and Premium remain unchanged."
+    },
+    {
+      "at_utc": "2026-08-15T15:40:27Z",
+      "scope": "Decision production runtime fingerprints only",
+      "change": "Re-pin the V13 model and unchanged V12 trade-selector artifact fingerprints to the GitHub Actions Linux production replay outputs.",
+      "production_model_artifacts_changed": false,
+      "production_model_behavior_changed": false,
+      "reason": "The strict validation metrics, model versions, source pins, policies, statistics, and formal NO_TRADE state are unchanged; this preserves fail-closed runtime verification against the production environment instead of weakening the freeze gate."
     }
   ],
   "release_contract": {
