@@ -14,7 +14,7 @@
   },
   "production": {
     "model_version": "auction_v13_five_year_promotion_blend_oos_1",
-    "model_artifact_sha256": "2e83f054f91768d1e3579e03f0188084718a65b1db9bff5f3c0431fe420abcf1",
+    "model_artifact_sha256": "69461c840a2190bf2fd686cf7e568d7b08b397df86daa9cf661cdae5c6bf7c6b",
     "promoted": false,
     "promotion_probability_promoted": true,
     "promotion_probability_head": "five_year_validated_promotion_blend",
@@ -120,7 +120,7 @@
     "data/auction_v3/promotion_prior/five_year_event_features.csv.gz": "57683c2ee65de2b9debd6c7ca253c5ef18e393c121b943884bc577054cd7fe3e",
     "models/decision_promotion_v13_validation.json": "bf7994f63ee3ab2d12eeb98db6c9e5e1c8a18c2a6de8c24fc15d861ae6057477",
     "src/top10decision/auction_v3/config.py": "4c28a0ae2265435074a0689f4ad904ebfe465bd59fce3e8f558764d5014b94b2",
-    "src/top10decision/auction_v3/engine.py": "167c35f54a59945c084c3b029cd4d4757c345b6d464603987a55aa1811c92ccb",
+    "src/top10decision/auction_v3/engine.py": "94d90009d32b9cb01a4f41c38864ad665786af11456352e8ce0279ab71e01e53",
     "src/top10decision/auction_v3/promotion_model.py": "af9941589e7eec766a3a855d9d8e384316852ea7f74c23122968961cc4cb2170",
     "src/top10decision/decision/action_plan.py": "bb3ea8274b545c1df098d9da157abcaec2df1e7b30bf277d313d16cbcc6677f8",
     "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",

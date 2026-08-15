@@ -12,9 +12,11 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
+from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine
 from top10decision.auction_v3.calibration import ProbabilityCalibrator
 from top10decision.auction_v3.promotion_model import (
     PROMOTION_PRIOR_FEATURES,
+    PROMOTION_SOURCE_FEATURES,
     attach_promotion_source_features,
     fit_promotion_blend,
     load_promotion_validation,
@@ -73,6 +75,28 @@ class PromotionSourceFeatureTests(unittest.TestCase):
                 first_features[PROMOTION_PRIOR_FEATURES].to_numpy(dtype=float),
                 second_features[PROMOTION_PRIOR_FEATURES].to_numpy(dtype=float),
                 equal_nan=True,
+            )
+
+    def test_scoring_entrypoint_always_attaches_promotion_features(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            engine = AuctionV3Engine(AuctionV3Config(root=Path(temporary)))
+            base = pd.DataFrame(
+                [
+                    {
+                        "signal_date": "20260805",
+                        "ts_code": "600001.SH",
+                        "limit_times": 2,
+                    }
+                ]
+            )
+            with patch.object(
+                engine,
+                "_score_candidates_batch",
+                side_effect=lambda frame, bundle, *, apply_policy: frame,
+            ):
+                scored = engine.score_candidates(base, object())
+            self.assertTrue(
+                set(PROMOTION_SOURCE_FEATURES).issubset(scored.columns)
             )
 
 

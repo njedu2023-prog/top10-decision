@@ -4099,6 +4099,7 @@ class AuctionV3Engine:
         *,
         apply_policy: bool = True,
     ) -> pd.DataFrame:
+        base = attach_promotion_source_features(base, self.config.root)
         out = base.copy().reset_index(drop=True)
         score_columns = [
             "recommended_max_gap",
