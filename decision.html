@@ -225,6 +225,13 @@
     }
     .panel-head h2 { margin: 0; font-size: 16px; line-height: 1.3; }
     #stageSignalDate { color: var(--muted); font-weight: 400; }
+    .stage-generated-time {
+      margin-left: 8px;
+      color: #8b9592;
+      font-size: 10px;
+      font-weight: 400;
+      white-space: nowrap;
+    }
     .panel-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
     .count { color: var(--muted); font-size: 12px; white-space: nowrap; }
     .empty {
@@ -746,7 +753,7 @@
     <section class="panel">
       <div class="panel-head">
         <div>
-          <h2>2→3→4 · <span id="stageSignalDate">D：-</span></h2>
+          <h2>2→3→4 · <span id="stageSignalDate">D：-</span><span id="stageGeneratedTime" class="stage-generated-time"></span></h2>
         </div>
         <span id="stageCount" class="count">0 条</span>
       </div>
@@ -811,7 +818,7 @@
     const CACHE_KEY = "decision-dashboard-v11-open0930-cache";
     const els = Object.fromEntries([
       "prevBtn", "refreshBtn", "nextBtn", "statusBand", "statusTitle", "brandDates",
-      "signalDate", "execDate", "exitDate", "top10BacktestCount", "top10BacktestContent", "top10BacktestNote", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageSignalDate", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
+      "signalDate", "execDate", "exitDate", "top10BacktestCount", "top10BacktestContent", "top10BacktestNote", "metrics", "metricsCount", "sentimentState", "sentimentMetrics", "sentimentIndustries", "stageSignalDate", "stageGeneratedTime", "stageCount", "stageContent", "observationUpdate", "observationMetrics",
       "observationNote", "pathDiagnosticsCount", "pathDiagnosticsContent", "pathDiagnosticsNote", "candidateCount", "actionContent", "auditContent", "reportContent", "footer"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -893,6 +900,22 @@
     function dateText(value) {
       const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
       return digits.length === 8 ? `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}` : "-";
+    }
+
+    function beijingDateTimeText(value) {
+      if (!value) return "";
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return "";
+      const parts = Object.fromEntries(new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+      }).formatToParts(parsed).map(part => [part.type, part.value]));
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
     }
 
     function integerText(value) {
@@ -997,7 +1020,9 @@
       els.signalDate.textContent = dateText(plan?.signal_date);
       els.execDate.textContent = dateText(plan?.exec_date);
       els.exitDate.textContent = dateText(plan?.exit_date);
+      const generatedTime = beijingDateTimeText(plan?.generated_at_utc);
       els.stageSignalDate.textContent = `D：${dateText(plan?.signal_date)}`;
+      els.stageGeneratedTime.textContent = generatedTime ? `数据生成时间 ${generatedTime}` : "";
     }
 
     function renderMetrics(plan) {
