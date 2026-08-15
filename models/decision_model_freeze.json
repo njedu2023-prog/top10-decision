@@ -1,11 +1,11 @@
 {
   "schema_version": "decision_model_freeze_v1",
   "active": true,
-  "freeze_id": "decision_v12_d20260807_history20260805_20260809",
-  "frozen_at_utc": "2026-08-09T15:04:49Z",
-  "frozen_from_main_commit": "31af13018a5505ce2ef20f11ac9a99e33522ebc8",
+  "freeze_id": "decision_v13_promotion_oos_d20260815_history20260805",
+  "frozen_at_utc": "2026-08-15T15:07:43Z",
+  "frozen_from_main_commit": "3413b5737a1e1da2623b26dffafe24ef143fdb51",
   "scope": "Decision subsystem only; premium is excluded",
-  "freeze_reason": "Hold the current production ranking and no-trade policy constant while forward shadow evidence accumulates.",
+  "freeze_reason": "Freeze the strictly validated V13 promotion probability and promotion ranking upgrade while preserving the existing no-trade policy, risk models, return models, second-filter statistics, and Premium isolation.",
   "training_cutoff_signal_date": "20260805",
   "history_snapshot": {
     "path": "models/decision_v12_frozen_history_20260805.csv.gz",
@@ -13,9 +13,12 @@
     "bootstrap_mode": false
   },
   "production": {
-    "model_version": "auction_v12_top10_trade_selector_oos_1",
-    "model_artifact_sha256": "6377cc95813ab63d3810fbbe7949986c7d6b09bba8a92eedaf25ef28fd16a94e",
+    "model_version": "auction_v13_five_year_promotion_blend_oos_1",
+    "model_artifact_sha256": "2e83f054f91768d1e3579e03f0188084718a65b1db9bff5f3c0431fe420abcf1",
     "promoted": false,
+    "promotion_probability_promoted": true,
+    "promotion_probability_head": "five_year_validated_promotion_blend",
+    "promotion_probability_validation": "models/decision_promotion_v13_validation.json",
     "trade_selector_version": "trade_selector_v2_nested_oos_top10_promotion_rank",
     "trade_selector_artifact_sha256": "18fdcf5f62951d380d498978882be5e1a2cb6c0583d419659713a83cffa26157",
     "trade_selector_promoted": false,
@@ -28,6 +31,34 @@
     "allow_truth_and_trainset_updates": true,
     "allow_production_model_replacement": false,
     "allow_post_learning_decision_refresh": false
+  },
+  "promotion_upgrade": {
+    "scope": "Decision promotion probability and promotion ranking only",
+    "strict_oos_rows": 6159,
+    "strict_oos_signal_dates": 514,
+    "strict_oos_start": "20240624",
+    "strict_oos_end": "20260805",
+    "incumbent_brier": 0.215895372,
+    "challenger_brier": 0.213055028,
+    "brier_improvement_ci95": [
+      0.0011497435,
+      0.0046678619
+    ],
+    "incumbent_ece": 0.0305501827,
+    "challenger_ece": 0.0287939866,
+    "incumbent_auc": 0.6785418958,
+    "challenger_auc": 0.6864798204,
+    "incumbent_top1_hit_rate": 0.6926070039,
+    "challenger_top1_hit_rate": 0.6964980545,
+    "incumbent_top3_row_hit_rate": 0.6039087948,
+    "challenger_top3_row_hit_rate": 0.6071661238,
+    "direct_promotion_pass": true,
+    "production_challenger": "extra_trees_identity_path_sentiment_source_context",
+    "production_challenger_weight": 0.8,
+    "incumbent_fallback_weight": 0.2,
+    "other_models_changed": false,
+    "existing_statistics_reset": false,
+    "profitability_claim": false
   },
   "runtime": {
     "allow_daily_prediction": true,
@@ -51,6 +82,14 @@
       "production_model_artifacts_changed": false,
       "production_model_behavior_changed": true,
       "reason": "User-approved operational contract. Frozen training history, estimators, model fingerprints, formal promotion gates, statistics start dates, and existing cumulative metric definitions remain unchanged."
+    },
+    {
+      "at_utc": "2026-08-15T15:07:43Z",
+      "scope": "Decision promotion probability and promotion ranking only",
+      "change": "Deploy the five-year-prior promotion blend after 514-date strict out-of-sample validation improved Brier, ECE, AUC, Top1, and Top3 over the incumbent; retain automatic incumbent fallback.",
+      "production_model_artifacts_changed": true,
+      "production_model_behavior_changed": true,
+      "reason": "The user authorized direct deployment only after verified superiority. Risk, return, P_fill, second-filter selection, formal no-trade gates, cumulative statistics, and Premium remain unchanged."
     }
   ],
   "release_contract": {
@@ -77,8 +116,12 @@
     "scripts/run_auction_v3.py": "7f1c6138a89d34979df3c46f828b543399a5f132ccdeeae73cf2d104871c93e3",
     "scripts/validate_decision_model_freeze.py": "2cf9c9a305d4e6fbe8dcc69c6676235fff313cabc8bb41bdb839dadfe8f6c90b",
     "src/top10decision/auction_v3/calibration.py": "06890dee4d9c7a6cd007ebdda823b4907774ba372ebe37f3072432335fce79a9",
-    "src/top10decision/auction_v3/config.py": "defd571ebb35fae75b694f419554ec3347c3b5f300e0e094882a8c1da1c48704",
-    "src/top10decision/auction_v3/engine.py": "60786d430b5c861070588175d43a62235587debdd945fcf1d8f1175668c24688",
+    "data/auction_v3/promotion_prior/five_year_daily_stage_board.csv": "d7b69e474502eb10882e65cb19becaa77c5a8e0ced90d002ae221a47b0160909",
+    "data/auction_v3/promotion_prior/five_year_event_features.csv.gz": "57683c2ee65de2b9debd6c7ca253c5ef18e393c121b943884bc577054cd7fe3e",
+    "models/decision_promotion_v13_validation.json": "bf7994f63ee3ab2d12eeb98db6c9e5e1c8a18c2a6de8c24fc15d861ae6057477",
+    "src/top10decision/auction_v3/config.py": "4c28a0ae2265435074a0689f4ad904ebfe465bd59fce3e8f558764d5014b94b2",
+    "src/top10decision/auction_v3/engine.py": "167c35f54a59945c084c3b029cd4d4757c345b6d464603987a55aa1811c92ccb",
+    "src/top10decision/auction_v3/promotion_model.py": "af9941589e7eec766a3a855d9d8e384316852ea7f74c23122968961cc4cb2170",
     "src/top10decision/decision/action_plan.py": "bb3ea8274b545c1df098d9da157abcaec2df1e7b30bf277d313d16cbcc6677f8",
     "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",
     "src/top10decision/decision/model_freeze.py": "e3dce81f9664484934b1e8268e8571b578a4329f9091a0d375cc9c644ab35d69",

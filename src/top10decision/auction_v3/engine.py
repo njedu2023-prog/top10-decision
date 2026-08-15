@@ -61,6 +61,14 @@ from .calibration import (
     fit_probability_calibrator,
     probability_metrics,
 )
+from .promotion_model import (
+    PROMOTION_CONTEXT_FEATURES,
+    PROMOTION_PRIOR_FEATURES,
+    PROMOTION_SOURCE_FEATURES,
+    attach_promotion_source_features,
+    fit_promotion_blend,
+    load_promotion_validation,
+)
 
 
 DATE_RE = re.compile(r"(?<!\d)(20\d{6})(?!\d)")
@@ -210,6 +218,15 @@ CONTINUATION_PATH_COHORT_FEATURES = [
 CONTINUATION_FEATURES = (
     CONTINUATION_PATH_COHORT_FEATURES + MARKET_SENTIMENT_FEATURES
 )
+CONTINUATION_FIVE_YEAR_PRIOR_FEATURES = (
+    CONTINUATION_FEATURES + PROMOTION_PRIOR_FEATURES
+)
+CONTINUATION_SOURCE_CONTEXT_FEATURES = (
+    CONTINUATION_FEATURES + PROMOTION_CONTEXT_FEATURES
+)
+CONTINUATION_FIVE_YEAR_FULL_FEATURES = (
+    CONTINUATION_FEATURES + PROMOTION_SOURCE_FEATURES
+)
 STREAK_PATH_FEATURES = [
     "path_days_observed",
     "path_data_coverage",
@@ -285,7 +302,7 @@ class ModelBundle:
     return_constant: float
     profit_model: Optional[Pipeline]
     loss_model: Optional[Pipeline]
-    continuation_model: Optional[Pipeline]
+    continuation_model: Optional[Any]
     fill_model: Optional[Pipeline]
     exit_model: Optional[Pipeline]
     profit_calibrator: ProbabilityCalibrator
@@ -464,6 +481,7 @@ def _model_artifact_sha256(
                 "market_fill",
                 *MODEL_FEATURES,
                 *MARKET_SENTIMENT_FEATURES,
+                *PROMOTION_SOURCE_FEATURES,
             ]
         )
     )
@@ -477,8 +495,18 @@ def _model_artifact_sha256(
     if sort_columns:
         training = training.sort_values(sort_columns, kind="stable")
     source_hasher = hashlib.sha256()
-    for name in ("engine.py", "calibration.py", "config.py"):
+    for name in (
+        "engine.py",
+        "calibration.py",
+        "config.py",
+        "promotion_model.py",
+    ):
         source_hasher.update((Path(__file__).with_name(name)).read_bytes())
+    promotion_validation = (
+        config.root / "models" / "decision_promotion_v13_validation.json"
+    )
+    if promotion_validation.exists():
+        source_hasher.update(promotion_validation.read_bytes())
     config_payload = {
         key: value
         for key, value in asdict(config).items()
@@ -501,7 +529,7 @@ def _model_artifact_sha256(
 
 
 def _probability(
-    model: Optional[Pipeline],
+    model: Optional[Any],
     frame: pd.DataFrame,
     constant: float,
     features: Sequence[str] = MODEL_FEATURES,
@@ -566,6 +594,9 @@ class AuctionV3Engine:
         self._sentiment_raw_cache: dict[str, dict[str, Any]] = {}
         self._streak_count_cache: dict[tuple[str, str], int] = {}
         self._path_cache: dict[tuple[str, str], dict[str, Any]] = {}
+        self._promotion_context_cache: dict[
+            tuple[str, str], dict[str, Any]
+        ] = {}
         self._eligibility_audit: dict[str, Any] = {}
         self._trade_selector_bundle: Optional[TradeSelectorBundle] = None
         self._trade_selector_metrics: dict[str, Any] = {}
@@ -1919,6 +1950,116 @@ class AuctionV3Engine:
         self._path_cache[cache_key] = result
         return dict(result)
 
+    def _promotion_source_context_features(
+        self,
+        signal_date: str,
+        code: str,
+        dates: Optional[Sequence[str]] = None,
+    ) -> dict[str, Any]:
+        """Build the five-year challenger context from D and earlier only."""
+
+        cache_key = (signal_date, _normal_code(code))
+        if cache_key in self._promotion_context_cache:
+            return dict(self._promotion_context_cache[cache_key])
+        defaults = {
+            feature: np.nan for feature in PROMOTION_CONTEXT_FEATURES
+        }
+        trading_dates = list(dates or self.market_dates())
+        try:
+            signal_index = trading_dates.index(signal_date)
+        except ValueError:
+            self._promotion_context_cache[cache_key] = defaults
+            return dict(defaults)
+        if signal_index < 5:
+            self._promotion_context_cache[cache_key] = defaults
+            return dict(defaults)
+
+        stage = self._consecutive_limit_up_count(
+            signal_date,
+            code,
+            trading_dates,
+        )
+        if stage not in (2, 3):
+            self._promotion_context_cache[cache_key] = defaults
+            return dict(defaults)
+
+        window_dates = trading_dates[signal_index - 5 : signal_index + 1]
+        closes: list[float] = []
+        states: list[str] = []
+        for trade_date in window_dates:
+            daily = self._row(self.market_table(trade_date, "daily"), code)
+            limit = self._row(self.market_table(trade_date, "stk_limit"), code)
+            close = _numeric_from(daily, ("close",)) if daily is not None else float("nan")
+            up_limit = _numeric_from(limit, ("up_limit",)) if limit is not None else float("nan")
+            closes.append(close)
+            states.append(
+                "limit_up"
+                if math.isfinite(close)
+                and math.isfinite(up_limit)
+                and _is_close(close, up_limit)
+                else "other"
+            )
+
+        close_values = np.asarray(closes, dtype=float)
+        pre_end = 5 - stage
+        pre_closes = close_values[: pre_end + 1]
+        valid_returns = np.asarray([], dtype=float)
+        if len(pre_closes) >= 2:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                returns = pre_closes[1:] / pre_closes[:-1] - 1.0
+            valid_returns = returns[np.isfinite(returns)]
+        pre_1d = (
+            pre_closes[-1] / pre_closes[-2] - 1.0
+            if len(pre_closes) >= 2
+            and np.isfinite(pre_closes[-2:]).all()
+            and pre_closes[-2] > 0
+            else float("nan")
+        )
+        anchor_index = max(0, pre_end - 3)
+        pre_3d = (
+            close_values[pre_end] / close_values[anchor_index] - 1.0
+            if np.isfinite(close_values[[pre_end, anchor_index]]).all()
+            and close_values[anchor_index] > 0
+            else float("nan")
+        )
+        prior_positions = [
+            index
+            for index, state in enumerate(states[: pre_end + 1])
+            if state == "limit_up"
+        ]
+        result = {
+            **defaults,
+            "five_year_pre_streak_1d_return": pre_1d,
+            "five_year_pre_streak_3d_return": pre_3d,
+            "five_year_pre_streak_volatility": (
+                float(np.std(valid_returns, ddof=0))
+                if len(valid_returns)
+                else float("nan")
+            ),
+            "five_year_pre_streak_limit_up_count": float(len(prior_positions)),
+            "five_year_recent_limit_up_count": float(
+                sum(state == "limit_up" for state in states)
+            ),
+            "five_year_days_since_prior_limit_up": (
+                float(pre_end - prior_positions[-1] + 1)
+                if prior_positions
+                else 6.0
+            ),
+            "five_year_streak_runup": (
+                close_values[-1] / close_values[pre_end] - 1.0
+                if np.isfinite(close_values[[-1, pre_end]]).all()
+                and close_values[pre_end] > 0
+                else float("nan")
+            ),
+            "five_year_price_log": (
+                float(np.log1p(close_values[-1]))
+                if math.isfinite(close_values[-1]) and close_values[-1] > 0
+                else float("nan")
+            ),
+        }
+        self._promotion_context_cache[cache_key] = result
+        return dict(result)
+
     @staticmethod
     def _attach_cohort_features(frame: pd.DataFrame) -> pd.DataFrame:
         if frame.empty:
@@ -2411,6 +2552,13 @@ class AuctionV3Engine:
                         dates,
                     )
                 )
+                features.update(
+                    self._promotion_source_context_features(
+                        signal_date,
+                        code,
+                        dates,
+                    )
+                )
                 features["proposed_gap"] = buy_open / d_close - 1.0
                 industry = _text_from(candidate, INDUSTRY_ALIASES)
                 records.append(
@@ -2481,6 +2629,7 @@ class AuctionV3Engine:
         )
         frame = self._attach_cohort_features(frame)
         frame = self._attach_point_in_time_stage_rates(frame)
+        frame = attach_promotion_source_features(frame, self.config.root)
         frame = frame.sort_values(["signal_date", "source_rank", "ts_code"]).reset_index(drop=True)
         return frame
 
@@ -2690,6 +2839,7 @@ class AuctionV3Engine:
     ) -> Optional[ModelBundle]:
         if history.empty:
             return None
+        history = attach_promotion_source_features(history, self.config.root)
         all_clean = history.dropna(subset=["net_return", "proposed_gap", "market_fill"]).copy()
         clean = all_clean[all_clean["market_fill"].eq(1)].copy()
         dates = sorted(clean["signal_date"].astype(str).unique())
@@ -3478,6 +3628,45 @@ class AuctionV3Engine:
                 ),
             },
         }
+        incumbent_continuation_selection = dict(continuation_selection)
+        promotion_validation = load_promotion_validation(self.config.root)
+        if promotion_validation.get("validated") is True:
+            promotion_blend = fit_promotion_blend(
+                incumbent_model=continuation_model,
+                incumbent_calibrator=continuation_calibrator,
+                incumbent_features=continuation_features,
+                constant=continuation_constant,
+                fit_frame=continuation_fit,
+                calibration_frame=continuation_calibration,
+                target="continuation_limit_up_hit",
+                feature_sets={
+                    "path_sentiment_five_year_prior": (
+                        CONTINUATION_FIVE_YEAR_PRIOR_FEATURES
+                    ),
+                    "path_sentiment_source_context": (
+                        CONTINUATION_SOURCE_CONTEXT_FEATURES
+                    ),
+                    "path_sentiment_prior_and_context": (
+                        CONTINUATION_FIVE_YEAR_FULL_FEATURES
+                    ),
+                },
+            )
+            continuation_model = promotion_blend.model
+            continuation_calibrator = promotion_blend.calibrator
+            continuation_features = promotion_blend.features
+            continuation_selection = {
+                **incumbent_continuation_selection,
+                "production_head": "five_year_validated_promotion_blend",
+                "incumbent_selection": incumbent_continuation_selection,
+                "promotion_blend": promotion_blend.selection,
+                "strict_oos_validation": promotion_validation,
+            }
+        else:
+            continuation_selection = {
+                **incumbent_continuation_selection,
+                "production_head": "incumbent_auto_fallback",
+                "strict_oos_validation": promotion_validation,
+            }
         # V8 removes the former in-sample stage-logit patch. Stage effects must
         # now earn their way through the held-out feature model and calibrator.
         continuation_stage_logit_adjustments: dict[int, float] = {2: 0.0, 3: 0.0}
@@ -5074,6 +5263,13 @@ class AuctionV3Engine:
                     dates,
                 )
             )
+            features.update(
+                self._promotion_source_context_features(
+                    signal_date,
+                    code,
+                    dates,
+                )
+            )
             rows.append(
                 {
                     "signal_date": signal_date,
@@ -5090,7 +5286,8 @@ class AuctionV3Engine:
                     **features,
                 }
             )
-        return self._attach_cohort_features(pd.DataFrame(rows))
+        base = self._attach_cohort_features(pd.DataFrame(rows))
+        return attach_promotion_source_features(base, self.config.root)
 
     def _walkforward_predictions(self, history: pd.DataFrame) -> pd.DataFrame:
         if history.empty:
