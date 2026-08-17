@@ -4,10 +4,10 @@
   "target_date": "20260817",
   "rows": 50,
   "sample_maturity": {
-    "PFILL_READY": 50
+    "FULLY_READY": 50
   },
   "label_ready_fill": 50,
-  "label_ready_ret": 0,
+  "label_ready_ret": 50,
   "y_fill_rate": 0.88,
   "public_market_buyable_rate": 0.88,
   "actual_order_fill_rate": null,
