@@ -31,9 +31,9 @@
   "post_release_mean_net_return": 0.0,
   "post_release_net_return_lcb": 0.0,
   "release_d_date": "20260807",
-  "fill_auc": 0.5098522167487685,
-  "fill_brier": 0.24289598339123156,
-  "fill_baseline_brier": 0.2843831598670966,
+  "fill_auc": 0.5183106121357925,
+  "fill_brier": 0.24197989160761396,
+  "fill_baseline_brier": 0.2840161286491495,
   "profit_rank_ic": -0.024369747899159664,
   "positive_fold_rate": 0.0,
   "selected_fill_features": [
@@ -62,7 +62,7 @@
     "premium_adaptive_score",
     "t1_high_profit_prob_model"
   ],
-  "data_fingerprint": "7b191ec8f46af6e499f7cb65fb388ca241caa967707cf6f2791fcf844bd4af02",
+  "data_fingerprint": "91e2d487f10119591f0467386df94338db5a4a3b9f083a6534122caa1d1cfad7",
   "feature_fingerprint": "e6581208b5d74aad64fe34e965fda17eb55abc0846d70f27cf66c4232c71e61a",
   "validation_mode": "purged_expanding_walk_forward_2d_embargo",
   "truth_source": "premium_execution_truth_ledger.csv",
