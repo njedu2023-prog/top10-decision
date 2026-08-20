@@ -1,7 +1,7 @@
 {
   "source": "tushare",
   "trade_date": "20260820",
-  "signal_date": "",
+  "signal_date": "20260818",
   "calendar_path": "data/market/trade_cal_sse.csv",
   "calendar_rows": 365,
   "candidate_codes": 80,
