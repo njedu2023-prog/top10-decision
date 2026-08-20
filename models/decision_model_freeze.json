@@ -10,7 +10,7 @@
   "history_snapshot": {
     "path": "models/decision_v12_frozen_history_20260805.csv.gz",
     "sha256": "77e48be6732a08698a6abf4a0da74cb02b3129c57d14be66fb94679816a5337e",
-    "promotion_feature_sha256": "f466904979afa394b9eaae460bfda78d1aaa8829137b0b0b58a9d0f5978dd2ed",
+    "promotion_feature_sha256": "71bb195df2d2a2ebd482a0522297258181a972111efdf0fde81f6fb76c5cf3be",
     "bootstrap_mode": false
   },
   "production": {
@@ -146,7 +146,7 @@
     "src/top10decision/auction_v3/promotion_model.py": "af9941589e7eec766a3a855d9d8e384316852ea7f74c23122968961cc4cb2170",
     "src/top10decision/decision/action_plan.py": "bb3ea8274b545c1df098d9da157abcaec2df1e7b30bf277d313d16cbcc6677f8",
     "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",
-    "src/top10decision/decision/model_freeze.py": "30e8d3803302eba09bafeadf227bed25710f6f18cadedde10f780925cb7e7538",
+    "src/top10decision/decision/model_freeze.py": "6f5c239dfb0d26eb260f9ccad64d6532be42e5004dbcbc41fdda5b648ae678e5",
     "src/top10decision/decision/trade_selector.py": "90f3317dd602f822714c89b2592b4a8b878bd1f013552ec625b019617db4ef2d",
     "src/top10decision/engines/eret_engine.py": "346bd65fa0c416c2e8876f92552b66d29f0f4cfe411fb408e95bfb355536c071",
     "src/top10decision/engines/pfill_engine.py": "ec38a49b51bed7ae3001393ee0b8c6b6fa04bf0a3db0e633cf2bf335c7d91e84"

@@ -11,6 +11,7 @@ import pandas as pd
 
 from top10decision.decision.model_freeze import (
     DecisionModelFreezeError,
+    PROMOTION_FEATURE_FINGERPRINT_DECIMALS,
     apply_frozen_history_cutoff,
     capture_frozen_history_snapshot,
     load_model_freeze,
@@ -143,15 +144,21 @@ class DecisionModelFreezeTest(unittest.TestCase):
             "proposed_gap",
             *PROMOTION_SOURCE_FEATURES,
         ]
-        expected = hashlib.sha256(
+        canonical = (
             frame[columns]
-            .sort_values(
-                ["signal_date", "ts_code", "proposed_gap"],
-                kind="stable",
-            )
+            .sort_values(["signal_date", "ts_code"], kind="stable")
             .reset_index(drop=True)
-            .to_csv(index=False, lineterminator="\n")
-            .encode("utf-8")
+        )
+        for name in ["proposed_gap", *PROMOTION_SOURCE_FEATURES]:
+            canonical[name] = pd.to_numeric(
+                canonical[name], errors="coerce"
+            ).map(
+                lambda value: "<NA>"
+                if pd.isna(value)
+                else f"{float(value):.{PROMOTION_FEATURE_FINGERPRINT_DECIMALS}f}"
+            )
+        expected = hashlib.sha256(
+            canonical.to_csv(index=False, lineterminator="\n").encode("utf-8")
         ).hexdigest()
         self.manifest["history_snapshot"] = {
             "promotion_feature_sha256": expected,

@@ -13,6 +13,7 @@ FREEZE_SCHEMA_VERSION = "decision_model_freeze_v1"
 DEFAULT_FREEZE_PATH = Path("models/decision_model_freeze.json")
 DATE_PATTERN = re.compile(r"^20\d{6}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+PROMOTION_FEATURE_FINGERPRINT_DECIMALS = 8
 
 
 class DecisionModelFreezeError(RuntimeError):
@@ -254,15 +255,32 @@ def materialize_frozen_training_features(
         raise DecisionModelFreezeError(
             "frozen promotion fingerprint requires signal_date, ts_code and proposed_gap"
         )
-    fingerprint_columns = [*identity_columns, *PROMOTION_SOURCE_FEATURES]
-    fingerprint = enriched[fingerprint_columns].sort_values(
-        identity_columns,
-        kind="stable",
+    duplicate_identity = enriched.duplicated(
+        ["signal_date", "ts_code"], keep=False
     )
+    if duplicate_identity.any():
+        raise DecisionModelFreezeError(
+            "frozen promotion fingerprint has duplicate signal_date/ts_code rows"
+        )
+    fingerprint_columns = [*identity_columns, *PROMOTION_SOURCE_FEATURES]
+    fingerprint = (
+        enriched[fingerprint_columns]
+        .sort_values(["signal_date", "ts_code"], kind="stable")
+        .reset_index(drop=True)
+    )
+    canonical = fingerprint.copy()
+    canonical["signal_date"] = canonical["signal_date"].astype(str)
+    canonical["ts_code"] = canonical["ts_code"].astype(str)
+    numeric_columns = ["proposed_gap", *PROMOTION_SOURCE_FEATURES]
+    for name in numeric_columns:
+        values = pd.to_numeric(canonical[name], errors="coerce")
+        canonical[name] = values.map(
+            lambda value: "<NA>"
+            if pd.isna(value)
+            else f"{float(value):.{PROMOTION_FEATURE_FINGERPRINT_DECIMALS}f}"
+        )
     actual_sha = hashlib.sha256(
-        fingerprint.reset_index(drop=True)
-        .to_csv(index=False, lineterminator="\n")
-        .encode("utf-8")
+        canonical.to_csv(index=False, lineterminator="\n").encode("utf-8")
     ).hexdigest()
     snapshot = manifest.get("history_snapshot", {}) or {}
     expected_sha = str(snapshot.get("promotion_feature_sha256") or "")
@@ -277,6 +295,7 @@ def materialize_frozen_training_features(
         "validated": True,
         "source": "pinned_promotion_sources",
         "sha256": actual_sha,
+        "canonical_numeric_decimals": PROMOTION_FEATURE_FINGERPRINT_DECIMALS,
         "feature_columns": int(len(PROMOTION_SOURCE_FEATURES)),
         "rows": int(len(enriched)),
         "non_null_cells": int(non_null.sum()),
@@ -560,6 +579,7 @@ def validate_runtime_artifacts(
 
 __all__ = [
     "DecisionModelFreezeError",
+    "PROMOTION_FEATURE_FINGERPRINT_DECIMALS",
     "apply_frozen_history_cutoff",
     "capture_frozen_history_snapshot",
     "history_snapshot_bootstrap_mode",
