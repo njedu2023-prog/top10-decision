@@ -21,6 +21,9 @@ from scripts.backfill_decision_v11_history import (  # noqa: E402
     _sha256_frame,
     _write_csv,
 )
+from scripts.backfill_decision_observation import (  # noqa: E402
+    backfill_observation,
+)
 from scripts.validate_decision_history_backfill import (  # noqa: E402
     validate_history_backfill,
 )
@@ -28,6 +31,45 @@ from scripts.validate_decision_publication import validate_publication  # noqa: 
 
 
 class DecisionAutonomyTests(unittest.TestCase):
+    def test_historical_observation_backfill_restores_latest_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            archive = root / "data" / "pred" / "archive"
+            archive.mkdir(parents=True)
+            for signal_date in ("20260818", "20260820"):
+                (archive / f"pred_source_{signal_date}.csv").write_text(
+                    "trade_date,ts_code\n",
+                    encoding="utf-8",
+                )
+
+            with mock.patch(
+                "scripts.backfill_decision_observation.subprocess.run"
+            ) as run:
+                result = backfill_observation(root, "20260818")
+
+            selector_dates = [
+                call.args[0][call.args[0].index("--signal-date") + 1]
+                for call in run.call_args_list
+                if "scripts/run_auction_v3.py" in call.args[0]
+            ]
+            publish_calls = [
+                call
+                for call in run.call_args_list
+                if "scripts/publish_decision_action.py" in call.args[0]
+            ]
+            self.assertEqual(selector_dates, ["20260818", "20260820"])
+            self.assertEqual(len(publish_calls), 2)
+            self.assertTrue(result["latest_restored"])
+            self.assertEqual(result["latest_signal_date"], "20260820")
+            for call in run.call_args_list:
+                self.assertEqual(call.kwargs["cwd"], root)
+                self.assertTrue(call.kwargs["check"])
+
+    def test_observation_backfill_requires_frozen_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(RuntimeError, "snapshot is missing"):
+                backfill_observation(Path(temp), "20260818")
+
     def test_history_fingerprint_survives_csv_float_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "history.csv"

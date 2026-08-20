@@ -124,6 +124,14 @@
       "production_model_artifacts_changed": false,
       "production_model_behavior_changed": false,
       "reason": "The prior and repaired Linux backtest payloads are exactly equal after excluding timestamps and identity hashes. Models, policies, ranks, gates, statistics, formal NO_TRADE state, and Premium remain unchanged."
+    },
+    {
+      "at_utc": "2026-08-20T12:13:33Z",
+      "scope": "Decision dated observation backfill publication only",
+      "change": "Generate a requested historical D-day observation as retrospective evidence, then restore the newest D-day aliases before the workflow publishes or commits.",
+      "production_model_artifacts_changed": false,
+      "production_model_behavior_changed": false,
+      "reason": "This fills missing dated Decision evidence without relabeling it as a premarket prediction, changing forward statistics, regressing the public latest date, or touching Premium."
     }
   ],
   "release_contract": {
@@ -132,7 +140,7 @@
   },
   "pinned_files": {
     ".github/workflows/backfill_decision_v11_history.yml": "014cb6f6ddd40f7b00e7262c3614a1e2f4fb4660a2210c98e478c65290df4e7f",
-    ".github/workflows/run_auction_v3.yml": "cd51e9c2b2f414b6e2fd3bb4665f546703f92268fc69e58077d61335ec128098",
+    ".github/workflows/run_auction_v3.yml": "fb3afdae791fdd87b871efb0744bbf4f6fd5cbf93f5cfd9ff44b9f9b25193efc",
     ".github/workflows/run_decision_daily.yml": "792841c96d0a40b1cdaa652845c07b50c14e2e28ae3a66f20b4652713e1b1025",
     "requirements-decision.lock.txt": "e9472999779ec6b79be70832a60ee83318665e1c428912dad14090110ca3d108",
     "models/eret_lgbm.joblib": "81c26cb342059026719dba000fe8176f61a1ef7470f7fc156ff4a695d2c1ac1d",
@@ -149,6 +157,7 @@
     "models/pfill_meta.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
     "models/pfill_meta_20260806.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
     "scripts/backfill_decision_v11_history.py": "52f4b86b96d0a8836a05c4f5922260693e6266eb148f6dae87674221b2ee5164",
+    "scripts/backfill_decision_observation.py": "165a4b41c0ea036ec27d02a12c1c3a5026d3c7b204de4dc2c419103c83b190ab",
     "scripts/publish_decision_action.py": "8e9d531da9de68dad4fb726e5020d9648173c591c604fbd8c5c102822fee497f",
     "scripts/run_auction_v3.py": "e2eaa3594f6f882418f0da8ea1be0a14c15df6d0dec03a382609d1898017019e",
     "scripts/validate_decision_history_backfill.py": "d57709a0a7b961fbc5abbd3022b3f238d5350f992c9f90009cb1f110c4c63040",

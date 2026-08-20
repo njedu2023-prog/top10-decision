@@ -15,6 +15,7 @@ on:
       - "src/top10decision/decision/**"
       - "src/top10decision/data/**"
       - "scripts/run_auction_v3.py"
+      - "scripts/backfill_decision_observation.py"
       - "scripts/validate_decision_model_freeze.py"
       - "scripts/validate_decision_publication.py"
       - "scripts/validate_io_contract.py"
@@ -147,17 +148,19 @@ jobs:
           ORDER_AMOUNT: ${{ inputs.order_amount || '100000' }}
         run: |
           set -e
-          args=(--order-amount "${ORDER_AMOUNT}")
+          args=(--order-amount "${ORDER_AMOUNT}" --root "${GITHUB_WORKSPACE}")
           if [ -n "${SIGNAL_DATE}" ]; then
             if ! echo "${SIGNAL_DATE}" | grep -Eq '^[0-9]{8}$'; then
               echo "invalid signal_date=${SIGNAL_DATE}"
               exit 1
             fi
-            args+=(--signal-date "${SIGNAL_DATE}")
+            runner=(python scripts/backfill_decision_observation.py --signal-date "${SIGNAL_DATE}")
+          else
+            runner=(python scripts/run_auction_v3.py)
           fi
           succeeded=0
           for attempt in 1 2 3; do
-            if python scripts/run_auction_v3.py "${args[@]}"; then
+            if "${runner[@]}" "${args[@]}"; then
               succeeded=1
               break
             fi
