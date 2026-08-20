@@ -88,6 +88,7 @@ LIMIT_LIST_FIELDS = (
     "limit",
 )
 MARKET_DATA_READY_TIME = clock_time(18, 0)
+HISTORY_FINGERPRINT_DECIMALS = 10
 
 
 def _date(value: Any) -> str:
@@ -107,7 +108,22 @@ def _write_csv(frame: pd.DataFrame, path: Path) -> None:
 
 
 def _sha256_frame(frame: pd.DataFrame) -> str:
-    payload = frame.to_csv(index=False, lineterminator="\n").encode("utf-8")
+    canonical = pd.DataFrame(index=frame.index)
+    for name in frame.columns:
+        series = frame[name]
+        present = series.notna()
+        numeric = pd.to_numeric(series, errors="coerce")
+        if ((~present) | numeric.notna()).all():
+            canonical[name] = numeric.map(
+                lambda value: "<NA>"
+                if pd.isna(value)
+                else f"{float(value):.{HISTORY_FINGERPRINT_DECIMALS}f}"
+            )
+        else:
+            canonical[name] = series.map(
+                lambda value: "<NA>" if pd.isna(value) else str(value)
+            )
+    payload = canonical.to_csv(index=False, lineterminator="\n").encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 

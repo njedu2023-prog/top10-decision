@@ -131,6 +131,7 @@
     "models/pfill_lr_20260806.joblib": "377ebd6db531f8a86a0eb1f32bc9a4d9db64d78636102c7b6413d984ed196f69",
     "models/pfill_meta.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
     "models/pfill_meta_20260806.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
+    "scripts/backfill_decision_v11_history.py": "52f4b86b96d0a8836a05c4f5922260693e6266eb148f6dae87674221b2ee5164",
     "scripts/publish_decision_action.py": "8e9d531da9de68dad4fb726e5020d9648173c591c604fbd8c5c102822fee497f",
     "scripts/run_auction_v3.py": "e2eaa3594f6f882418f0da8ea1be0a14c15df6d0dec03a382609d1898017019e",
     "scripts/validate_decision_history_backfill.py": "d57709a0a7b961fbc5abbd3022b3f238d5350f992c9f90009cb1f110c4c63040",

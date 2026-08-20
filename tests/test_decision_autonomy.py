@@ -16,7 +16,11 @@ for path in (ROOT, SRC):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from scripts.backfill_decision_v11_history import _sha256_frame  # noqa: E402
+from scripts.backfill_decision_v11_history import (  # noqa: E402
+    _read_csv,
+    _sha256_frame,
+    _write_csv,
+)
 from scripts.validate_decision_history_backfill import (  # noqa: E402
     validate_history_backfill,
 )
@@ -24,6 +28,21 @@ from scripts.validate_decision_publication import validate_publication  # noqa: 
 
 
 class DecisionAutonomyTests(unittest.TestCase):
+    def test_history_fingerprint_survives_csv_float_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "history.csv"
+            before = pd.DataFrame(
+                {
+                    "signal_date": ["20260819"],
+                    "ts_code": ["000001.SZ"],
+                    "net_return": [0.1 + 0.2],
+                    "optional": [None],
+                }
+            )
+            _write_csv(before, path)
+            after = _read_csv(path)
+            self.assertEqual(_sha256_frame(before), _sha256_frame(after))
+
     def test_publication_requires_one_matching_strict_calendar_chain(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
