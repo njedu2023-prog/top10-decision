@@ -1,8 +1,8 @@
 {
-  "created_at_utc": "2026-08-20T11:22:07+00:00",
+  "created_at_utc": "2026-08-20T11:58:51+00:00",
   "source": "url",
-  "source_ref": "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_20260820.csv",
-  "sha256": "180344ac6162bbb3a59bd19d512324087d586f8290c5688a1bb94b09239e6f58",
+  "source_ref": "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv",
+  "sha256": "dc2ccaed9e6d77b15ad5b2c9af40ea68c6e76c3a5ba067d64eff3c437144b067",
   "resolved_trade_date": "20260820",
   "csv_profile": {
     "rows_sampled": 59,
