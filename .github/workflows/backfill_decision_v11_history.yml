@@ -4,6 +4,16 @@ on:
   schedule:
     # Sunday 10:30 Beijing. Keep 500 OOS sessions plus conservative warmup complete.
     - cron: "30 2 * * 0"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/backfill_decision_v11_history.yml"
+      - "requirements-decision.lock.txt"
+      - "scripts/backfill_decision_v11_history.py"
+      - "scripts/validate_decision_history_backfill.py"
+      - "tests/test_decision_autonomy.py"
+      - "tests/test_decision_contract.py"
+      - "tests/test_decision_model_freeze.py"
   workflow_dispatch:
     inputs:
       start_date:
