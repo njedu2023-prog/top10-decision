@@ -21,7 +21,7 @@
     "promotion_probability_head": "five_year_validated_promotion_blend",
     "promotion_probability_validation": "models/decision_promotion_v13_validation.json",
     "trade_selector_version": "trade_selector_v2_nested_oos_top10_promotion_rank",
-    "trade_selector_artifact_sha256": "385d1c67e18ca0b0eaf0873b009e3583b0214700518cdf2320afd20bb0ff54e1",
+    "trade_selector_artifact_sha256": "09e291bea250d767c2b96d6ea82144aa896033e61d57d3212a5ef3a8b670f304",
     "trade_selector_promoted": false,
     "formal_status": "NO_TRADE_MODEL_NOT_PROMOTED",
     "formal_buy_count": 0
@@ -107,6 +107,14 @@
       "production_model_artifacts_changed": false,
       "production_model_behavior_changed": false,
       "reason": "Operational reliability repair only. V13 ranking, probability, risk, return, second-filter rules, formal gates, cumulative statistics, and all Premium assets remain unchanged."
+    },
+    {
+      "at_utc": "2026-08-20T11:02:55Z",
+      "scope": "Decision production fingerprint canonicalization only",
+      "change": "Canonicalize runtime identity serialization and re-pin the trade-selector fingerprint to three identical GitHub Actions Linux production replays.",
+      "production_model_artifacts_changed": false,
+      "production_model_behavior_changed": false,
+      "reason": "The prior and repaired Linux backtest payloads are exactly equal after excluding timestamps and identity hashes. Models, policies, ranks, gates, statistics, formal NO_TRADE state, and Premium remain unchanged."
     }
   ],
   "release_contract": {
