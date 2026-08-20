@@ -128,7 +128,7 @@
     {
       "at_utc": "2026-08-20T12:13:33Z",
       "scope": "Decision dated observation backfill publication only",
-      "change": "Generate a requested historical D-day observation as retrospective evidence, then restore the newest D-day aliases before the workflow publishes or commits.",
+      "change": "Generate a requested historical D-day observation as retrospective evidence, publish its matching strict-calendar T-day action plan, reject stale pending plans, then restore the newest D-day aliases before the workflow commits.",
       "production_model_artifacts_changed": false,
       "production_model_behavior_changed": false,
       "reason": "This fills missing dated Decision evidence without relabeling it as a premarket prediction, changing forward statistics, regressing the public latest date, or touching Premium."
@@ -157,7 +157,7 @@
     "models/pfill_meta.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
     "models/pfill_meta_20260806.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
     "scripts/backfill_decision_v11_history.py": "52f4b86b96d0a8836a05c4f5922260693e6266eb148f6dae87674221b2ee5164",
-    "scripts/backfill_decision_observation.py": "165a4b41c0ea036ec27d02a12c1c3a5026d3c7b204de4dc2c419103c83b190ab",
+    "scripts/backfill_decision_observation.py": "a9cac06b209576f150113bf9833ba3611ebefeea41c09c6d39b6fc41fde5b995",
     "scripts/publish_decision_action.py": "8e9d531da9de68dad4fb726e5020d9648173c591c604fbd8c5c102822fee497f",
     "scripts/run_auction_v3.py": "e2eaa3594f6f882418f0da8ea1be0a14c15df6d0dec03a382609d1898017019e",
     "scripts/validate_decision_history_backfill.py": "d57709a0a7b961fbc5abbd3022b3f238d5350f992c9f90009cb1f110c4c63040",

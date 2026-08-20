@@ -22,6 +22,7 @@ from scripts.backfill_decision_v11_history import (  # noqa: E402
     _write_csv,
 )
 from scripts.backfill_decision_observation import (  # noqa: E402
+    _validate_published_action,
     backfill_observation,
 )
 from scripts.validate_decision_history_backfill import (  # noqa: E402
@@ -42,9 +43,20 @@ class DecisionAutonomyTests(unittest.TestCase):
                     encoding="utf-8",
                 )
 
+            next_dates = {
+                "20260818": "20260819",
+                "20260819": "20260820",
+                "20260820": "20260821",
+                "20260821": "20260824",
+            }
             with mock.patch(
                 "scripts.backfill_decision_observation.subprocess.run"
-            ) as run:
+            ) as run, mock.patch(
+                "scripts.backfill_decision_observation.next_a_share_trading_day",
+                side_effect=next_dates.__getitem__,
+            ), mock.patch(
+                "scripts.backfill_decision_observation._validate_published_action"
+            ) as validate:
                 result = backfill_observation(root, "20260818")
 
             selector_dates = [
@@ -59,11 +71,56 @@ class DecisionAutonomyTests(unittest.TestCase):
             ]
             self.assertEqual(selector_dates, ["20260818", "20260820"])
             self.assertEqual(len(publish_calls), 2)
+            publish_dates = [
+                call.args[0][call.args[0].index("--report-date") + 1]
+                for call in publish_calls
+            ]
+            self.assertEqual(publish_dates, ["20260819", "20260821"])
+            self.assertEqual(validate.call_count, 2)
             self.assertTrue(result["latest_restored"])
             self.assertEqual(result["latest_signal_date"], "20260820")
             for call in run.call_args_list:
                 self.assertEqual(call.kwargs["cwd"], root)
                 self.assertTrue(call.kwargs["check"])
+
+    def test_dated_action_validation_rejects_stale_pending_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output = root / "outputs" / "decision"
+            output.mkdir(parents=True)
+            plan = {
+                "signal_date": "20260818",
+                "exec_date": "20260819",
+                "exit_date": "20260820",
+                "report_date": "20260819",
+                "status_code": "PENDING_AUCTION_MODEL",
+                "model": {"prediction_matches_report": False},
+            }
+            (output / "action_plan_20260819.json").write_text(
+                json.dumps(plan), encoding="utf-8"
+            )
+            with mock.patch(
+                "scripts.backfill_decision_observation.next_a_share_trading_day",
+                return_value="20260820",
+            ):
+                with self.assertRaisesRegex(RuntimeError, "does not match"):
+                    _validate_published_action(root, "20260818", "20260819")
+
+            plan["status_code"] = "NO_TRADE_MODEL_NOT_PROMOTED"
+            plan["model"]["prediction_matches_report"] = True
+            (output / "action_plan_20260819.json").write_text(
+                json.dumps(plan), encoding="utf-8"
+            )
+            with mock.patch(
+                "scripts.backfill_decision_observation.next_a_share_trading_day",
+                return_value="20260820",
+            ):
+                path = _validate_published_action(
+                    root,
+                    "20260818",
+                    "20260819",
+                )
+            self.assertEqual(path.name, "action_plan_20260819.json")
 
     def test_observation_backfill_requires_frozen_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
