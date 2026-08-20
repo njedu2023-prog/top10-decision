@@ -457,9 +457,44 @@ def _time_to_minutes(value: Any) -> float:
     return hour * 60.0 + minute + second / 60.0
 
 
+_ARTIFACT_HASH_DECIMALS = 8
+
+
+def _canonical_hash_value(value: Any) -> str:
+    if pd.isna(value):
+        return "<NA>"
+    numeric: Optional[float] = None
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        numeric = float(value)
+    elif isinstance(value, str):
+        try:
+            numeric = float(value.strip())
+        except (TypeError, ValueError):
+            return value
+    else:
+        return str(value)
+    if math.isnan(numeric):
+        return "<NA>"
+    if math.isinf(numeric):
+        return "<INF>" if numeric > 0 else "<-INF>"
+    rounded = round(numeric, _ARTIFACT_HASH_DECIMALS)
+    if rounded == 0:
+        rounded = 0.0
+    return f"{rounded:.{_ARTIFACT_HASH_DECIMALS}f}"
+
+
+def _canonical_hash_payload(frame: pd.DataFrame) -> bytes:
+    canonical = frame.copy()
+    for column in canonical.columns:
+        canonical[column] = canonical[column].map(_canonical_hash_value)
+    return canonical.to_csv(
+        index=False,
+        lineterminator="\n",
+    ).encode("utf-8")
+
+
 def _hash_frame(frame: pd.DataFrame) -> str:
-    payload = frame.to_csv(index=False, lineterminator="\n").encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    return hashlib.sha256(_canonical_hash_payload(frame)).hexdigest()
 
 
 def _model_artifact_sha256(

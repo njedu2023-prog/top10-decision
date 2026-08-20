@@ -1004,16 +1004,25 @@ class DecisionActionPlanTests(unittest.TestCase):
 
 
 class DecisionWorkflowSerializationTests(unittest.TestCase):
-    def test_all_decision_main_writers_share_one_non_cancelling_lock(self) -> None:
+    def test_decision_writers_use_scoped_non_cancelling_locks(self) -> None:
         workflow_root = ROOT / ".github" / "workflows"
         for name in (
             "run_decision_daily.yml",
             "run_auction_v3.yml",
-            "backfill_decision_v11_history.yml",
         ):
             text = (workflow_root / name).read_text(encoding="utf-8")
             self.assertIn("group: decision-auction-main-writer", text)
             self.assertIn("cancel-in-progress: false", text)
+
+        backfill = (
+            workflow_root / "backfill_decision_v11_history.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("group: decision-history-main-writer", backfill)
+        self.assertIn("cancel-in-progress: false", backfill)
+        self.assertIn("git add data/auction_v3/history", backfill)
+        self.assertNotIn("git add data/market/trade_cal_sse.csv", backfill)
+        self.assertNotIn("git add outputs/auction_v3", backfill)
+        self.assertIn("git rebase origin/main", backfill)
 
     def test_learning_migration_has_time_and_avoids_shared_pred_meta(self) -> None:
         text = (

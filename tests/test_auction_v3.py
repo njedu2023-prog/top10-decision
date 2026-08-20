@@ -16,6 +16,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from top10decision.auction_v3 import AuctionV3Config, AuctionV3Engine  # noqa: E402
+from top10decision.auction_v3.engine import _hash_frame  # noqa: E402
 
 
 class AuctionV3Test(unittest.TestCase):
@@ -49,6 +50,18 @@ class AuctionV3Test(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def test_artifact_frame_hash_ignores_only_sub_precision_noise(self) -> None:
+        frame = pd.DataFrame(
+            [{"signal_date": "20260819", "ts_code": "600617.SH", "value": 0.3}]
+        )
+        numerical_equivalent = frame.copy()
+        numerical_equivalent.loc[0, "value"] = 0.1 + 0.2
+        material_change = frame.copy()
+        material_change.loc[0, "value"] = 0.3001
+
+        self.assertEqual(_hash_frame(frame), _hash_frame(numerical_equivalent))
+        self.assertNotEqual(_hash_frame(frame), _hash_frame(material_change))
 
     def _write_market(self) -> None:
         previous = {code: 10.0 + idx for idx, code in enumerate(self.codes)}

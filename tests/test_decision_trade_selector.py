@@ -311,6 +311,29 @@ class DecisionTradeSelectorTest(unittest.TestCase):
             _bundle_hash(changed, {"ready": False}),
         )
 
+    def test_artifact_hash_is_stable_across_float_roundoff(self) -> None:
+        frame = pd.DataFrame(
+            [
+                {
+                    "signal_date": "20260105",
+                    "ts_code": "600001.SH",
+                    "stage": "2→3",
+                    "observation_rank": 1,
+                    "market_fill": 1,
+                    "net_return": 0.3,
+                }
+            ]
+        )
+        numerical_equivalent = frame.copy()
+        numerical_equivalent.loc[0, "net_return"] = 0.1 + 0.2
+        base_policy = {"ready": False, "threshold": 0.3}
+        equivalent_policy = {"ready": False, "threshold": 0.1 + 0.2}
+
+        self.assertEqual(
+            _bundle_hash(frame, base_policy),
+            _bundle_hash(numerical_equivalent, equivalent_policy),
+        )
+
     def test_promotion_audit_reports_skill_and_time_segments(self) -> None:
         frame = pd.DataFrame(
             [

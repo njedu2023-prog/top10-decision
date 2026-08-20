@@ -1140,6 +1140,50 @@ def _tune_policy(
     return selected
 
 
+_ARTIFACT_HASH_DECIMALS = 8
+
+
+def _canonical_hash_value(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_hash_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonical_hash_value(item) for item in value]
+    if value is None:
+        return "<NA>"
+    if isinstance(value, float):
+        if math.isnan(value):
+            return "<NA>"
+        if math.isinf(value):
+            return "<INF>" if value > 0 else "<-INF>"
+        rounded = round(value, _ARTIFACT_HASH_DECIMALS)
+        if rounded == 0:
+            rounded = 0.0
+        return f"{rounded:.{_ARTIFACT_HASH_DECIMALS}f}"
+    return value
+
+
+def _canonical_frame_payload(frame: pd.DataFrame) -> bytes:
+    canonical = frame.copy()
+    for column in canonical.columns:
+        numeric = pd.to_numeric(canonical[column], errors="coerce")
+        non_missing = canonical[column].notna()
+        if bool(non_missing.any()) and bool(numeric[non_missing].notna().all()):
+            canonical[column] = numeric.map(_canonical_hash_value)
+        else:
+            canonical[column] = canonical[column].map(
+                lambda value: "<NA>" if pd.isna(value) else str(value)
+            )
+    return canonical.to_csv(
+        index=False,
+        lineterminator="\n",
+    ).encode("utf-8")
+
+
 def _bundle_hash(
     frame: pd.DataFrame,
     policy: dict[str, Any],
@@ -1161,14 +1205,20 @@ def _bundle_hash(
     for column in stable.columns:
         if column not in {"signal_date", "ts_code", "stage"}:
             stable[column] = pd.to_numeric(stable[column], errors="coerce")
-    digest = hashlib.sha256(
-        pd.util.hash_pandas_object(stable, index=False).values.tobytes()
-    )
+    sort_columns = [
+        name
+        for name in ("signal_date", "ts_code", "stage", "observation_rank")
+        if name in stable.columns
+    ]
+    if sort_columns:
+        stable = stable.sort_values(sort_columns, kind="stable")
+    digest = hashlib.sha256(_canonical_frame_payload(stable))
     digest.update(
         json.dumps(
-            policy,
+            _canonical_hash_value(policy),
             ensure_ascii=True,
             sort_keys=True,
+            separators=(",", ":"),
             default=str,
         ).encode("utf-8")
     )
