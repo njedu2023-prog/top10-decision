@@ -20,6 +20,47 @@ class DecisionModelFreezeError(RuntimeError):
     """Raised when a frozen Decision production contract drifts."""
 
 
+def _validated_prediction_artifact_compatibility(
+    production: dict[str, Any],
+) -> set[tuple[str, str, str, str]]:
+    entries = production.get("prediction_compatible_artifacts", [])
+    if not isinstance(entries, list) or len(entries) > 8:
+        raise DecisionModelFreezeError(
+            "prediction_compatible_artifacts must be a list of at most 8 entries"
+        )
+    approved: set[tuple[str, str, str, str]] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise DecisionModelFreezeError(
+                f"prediction_compatible_artifacts[{index}] must be an object"
+            )
+        model_version = str(entry.get("model_version") or "").strip()
+        model_sha = str(entry.get("model_artifact_sha256") or "").strip()
+        selector_version = str(
+            entry.get("trade_selector_version") or ""
+        ).strip()
+        selector_sha = str(
+            entry.get("trade_selector_artifact_sha256") or ""
+        ).strip()
+        if not model_version or not selector_version:
+            raise DecisionModelFreezeError(
+                f"prediction_compatible_artifacts[{index}] requires both versions"
+            )
+        if not SHA256_PATTERN.fullmatch(model_sha) or not SHA256_PATTERN.fullmatch(
+            selector_sha
+        ):
+            raise DecisionModelFreezeError(
+                f"prediction_compatible_artifacts[{index}] requires SHA256 fingerprints"
+            )
+        pair = (model_version, model_sha, selector_version, selector_sha)
+        if pair in approved:
+            raise DecisionModelFreezeError(
+                f"prediction_compatible_artifacts[{index}] duplicates an earlier entry"
+            )
+        approved.add(pair)
+    return approved
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -56,6 +97,8 @@ def load_model_freeze(
     production = payload.get("production")
     if payload["active"] and not isinstance(production, dict):
         raise DecisionModelFreezeError("active model freeze requires production metadata")
+    if payload["active"]:
+        _validated_prediction_artifact_compatibility(production)
     pinned = payload.get("pinned_files", {})
     if payload["active"] and not isinstance(pinned, dict):
         raise DecisionModelFreezeError("active model freeze requires pinned_files")
@@ -103,6 +146,19 @@ def load_model_freeze(
 
 def model_freeze_active(manifest: dict[str, Any]) -> bool:
     return manifest.get("active") is True
+
+
+def prediction_artifact_compatibility(
+    manifest: dict[str, Any],
+) -> set[tuple[str, str, str, str]]:
+    if not model_freeze_active(manifest):
+        return set()
+    production = manifest.get("production")
+    if not isinstance(production, dict):
+        raise DecisionModelFreezeError(
+            "active model freeze requires production metadata"
+        )
+    return _validated_prediction_artifact_compatibility(production)
 
 
 def apply_frozen_history_cutoff(
@@ -587,6 +643,7 @@ __all__ = [
     "load_frozen_history_snapshot",
     "materialize_frozen_training_features",
     "model_freeze_active",
+    "prediction_artifact_compatibility",
     "validate_pinned_files",
     "validate_runtime_artifacts",
 ]

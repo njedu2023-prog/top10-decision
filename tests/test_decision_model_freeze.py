@@ -313,6 +313,30 @@ class DecisionModelFreezeTest(unittest.TestCase):
         with self.assertRaises(DecisionModelFreezeError):
             load_model_freeze(self.root, required=True)
 
+    def test_prediction_compatibility_requires_exact_sha256_pairs(self) -> None:
+        manifest = json.loads(json.dumps(self.manifest))
+        manifest["history_snapshot"] = {
+            "path": "models/frozen_history.csv.gz",
+            "sha256": "",
+            "promotion_feature_sha256": "",
+            "bootstrap_mode": True,
+        }
+        manifest["production"]["prediction_compatible_artifacts"] = [
+            {
+                "model_version": "auction_v12",
+                "model_artifact_sha256": "not-a-sha",
+                "trade_selector_version": "selector-v2",
+                "trade_selector_artifact_sha256": "c" * 64,
+            }
+        ]
+        _write_json(
+            self.root / "models" / "decision_model_freeze.json",
+            manifest,
+        )
+
+        with self.assertRaises(DecisionModelFreezeError):
+            load_model_freeze(self.root, required=True)
+
 
 if __name__ == "__main__":
     unittest.main()

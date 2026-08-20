@@ -682,6 +682,9 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "trade_shadow_selected": int(promoted),
                     "trade_rank": 1,
                     "trade_selector_promoted": int(promoted),
+                    "trade_selector_version": (
+                        "trade_selector_v2_nested_oos_top10_promotion_rank"
+                    ),
                     "trade_selector_artifact_sha256": trade_artifact,
                     "action": "BUY",
                     "recommended_max_price": 10.5,
@@ -714,6 +717,9 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "trade_shadow_selected": int(promoted),
                     "trade_rank": 2,
                     "trade_selector_promoted": int(promoted),
+                    "trade_selector_version": (
+                        "trade_selector_v2_nested_oos_top10_promotion_rank"
+                    ),
                     "trade_selector_artifact_sha256": trade_artifact,
                     "action": "BUY",
                     "model_ready": 1,
@@ -731,6 +737,9 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "promoted": promoted,
                     "promotion_failures": [],
                     "trade_selector": {
+                        "version": (
+                            "trade_selector_v2_nested_oos_top10_promotion_rank"
+                        ),
                         "promoted": promoted,
                         "production_artifact_sha256": trade_artifact,
                     },
@@ -746,6 +755,9 @@ class DecisionActionPlanTests(unittest.TestCase):
                     "ready": True,
                     "promoted": promoted,
                     "trade_selector": {
+                        "version": (
+                            "trade_selector_v2_nested_oos_top10_promotion_rank"
+                        ),
                         "promoted": promoted,
                         "production_artifact_sha256": trade_artifact,
                     },
@@ -982,6 +994,70 @@ class DecisionActionPlanTests(unittest.TestCase):
         self.assertFalse(plan["model"]["artifact_versions_match"])
         self.assertFalse(plan["model"]["artifact_fingerprints_match"])
         self.assertEqual(plan["formal_buy_count"], 0)
+
+    def test_approved_identity_only_prediction_artifacts_remain_frozen(self) -> None:
+        self._write_model_artifacts(promoted=False)
+        prediction_path = (
+            self.root
+            / "outputs"
+            / "auction_v3"
+            / "predictions"
+            / "pred_latest.csv"
+        )
+        prediction = pd.read_csv(prediction_path)
+        prediction["model_artifact_sha256"] = "b" * 64
+        prediction["trade_selector_artifact_sha256"] = "d" * 64
+        prediction.to_csv(prediction_path, index=False)
+        manifest = {
+            "schema_version": "decision_model_freeze_v1",
+            "active": True,
+            "freeze_id": "identity-only-test",
+            "training_cutoff_signal_date": "20260805",
+            "production": {
+                "model_version": "auction_v12_top10_trade_selector_oos_1",
+                "model_artifact_sha256": "a" * 64,
+                "trade_selector_version": (
+                    "trade_selector_v2_nested_oos_top10_promotion_rank"
+                ),
+                "trade_selector_artifact_sha256": "c" * 64,
+                "prediction_compatible_artifacts": [
+                    {
+                        "model_version": (
+                            "auction_v12_top10_trade_selector_oos_1"
+                        ),
+                        "model_artifact_sha256": "b" * 64,
+                        "trade_selector_version": (
+                            "trade_selector_v2_nested_oos_top10_promotion_rank"
+                        ),
+                        "trade_selector_artifact_sha256": "d" * 64,
+                    }
+                ],
+            },
+            "pinned_files": {},
+            "history_snapshot": {
+                "path": "models/frozen_history.csv.gz",
+                "sha256": "",
+                "promotion_feature_sha256": "",
+                "bootstrap_mode": True,
+            },
+        }
+        manifest_path = self.root / "models" / "decision_model_freeze.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        plan = build_action_plan(self.root)
+
+        self.assertTrue(plan["model"]["artifact_versions_match"])
+        self.assertTrue(plan["model"]["artifact_fingerprints_match"])
+        self.assertTrue(plan["model"]["trade_selector_artifacts_match"])
+        self.assertTrue(
+            plan["model"]["prediction_artifact_compatibility_used"]
+        )
+        self.assertEqual(
+            plan["model"]["prediction_artifact_sha256"],
+            "b" * 64,
+        )
+        self.assertEqual(plan["status_code"], "NO_TRADE_MODEL_NOT_PROMOTED")
 
     def test_selector_fingerprint_ignores_non_top10_blank_rows(self) -> None:
         self._write_model_artifacts(promoted=True)

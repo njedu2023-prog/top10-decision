@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from .eligibility import annotate_standard_limit_universe, filter_standard_limit_universe
+from .model_freeze import load_model_freeze, prediction_artifact_compatibility
 from .observation import (
     OBSERVATION_START_EXEC_DATE,
     OBSERVATION_TOP_N,
@@ -789,6 +790,11 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     prediction = _read_csv(root / "outputs" / "auction_v3" / "predictions" / "pred_latest.csv")
     backtest = _read_json(root / "outputs" / "auction_v3" / "metrics" / "backtest_latest.json")
     model_meta = _read_json(root / "outputs" / "auction_v3" / "models" / "model_meta_latest.json")
+    freeze_manifest = load_model_freeze(root)
+    frozen_production = freeze_manifest.get("production", {}) or {}
+    approved_prediction_artifacts = prediction_artifact_compatibility(
+        freeze_manifest
+    )
     sentiment_meta = model_meta.get("current_market_sentiment") or {}
 
     def sentiment_value(name: str) -> Any:
@@ -809,6 +815,14 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     pred_version = _text(prediction.get("model_version", pd.Series([""])).iloc[0]) if not prediction.empty else ""
     backtest_version = _text(backtest.get("model_version"))
     meta_version = _text(model_meta.get("model_version"))
+    prediction_selector_version = _unique_nonempty_column_value(
+        prediction,
+        "trade_selector_version",
+    )
+    backtest_selector = backtest.get("trade_selector") or {}
+    meta_selector = model_meta.get("trade_selector") or {}
+    backtest_selector_version = _text(backtest_selector.get("version"))
+    meta_selector_version = _text(meta_selector.get("version"))
     artifact_versions_match = bool(
         pred_version
         and pred_version == backtest_version == meta_version
@@ -825,9 +839,57 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
     )
     backtest_artifact = _text(backtest.get("model_artifact_sha256"))
     meta_artifact = _text(model_meta.get("model_artifact_sha256"))
+    prediction_selector_artifact = _unique_nonempty_column_value(
+        prediction,
+        "trade_selector_artifact_sha256",
+    )
+    backtest_selector_artifact = _text(
+        backtest_selector.get("production_artifact_sha256")
+    )
+    meta_selector_artifact = _text(
+        meta_selector.get("production_artifact_sha256")
+    )
+    runtime_matches_freeze = bool(
+        backtest_version
+        and backtest_version == meta_version
+        == _text(frozen_production.get("model_version"))
+        and backtest_artifact
+        and backtest_artifact == meta_artifact
+        == _text(frozen_production.get("model_artifact_sha256"))
+        and backtest_selector_version
+        and backtest_selector_version == meta_selector_version
+        == _text(frozen_production.get("trade_selector_version"))
+        and backtest_selector_artifact
+        and backtest_selector_artifact == meta_selector_artifact
+        == _text(
+            frozen_production.get("trade_selector_artifact_sha256")
+        )
+    )
+    prediction_artifact_pair = (
+        pred_version,
+        pred_artifact,
+        prediction_selector_version,
+        prediction_selector_artifact,
+    )
+    prediction_artifact_compatibility_used = bool(
+        runtime_matches_freeze
+        and prediction_artifact_pair in approved_prediction_artifacts
+    )
     artifact_fingerprints_match = bool(
-        pred_artifact
-        and pred_artifact == backtest_artifact == meta_artifact
+        backtest_artifact
+        and backtest_artifact == meta_artifact
+        and (
+            pred_artifact == backtest_artifact
+            or prediction_artifact_compatibility_used
+        )
+    )
+    selector_artifacts_match = bool(
+        backtest_selector_artifact
+        and backtest_selector_artifact == meta_selector_artifact
+        and (
+            prediction_selector_artifact == backtest_selector_artifact
+            or prediction_artifact_compatibility_used
+        )
     )
     artifacts_match = bool(
         artifact_versions_match
@@ -840,24 +902,6 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             prediction.get("model_promoted", pd.Series([0])),
         ).iloc[0]
     ) == 1 if not prediction.empty else False
-    backtest_selector = backtest.get("trade_selector") or {}
-    meta_selector = model_meta.get("trade_selector") or {}
-    prediction_selector_artifact = _unique_nonempty_column_value(
-        prediction,
-        "trade_selector_artifact_sha256",
-    )
-    backtest_selector_artifact = _text(
-        backtest_selector.get("production_artifact_sha256")
-    )
-    meta_selector_artifact = _text(
-        meta_selector.get("production_artifact_sha256")
-    )
-    selector_artifacts_match = bool(
-        prediction_selector_artifact
-        and prediction_selector_artifact
-        == backtest_selector_artifact
-        == meta_selector_artifact
-    )
     promoted = bool(
         backtest.get("promoted") is True
         and model_meta.get("promoted") is True
@@ -933,6 +977,13 @@ def build_action_plan(root: Path, report_date: str = "") -> dict[str, Any]:
             "artifact_sha256": meta_artifact,
             "trade_selector_artifacts_match": selector_artifacts_match,
             "trade_selector_artifact_sha256": meta_selector_artifact,
+            "prediction_artifact_compatibility_used": (
+                prediction_artifact_compatibility_used
+            ),
+            "prediction_artifact_sha256": pred_artifact,
+            "prediction_trade_selector_artifact_sha256": (
+                prediction_selector_artifact
+            ),
             "trade_selector": meta_selector,
             "promotion_failures": list(backtest.get("promotion_failures", []) or []),
             "return_model": _text((model_meta.get("return_selection", {}) or {}).get("selected")),

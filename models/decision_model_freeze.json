@@ -23,6 +23,15 @@
     "trade_selector_version": "trade_selector_v2_nested_oos_top10_promotion_rank",
     "trade_selector_artifact_sha256": "09e291bea250d767c2b96d6ea82144aa896033e61d57d3212a5ef3a8b670f304",
     "trade_selector_promoted": false,
+    "prediction_compatible_artifacts": [
+      {
+        "model_version": "auction_v13_five_year_promotion_blend_oos_1",
+        "model_artifact_sha256": "d59d4b6eeea9858836ff987aa9354766e69c34dd4ba432a731a21818215f064a",
+        "trade_selector_version": "trade_selector_v2_nested_oos_top10_promotion_rank",
+        "trade_selector_artifact_sha256": "2b41b4db772940d32d8fb5699a653ea3c1246a44b32efee81e8f17176f4206bf",
+        "reason": "Immutable D=20260819 prediction generated before identity-only canonicalization; Linux backtest payload is unchanged."
+      }
+    ],
     "formal_status": "NO_TRADE_MODEL_NOT_PROMOTED",
     "formal_buy_count": 0
   },
@@ -153,9 +162,9 @@
     "src/top10decision/auction_v3/config.py": "4c28a0ae2265435074a0689f4ad904ebfe465bd59fce3e8f558764d5014b94b2",
     "src/top10decision/auction_v3/engine.py": "a7f8cdb327de596e3414a58d2a405f30d6508185192f595d7b7ef3cfeee7c1b9",
     "src/top10decision/auction_v3/promotion_model.py": "af9941589e7eec766a3a855d9d8e384316852ea7f74c23122968961cc4cb2170",
-    "src/top10decision/decision/action_plan.py": "bb3ea8274b545c1df098d9da157abcaec2df1e7b30bf277d313d16cbcc6677f8",
+    "src/top10decision/decision/action_plan.py": "d2db243e064ded20bbda4ac1e7938d07709458c023b8791954908d99f71090f7",
     "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",
-    "src/top10decision/decision/model_freeze.py": "6f5c239dfb0d26eb260f9ccad64d6532be42e5004dbcbc41fdda5b648ae678e5",
+    "src/top10decision/decision/model_freeze.py": "b501969c76a9361b2bc1a7fc08ab9721db6ba73946e7eff1ab1e447f9269259f",
     "src/top10decision/decision/trade_selector.py": "4264248dd6b11a10fd379c9e6c574ad24003b0438a70164ecedc665c25d6648a",
     "src/top10decision/engines/eret_engine.py": "346bd65fa0c416c2e8876f92552b66d29f0f4cfe411fb408e95bfb355536c071",
     "src/top10decision/engines/pfill_engine.py": "ec38a49b51bed7ae3001393ee0b8c6b6fa04bf0a3db0e633cf2bf335c7d91e84"
