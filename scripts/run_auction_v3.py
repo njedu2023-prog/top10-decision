@@ -19,6 +19,7 @@ from top10decision.decision.model_freeze import (  # noqa: E402
     capture_frozen_history_snapshot,
     load_model_freeze,
     load_frozen_history_snapshot,
+    materialize_frozen_training_features,
     model_freeze_active,
     validate_pinned_files,
     validate_runtime_artifacts,
@@ -37,7 +38,22 @@ class FreezeAwareAuctionV3Engine(AuctionV3Engine):
             self.model_freeze_manifest,
         )
         if frozen is not None:
-            self.model_freeze_history_audit = audit
+            frozen, feature_audit = materialize_frozen_training_features(
+                self.config.root,
+                self.model_freeze_manifest,
+                frozen,
+            )
+            self.model_freeze_history_audit = {
+                **audit,
+                "training_features": feature_audit,
+            }
+            print(
+                json.dumps(
+                    {"model_freeze_training_features": feature_audit},
+                    ensure_ascii=True,
+                    sort_keys=True,
+                )
+            )
             return frozen
         history = super().build_history()
         history, audit = apply_frozen_history_cutoff(
@@ -49,7 +65,22 @@ class FreezeAwareAuctionV3Engine(AuctionV3Engine):
             self.model_freeze_manifest,
             history,
         )
-        self.model_freeze_history_audit = audit
+        history, feature_audit = materialize_frozen_training_features(
+            self.config.root,
+            self.model_freeze_manifest,
+            history,
+        )
+        self.model_freeze_history_audit = {
+            **audit,
+            "training_features": feature_audit,
+        }
+        print(
+            json.dumps(
+                {"model_freeze_training_features": feature_audit},
+                ensure_ascii=True,
+                sort_keys=True,
+            )
+        )
         return history
 
 

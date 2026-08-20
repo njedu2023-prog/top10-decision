@@ -80,6 +80,7 @@ def load_model_freeze(
                 "history_snapshot.bootstrap_mode must be boolean"
             )
         snapshot_sha = str(snapshot.get("sha256") or "")
+        feature_sha = str(snapshot.get("promotion_feature_sha256") or "")
         if (
             payload["active"]
             and not snapshot["bootstrap_mode"]
@@ -87,6 +88,14 @@ def load_model_freeze(
         ):
             raise DecisionModelFreezeError(
                 "finalized history snapshot requires sha256"
+            )
+        if (
+            payload["active"]
+            and not snapshot["bootstrap_mode"]
+            and not SHA256_PATTERN.fullmatch(feature_sha)
+        ):
+            raise DecisionModelFreezeError(
+                "finalized history snapshot requires promotion_feature_sha256"
             )
     return payload
 
@@ -206,6 +215,71 @@ def load_frozen_history_snapshot(
         "path": str(path.relative_to(Path(root).resolve())),
         "sha256": actual_sha,
         "bootstrap_mode": bootstrap,
+    }
+
+
+def materialize_frozen_training_features(
+    root: Path | str,
+    manifest: dict[str, Any],
+    frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Attach and fingerprint every mutable promotion input before model fitting."""
+    if not model_freeze_active(manifest):
+        return frame.copy(), {
+            "active": False,
+            "validated": True,
+            "source": "live_training_features",
+        }
+
+    from top10decision.auction_v3.promotion_model import (
+        PROMOTION_SOURCE_FEATURES,
+        attach_promotion_source_features,
+    )
+
+    enriched = attach_promotion_source_features(frame, Path(root).resolve())
+    missing = [
+        name for name in PROMOTION_SOURCE_FEATURES if name not in enriched.columns
+    ]
+    if missing:
+        raise DecisionModelFreezeError(
+            "frozen promotion training features missing: " + ", ".join(missing)
+        )
+
+    identity_columns = [
+        name
+        for name in ("signal_date", "ts_code", "proposed_gap")
+        if name in enriched.columns
+    ]
+    if len(identity_columns) != 3:
+        raise DecisionModelFreezeError(
+            "frozen promotion fingerprint requires signal_date, ts_code and proposed_gap"
+        )
+    fingerprint_columns = [*identity_columns, *PROMOTION_SOURCE_FEATURES]
+    fingerprint = enriched[fingerprint_columns].sort_values(
+        identity_columns,
+        kind="stable",
+    )
+    actual_sha = hashlib.sha256(
+        fingerprint.reset_index(drop=True)
+        .to_csv(index=False, lineterminator="\n")
+        .encode("utf-8")
+    ).hexdigest()
+    snapshot = manifest.get("history_snapshot", {}) or {}
+    expected_sha = str(snapshot.get("promotion_feature_sha256") or "")
+    if actual_sha != expected_sha:
+        raise DecisionModelFreezeError(
+            "frozen promotion feature drift detected: "
+            f"expected={expected_sha} actual={actual_sha}"
+        )
+    non_null = enriched[PROMOTION_SOURCE_FEATURES].notna().sum()
+    return enriched, {
+        "active": True,
+        "validated": True,
+        "source": "pinned_promotion_sources",
+        "sha256": actual_sha,
+        "feature_columns": int(len(PROMOTION_SOURCE_FEATURES)),
+        "rows": int(len(enriched)),
+        "non_null_cells": int(non_null.sum()),
     }
 
 
@@ -491,6 +565,7 @@ __all__ = [
     "history_snapshot_bootstrap_mode",
     "load_model_freeze",
     "load_frozen_history_snapshot",
+    "materialize_frozen_training_features",
     "model_freeze_active",
     "validate_pinned_files",
     "validate_runtime_artifacts",

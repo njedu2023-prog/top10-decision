@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
@@ -14,6 +15,7 @@ from top10decision.decision.model_freeze import (
     capture_frozen_history_snapshot,
     load_model_freeze,
     load_frozen_history_snapshot,
+    materialize_frozen_training_features,
     validate_pinned_files,
     validate_runtime_artifacts,
 )
@@ -118,6 +120,66 @@ class DecisionModelFreezeTest(unittest.TestCase):
         target.write_bytes(b"changed")
         with self.assertRaises(DecisionModelFreezeError):
             validate_pinned_files(self.root, self.manifest)
+
+    def test_frozen_promotion_features_are_materialized_and_fingerprinted(self) -> None:
+        from top10decision.auction_v3.promotion_model import (
+            PROMOTION_SOURCE_FEATURES,
+        )
+
+        frame = pd.DataFrame(
+            {
+                "signal_date": ["20260806", "20260807"],
+                "ts_code": ["000001.SZ", "600000.SH"],
+                "proposed_gap": [0.01, 0.02],
+                **{
+                    name: [float(index), float(index + 1)]
+                    for index, name in enumerate(PROMOTION_SOURCE_FEATURES)
+                },
+            }
+        )
+        columns = [
+            "signal_date",
+            "ts_code",
+            "proposed_gap",
+            *PROMOTION_SOURCE_FEATURES,
+        ]
+        expected = hashlib.sha256(
+            frame[columns]
+            .sort_values(
+                ["signal_date", "ts_code", "proposed_gap"],
+                kind="stable",
+            )
+            .reset_index(drop=True)
+            .to_csv(index=False, lineterminator="\n")
+            .encode("utf-8")
+        ).hexdigest()
+        self.manifest["history_snapshot"] = {
+            "promotion_feature_sha256": expected,
+        }
+        with mock.patch(
+            "top10decision.auction_v3.promotion_model.attach_promotion_source_features",
+            return_value=frame,
+        ):
+            enriched, audit = materialize_frozen_training_features(
+                self.root,
+                self.manifest,
+                frame,
+            )
+        self.assertEqual(len(enriched), 2)
+        self.assertEqual(audit["sha256"], expected)
+        self.assertTrue(audit["validated"])
+
+        self.manifest["history_snapshot"]["promotion_feature_sha256"] = "0" * 64
+        with mock.patch(
+            "top10decision.auction_v3.promotion_model.attach_promotion_source_features",
+            return_value=frame,
+        ):
+            with self.assertRaises(DecisionModelFreezeError):
+                materialize_frozen_training_features(
+                    self.root,
+                    self.manifest,
+                    frame,
+                )
 
     def test_inactive_manifest_does_not_enforce_pins(self) -> None:
         manifest = {

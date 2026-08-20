@@ -10,6 +10,7 @@
   "history_snapshot": {
     "path": "models/decision_v12_frozen_history_20260805.csv.gz",
     "sha256": "77e48be6732a08698a6abf4a0da74cb02b3129c57d14be66fb94679816a5337e",
+    "promotion_feature_sha256": "f466904979afa394b9eaae460bfda78d1aaa8829137b0b0b58a9d0f5978dd2ed",
     "bootstrap_mode": false
   },
   "production": {
@@ -98,6 +99,14 @@
       "production_model_artifacts_changed": false,
       "production_model_behavior_changed": false,
       "reason": "The strict validation metrics, model versions, source pins, policies, statistics, and formal NO_TRADE state are unchanged; this preserves fail-closed runtime verification against the production environment instead of weakening the freeze gate."
+    },
+    {
+      "at_utc": "2026-08-20T06:10:58Z",
+      "scope": "Decision autonomous runtime and historical backfill only",
+      "change": "Pin the Decision runtime, fingerprint materialized promotion features, separate historical backfill from current publication, distinguish legacy observation picks from formal buys, and add strict-calendar recovery plus publication freshness gates.",
+      "production_model_artifacts_changed": false,
+      "production_model_behavior_changed": false,
+      "reason": "Operational reliability repair only. V13 ranking, probability, risk, return, second-filter rules, formal gates, cumulative statistics, and all Premium assets remain unchanged."
     }
   ],
   "release_contract": {
@@ -105,8 +114,10 @@
     "automatic_unfreeze": false
   },
   "pinned_files": {
-    ".github/workflows/run_auction_v3.yml": "5436003d96d76de588390bb82151cb02130066790d1716383d554335959959d7",
-    ".github/workflows/run_decision_daily.yml": "0c53fc69d25f097063557e0d48759d13b4cdd4134585e50bdcb7584af93fad2e",
+    ".github/workflows/backfill_decision_v11_history.yml": "6bba110ecbb5d79455c00ac213a6406a4495dcefdc016a71e10e75bda2e92f8c",
+    ".github/workflows/run_auction_v3.yml": "cd51e9c2b2f414b6e2fd3bb4665f546703f92268fc69e58077d61335ec128098",
+    ".github/workflows/run_decision_daily.yml": "792841c96d0a40b1cdaa652845c07b50c14e2e28ae3a66f20b4652713e1b1025",
+    "requirements-decision.lock.txt": "e9472999779ec6b79be70832a60ee83318665e1c428912dad14090110ca3d108",
     "models/eret_lgbm.joblib": "81c26cb342059026719dba000fe8176f61a1ef7470f7fc156ff4a695d2c1ac1d",
     "models/eret_lgbm_20260805.joblib": "81c26cb342059026719dba000fe8176f61a1ef7470f7fc156ff4a695d2c1ac1d",
     "models/eret_lr.joblib": "6809668f57b32943e3ebfd2a0140b8419a1a1d9710018c928dd723f02cf8f05d",
@@ -121,8 +132,11 @@
     "models/pfill_meta.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
     "models/pfill_meta_20260806.json": "f0e2faf02f31d8011d13e0a30cc593c2f587f63bdf3202bd75b41f0daa022300",
     "scripts/publish_decision_action.py": "8e9d531da9de68dad4fb726e5020d9648173c591c604fbd8c5c102822fee497f",
-    "scripts/run_auction_v3.py": "7f1c6138a89d34979df3c46f828b543399a5f132ccdeeae73cf2d104871c93e3",
+    "scripts/run_auction_v3.py": "e2eaa3594f6f882418f0da8ea1be0a14c15df6d0dec03a382609d1898017019e",
+    "scripts/validate_decision_history_backfill.py": "d57709a0a7b961fbc5abbd3022b3f238d5350f992c9f90009cb1f110c4c63040",
     "scripts/validate_decision_model_freeze.py": "2cf9c9a305d4e6fbe8dcc69c6676235fff313cabc8bb41bdb839dadfe8f6c90b",
+    "scripts/validate_decision_publication.py": "6fb5eca85ff136a6331d3738dcf5ea4228d5459f21fb9e1cb0adbc034cef2695",
+    "scripts/validate_io_contract.py": "3389e6922ecfb67dae3c535c94b8c0a2730515225461dc3bc1bd16e892cc93d2",
     "src/top10decision/auction_v3/calibration.py": "06890dee4d9c7a6cd007ebdda823b4907774ba372ebe37f3072432335fce79a9",
     "data/auction_v3/promotion_prior/five_year_daily_stage_board.csv": "d7b69e474502eb10882e65cb19becaa77c5a8e0ced90d002ae221a47b0160909",
     "data/auction_v3/promotion_prior/five_year_event_features.csv.gz": "57683c2ee65de2b9debd6c7ca253c5ef18e393c121b943884bc577054cd7fe3e",
@@ -132,7 +146,7 @@
     "src/top10decision/auction_v3/promotion_model.py": "af9941589e7eec766a3a855d9d8e384316852ea7f74c23122968961cc4cb2170",
     "src/top10decision/decision/action_plan.py": "bb3ea8274b545c1df098d9da157abcaec2df1e7b30bf277d313d16cbcc6677f8",
     "src/top10decision/decision/contracts.py": "50e2cba257ee02804db8937a4a072572a56372afba941dfec9bfa719b812c917",
-    "src/top10decision/decision/model_freeze.py": "e3dce81f9664484934b1e8268e8571b578a4329f9091a0d375cc9c644ab35d69",
+    "src/top10decision/decision/model_freeze.py": "30e8d3803302eba09bafeadf227bed25710f6f18cadedde10f780925cb7e7538",
     "src/top10decision/decision/trade_selector.py": "90f3317dd602f822714c89b2592b4a8b878bd1f013552ec625b019617db4ef2d",
     "src/top10decision/engines/eret_engine.py": "346bd65fa0c416c2e8876f92552b66d29f0f4cfe411fb408e95bfb355536c071",
     "src/top10decision/engines/pfill_engine.py": "ec38a49b51bed7ae3001393ee0b8c6b6fa04bf0a3db0e633cf2bf335c7d91e84"

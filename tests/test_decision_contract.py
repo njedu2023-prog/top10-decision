@@ -244,8 +244,15 @@ class DecisionStrictSemanticContractTests(unittest.TestCase):
             "status_code": "NO_TRADE_MODEL_NOT_PROMOTED",
             "formal_buy_count": 0,
             "model": {"promoted": False},
+            "candidates": [
+                {
+                    "action": "SHADOW_ONLY",
+                    "target_weight": 0.0,
+                }
+            ],
         }
         self.assertTrue(_allows_unpromoted_no_trade(plan, picked=0))
+        self.assertTrue(_allows_unpromoted_no_trade(plan, picked=6))
 
     def test_no_trade_exception_fails_closed_when_any_guard_is_missing(self) -> None:
         plan = {
@@ -258,7 +265,8 @@ class DecisionStrictSemanticContractTests(unittest.TestCase):
         plan["model"]["promoted"] = True
         self.assertFalse(_allows_unpromoted_no_trade(plan, picked=0))
         plan["model"]["promoted"] = False
-        self.assertFalse(_allows_unpromoted_no_trade(plan, picked=1))
+        plan["candidates"] = [{"action": "BUY", "target_weight": 0.1}]
+        self.assertFalse(_allows_unpromoted_no_trade(plan, picked=0))
 
 
 class DecisionExecutionTruthTests(unittest.TestCase):

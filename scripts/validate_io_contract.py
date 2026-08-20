@@ -171,11 +171,31 @@ def _allows_unpromoted_no_trade(
     picked: int,
 ) -> bool:
     model = action_plan.get("model") or {}
+    candidates = action_plan.get("candidates") or []
+    has_formal_buy = any(
+        isinstance(row, dict)
+        and (
+            str(row.get("action") or "").strip().upper() == "BUY"
+            or float(
+                pd.to_numeric(
+                    pd.Series([row.get("target_weight", 0)]),
+                    errors="coerce",
+                )
+                .fillna(0.0)
+                .iloc[0]
+            )
+            > 0.0
+        )
+        for row in candidates
+    )
+    # `picked` belongs to the legacy observation engine. It is deliberately
+    # audited but cannot turn a zero-formal-buy action plan into a BUY plan.
+    _ = picked
     return bool(
         action_plan.get("status_code") == "NO_TRADE_MODEL_NOT_PROMOTED"
         and action_plan.get("formal_buy_count") == 0
         and model.get("promoted") is False
-        and picked <= 0
+        and not has_formal_buy
     )
 
 
@@ -202,7 +222,8 @@ def _validate_semantic_health(
         if _allows_unpromoted_no_trade(action_plan, picked=picked):
             _warn(
                 "learning_acceptance overall_pass=false；"
-                "V9模型未晋级且正式买入/picked均为0，Top1/Top2影子验证继续累计，按严格NO_TRADE放行"
+                f"生产模型未晋级且正式买入为0（旧观察picked={picked}），"
+                "影子验证继续累计，按严格NO_TRADE放行"
             )
         else:
             _fail(f"learning_acceptance overall_pass != true: {learning.get('overall_pass')}")
