@@ -6083,21 +6083,21 @@
     },
     "t": {
       "trade_date": "20260820",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
+      "stock_count": 5541,
+      "return_coverage": 1.0,
+      "up_count": 4096,
+      "down_count": 1347,
+      "flat_count": 98,
+      "limit_up_count": 84,
       "classified_limit_up_count": 0,
       "industry_top10": [],
       "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "raw_close_available": true,
+      "coverage_against_d": 1.0,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
@@ -6119,7 +6119,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-08-19T09:50:59+00:00",
+    "generated_at_utc": "2026-08-20T08:58:17+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
