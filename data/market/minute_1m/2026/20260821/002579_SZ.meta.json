@@ -3,7 +3,7 @@
   "trade_date": "20260821",
   "ts_code": "002579.SZ",
   "frequency": "1MIN",
-  "rows": 29,
+  "rows": 241,
   "fields": [
     "ts_code",
     "time",
