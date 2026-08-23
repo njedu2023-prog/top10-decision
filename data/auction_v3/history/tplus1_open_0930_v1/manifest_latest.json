@@ -1,25 +1,24 @@
 {
   "schema_version": "decision_v11_history_manifest_v1",
-  "generated_at_utc": "2026-08-20T10:38:45+00:00",
+  "generated_at_utc": "2026-08-23T03:30:45+00:00",
   "calendar_source": "tushare:trade_cal:SSE",
   "strict_calendar": true,
   "requested_start_date": "20200101",
-  "requested_end_date": "20260820",
+  "requested_end_date": "20260823",
   "target_signal_dates": [
-    "20260807",
-    "20260810"
+    "20260811"
   ],
-  "target_window_start": "20230915",
-  "target_window_end": "20260810",
+  "target_window_start": "20230918",
+  "target_window_end": "20260811",
   "target_window_open_sessions": 700,
   "target_history_sessions": 700,
   "walkforward_warmup_sessions": 200,
-  "target_signal_date_count": 2,
-  "produced_signal_dates": 2,
-  "produced_rows": 150,
-  "official_auction_truth_rows": 150,
+  "target_signal_date_count": 1,
+  "produced_signal_dates": 1,
+  "produced_rows": 53,
+  "official_auction_truth_rows": 53,
   "auction_truth_coverage": 1.0,
-  "total_compact_signal_dates": 718,
+  "total_compact_signal_dates": 719,
   "target_independent_dates": 500,
   "exit_policy": {
     "version": "tplus1_open_0930_v1",
@@ -28,14 +27,14 @@
     "latest_exit_time": "09:30",
     "requires_intraday_truth": false
   },
-  "output_file": "data/auction_v3/history/tplus1_open_0930_v1/training_20260807_20260810.csv",
-  "output_sha256": "fad90f4daf9cb6774c3360ec81584850f63096b194624e389ac5356d0d8e54c4",
+  "output_file": "data/auction_v3/history/tplus1_open_0930_v1/training_20260811_20260811.csv",
+  "output_sha256": "d5e332e8951295753d56e23a11c62a50999b6db3b4d85d5d402d2e677fd69ea0",
   "endpoint_rows": {
-    "daily": 83043,
-    "stk_limit": 116030,
-    "daily_basic": 83043,
-    "limit_list_d": 1239,
-    "stk_auction_o": 77143
+    "daily": 77529,
+    "stk_limit": 108349,
+    "daily_basic": 77529,
+    "limit_list_d": 1119,
+    "stk_auction_o": 77145
   },
   "failures": [],
   "credential_persisted": false
