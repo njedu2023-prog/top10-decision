@@ -4,10 +4,10 @@
   "sell_rule": "T+1 11:00 minute open",
   "fill_assumption": "small shadow order and positive auction matched volume",
   "cost_bps": 35.0,
-  "records": 38,
+  "records": 39,
   "completed": 36,
   "pending": 2,
-  "missing": 0,
+  "missing": 1,
   "wins": 20,
   "losses": 16,
   "win_rate": 0.5555555555555556,
@@ -17,5 +17,5 @@
   "unit_compound_return": 0.3736785478486706,
   "unit_max_drawdown": -0.3198226290034647,
   "first_d_date": "20260701",
-  "last_d_date": "20260821"
+  "last_d_date": "20260824"
 }
