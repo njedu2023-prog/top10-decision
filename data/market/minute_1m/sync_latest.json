@@ -10,9 +10,9 @@
   "minute_files_written": 80,
   "minute_sync_skipped_non_current_date": false,
   "auction_truth_source": "tushare:stk_auction_o",
-  "auction_truth_status": "source_pending_or_empty",
-  "auction_truth_rows": 0,
-  "auction_truth_path": "",
+  "auction_truth_status": "written",
+  "auction_truth_rows": 80,
+  "auction_truth_path": "data/market/raw/2026/20260824/stk_auction_o.csv",
   "failures": [],
   "token_persisted": false
 }
