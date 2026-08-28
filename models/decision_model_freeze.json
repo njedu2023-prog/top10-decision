@@ -141,7 +141,7 @@
   "pinned_files": {
     ".github/workflows/backfill_decision_v11_history.yml": "014cb6f6ddd40f7b00e7262c3614a1e2f4fb4660a2210c98e478c65290df4e7f",
     ".github/workflows/run_auction_v3.yml": "fb3afdae791fdd87b871efb0744bbf4f6fd5cbf93f5cfd9ff44b9f9b25193efc",
-    ".github/workflows/run_decision_daily.yml": "792841c96d0a40b1cdaa652845c07b50c14e2e28ae3a66f20b4652713e1b1025",
+    ".github/workflows/run_decision_daily.yml": "863d80cd56f991ae4bb6a47308cd290e2cb7ab2cf1e5cf05d0cd765625611744",
     "requirements-decision.lock.txt": "e9472999779ec6b79be70832a60ee83318665e1c428912dad14090110ca3d108",
     "models/eret_lgbm.joblib": "81c26cb342059026719dba000fe8176f61a1ef7470f7fc156ff4a695d2c1ac1d",
     "models/eret_lgbm_20260805.joblib": "81c26cb342059026719dba000fe8176f61a1ef7470f7fc156ff4a695d2c1ac1d",
