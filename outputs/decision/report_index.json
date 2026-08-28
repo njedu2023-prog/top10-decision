@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_report_index_v1",
-  "generated_at_utc": "2026-08-28T12:40:08+00:00",
+  "generated_at_utc": "2026-08-28T23:03:36+00:00",
   "latest_report_date": "20260831",
   "latest_report_file": "decision_report_20260831.md",
   "latest_action_url": "outputs/decision/action_plan_latest.json",
