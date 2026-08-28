@@ -34,10 +34,18 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: Checkout latest main
         uses: actions/checkout@v5
         with:
+          ref: main
           fetch-depth: 0
+
+      - name: Reset to latest remote main
+        run: |
+          set -e
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
 
       - name: Setup Python
         uses: actions/setup-python@v6
