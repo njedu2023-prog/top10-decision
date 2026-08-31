@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-08-28T23:56:25+00:00",
+  "generated_at_utc": "2026-08-31T05:38:44+00:00",
   "model_version": "auction_v13_five_year_promotion_blend_oos_1",
   "model_artifact_sha256": "7b00b5ccb4dad0b56631861d0531909d0951aee23397e45f3004b9be2c91913f",
   "ready": true,
@@ -2787,25 +2787,29 @@
     "official_auction_truth_coverage": 0.8312476769,
     "backfill_manifest": {
       "schema_version": "decision_v11_history_manifest_v1",
-      "generated_at_utc": "2026-08-23T03:30:45+00:00",
+      "generated_at_utc": "2026-08-30T08:30:58+00:00",
       "calendar_source": "tushare:trade_cal:SSE",
       "strict_calendar": true,
       "requested_start_date": "20200101",
-      "requested_end_date": "20260823",
+      "requested_end_date": "20260830",
       "target_signal_dates": [
-        "20260811"
+        "20260812",
+        "20260813",
+        "20260814",
+        "20260817",
+        "20260818"
       ],
-      "target_window_start": "20230918",
-      "target_window_end": "20260811",
+      "target_window_start": "20230925",
+      "target_window_end": "20260818",
       "target_window_open_sessions": 700,
       "target_history_sessions": 700,
       "walkforward_warmup_sessions": 200,
-      "target_signal_date_count": 1,
-      "produced_signal_dates": 1,
-      "produced_rows": 53,
-      "official_auction_truth_rows": 53,
+      "target_signal_date_count": 5,
+      "produced_signal_dates": 5,
+      "produced_rows": 347,
+      "official_auction_truth_rows": 347,
       "auction_truth_coverage": 1.0,
-      "total_compact_signal_dates": 719,
+      "total_compact_signal_dates": 724,
       "target_independent_dates": 500,
       "exit_policy": {
         "version": "tplus1_open_0930_v1",
@@ -2814,14 +2818,14 @@
         "latest_exit_time": "09:30",
         "requires_intraday_truth": false
       },
-      "output_file": "data/auction_v3/history/tplus1_open_0930_v1/training_20260811_20260811.csv",
-      "output_sha256": "d5e332e8951295753d56e23a11c62a50999b6db3b4d85d5d402d2e677fd69ea0",
+      "output_file": "data/auction_v3/history/tplus1_open_0930_v1/training_20260812_20260818.csv",
+      "output_sha256": "1623eddbdb4b997a1796e60b038a05479c8595541eeab992452089ae85a0a649",
       "endpoint_rows": {
-        "daily": 77529,
-        "stk_limit": 108349,
-        "daily_basic": 77529,
-        "limit_list_d": 1119,
-        "stk_auction_o": 77145
+        "daily": 99732,
+        "stk_limit": 139435,
+        "daily_basic": 99732,
+        "limit_list_d": 1303,
+        "stk_auction_o": 99134
       },
       "failures": [],
       "credential_persisted": false
@@ -2832,7 +2836,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-08-28T23:54:34+00:00",
+        "generated_at_utc": "2026-08-31T05:36:46+00:00",
         "frozen_predictions": 2148,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -2877,7 +2881,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-08-28T23:54:35+00:00",
+        "generated_at_utc": "2026-08-31T05:36:47+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -4187,7 +4191,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-08-28T23:54:34+00:00",
+        "generated_at_utc": "2026-08-31T05:36:46+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -4379,7 +4383,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-08-28T23:51:56+00:00",
+    "generated_at_utc": "2026-08-31T05:34:02+00:00",
     "model_version": "auction_v13_five_year_promotion_blend_oos_1",
     "history_dates": 715,
     "oos_dates": 544,
