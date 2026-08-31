@@ -5441,7 +5441,7 @@
       "actual_net_return": 0.001703473945409,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-08-31T11:56:09+00:00",
+      "truth_generated_at_utc": "2026-08-31T16:11:52+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -5565,7 +5565,7 @@
       "actual_net_return": -0.1073428093645486,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-08-31T11:56:09+00:00",
+      "truth_generated_at_utc": "2026-08-31T16:11:52+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -5689,7 +5689,7 @@
       "actual_net_return": -0.0150764145954521,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-08-31T11:56:09+00:00",
+      "truth_generated_at_utc": "2026-08-31T16:11:52+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -5813,7 +5813,7 @@
       "actual_net_return": -0.0679028892455859,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-08-31T11:56:09+00:00",
+      "truth_generated_at_utc": "2026-08-31T16:11:52+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -5937,7 +5937,7 @@
       "actual_net_return": 0.0110148095909733,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-08-31T11:56:09+00:00",
+      "truth_generated_at_utc": "2026-08-31T16:11:52+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -6061,7 +6061,7 @@
       "actual_net_return": 0.0616764705882352,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-08-31T11:56:09+00:00",
+      "truth_generated_at_utc": "2026-08-31T16:11:52+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     },
@@ -6185,7 +6185,7 @@
       "actual_net_return": 0.1479390243902438,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-08-31T11:56:09+00:00",
+      "truth_generated_at_utc": "2026-08-31T16:11:52+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "收盘后回溯"
     }
@@ -9365,7 +9365,7 @@
     "premarket_valid_rows": 0,
     "retrospective_rows": 7,
     "pending_rows": 0,
-    "generated_at_utc": "2026-08-31T11:56:09+00:00",
+    "generated_at_utc": "2026-08-31T16:11:52+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -9375,7 +9375,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-08-31T11:56:09+00:00",
+    "generated_at_utc": "2026-08-31T16:11:53+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
