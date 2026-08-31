@@ -1,8 +1,8 @@
 trade_date: 20260831
-run_id: gh_33388487324
-commit_sha: 507396ca0dd3
+run_id: gh_33430926070
+commit_sha: 844e185511ba
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-08-31T11:47:50Z
+created_at_utc: 2026-08-31T19:32:36Z
 ok: True
 buy_date: 20260901
 target_date: 20260902
@@ -100,7 +100,7 @@ limitup_calibration_reason: ok
 limitup_calibration_platt_raw_brier: 0.2748341473706188
 limitup_calibration_platt_brier: 0.16363816976360024
 limitup_calibration_platt_kind: platt_monotonic
-limitup_calibration_avg_delta: -0.1568160008851414
+limitup_calibration_avg_delta: -0.1562689356481289
 limitup_calibration_platt_slope: 0.10367637396752942
 limitup_calibration_platt_intercept: -1.465272124032159
 t1_calibration_mode: validated_platt_v1
@@ -108,7 +108,7 @@ t1_calibration_reason: ok
 t1_calibration_raw_brier: 0.2755029835353892
 t1_calibration_brier: 0.2501969950485511
 t1_calibration_kind: platt_monotonic
-t1_calibration_avg_delta: -0.03722172893407018
+t1_calibration_avg_delta: -0.03720472134783001
 t1_calibration_slope: 0.04122275378493445
 t1_calibration_intercept: -0.1097302268548884
 adaptive_rank_mode: history_ic_weighted_v1
@@ -127,13 +127,13 @@ adaptive_t1_model_active: 0
 adaptive_reason: t1_gate_shadow_downweighted
 premium_score_mode: target_evidence_weighted_v2
 premium_intraday_mode: intraday_weighted_v1
-premium_intraday_avg_attack_edge: 0.49021001782055007
-premium_intraday_avg_execution_edge: 0.5020508657090256
-premium_intraday_avg_risk_penalty: 0.0003916139240506329
+premium_intraday_avg_attack_edge: 0.48360849883320817
+premium_intraday_avg_execution_edge: 0.49824428343054467
+premium_intraday_avg_risk_penalty: 0.004746835443037975
 premium_stage_mode: tushare_limit_times_hump_v1
 premium_stage_rows: 79
 premium_stage_avg_quality_weight: 0.8248101265822788
-premium_stage_avg_risk_weight: 0.03132911392405065
+premium_stage_avg_risk_weight: 0.031329113924050654
 premium_intraday_hard_risk_count: 0
 premium_eligible_count: 0
 premium_watch_count: 79
@@ -151,7 +151,7 @@ exec_fields: buy_date|T日涨停概率|T日涨停强度|T+1延续上涨率|涨�
 limitup_model_fields: t_up_prob_model|t_high_profit_prob_model|t_limitup_prob_model|t_touch_limitup_prob_model|t1_up_prob_model|t1_high_profit_prob_model|t1_accept_prob_model|t1_fail_prob_model|t1_big_drawdown_prob_model|t_close_ret_pred|t_intraday_ret_pred|t1_close_ret_pred|t1_high_ret_pred|limitup_model_score
 premium_professional_fields: t_up_attack_score|t1_accept_score|t1_evidence_score|premium_final_score|premium_bucket|premium_candidate_state|premium_exclude_reason
 rank_groups: TOP10|TOP20
-limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: http_get_failed: status=404 url=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260901/daily.csv body_snippet=404: Not Found
+limitup_truth_reason: t_truth_not_ready:fetch_remote_failed: daily.csv after normalize is empty for trade_date=20260901
 limitup_validation_ready: False
 limitup_validation_reason: t_daily_not_ready
 top10_limitup_total: 0
