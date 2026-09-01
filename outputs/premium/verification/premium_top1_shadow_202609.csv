@@ -1,0 +1,2 @@
+﻿d_trade_date,t_trade_date,t1_trade_date,rank,ts_code,name,buy_time,buy_price,auction_volume,sell_rule,sell_time,sell_price,gross_return,cost_bps,net_return,pnl_per_10000,is_win,status,fill_assumption,buy_source,sell_source
+20260901,20260902,20260903,1,600540.SH,新赛股份,09:25:00,,,T+1 11:00 minute open,,,,35.0,,,,PENDING_T_AUCTION,small shadow order; positive matched auction volume,/home/runner/work/top10-decision/top10-decision/data/market/raw/2026/20260902/stk_auction.csv,
