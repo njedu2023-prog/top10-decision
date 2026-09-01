@@ -14354,21 +14354,128 @@
     },
     "t": {
       "trade_date": "20260901",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5546,
+      "return_coverage": 1.0,
+      "up_count": 3387,
+      "down_count": 2040,
+      "flat_count": 119,
+      "limit_up_count": 83,
+      "classified_limit_up_count": 83,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "种植业",
+          "limit_up_count": 8,
+          "share": 0.0963855421686747
+        },
+        {
+          "rank": 2,
+          "industry": "一般零售",
+          "limit_up_count": 6,
+          "share": 0.07228915662650602
+        },
+        {
+          "rank": 3,
+          "industry": "汽车零部件",
+          "limit_up_count": 4,
+          "share": 0.04819277108433735
+        },
+        {
+          "rank": 4,
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 3,
+          "share": 0.03614457831325301
+        },
+        {
+          "rank": 5,
+          "industry": "中药Ⅱ",
+          "limit_up_count": 3,
+          "share": 0.03614457831325301
+        },
+        {
+          "rank": 6,
+          "industry": "农产品加",
+          "limit_up_count": 3,
+          "share": 0.03614457831325301
+        },
+        {
+          "rank": 7,
+          "industry": "出版",
+          "limit_up_count": 3,
+          "share": 0.03614457831325301
+        },
+        {
+          "rank": 8,
+          "industry": "多元金融",
+          "limit_up_count": 3,
+          "share": 0.03614457831325301
+        },
+        {
+          "rank": 9,
+          "industry": "影视院线",
+          "limit_up_count": 3,
+          "share": 0.03614457831325301
+        },
+        {
+          "rank": 10,
+          "industry": "专用设备",
+          "limit_up_count": 2,
+          "share": 0.024096385542168676
+        }
+      ],
+      "industry_counts": {
+        "种植业": 8,
+        "一般零售": 6,
+        "汽车零部件": 4,
+        "IT服务Ⅱ": 3,
+        "中药Ⅱ": 3,
+        "农产品加": 3,
+        "出版": 3,
+        "多元金融": 3,
+        "影视院线": 3,
+        "专用设备": 2,
+        "光学光电": 2,
+        "化学制品": 2,
+        "化学原料": 2,
+        "医药商业": 2,
+        "家居用品": 2,
+        "数字媒体": 2,
+        "消费电子": 2,
+        "游戏Ⅱ": 2,
+        "通信设备": 2,
+        "饮料乳品": 2,
+        "农化制品": 1,
+        "化学制药": 1,
+        "医疗器械": 1,
+        "医疗服务": 1,
+        "地面兵装": 1,
+        "塑料": 1,
+        "工业金属": 1,
+        "广告营销": 1,
+        "房地产服务": 1,
+        "服装家纺": 1,
+        "林业Ⅱ": 1,
+        "焦炭Ⅱ": 1,
+        "煤炭开采": 1,
+        "照明设备": 1,
+        "物流": 1,
+        "环境治理": 1,
+        "电力": 1,
+        "电网设备": 1,
+        "白酒Ⅱ": 1,
+        "证券Ⅱ": 1,
+        "软件开发": 1,
+        "造纸": 1,
+        "酒店餐饮": 1,
+        "饰品": 1,
+        "饲料": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.000180342651037,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
