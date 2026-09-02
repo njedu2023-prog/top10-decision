@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_action_plan_v12_top10_trade_selector",
-  "generated_at_utc": "2026-09-02T12:07:56+00:00",
+  "generated_at_utc": "2026-09-02T17:09:21+00:00",
   "report_date": "20260903",
   "report_file": "decision_report_20260903.md",
   "signal_date": "20260902",
@@ -11677,113 +11677,106 @@
       "up_count": 1541,
       "down_count": 3901,
       "flat_count": 105,
-      "limit_up_count": 75,
-      "classified_limit_up_count": 75,
+      "limit_up_count": 53,
+      "classified_limit_up_count": 53,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "汽车零部件",
           "limit_up_count": 5,
-          "share": 0.06666666666666667
+          "share": 0.09433962264150944
         },
         {
           "rank": 2,
-          "industry": "服装家纺",
+          "industry": "电网设备",
           "limit_up_count": 4,
-          "share": 0.05333333333333334
+          "share": 0.07547169811320754
         },
         {
           "rank": 3,
-          "industry": "电网设备",
-          "limit_up_count": 4,
-          "share": 0.05333333333333334
+          "industry": "服装家纺",
+          "limit_up_count": 3,
+          "share": 0.05660377358490566
         },
         {
           "rank": 4,
-          "industry": "种植业",
-          "limit_up_count": 4,
-          "share": 0.05333333333333334
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 5,
-          "industry": "专用设备",
-          "limit_up_count": 3,
-          "share": 0.04
+          "industry": "一般零售",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 6,
-          "industry": "农化制品",
-          "limit_up_count": 3,
-          "share": 0.04
+          "industry": "化学原料",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 7,
-          "industry": "化学制药",
-          "limit_up_count": 3,
-          "share": 0.04
+          "industry": "地面兵装",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 8,
-          "industry": "化学原料",
-          "limit_up_count": 3,
-          "share": 0.04
+          "industry": "塑料",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 9,
-          "industry": "IT服务Ⅱ",
+          "industry": "玻璃玻纤",
           "limit_up_count": 2,
-          "share": 0.02666666666666667
+          "share": 0.03773584905660377
         },
         {
           "rank": 10,
-          "industry": "一般零售",
+          "industry": "航空装备",
           "limit_up_count": 2,
-          "share": 0.02666666666666667
+          "share": 0.03773584905660377
         }
       ],
       "industry_counts": {
         "汽车零部件": 5,
-        "服装家纺": 4,
         "电网设备": 4,
-        "种植业": 4,
-        "专用设备": 3,
-        "农化制品": 3,
-        "化学制药": 3,
-        "化学原料": 3,
+        "服装家纺": 3,
         "IT服务Ⅱ": 2,
         "一般零售": 2,
+        "化学原料": 2,
         "地面兵装": 2,
         "塑料": 2,
-        "家居用品": 2,
-        "影视院线": 2,
-        "消费电子": 2,
         "玻璃玻纤": 2,
         "航空装备": 2,
-        "通信设备": 2,
         "通用设备": 2,
+        "专用设备": 1,
         "光伏设备": 1,
+        "农化制品": 1,
         "出版": 1,
         "化妆品": 1,
         "化学制品": 1,
+        "化学制药": 1,
         "半导体": 1,
         "多元金融": 1,
+        "家居用品": 1,
+        "影视院线": 1,
         "房地产开发": 1,
         "房屋建设": 1,
         "旅游及景": 1,
-        "林业Ⅱ": 1,
+        "消费电子": 1,
         "游戏Ⅱ": 1,
-        "炼化及贸": 1,
-        "焦炭Ⅱ": 1,
-        "煤炭开采": 1,
         "照明设备": 1,
         "燃气Ⅱ": 1,
         "环境治理": 1,
         "电力": 1,
-        "航运港口": 1,
-        "装修装饰": 1,
+        "种植业": 1,
         "计算机设": 1,
+        "通信设备": 1,
         "金属新材": 1,
-        "饮料乳品": 1,
         "饲料": 1
       },
       "maturity_status": "FINAL_D_CLOSE"
