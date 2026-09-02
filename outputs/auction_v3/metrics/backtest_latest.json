@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "generated_at_utc": "2026-09-01T18:47:50+00:00",
+  "generated_at_utc": "2026-09-02T04:32:47+00:00",
   "model_version": "auction_v13_five_year_promotion_blend_oos_1",
   "history_dates": 715,
   "oos_dates": 544,
@@ -3764,10 +3764,10 @@
       "target": "T_close_continuation_limit_up_hit",
       "rows": 3097,
       "dates": 363,
-      "probability_brier": 0.22581751702749267,
+      "probability_brier": 0.22581751702737413,
       "constant_probability_brier": 0.2320870687507956,
-      "probability_brier_skill": 0.027013791664691533,
-      "probability_ece_5bin": 0.10724838789828413,
+      "probability_brier_skill": 0.027013791665202347,
+      "probability_ece_5bin": 0.10724838789760036,
       "promotion_rank": {
         "top1_promotion_rate": 0.6473829201101928,
         "top3_promotion_rate": 0.5206611570247934,
@@ -3869,10 +3869,10 @@
       "max_positions": 2,
       "tail_risk_weight": 0.75,
       "thresholds": {
-        "min_trade_score": -0.018372119893454195,
+        "min_trade_score": -0.018372119893454344,
         "min_mean_return_lcb": -0.026957795555480946,
         "min_fill_probability": 0.0,
-        "max_big_loss_probability": 0.5664759332565762
+        "max_big_loss_probability": 0.5664759332566216
       },
       "ready": false,
       "checks": {
@@ -3968,9 +3968,9 @@
       "rejected_candidate": "ridge",
       "passed": false,
       "reason": "oos_rmse_skill_below_floor",
-      "relative_rmse_improvement": -0.014950055243519493,
+      "relative_rmse_improvement": -0.01495005524352077,
       "rmse": 0.08696165820598677,
-      "candidate_rmse": 0.08826173980023433,
+      "candidate_rmse": 0.08826173980023444,
       "constant_rmse": 0.08696165820598677,
       "fit_rows": 916,
       "calibration_rows": 329,
@@ -3980,21 +3980,21 @@
       "fill": {
         "method": "identity",
         "rows": 825,
-        "held_out_brier": 0.3049158775039004,
+        "held_out_brier": 0.30491587750387406,
         "constant_brier": 0.3175542195060362,
         "beats_constant": true
       },
       "big_loss": {
         "method": "platt",
         "rows": 329,
-        "held_out_brier": 0.2482570712720315,
+        "held_out_brier": 0.24825707127203187,
         "constant_brier": 0.2503629119986001,
         "beats_constant": true
       },
       "promotion": {
         "method": "isotonic",
         "rows": 825,
-        "held_out_brier": 0.20099189029840941,
+        "held_out_brier": 0.20099188987445715,
         "constant_brier": 0.22861909629723576,
         "beats_constant": true
       }

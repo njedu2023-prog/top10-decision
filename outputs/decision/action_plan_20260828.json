@@ -5729,7 +5729,7 @@
       "actual_net_return": -0.0403974358974358,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -5853,7 +5853,7 @@
       "actual_net_return": 0.0802457627118644,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -5977,7 +5977,7 @@
       "actual_net_return": -0.0452371483996119,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6101,7 +6101,7 @@
       "actual_net_return": -0.1021430976430975,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6225,7 +6225,7 @@
       "actual_net_return": -0.0918786407766991,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6349,7 +6349,7 @@
       "actual_net_return": -0.0067346368715082,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6473,7 +6473,7 @@
       "actual_net_return": -0.1038589743589743,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6597,7 +6597,7 @@
       "actual_net_return": -0.123547619047619,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6721,7 +6721,7 @@
       "actual_net_return": 0.0951533795493934,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6845,7 +6845,7 @@
       "actual_net_return": 0.0711302521008405,
       "exit_reason": "fixed_open_0930",
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-01T18:49:50+00:00",
+      "truth_generated_at_utc": "2026-09-02T04:35:31+00:00",
       "validation_status_label": "T+1最终完成",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -13371,7 +13371,7 @@
     "premarket_valid_rows": 10,
     "retrospective_rows": 0,
     "pending_rows": 0,
-    "generated_at_utc": "2026-09-01T18:49:50+00:00",
+    "generated_at_utc": "2026-09-02T04:35:31+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -13381,7 +13381,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-09-01T18:49:51+00:00",
+    "generated_at_utc": "2026-09-02T04:35:32+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,

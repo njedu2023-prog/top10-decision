@@ -1,0 +1,18 @@
+{
+  "source": "tushare:rt_min_daily",
+  "trade_date": "20260902",
+  "ts_code": "605118.SH",
+  "frequency": "1MIN",
+  "rows": 121,
+  "fields": [
+    "ts_code",
+    "time",
+    "open",
+    "close",
+    "high",
+    "low",
+    "vol",
+    "amount"
+  ],
+  "credential_persisted": false
+}
