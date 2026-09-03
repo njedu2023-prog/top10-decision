@@ -1,18 +1,99 @@
 {
   "source": "tushare",
-  "trade_date": "20260903",
+  "trade_date": "20260904",
   "signal_date": "",
   "calendar_path": "data/market/trade_cal_sse.csv",
   "calendar_rows": 365,
   "candidate_codes": 80,
   "request_timeout_seconds": 8,
   "workers": 6,
-  "minute_files_written": 80,
+  "minute_files_written": 0,
   "minute_sync_skipped_non_current_date": false,
   "auction_truth_source": "tushare:stk_auction_o",
   "auction_truth_status": "source_pending_or_empty",
   "auction_truth_rows": 0,
   "auction_truth_path": "",
-  "failures": [],
+  "failures": [
+    {
+      "ts_code": "002909.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "605577.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "601566.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "000892.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600892.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "000635.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600967.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603207.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600828.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600830.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "003005.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002104.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603270.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600540.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "601086.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001366.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603665.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001278.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603375.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001326.SZ",
+      "reason": "empty"
+    }
+  ],
   "token_persisted": false
 }
