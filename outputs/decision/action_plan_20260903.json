@@ -11783,21 +11783,114 @@
     },
     "t": {
       "trade_date": "20260903",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5549,
+      "return_coverage": 1.0,
+      "up_count": 1846,
+      "down_count": 3570,
+      "flat_count": 133,
+      "limit_up_count": 44,
+      "classified_limit_up_count": 44,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "汽车零部件",
+          "limit_up_count": 4,
+          "share": 0.09090909090909091
+        },
+        {
+          "rank": 2,
+          "industry": "一般零售",
+          "limit_up_count": 3,
+          "share": 0.06818181818181818
+        },
+        {
+          "rank": 3,
+          "industry": "包装印刷",
+          "limit_up_count": 3,
+          "share": 0.06818181818181818
+        },
+        {
+          "rank": 4,
+          "industry": "通用设备",
+          "limit_up_count": 3,
+          "share": 0.06818181818181818
+        },
+        {
+          "rank": 5,
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 2,
+          "share": 0.045454545454545456
+        },
+        {
+          "rank": 6,
+          "industry": "化学制药",
+          "limit_up_count": 2,
+          "share": 0.045454545454545456
+        },
+        {
+          "rank": 7,
+          "industry": "电力",
+          "limit_up_count": 2,
+          "share": 0.045454545454545456
+        },
+        {
+          "rank": 8,
+          "industry": "电网设备",
+          "limit_up_count": 2,
+          "share": 0.045454545454545456
+        },
+        {
+          "rank": 9,
+          "industry": "中药Ⅱ",
+          "limit_up_count": 1,
+          "share": 0.022727272727272728
+        },
+        {
+          "rank": 10,
+          "industry": "元件",
+          "limit_up_count": 1,
+          "share": 0.022727272727272728
+        }
+      ],
+      "industry_counts": {
+        "汽车零部件": 4,
+        "一般零售": 3,
+        "包装印刷": 3,
+        "通用设备": 3,
+        "IT服务Ⅱ": 2,
+        "化学制药": 2,
+        "电力": 2,
+        "电网设备": 2,
+        "中药Ⅱ": 1,
+        "元件": 1,
+        "光学光电": 1,
+        "出版": 1,
+        "化学制品": 1,
+        "化学原料": 1,
+        "塑料": 1,
+        "家居用品": 1,
+        "小家电": 1,
+        "工业金属": 1,
+        "房地产开发": 1,
+        "旅游及景": 1,
+        "旅游零售": 1,
+        "燃气Ⅱ": 1,
+        "电子化学": 1,
+        "电机Ⅱ": 1,
+        "种植业": 1,
+        "自动化设": 1,
+        "航空装备": 1,
+        "航运港口": 1,
+        "装修装饰": 1,
+        "软件开发": 1,
+        "铁路公路": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.000360555255093,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
