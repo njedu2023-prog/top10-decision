@@ -10606,124 +10606,99 @@
       "up_count": 2444,
       "down_count": 2914,
       "flat_count": 190,
-      "limit_up_count": 96,
-      "classified_limit_up_count": 96,
+      "limit_up_count": 40,
+      "classified_limit_up_count": 40,
       "industry_top10": [
         {
           "rank": 1,
-          "industry": "汽车零部件",
-          "limit_up_count": 7,
-          "share": 0.07291666666666667
+          "industry": "饲料",
+          "limit_up_count": 4,
+          "share": 0.1
         },
         {
           "rank": 2,
-          "industry": "饲料",
-          "limit_up_count": 7,
-          "share": 0.07291666666666667
+          "industry": "养殖业",
+          "limit_up_count": 3,
+          "share": 0.075
         },
         {
           "rank": 3,
           "industry": "出版",
-          "limit_up_count": 4,
-          "share": 0.041666666666666664
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 4,
-          "industry": "IT服务Ⅱ",
-          "limit_up_count": 3,
-          "share": 0.03125
+          "industry": "文娱用品",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 5,
-          "industry": "元件",
-          "limit_up_count": 3,
-          "share": 0.03125
+          "industry": "汽车零部件",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 6,
-          "industry": "养殖业",
-          "limit_up_count": 3,
-          "share": 0.03125
+          "industry": "炼化及贸",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 7,
-          "industry": "化学制品",
-          "limit_up_count": 3,
-          "share": 0.03125
+          "industry": "种植业",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 8,
-          "industry": "工程咨询",
-          "limit_up_count": 3,
-          "share": 0.03125
+          "industry": "非白酒",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 9,
-          "industry": "广告营销",
-          "limit_up_count": 3,
-          "share": 0.03125
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 1,
+          "share": 0.025
         },
         {
           "rank": 10,
-          "industry": "非白酒",
-          "limit_up_count": 3,
-          "share": 0.03125
+          "industry": "一般零售",
+          "limit_up_count": 1,
+          "share": 0.025
         }
       ],
       "industry_counts": {
-        "汽车零部件": 7,
-        "饲料": 7,
-        "出版": 4,
-        "IT服务Ⅱ": 3,
-        "元件": 3,
+        "饲料": 4,
         "养殖业": 3,
-        "化学制品": 3,
-        "工程咨询": 3,
-        "广告营销": 3,
-        "非白酒": 3,
-        "一般零售": 2,
-        "专用设备": 2,
-        "化学制药": 2,
-        "多元金融": 2,
-        "房地产服务": 2,
+        "出版": 2,
         "文娱用品": 2,
+        "汽车零部件": 2,
         "炼化及贸": 2,
-        "电力": 2,
         "种植业": 2,
-        "计算机设": 2,
-        "软件开发": 2,
-        "通信设备": 2,
-        "饰品": 2,
-        "互联网电": 1,
-        "光学光电": 1,
-        "其他电子": 1,
+        "非白酒": 2,
+        "IT服务Ⅱ": 1,
+        "一般零售": 1,
+        "专用设备": 1,
         "动物保健": 1,
         "包装印刷": 1,
-        "化学原料": 1,
+        "化学制品": 1,
         "医疗服务": 1,
-        "医药商业": 1,
-        "半导体": 1,
+        "多元金融": 1,
         "小家电": 1,
+        "工程咨询": 1,
         "影视院线": 1,
-        "房地产开发": 1,
-        "教育": 1,
+        "房地产服务": 1,
         "林业Ⅱ": 1,
         "水泥": 1,
         "渔业": 1,
-        "游戏Ⅱ": 1,
-        "煤炭开采": 1,
-        "燃气Ⅱ": 1,
-        "玻璃玻纤": 1,
-        "电网设备": 1,
-        "自动化设": 1,
-        "航海装备": 1,
+        "电力": 1,
         "航运港口": 1,
-        "证券Ⅱ": 1,
         "调味发酵": 1,
-        "通用设备": 1,
+        "通信设备": 1,
         "酒店餐饮": 1,
-        "金属新材": 1,
-        "铁路公路": 1,
         "食品加工": 1
       },
       "raw_close_available": true,
