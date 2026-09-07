@@ -10372,21 +10372,124 @@
     },
     "t": {
       "trade_date": "20260907",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5549,
+      "return_coverage": 1.0,
+      "up_count": 3167,
+      "down_count": 2196,
+      "flat_count": 186,
+      "limit_up_count": 93,
+      "classified_limit_up_count": 93,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "元件",
+          "limit_up_count": 14,
+          "share": 0.15053763440860216
+        },
+        {
+          "rank": 2,
+          "industry": "通信设备",
+          "limit_up_count": 8,
+          "share": 0.08602150537634409
+        },
+        {
+          "rank": 3,
+          "industry": "汽车零部件",
+          "limit_up_count": 7,
+          "share": 0.07526881720430108
+        },
+        {
+          "rank": 4,
+          "industry": "一般零售",
+          "limit_up_count": 6,
+          "share": 0.06451612903225806
+        },
+        {
+          "rank": 5,
+          "industry": "种植业",
+          "limit_up_count": 4,
+          "share": 0.043010752688172046
+        },
+        {
+          "rank": 6,
+          "industry": "专用设备",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        },
+        {
+          "rank": 7,
+          "industry": "出版",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        },
+        {
+          "rank": 8,
+          "industry": "化学制品",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        },
+        {
+          "rank": 9,
+          "industry": "家电零部",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        },
+        {
+          "rank": 10,
+          "industry": "农产品加",
+          "limit_up_count": 2,
+          "share": 0.021505376344086023
+        }
+      ],
+      "industry_counts": {
+        "元件": 14,
+        "通信设备": 8,
+        "汽车零部件": 7,
+        "一般零售": 6,
+        "种植业": 4,
+        "专用设备": 3,
+        "出版": 3,
+        "化学制品": 3,
+        "家电零部": 3,
+        "农产品加": 2,
+        "农化制品": 2,
+        "小家电": 2,
+        "影视院线": 2,
+        "服装家纺": 2,
+        "自动化设": 2,
+        "通用设备": 2,
+        "非金属材": 2,
+        "食品加工": 2,
+        "饲料": 2,
+        "光伏设备": 1,
+        "光学光电": 1,
+        "其他电源": 1,
+        "养殖业": 1,
+        "医疗服务": 1,
+        "塑料": 1,
+        "工业金属": 1,
+        "广告营销": 1,
+        "房地产开发": 1,
+        "旅游及景": 1,
+        "消费电子": 1,
+        "渔业": 1,
+        "电子化学": 1,
+        "电网设备": 1,
+        "综合Ⅱ": 1,
+        "装修装饰": 1,
+        "计算机设": 1,
+        "调味发酵": 1,
+        "轨交设备": 1,
+        "造纸": 1,
+        "酒店餐饮": 1,
+        "金属新材": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.0001802451333814,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
