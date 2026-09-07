@@ -1,7 +1,7 @@
 {
   "trade_date": "20260907",
-  "created_at_utc": "2026-09-07T14:07:05+00:00",
-  "commit_sha": "9eddd57701c699fed3c3e00b42be26bc8ea28d0a",
+  "created_at_utc": "2026-09-07T15:16:24+00:00",
+  "commit_sha": "92dc64cd8cbde9584f06d72c827b48802474e4c7",
   "fs_version": "v0.6-intraday-auction-features",
   "richness_target": 0.75,
   "richness_estimate": 0.989899,
@@ -40,7 +40,7 @@
     "intraday_features": {
       "path": "data/market/raw/2026/20260907/intraday_features.csv",
       "loaded": true,
-      "rows": 80,
+      "rows": 173,
       "columns": [
         "trade_date",
         "ts_code",
@@ -209,7 +209,7 @@
       "loaded": true,
       "content": {
         "trade_date": "20260907",
-        "created_at_utc": "2026-09-07T14:04:55+00:00",
+        "created_at_utc": "2026-09-07T15:15:34+00:00",
         "source_repo": {
           "owner": "njedu2023-prog",
           "repo": "a-share-top3-data",
@@ -222,9 +222,9 @@
         "upstream_primary_pattern": "data/raw/{YYYY}/{YYYYMMDD}/{filename}",
         "upstream_meta_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260907/_meta.json",
         "upstream_meta": {
-          "requested_trade_date": "20260907",
+          "requested_trade_date": null,
           "resolved_trade_date": "20260907",
-          "generated_at_bj": "2026-09-07 21:58:43",
+          "generated_at_bj": "2026-09-07 23:09:08",
           "jobs": [
             {
               "key": "limit_list_d",
@@ -429,16 +429,32 @@
             "ok": true,
             "freq": "1min",
             "wp_pre_candidates": 111,
+            "selection": {
+              "policy": "preserve_legacy_selection_plus_required_limit_list",
+              "configured_cap": 80,
+              "legacy_selected_count": 80,
+              "required_count": 93,
+              "required_selected": 93,
+              "required_already_in_legacy": 0,
+              "required_added_beyond_cap": 93,
+              "preserved_nonrequired_count": 80,
+              "selected_count": 173
+            },
             "minute_end": "2026-09-07 15:00:00",
-            "symbols_requested": 80,
-            "symbols_success": 80,
+            "symbols_requested": 173,
+            "symbols_success": 173,
             "symbols_failed": 0,
             "errors": [],
-            "fallback_symbol_query_count": 80
+            "fallback_symbol_query_count": 173,
+            "required_symbols_success": 93,
+            "required_symbols_failed": 0,
+            "required_failed_codes": [],
+            "required_coverage_ratio": 1.0,
+            "coverage_status": "complete"
           },
           "intraday_features": {
             "ok": true,
-            "rows": 80,
+            "rows": 173,
             "columns": [
               "ts_code",
               "trade_date",
@@ -470,7 +486,7 @@
           },
           "realtime_snapshot": {
             "ok": true,
-            "rows": 80,
+            "rows": 173,
             "columns": [
               "ts_code",
               "trade_date",
@@ -544,7 +560,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260907/intraday_features.csv",
             "latest_path": "data/market/raw/latest/intraday_features.csv",
-            "bytes": 10059
+            "bytes": 23806
           },
           {
             "name": "limit_break_d",
@@ -866,12 +882,12 @@
         "is_hot_board": 0.01676,
         "board_rank": 0.009551,
         "limit_up_strength": 1.0,
-        "intraday_available": 0.014417,
-        "intraday_quality_score": 0.014417,
-        "intraday_risk_score": 0.014417,
-        "late_withdraw_score": 0.014417,
-        "reseal_score": 0.014417,
-        "open_board_count": 0.014417,
+        "intraday_available": 0.031177,
+        "intraday_quality_score": 0.031177,
+        "intraday_risk_score": 0.031177,
+        "late_withdraw_score": 0.031177,
+        "reseal_score": 0.031177,
+        "open_board_count": 0.031177,
         "auction_strength_score": 1.0
       }
     },

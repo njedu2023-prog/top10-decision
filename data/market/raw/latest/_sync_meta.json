@@ -1,6 +1,6 @@
 {
   "trade_date": "20260907",
-  "created_at_utc": "2026-09-07T14:04:55+00:00",
+  "created_at_utc": "2026-09-07T15:15:34+00:00",
   "source_repo": {
     "owner": "njedu2023-prog",
     "repo": "a-share-top3-data",
@@ -13,9 +13,9 @@
   "upstream_primary_pattern": "data/raw/{YYYY}/{YYYYMMDD}/{filename}",
   "upstream_meta_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260907/_meta.json",
   "upstream_meta": {
-    "requested_trade_date": "20260907",
+    "requested_trade_date": null,
     "resolved_trade_date": "20260907",
-    "generated_at_bj": "2026-09-07 21:58:43",
+    "generated_at_bj": "2026-09-07 23:09:08",
     "jobs": [
       {
         "key": "limit_list_d",
@@ -220,16 +220,32 @@
       "ok": true,
       "freq": "1min",
       "wp_pre_candidates": 111,
+      "selection": {
+        "policy": "preserve_legacy_selection_plus_required_limit_list",
+        "configured_cap": 80,
+        "legacy_selected_count": 80,
+        "required_count": 93,
+        "required_selected": 93,
+        "required_already_in_legacy": 0,
+        "required_added_beyond_cap": 93,
+        "preserved_nonrequired_count": 80,
+        "selected_count": 173
+      },
       "minute_end": "2026-09-07 15:00:00",
-      "symbols_requested": 80,
-      "symbols_success": 80,
+      "symbols_requested": 173,
+      "symbols_success": 173,
       "symbols_failed": 0,
       "errors": [],
-      "fallback_symbol_query_count": 80
+      "fallback_symbol_query_count": 173,
+      "required_symbols_success": 93,
+      "required_symbols_failed": 0,
+      "required_failed_codes": [],
+      "required_coverage_ratio": 1.0,
+      "coverage_status": "complete"
     },
     "intraday_features": {
       "ok": true,
-      "rows": 80,
+      "rows": 173,
       "columns": [
         "ts_code",
         "trade_date",
@@ -261,7 +277,7 @@
     },
     "realtime_snapshot": {
       "ok": true,
-      "rows": 80,
+      "rows": 173,
       "columns": [
         "ts_code",
         "trade_date",
@@ -335,7 +351,7 @@
       "error": "",
       "dated_path": "data/market/raw/2026/20260907/intraday_features.csv",
       "latest_path": "data/market/raw/latest/intraday_features.csv",
-      "bytes": 10059
+      "bytes": 23806
     },
     {
       "name": "limit_break_d",

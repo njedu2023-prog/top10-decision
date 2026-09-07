@@ -6,17 +6,17 @@
   "regime": "CAUTION",
   "risk_budget": 0.7,
   "regime_reason": "tail_risk_mean=0.1864,volatility_mean=0.0456",
-  "guardrail_reason": "CAUTION:tail_risk_mean=0.1864",
+  "guardrail_reason": "CAUTION:open_board_max=9.0,tail_risk_mean=0.1864",
   "topk": 70,
-  "picked": 0,
-  "cost_est_mean": 0.0014871555785714284,
+  "picked": 5,
+  "cost_est_mean": 0.0014949054928571428,
   "cost_est_min": 0.0011265090000000001,
   "cost_est_max": 0.0022368749999999997,
-  "risk_penalty_mean": 0.01633834829847009,
-  "risk_penalty_min": 0.00788810990283202,
-  "risk_penalty_max": 0.02361157804761379,
-  "ev_base_mean": -0.011769132727296409,
-  "ev_final_mean": -0.011769132727296409,
+  "risk_penalty_mean": 0.014418555892417837,
+  "risk_penalty_min": 0.005480950811922929,
+  "risk_penalty_max": 0.022770593990764962,
+  "ev_base_mean": -0.006105707098808849,
+  "ev_final_mean": -0.006105707098808849,
   "pfill_penalty_extra_mean": 0.0,
   "risk_penalty_extra_mean": 0.0,
   "intraday_penalty_extra_mean": 0.0,
@@ -37,8 +37,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260907",
-      "created_at_utc": "2026-09-07T14:07:05+00:00",
-      "commit_sha": "9eddd57701c699fed3c3e00b42be26bc8ea28d0a",
+      "created_at_utc": "2026-09-07T15:16:24+00:00",
+      "commit_sha": "92dc64cd8cbde9584f06d72c827b48802474e4c7",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -77,7 +77,7 @@
         "intraday_features": {
           "path": "data/market/raw/2026/20260907/intraday_features.csv",
           "loaded": true,
-          "rows": 80,
+          "rows": 173,
           "columns": [
             "trade_date",
             "ts_code",
@@ -246,7 +246,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260907",
-            "created_at_utc": "2026-09-07T14:04:55+00:00",
+            "created_at_utc": "2026-09-07T15:15:34+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -259,9 +259,9 @@
             "upstream_primary_pattern": "data/raw/{YYYY}/{YYYYMMDD}/{filename}",
             "upstream_meta_url": "https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20260907/_meta.json",
             "upstream_meta": {
-              "requested_trade_date": "20260907",
+              "requested_trade_date": null,
               "resolved_trade_date": "20260907",
-              "generated_at_bj": "2026-09-07 21:58:43",
+              "generated_at_bj": "2026-09-07 23:09:08",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -466,16 +466,32 @@
                 "ok": true,
                 "freq": "1min",
                 "wp_pre_candidates": 111,
+                "selection": {
+                  "policy": "preserve_legacy_selection_plus_required_limit_list",
+                  "configured_cap": 80,
+                  "legacy_selected_count": 80,
+                  "required_count": 93,
+                  "required_selected": 93,
+                  "required_already_in_legacy": 0,
+                  "required_added_beyond_cap": 93,
+                  "preserved_nonrequired_count": 80,
+                  "selected_count": 173
+                },
                 "minute_end": "2026-09-07 15:00:00",
-                "symbols_requested": 80,
-                "symbols_success": 80,
+                "symbols_requested": 173,
+                "symbols_success": 173,
                 "symbols_failed": 0,
                 "errors": [],
-                "fallback_symbol_query_count": 80
+                "fallback_symbol_query_count": 173,
+                "required_symbols_success": 93,
+                "required_symbols_failed": 0,
+                "required_failed_codes": [],
+                "required_coverage_ratio": 1.0,
+                "coverage_status": "complete"
               },
               "intraday_features": {
                 "ok": true,
-                "rows": 80,
+                "rows": 173,
                 "columns": [
                   "ts_code",
                   "trade_date",
@@ -507,7 +523,7 @@
               },
               "realtime_snapshot": {
                 "ok": true,
-                "rows": 80,
+                "rows": 173,
                 "columns": [
                   "ts_code",
                   "trade_date",
@@ -581,7 +597,7 @@
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260907/intraday_features.csv",
                 "latest_path": "data/market/raw/latest/intraday_features.csv",
-                "bytes": 10059
+                "bytes": 23806
               },
               {
                 "name": "limit_break_d",
@@ -903,12 +919,12 @@
             "is_hot_board": 0.01676,
             "board_rank": 0.009551,
             "limit_up_strength": 1.0,
-            "intraday_available": 0.014417,
-            "intraday_quality_score": 0.014417,
-            "intraday_risk_score": 0.014417,
-            "late_withdraw_score": 0.014417,
-            "reseal_score": 0.014417,
-            "open_board_count": 0.014417,
+            "intraday_available": 0.031177,
+            "intraday_quality_score": 0.031177,
+            "intraday_risk_score": 0.031177,
+            "late_withdraw_score": 0.031177,
+            "reseal_score": 0.031177,
+            "open_board_count": 0.031177,
             "auction_strength_score": 1.0
           }
         },
@@ -977,35 +993,35 @@
       "intraday_confidence_score"
     ],
     "rows": 70,
-    "available_rows": 0,
+    "available_rows": 70,
     "status_counts": {
-      "missing_stock": 70
+      "ok": 70
     },
     "hard_risk_rows": 0,
     "risk_intraday_hard_penalty_mean": 0.0,
     "risk_intraday_hard_penalty_max": 0.0,
     "risk_intraday_hard_penalty_sum": 0.0,
-    "risk_intraday_soft_penalty_mean": 0.0,
-    "risk_intraday_soft_penalty_max": 0.0,
-    "risk_intraday_soft_penalty_sum": 0.0,
-    "risk_intraday_confidence_penalty_mean": 0.0009626850714285716,
-    "risk_intraday_confidence_penalty_max": 0.0013064950000000004,
-    "risk_intraday_confidence_penalty_sum": 0.06738795500000001,
-    "risk_intraday_missing_penalty_mean": 0.002,
-    "risk_intraday_missing_penalty_max": 0.002,
-    "risk_intraday_missing_penalty_sum": 0.14,
+    "risk_intraday_soft_penalty_mean": 0.0006325932857142858,
+    "risk_intraday_soft_penalty_max": 0.00130005,
+    "risk_intraday_soft_penalty_sum": 0.044281530000000006,
+    "risk_intraday_confidence_penalty_mean": 0.0,
+    "risk_intraday_confidence_penalty_max": 0.0,
+    "risk_intraday_confidence_penalty_sum": 0.0,
+    "risk_intraday_missing_penalty_mean": 0.0,
+    "risk_intraday_missing_penalty_max": 0.0,
+    "risk_intraday_missing_penalty_sum": 0.0,
     "risk_late_withdraw_penalty_mean": 0.0,
     "risk_late_withdraw_penalty_max": 0.0,
     "risk_late_withdraw_penalty_sum": 0.0,
-    "risk_reseal_weakness_penalty_mean": 0.0020909090909090908,
-    "risk_reseal_weakness_penalty_max": 0.002090909090909091,
-    "risk_reseal_weakness_penalty_sum": 0.14636363636363636,
-    "risk_auction_weakness_penalty_mean": 0.0009816823685868652,
+    "risk_reseal_weakness_penalty_mean": 0.0015189276493506494,
+    "risk_reseal_weakness_penalty_max": 0.0033627072727272726,
+    "risk_reseal_weakness_penalty_sum": 0.10632493545454545,
+    "risk_auction_weakness_penalty_mean": 0.0010017741184674533,
     "risk_auction_weakness_penalty_max": 0.0029635967523761395,
-    "risk_auction_weakness_penalty_sum": 0.06871776580108056,
-    "intraday_execution_penalty_mean": 0.006035276530924529,
-    "intraday_execution_penalty_max": 0.00836100084328523,
-    "intraday_execution_penalty_sum": 0.42246935716471706,
+    "risk_auction_weakness_penalty_sum": 0.07012418829272173,
+    "intraday_execution_penalty_mean": 0.003153295053532389,
+    "intraday_execution_penalty_max": 0.005576659146853148,
+    "intraday_execution_penalty_sum": 0.22073065374726722,
     "intraday_ev_bonus_mean": 0.0,
     "intraday_ev_bonus_max": 0.0,
     "intraday_ev_bonus_sum": 0.0,
@@ -1014,117 +1030,117 @@
     "intraday_penalty_extra_sum": 0.0,
     "top_penalty_rows": [
       {
+        "ts_code": "600280.SH",
+        "name": "中央商场",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.005576659146853148,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.007371550878301577
+      },
+      {
+        "ts_code": "603042.SH",
+        "name": "华脉科技",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.005467377135229702,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.004281867912630876
+      },
+      {
         "ts_code": "603311.SH",
         "name": "金海高科",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.00836100084328523,
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.00533890675237614,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.017343203890057213
+        "ev_pred": -0.012086939088184524
       },
       {
-        "ts_code": "002708.SZ",
-        "name": "光洋股份",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.007397377028933738,
+        "ts_code": "002963.SZ",
+        "name": "豪尔赛",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.00533255616502663,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.012878981681811758
-      },
-      {
-        "ts_code": "600791.SH",
-        "name": "京能置业",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.007120280489510493,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.016005828774756682
-      },
-      {
-        "ts_code": "603009.SH",
-        "name": "北特科技",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.007078667663490824,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.01074185517002188
-      },
-      {
-        "ts_code": "603999.SH",
-        "name": "读者传媒",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.007078229744459519,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.007985045035431302
-      },
-      {
-        "ts_code": "603192.SH",
-        "name": "汇得科技",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.006982083984633059,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.015229282161928068
-      },
-      {
-        "ts_code": "002172.SZ",
-        "name": "澳洋健康",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.006890243552148562,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.010772387214551305
-      },
-      {
-        "ts_code": "001229.SZ",
-        "name": "魅视科技",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.0068237627844927335,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.010205503211525035
+        "ev_pred": -0.011535660885557839
       },
       {
         "ts_code": "000816.SZ",
         "name": "智慧农业",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.0068147727272727275,
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.005147639854545455,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.010823209024383206
+        "ev_pred": -0.006586986547282918
       },
       {
         "ts_code": "000978.SZ",
         "name": "桂林旅游",
-        "intraday_status": "missing_stock",
-        "intraday_execution_penalty": 0.0068147727272727275,
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.0050178723636363646,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.014244060256085551
+        "ev_pred": -0.01156579003731096
+      },
+      {
+        "ts_code": "002172.SZ",
+        "name": "澳洋健康",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.004825777552148561,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.006292934829832451
+      },
+      {
+        "ts_code": "600770.SH",
+        "name": "综艺股份",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.004654036945454545,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.007111969699695325
+      },
+      {
+        "ts_code": "002708.SZ",
+        "name": "光洋股份",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.004614279301661011,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.0075097279498190245
+      },
+      {
+        "ts_code": "605168.SH",
+        "name": "三人行",
+        "intraday_status": "ok",
+        "intraday_execution_penalty": 0.004540907074601843,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.009272659119236944
       }
     ]
   },
   "decision_diagnostics": {
     "rows_scored": 70,
-    "selected_rows": 0,
+    "selected_rows": 5,
     "risk_budget": 0.7,
     "stop_reason": "",
-    "p_fill_pred_min": 0.5192984180511091,
-    "p_fill_pred_max": 0.8017403503877071,
-    "p_fill_pred_mean": 0.6822931483715591,
-    "e_ret_pred_min": 0.005470559304474899,
-    "e_ret_pred_max": 0.015645236539751493,
-    "e_ret_pred_mean": 0.008905946238790987,
+    "p_fill_pred_min": 0.6292367613048321,
+    "p_fill_pred_max": 0.8720602890171253,
+    "p_fill_pred_mean": 0.7377607194698897,
+    "e_ret_pred_min": 0.009146266974573918,
+    "e_ret_pred_max": 0.021208958039751494,
+    "e_ret_pred_mean": 0.013307672795522564,
     "cost_est_min": 0.0011265090000000001,
     "cost_est_max": 0.0022368749999999997,
-    "cost_est_mean": 0.0014871555785714284,
-    "risk_penalty_min": 0.00788810990283202,
-    "risk_penalty_max": 0.02361157804761379,
-    "risk_penalty_mean": 0.01633834829847009,
-    "ev_base_min": -0.01782865653045987,
-    "ev_base_max": -0.003598128860908585,
-    "ev_base_mean": -0.011769132727296409,
+    "cost_est_mean": 0.0014949054928571428,
+    "risk_penalty_min": 0.005480950811922929,
+    "risk_penalty_max": 0.022770593990764962,
+    "risk_penalty_mean": 0.014418555892417837,
+    "ev_base_min": -0.012132640969260361,
+    "ev_base_max": 0.003626785530519921,
+    "ev_base_mean": -0.006105707098808849,
     "pfill_penalty_extra_min": 0.0,
     "pfill_penalty_extra_max": 0.0,
     "pfill_penalty_extra_mean": 0.0,
@@ -1140,86 +1156,86 @@
     "ev_penalty_total_extra_min": 0.0,
     "ev_penalty_total_extra_max": 0.0,
     "ev_penalty_total_extra_mean": 0.0,
-    "ev_final_min": -0.01782865653045987,
-    "ev_final_max": -0.003598128860908585,
-    "ev_final_mean": -0.011769132727296409,
-    "ev_pred_min": -0.01782865653045987,
-    "ev_pred_max": -0.003598128860908585,
-    "ev_pred_mean": -0.011769132727296409,
-    "positive_ev_rows": 0,
-    "positive_ev_base_rows": 0,
+    "ev_final_min": -0.012132640969260361,
+    "ev_final_max": 0.003626785530519921,
+    "ev_final_mean": -0.006105707098808849,
+    "ev_pred_min": -0.012132640969260361,
+    "ev_pred_max": 0.003626785530519921,
+    "ev_pred_mean": -0.006105707098808849,
+    "positive_ev_rows": 5,
+    "positive_ev_base_rows": 5,
     "positive_e_ret_rows": 70,
     "high_pfill_rows": 0,
-    "low_risk_rows": 3,
+    "low_risk_rows": 8,
     "top_mean_penalty_drivers": [
       {
         "name": "risk_penalty",
-        "mean": 0.01633834829847009
+        "mean": 0.014418555892417837
       },
       {
         "name": "cost_est",
-        "mean": 0.0014871555785714284
+        "mean": 0.0014949054928571428
       }
     ],
-    "primary_no_trade_reason": "positive_e_ret_cannot_cover_cost_and_risk",
+    "primary_no_trade_reason": "selected_positive_weight",
     "top_ev_rows": [
       {
         "ts_code": "001296.SZ",
         "name": "长江材料",
-        "ev_pred": -0.003598128860908585,
-        "ev_base": -0.003598128860908585,
-        "p_fill_pred": 0.6843590502175381,
-        "e_ret_pred": 0.007929358193186015,
+        "ev_pred": 0.003626785530519921,
+        "ev_base": 0.003626785530519921,
+        "p_fill_pred": 0.759224993506575,
+        "e_ret_pred": 0.013493079693186014,
         "cost_est": 0.0011365470000000001,
-        "risk_penalty": 0.00788810990283202,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
-        "ts_code": "601949.SH",
-        "name": "中国出版",
-        "ev_pred": -0.004226372298741133,
-        "ev_base": -0.004226372298741133,
-        "p_fill_pred": 0.6714143542664949,
-        "e_ret_pred": 0.00731172358753813,
-        "cost_est": 0.001141825,
-        "risk_penalty": 0.007993743469843146,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
-        "ts_code": "000798.SZ",
-        "name": "中水渔业",
-        "ev_pred": -0.004791523503807757,
-        "ev_base": -0.004791523503807757,
-        "p_fill_pred": 0.6547556071976275,
-        "e_ret_pred": 0.009781510300480125,
-        "cost_est": 0.0011460705,
-        "risk_penalty": 0.01004995171990847,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
-        "ts_code": "002436.SZ",
-        "name": "兴森科技",
-        "ev_pred": -0.0049914002196741565,
-        "ev_base": -0.0049914002196741565,
-        "p_fill_pred": 0.6026444550736076,
-        "e_ret_pred": 0.014411011621435212,
-        "cost_est": 0.0011265090000000001,
-        "risk_penalty": 0.012549607465333406,
+        "risk_penalty": 0.005480950811922929,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
         "ts_code": "600865.SH",
         "name": "百大集团",
-        "ev_pred": -0.005108116740867627,
-        "ev_base": -0.005108116740867627,
-        "p_fill_pred": 0.5729037689054788,
-        "e_ret_pred": 0.01292327837110301,
+        "ev_pred": 0.002202377346483682,
+        "ev_base": 0.002202377346483682,
+        "p_fill_pred": 0.6657180704100635,
+        "e_ret_pred": 0.01848699987110301,
         "cost_est": 0.0012160565,
-        "risk_penalty": 0.011295855126287198,
+        "risk_penalty": 0.008888696035378106,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "601949.SH",
+        "name": "中国出版",
+        "ev_pred": 0.001846080528506982,
+        "ev_base": 0.001846080528506982,
+        "p_fill_pred": 0.7184683585982702,
+        "e_ret_pred": 0.012103392216499143,
+        "cost_est": 0.001141825,
+        "risk_penalty": 0.005707998810752237,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "000798.SZ",
+        "name": "中水渔业",
+        "ev_pred": 0.0016083267708759934,
+        "ev_base": 0.0016083267708759934,
+        "p_fill_pred": 0.7270086474958125,
+        "e_ret_pred": 0.014626868988990552,
+        "cost_est": 0.0011460705,
+        "risk_penalty": 0.00787946296990847,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "002436.SZ",
+        "name": "兴森科技",
+        "ev_pred": 0.0015828584398041943,
+        "ev_base": 0.0015828584398041943,
+        "p_fill_pred": 0.6650269938003343,
+        "e_ret_pred": 0.019184640495776936,
+        "cost_est": 0.0011265090000000001,
+        "risk_penalty": 0.010048936356242497,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       }
@@ -1249,8 +1265,8 @@
   },
   "report_stats": {
     "high_ev_low_risk_rows": 0,
-    "topn_rows": 0,
-    "full_candidate_rows": 70
+    "topn_rows": 5,
+    "full_candidate_rows": 65
   },
-  "intraday_execution_penalty_mean": 0.006035276530924469
+  "intraday_execution_penalty_mean": 0.0031532950535323456
 }
