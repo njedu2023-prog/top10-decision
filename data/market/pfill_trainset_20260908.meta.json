@@ -1,45 +1,45 @@
 {
-  "trade_date": "20260907",
-  "rows": 86,
+  "trade_date": "20260908",
+  "rows": 71,
   "fill_truth_ready_only": true,
   "label_version": "pfill_truth_v7_public_buyable_explicit",
   "execution_contract": "manual_guidance_0925_public_market_fillability_proxy",
   "source": {
-    "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260907.csv",
-    "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260907.csv",
-    "fill_truth": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260907.csv",
+    "features_base": "/home/runner/work/top10-decision/top10-decision/data/market/features_base_20260908.csv",
+    "features_limit": "/home/runner/work/top10-decision/top10-decision/data/market/features_limit_20260908.csv",
+    "fill_truth": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20260908.csv",
     "prior_mode": "dated_pred_source_archive",
-    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260907.csv"
+    "prior_path": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20260908.csv"
   },
-  "output": "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260907.csv",
+  "output": "/home/runner/work/top10-decision/top10-decision/data/market/pfill_trainset_20260908.csv",
   "input_rows": {
     "features_base": 5549,
     "features_limit": 5549,
-    "fill_truth": 86,
-    "prior": 86
+    "fill_truth": 71,
+    "prior": 71
   },
   "coverage": {
     "y_fill": 1.0,
     "fill_label_quality": 1.0,
-    "entry_price_proxy_t1": 0.895349,
+    "entry_price_proxy_t1": 0.915493,
     "open_t1": 1.0,
     "up_limit_t1": 1.0,
-    "open_times_t1": 0.22093,
+    "open_times_t1": 0.211268,
     "prior_prob_prior": 1.0,
     "prior_strength_score": 1.0,
     "prior_theme_boost": 1.0,
     "rank": 1.0
   },
   "label_distribution": {
-    "1": 77,
-    "0": 9
+    "1": 65,
+    "0": 6
   },
   "quality_distribution": {
-    "strong_official_opening_auction": 77,
-    "strong_opening_auction_limit_up_unconfirmed": 9
+    "strong_official_opening_auction": 65,
+    "strong_opening_auction_limit_up_unconfirmed": 6
   },
   "sample_maturity_distribution": {
-    "FULLY_READY": 86
+    "PFILL_READY": 71
   },
   "column_groups": {
     "base_cols": [
@@ -190,8 +190,8 @@
     ]
   },
   "cold_start_ratio": 0.0,
-  "feature_coverage_score_mean": 0.844186,
-  "sample_weight_mean": 1.287791,
+  "feature_coverage_score_mean": 0.842254,
+  "sample_weight_mean": 1.295775,
   "notes": [
     "本文件是 P_fill 训练前宽表，不是训练结果文件。",
     "训练集只保留 label_ready_fill=1 的成熟样本。",
