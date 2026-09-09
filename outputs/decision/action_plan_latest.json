@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_action_plan_v12_top10_trade_selector",
-  "generated_at_utc": "2026-09-09T17:11:17+00:00",
+  "generated_at_utc": "2026-09-09T18:55:31+00:00",
   "report_date": "20260910",
   "report_file": "decision_report_20260910.md",
   "signal_date": "20260909",
@@ -2873,7 +2873,7 @@
         "path": "outputs/auction_v3/verification/verify_latest.csv",
         "metrics": {
           "status": "ok",
-          "generated_at_utc": "2026-09-09T12:10:48+00:00",
+          "generated_at_utc": "2026-09-09T18:54:03+00:00",
           "frozen_predictions": 2639,
           "selected_predictions": 0,
           "verified_trades": 0,
@@ -2918,7 +2918,7 @@
         "metrics": {
           "schema_version": "decision_observation_validation_v4_auction_truth",
           "status": "ok",
-          "generated_at_utc": "2026-09-09T12:10:50+00:00",
+          "generated_at_utc": "2026-09-09T18:54:04+00:00",
           "validation_start_exec_date": "20260721",
           "validation_mode": "market_at_open_proxy",
           "market_open_fill_assumption": true,
@@ -4644,7 +4644,7 @@
         "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
         "metrics": {
           "schema_version": "decision_manual_actual_v1",
-          "generated_at_utc": "2026-09-09T12:10:48+00:00",
+          "generated_at_utc": "2026-09-09T18:54:03+00:00",
           "truth_source": "manual_actual",
           "trades": 0,
           "win_rate": null,
@@ -6197,7 +6197,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6321,7 +6321,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6445,7 +6445,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6569,7 +6569,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6693,7 +6693,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6817,7 +6817,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6941,7 +6941,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7065,7 +7065,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7189,7 +7189,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7313,7 +7313,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-09T12:59:45+00:00",
+      "truth_generated_at_utc": "2026-09-09T18:54:04+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -11875,7 +11875,7 @@
     "premarket_valid_rows": 10,
     "retrospective_rows": 0,
     "pending_rows": 10,
-    "generated_at_utc": "2026-09-09T12:59:45+00:00",
+    "generated_at_utc": "2026-09-09T18:54:04+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -11885,7 +11885,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-09-09T12:59:46+00:00",
+    "generated_at_utc": "2026-09-09T18:54:04+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
