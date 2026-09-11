@@ -10374,110 +10374,92 @@
       "up_count": 643,
       "down_count": 4870,
       "flat_count": 37,
-      "limit_up_count": 79,
-      "classified_limit_up_count": 79,
+      "limit_up_count": 40,
+      "classified_limit_up_count": 40,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "元件",
-          "limit_up_count": 10,
-          "share": 0.12658227848101267
+          "limit_up_count": 9,
+          "share": 0.225
         },
         {
           "rank": 2,
           "industry": "电力",
-          "limit_up_count": 5,
-          "share": 0.06329113924050633
+          "limit_up_count": 4,
+          "share": 0.1
         },
         {
           "rank": 3,
-          "industry": "种植业",
-          "limit_up_count": 5,
-          "share": 0.06329113924050633
+          "industry": "地面兵装",
+          "limit_up_count": 3,
+          "share": 0.075
         },
         {
           "rank": 4,
           "industry": "通信设备",
-          "limit_up_count": 5,
-          "share": 0.06329113924050633
+          "limit_up_count": 3,
+          "share": 0.075
         },
         {
           "rank": 5,
-          "industry": "一般零售",
-          "limit_up_count": 4,
-          "share": 0.05063291139240506
+          "industry": "汽车零部件",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 6,
-          "industry": "旅游及景",
-          "limit_up_count": 4,
-          "share": 0.05063291139240506
+          "industry": "环境治理",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 7,
-          "industry": "地面兵装",
-          "limit_up_count": 3,
-          "share": 0.0379746835443038
+          "industry": "玻璃玻纤",
+          "limit_up_count": 2,
+          "share": 0.05
         },
         {
           "rank": 8,
-          "industry": "家居用品",
-          "limit_up_count": 3,
-          "share": 0.0379746835443038
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 1,
+          "share": 0.025
         },
         {
           "rank": 9,
           "industry": "中药Ⅱ",
-          "limit_up_count": 2,
-          "share": 0.02531645569620253
+          "limit_up_count": 1,
+          "share": 0.025
         },
         {
           "rank": 10,
-          "industry": "多元金融",
-          "limit_up_count": 2,
-          "share": 0.02531645569620253
+          "industry": "光伏设备",
+          "limit_up_count": 1,
+          "share": 0.025
         }
       ],
       "industry_counts": {
-        "元件": 10,
-        "电力": 5,
-        "种植业": 5,
-        "通信设备": 5,
-        "一般零售": 4,
-        "旅游及景": 4,
+        "元件": 9,
+        "电力": 4,
         "地面兵装": 3,
-        "家居用品": 3,
-        "中药Ⅱ": 2,
-        "多元金融": 2,
-        "小家电": 2,
-        "工业金属": 2,
+        "通信设备": 3,
         "汽车零部件": 2,
         "环境治理": 2,
         "玻璃玻纤": 2,
-        "食品加工": 2,
         "IT服务Ⅱ": 1,
-        "专业工程": 1,
+        "中药Ⅱ": 1,
         "光伏设备": 1,
         "其他电子": 1,
-        "出版": 1,
-        "化学制品": 1,
         "化学原料": 1,
-        "厨卫电器": 1,
         "塑料": 1,
-        "工程咨询": 1,
+        "家居用品": 1,
+        "小家电": 1,
         "影视院线": 1,
         "数字媒体": 1,
-        "消费电子": 1,
-        "焦炭Ⅱ": 1,
-        "环保设备": 1,
+        "旅游及景": 1,
         "电网设备": 1,
-        "综合Ⅱ": 1,
-        "航空装备": 1,
-        "航运港口": 1,
+        "种植业": 1,
         "计算机设": 1,
-        "酒店餐饮": 1,
-        "金属新材": 1,
-        "饰品": 1,
         "黑色家电": 1
       },
       "raw_close_available": true,
