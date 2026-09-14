@@ -32,7 +32,7 @@
   "post_release_net_return_lcb": -0.00811458690286515,
   "release_d_date": "20260807",
   "fill_auc": 0.583133413301346,
-  "fill_brier": 0.22791484952087682,
+  "fill_brier": 0.22791484952087676,
   "fill_baseline_brier": 0.25417120019031286,
   "profit_rank_ic": -0.1326530612244898,
   "positive_fold_rate": 0.3333333333333333,
