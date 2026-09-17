@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_action_plan_v12_top10_trade_selector",
-  "generated_at_utc": "2026-09-17T12:13:39+00:00",
+  "generated_at_utc": "2026-09-17T17:39:14+00:00",
   "report_date": "20260918",
   "report_file": "decision_report_20260918.md",
   "signal_date": "20260917",
@@ -11449,115 +11449,102 @@
       "up_count": 2576,
       "down_count": 2820,
       "flat_count": 157,
-      "limit_up_count": 68,
-      "classified_limit_up_count": 68,
+      "limit_up_count": 47,
+      "classified_limit_up_count": 47,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "汽车零部件",
-          "limit_up_count": 10,
-          "share": 0.14705882352941177
+          "limit_up_count": 8,
+          "share": 0.1702127659574468
         },
         {
           "rank": 2,
-          "industry": "玻璃玻纤",
-          "limit_up_count": 3,
-          "share": 0.04411764705882353
+          "industry": "出版",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
         },
         {
           "rank": 3,
-          "industry": "光学光电",
+          "industry": "化学制品",
           "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "share": 0.0425531914893617
         },
         {
           "rank": 4,
-          "industry": "出版",
+          "industry": "医疗服务",
           "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "share": 0.0425531914893617
         },
         {
           "rank": 5,
-          "industry": "化学制品",
+          "industry": "半导体",
           "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "share": 0.0425531914893617
         },
         {
           "rank": 6,
-          "industry": "化学制药",
+          "industry": "消费电子",
           "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "share": 0.0425531914893617
         },
         {
           "rank": 7,
-          "industry": "医疗服务",
+          "industry": "种植业",
           "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "share": 0.0425531914893617
         },
         {
           "rank": 8,
-          "industry": "半导体",
+          "industry": "风电设备",
           "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "share": 0.0425531914893617
         },
         {
           "rank": 9,
-          "industry": "服装家纺",
-          "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "industry": "专业工程",
+          "limit_up_count": 1,
+          "share": 0.02127659574468085
         },
         {
           "rank": 10,
-          "industry": "消费电子",
-          "limit_up_count": 2,
-          "share": 0.029411764705882353
+          "industry": "互联网电",
+          "limit_up_count": 1,
+          "share": 0.02127659574468085
         }
       ],
       "industry_counts": {
-        "汽车零部件": 10,
-        "玻璃玻纤": 3,
-        "光学光电": 2,
+        "汽车零部件": 8,
         "出版": 2,
         "化学制品": 2,
-        "化学制药": 2,
         "医疗服务": 2,
         "半导体": 2,
-        "服装家纺": 2,
         "消费电子": 2,
         "种植业": 2,
-        "通用设备": 2,
         "风电设备": 2,
         "专业工程": 1,
-        "专用设备": 1,
-        "中药Ⅱ": 1,
-        "乘用车": 1,
         "互联网电": 1,
         "元件": 1,
         "养殖业": 1,
         "农产品加": 1,
         "包装印刷": 1,
+        "化学制药": 1,
         "化学原料": 1,
         "商用车": 1,
         "塑料": 1,
         "家居用品": 1,
-        "工业金属": 1,
         "工程咨询": 1,
-        "影视院线": 1,
         "房地产服务": 1,
         "旅游及景": 1,
-        "橡胶": 1,
+        "服装家纺": 1,
         "汽车服务": 1,
         "焦炭Ⅱ": 1,
-        "照明设备": 1,
-        "生物制品": 1,
+        "玻璃玻纤": 1,
         "电力": 1,
-        "电子化学": 1,
         "电网设备": 1,
         "纺织制造": 1,
         "自动化设": 1,
         "航运港口": 1,
-        "装修装饰": 1,
-        "软件开发": 1,
         "通信设备": 1,
         "造纸": 1
       },
