@@ -14947,21 +14947,116 @@
     },
     "t": {
       "trade_date": "20260917",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5553,
+      "return_coverage": 1.0,
+      "up_count": 2576,
+      "down_count": 2820,
+      "flat_count": 157,
+      "limit_up_count": 47,
+      "classified_limit_up_count": 47,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "汽车零部件",
+          "limit_up_count": 8,
+          "share": 0.1702127659574468
+        },
+        {
+          "rank": 2,
+          "industry": "出版",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
+        },
+        {
+          "rank": 3,
+          "industry": "化学制品",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
+        },
+        {
+          "rank": 4,
+          "industry": "医疗服务",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
+        },
+        {
+          "rank": 5,
+          "industry": "半导体",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
+        },
+        {
+          "rank": 6,
+          "industry": "消费电子",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
+        },
+        {
+          "rank": 7,
+          "industry": "种植业",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
+        },
+        {
+          "rank": 8,
+          "industry": "风电设备",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
+        },
+        {
+          "rank": 9,
+          "industry": "专业工程",
+          "limit_up_count": 1,
+          "share": 0.02127659574468085
+        },
+        {
+          "rank": 10,
+          "industry": "互联网电",
+          "limit_up_count": 1,
+          "share": 0.02127659574468085
+        }
+      ],
+      "industry_counts": {
+        "汽车零部件": 8,
+        "出版": 2,
+        "化学制品": 2,
+        "医疗服务": 2,
+        "半导体": 2,
+        "消费电子": 2,
+        "种植业": 2,
+        "风电设备": 2,
+        "专业工程": 1,
+        "互联网电": 1,
+        "元件": 1,
+        "养殖业": 1,
+        "农产品加": 1,
+        "包装印刷": 1,
+        "化学制药": 1,
+        "化学原料": 1,
+        "商用车": 1,
+        "塑料": 1,
+        "家居用品": 1,
+        "工程咨询": 1,
+        "房地产服务": 1,
+        "旅游及景": 1,
+        "服装家纺": 1,
+        "汽车服务": 1,
+        "焦炭Ⅱ": 1,
+        "玻璃玻纤": 1,
+        "电力": 1,
+        "电网设备": 1,
+        "纺织制造": 1,
+        "自动化设": 1,
+        "航运港口": 1,
+        "通信设备": 1,
+        "造纸": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.0005405405405405,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
