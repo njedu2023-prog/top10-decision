@@ -6565,7 +6565,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6689,7 +6689,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6813,7 +6813,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6937,7 +6937,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7061,7 +7061,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7185,7 +7185,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7309,7 +7309,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7433,7 +7433,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7557,7 +7557,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-09-21T12:27:29+00:00",
+      "truth_generated_at_utc": "2026-09-21T15:08:48+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -14420,109 +14420,115 @@
       "up_count": 4536,
       "down_count": 936,
       "flat_count": 81,
-      "limit_up_count": 104,
-      "classified_limit_up_count": 104,
+      "limit_up_count": 130,
+      "classified_limit_up_count": 130,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "化学制药",
-          "limit_up_count": 9,
-          "share": 0.08653846153846154
+          "limit_up_count": 10,
+          "share": 0.07692307692307693
         },
         {
           "rank": 2,
-          "industry": "化学制品",
-          "limit_up_count": 5,
-          "share": 0.04807692307692308
+          "industry": "房地产开发",
+          "limit_up_count": 7,
+          "share": 0.05384615384615385
         },
         {
           "rank": 3,
-          "industry": "医疗服务",
-          "limit_up_count": 5,
-          "share": 0.04807692307692308
+          "industry": "化学制品",
+          "limit_up_count": 6,
+          "share": 0.046153846153846156
         },
         {
           "rank": 4,
-          "industry": "房地产开发",
-          "limit_up_count": 5,
-          "share": 0.04807692307692308
+          "industry": "汽车零部件",
+          "limit_up_count": 6,
+          "share": 0.046153846153846156
         },
         {
           "rank": 5,
-          "industry": "一般零售",
-          "limit_up_count": 4,
+          "industry": "医疗服务",
+          "limit_up_count": 5,
           "share": 0.038461538461538464
         },
         {
           "rank": 6,
-          "industry": "医疗器械",
+          "industry": "一般零售",
           "limit_up_count": 4,
-          "share": 0.038461538461538464
+          "share": 0.03076923076923077
         },
         {
           "rank": 7,
-          "industry": "服装家纺",
+          "industry": "元件",
           "limit_up_count": 4,
-          "share": 0.038461538461538464
+          "share": 0.03076923076923077
         },
         {
           "rank": 8,
-          "industry": "专用设备",
-          "limit_up_count": 3,
-          "share": 0.028846153846153848
+          "industry": "医疗器械",
+          "limit_up_count": 4,
+          "share": 0.03076923076923077
         },
         {
           "rank": 9,
-          "industry": "出版",
-          "limit_up_count": 3,
-          "share": 0.028846153846153848
+          "industry": "家居用品",
+          "limit_up_count": 4,
+          "share": 0.03076923076923077
         },
         {
           "rank": 10,
-          "industry": "家居用品",
-          "limit_up_count": 3,
-          "share": 0.028846153846153848
+          "industry": "服装家纺",
+          "limit_up_count": 4,
+          "share": 0.03076923076923077
         }
       ],
       "industry_counts": {
-        "化学制药": 9,
-        "化学制品": 5,
+        "化学制药": 10,
+        "房地产开发": 7,
+        "化学制品": 6,
+        "汽车零部件": 6,
         "医疗服务": 5,
-        "房地产开发": 5,
         "一般零售": 4,
+        "元件": 4,
         "医疗器械": 4,
+        "家居用品": 4,
         "服装家纺": 4,
+        "通信设备": 4,
         "专用设备": 3,
+        "光学光电": 3,
         "出版": 3,
-        "家居用品": 3,
         "房地产服务": 3,
+        "电网设备": 3,
         "通用设备": 3,
         "中药Ⅱ": 2,
-        "元件": 2,
-        "光学光电": 2,
         "养殖业": 2,
+        "农产品加": 2,
         "化学原料": 2,
         "半导体": 2,
         "塑料": 2,
         "多元金融": 2,
+        "家电零部": 2,
         "小金属": 2,
-        "汽车零部件": 2,
+        "工程咨询": 2,
         "纺织制造": 2,
+        "装修装饰": 2,
         "计算机设": 2,
-        "通信设备": 2,
         "IT服务Ⅱ": 1,
         "专业连锁": 1,
+        "光伏设备": 1,
         "其他家电": 1,
         "其他电子": 1,
-        "农产品加": 1,
         "农化制品": 1,
         "冶钢原料": 1,
         "包装印刷": 1,
         "医药商业": 1,
-        "家电零部": 1,
-        "工程咨询": 1,
+        "商用车": 1,
         "广告营销": 1,
+        "影视院线": 1,
         "旅游及景": 1,
+        "油服工程": 1,
         "游戏Ⅱ": 1,
         "照明设备": 1,
         "燃气Ⅱ": 1,
@@ -14530,10 +14536,10 @@
         "生物制品": 1,
         "电力": 1,
         "电机Ⅱ": 1,
-        "电网设备": 1,
         "白酒Ⅱ": 1,
-        "装修装饰": 1,
+        "航空装备": 1,
         "软件开发": 1,
+        "造纸": 1,
         "铁路公路": 1,
         "非白酒": 1,
         "饲料": 1
@@ -14552,7 +14558,7 @@
     "premarket_valid_rows": 9,
     "retrospective_rows": 0,
     "pending_rows": 9,
-    "generated_at_utc": "2026-09-21T12:27:29+00:00",
+    "generated_at_utc": "2026-09-21T15:08:48+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -14562,7 +14568,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-09-21T12:27:30+00:00",
+    "generated_at_utc": "2026-09-21T15:08:49+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
