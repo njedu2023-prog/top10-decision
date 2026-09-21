@@ -1,11 +1,11 @@
 {
-  "created_at_utc": "2026-09-18T18:03:43+00:00",
+  "created_at_utc": "2026-09-21T11:25:01+00:00",
   "source": "url",
-  "source_ref": "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv",
-  "sha256": "98a5e9b83bd22326fbc8e621538868b093b687f51e96b6479d87d6191248a61d",
-  "resolved_trade_date": "20260918",
+  "source_ref": "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_20260921.csv",
+  "sha256": "826ccc7fa0cab1770cc3c3289af274b7dcd94f747b68b7fd797e149f6823c39a",
+  "resolved_trade_date": "20260921",
   "csv_profile": {
-    "rows_sampled": 73,
+    "rows_sampled": 94,
     "columns": [
       "trade_date",
       "verify_date",
@@ -73,15 +73,15 @@
       "prob_final",
       "rank_v2"
     ],
-    "trade_date": "20260918",
-    "target_trade_date": "20260921",
+    "trade_date": "20260921",
+    "target_trade_date": "20260922",
     "has_intraday_fields": true,
     "missing_intraday_fields": []
   },
   "consistency": {
     "snapshot_path": "data/pred/pred_source_latest.csv",
-    "archive_path": "data/pred/archive/pred_source_20260918.csv",
+    "archive_path": "data/pred/archive/pred_source_20260921.csv",
     "has_intraday_fields": true,
-    "target_trade_date": "20260921"
+    "target_trade_date": "20260922"
   }
 }
