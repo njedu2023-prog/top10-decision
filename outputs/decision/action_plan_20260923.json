@@ -1,6 +1,6 @@
 {
   "schema_version": "decision_action_plan_v12_top10_trade_selector",
-  "generated_at_utc": "2026-09-22T12:39:40+00:00",
+  "generated_at_utc": "2026-09-22T17:41:20+00:00",
   "report_date": "20260923",
   "report_file": "decision_report_20260923.md",
   "signal_date": "20260922",
@@ -13235,115 +13235,106 @@
       "up_count": 2374,
       "down_count": 3030,
       "flat_count": 150,
-      "limit_up_count": 84,
-      "classified_limit_up_count": 84,
+      "limit_up_count": 64,
+      "classified_limit_up_count": 64,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "家居用品",
-          "limit_up_count": 6,
-          "share": 0.07142857142857142
+          "limit_up_count": 5,
+          "share": 0.078125
         },
         {
           "rank": 2,
-          "industry": "元件",
+          "industry": "出版",
           "limit_up_count": 4,
-          "share": 0.047619047619047616
+          "share": 0.0625
         },
         {
           "rank": 3,
-          "industry": "出版",
-          "limit_up_count": 4,
-          "share": 0.047619047619047616
+          "industry": "元件",
+          "limit_up_count": 3,
+          "share": 0.046875
         },
         {
           "rank": 4,
-          "industry": "半导体",
-          "limit_up_count": 4,
-          "share": 0.047619047619047616
+          "industry": "化学制药",
+          "limit_up_count": 3,
+          "share": 0.046875
         },
         {
           "rank": 5,
-          "industry": "IT服务Ⅱ",
+          "industry": "半导体",
           "limit_up_count": 3,
-          "share": 0.03571428571428571
+          "share": 0.046875
         },
         {
           "rank": 6,
-          "industry": "化学制药",
+          "industry": "广告营销",
           "limit_up_count": 3,
-          "share": 0.03571428571428571
+          "share": 0.046875
         },
         {
           "rank": 7,
-          "industry": "广告营销",
-          "limit_up_count": 3,
-          "share": 0.03571428571428571
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 2,
+          "share": 0.03125
         },
         {
           "rank": 8,
-          "industry": "房地产开发",
-          "limit_up_count": 3,
-          "share": 0.03571428571428571
+          "industry": "专用设备",
+          "limit_up_count": 2,
+          "share": 0.03125
         },
         {
           "rank": 9,
-          "industry": "计算机设",
-          "limit_up_count": 3,
-          "share": 0.03571428571428571
+          "industry": "光学光电",
+          "limit_up_count": 2,
+          "share": 0.03125
         },
         {
           "rank": 10,
-          "industry": "专用设备",
+          "industry": "医疗服务",
           "limit_up_count": 2,
-          "share": 0.023809523809523808
+          "share": 0.03125
         }
       ],
       "industry_counts": {
-        "家居用品": 6,
-        "元件": 4,
+        "家居用品": 5,
         "出版": 4,
-        "半导体": 4,
-        "IT服务Ⅱ": 3,
+        "元件": 3,
         "化学制药": 3,
+        "半导体": 3,
         "广告营销": 3,
-        "房地产开发": 3,
-        "计算机设": 3,
+        "IT服务Ⅱ": 2,
         "专用设备": 2,
         "光学光电": 2,
-        "化学制品": 2,
         "医疗服务": 2,
         "塑料": 2,
         "家电零部": 2,
         "房地产服务": 2,
-        "服装家纺": 2,
         "环境治理": 2,
-        "生物制品": 2,
+        "计算机设": 2,
         "软件开发": 2,
-        "通用设备": 2,
         "专业工程": 1,
         "中药Ⅱ": 1,
         "其他家电": 1,
         "包装印刷": 1,
+        "化学制品": 1,
         "医疗器械": 1,
         "商用车": 1,
         "工程机械": 1,
-        "教育": 1,
+        "房地产开发": 1,
         "文娱用品": 1,
+        "服装家纺": 1,
         "汽车零部件": 1,
-        "消费电子": 1,
-        "炼化及贸": 1,
-        "焦炭Ⅱ": 1,
         "煤炭开采": 1,
         "燃气Ⅱ": 1,
-        "玻璃玻纤": 1,
         "电力": 1,
         "电子化学": 1,
         "电视广播": 1,
-        "种植业": 1,
         "综合Ⅱ": 1,
         "自动化设": 1,
-        "装修装饰": 1,
         "通信服务": 1,
         "通信设备": 1,
         "铁路公路": 1,
