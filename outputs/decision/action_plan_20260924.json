@@ -12020,113 +12020,104 @@
       "up_count": 1120,
       "down_count": 4306,
       "flat_count": 131,
-      "limit_up_count": 75,
-      "classified_limit_up_count": 75,
+      "limit_up_count": 53,
+      "classified_limit_up_count": 53,
       "industry_top10": [
         {
           "rank": 1,
-          "industry": "汽车零部件",
+          "industry": "通用设备",
           "limit_up_count": 6,
-          "share": 0.08
+          "share": 0.11320754716981132
         },
         {
           "rank": 2,
-          "industry": "通用设备",
-          "limit_up_count": 6,
-          "share": 0.08
+          "industry": "汽车零部件",
+          "limit_up_count": 4,
+          "share": 0.07547169811320754
         },
         {
           "rank": 3,
-          "industry": "专用设备",
-          "limit_up_count": 4,
-          "share": 0.05333333333333334
+          "industry": "出版",
+          "limit_up_count": 3,
+          "share": 0.05660377358490566
         },
         {
           "rank": 4,
-          "industry": "出版",
-          "limit_up_count": 4,
-          "share": 0.05333333333333334
+          "industry": "医疗服务",
+          "limit_up_count": 3,
+          "share": 0.05660377358490566
         },
         {
           "rank": 5,
-          "industry": "医疗服务",
-          "limit_up_count": 4,
-          "share": 0.05333333333333334
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 6,
-          "industry": "化学制品",
-          "limit_up_count": 3,
-          "share": 0.04
+          "industry": "军工电子",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 7,
-          "industry": "半导体",
-          "limit_up_count": 3,
-          "share": 0.04
+          "industry": "化学制品",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 8,
-          "industry": "广告营销",
-          "limit_up_count": 3,
-          "share": 0.04
+          "industry": "半导体",
+          "limit_up_count": 2,
+          "share": 0.03773584905660377
         },
         {
           "rank": 9,
-          "industry": "IT服务Ⅱ",
+          "industry": "广告营销",
           "limit_up_count": 2,
-          "share": 0.02666666666666667
+          "share": 0.03773584905660377
         },
         {
           "rank": 10,
-          "industry": "军工电子",
+          "industry": "服装家纺",
           "limit_up_count": 2,
-          "share": 0.02666666666666667
+          "share": 0.03773584905660377
         }
       ],
       "industry_counts": {
-        "汽车零部件": 6,
         "通用设备": 6,
-        "专用设备": 4,
-        "出版": 4,
-        "医疗服务": 4,
-        "化学制品": 3,
-        "半导体": 3,
-        "广告营销": 3,
+        "汽车零部件": 4,
+        "出版": 3,
+        "医疗服务": 3,
         "IT服务Ⅱ": 2,
         "军工电子": 2,
+        "化学制品": 2,
+        "半导体": 2,
+        "广告营销": 2,
         "服装家纺": 2,
         "林业Ⅱ": 2,
         "水泥": 2,
-        "电视广播": 2,
-        "纺织制造": 2,
-        "饮料乳品": 2,
-        "一般零售": 1,
+        "专用设备": 1,
         "中药Ⅱ": 1,
-        "元件": 1,
         "光伏设备": 1,
-        "光学光电": 1,
         "其他家电": 1,
         "养殖业": 1,
         "农化制品": 1,
         "包装印刷": 1,
-        "化学制药": 1,
         "基础建设": 1,
         "塑料": 1,
-        "家居用品": 1,
-        "工业金属": 1,
         "工程机械": 1,
-        "房地产开发": 1,
-        "旅游及景": 1,
         "焦炭Ⅱ": 1,
-        "燃气Ⅱ": 1,
         "电网设备": 1,
+        "电视广播": 1,
+        "纺织制造": 1,
         "综合Ⅱ": 1,
         "航运港口": 1,
         "轨交设备": 1,
         "通信设备": 1,
         "铁路公路": 1,
-        "风电设备": 1
+        "风电设备": 1,
+        "饮料乳品": 1
       },
       "raw_close_available": true,
       "coverage_against_d": 1.000179985601152,
