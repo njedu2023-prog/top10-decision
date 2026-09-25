@@ -1,7 +1,7 @@
 {
   "trade_date": "20260924",
-  "created_at_utc": "2026-09-24T17:53:57+00:00",
-  "commit_sha": "6a0a5c364fcf13d6ca06004952fcea703b89cb7d",
+  "created_at_utc": "2026-09-25T17:59:08+00:00",
+  "commit_sha": "912f1847415389c96b09c722093488048ca0c73b",
   "fs_version": "v0.6-intraday-auction-features",
   "richness_target": 0.75,
   "richness_estimate": 0.989899,
@@ -209,7 +209,7 @@
       "loaded": true,
       "content": {
         "trade_date": "20260924",
-        "created_at_utc": "2026-09-24T17:51:52+00:00",
+        "created_at_utc": "2026-09-25T17:57:03+00:00",
         "source_repo": {
           "owner": "njedu2023-prog",
           "repo": "a-share-top3-data",
@@ -224,7 +224,7 @@
         "upstream_meta": {
           "requested_trade_date": null,
           "resolved_trade_date": "20260924",
-          "generated_at_bj": "2026-09-24 22:37:31",
+          "generated_at_bj": "2026-09-25 22:59:06",
           "jobs": [
             {
               "key": "limit_list_d",
@@ -440,17 +440,12 @@
               "preserved_nonrequired_count": 27,
               "selected_count": 80
             },
-            "minute_end": "2026-09-24 15:00:00",
+            "minute_end": "",
             "symbols_requested": 80,
-            "symbols_success": 80,
+            "symbols_success": 0,
             "symbols_failed": 0,
             "errors": [],
-            "fallback_symbol_query_count": 80,
-            "required_symbols_success": 53,
-            "required_symbols_failed": 0,
-            "required_failed_codes": [],
-            "required_coverage_ratio": 1.0,
-            "coverage_status": "complete"
+            "skip_reason": "REALTIME_MINUTE_ONLY enabled; trade_date 20260924 is not today 20260925"
           },
           "intraday_features": {
             "ok": true,
@@ -486,7 +481,7 @@
           },
           "realtime_snapshot": {
             "ok": true,
-            "rows": 80,
+            "rows": 0,
             "columns": [
               "ts_code",
               "trade_date",
@@ -560,7 +555,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260924/intraday_features.csv",
             "latest_path": "data/market/raw/latest/intraday_features.csv",
-            "bytes": 11543
+            "bytes": 7725
           },
           {
             "name": "limit_break_d",
@@ -669,7 +664,7 @@
             "error": "",
             "dated_path": "data/market/raw/2026/20260924/stock_basic.csv",
             "latest_path": "data/market/raw/latest/stock_basic.csv",
-            "bytes": 363619
+            "bytes": 363618
           },
           {
             "name": "top_list",

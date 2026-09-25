@@ -5,18 +5,18 @@
   "requested_trade_date": "",
   "regime": "CAUTION",
   "risk_budget": 0.7,
-  "regime_reason": "tail_risk_mean=0.1592,volatility_mean=0.0470",
-  "guardrail_reason": "CAUTION:tail_risk_mean=0.1592",
+  "regime_reason": "tail_risk_mean=0.1592,volatility_mean=0.0470,intraday_risk_mean=0.750",
+  "guardrail_reason": "CAUTION:intraday_risk_mean=0.750,tail_risk_mean=0.1592",
   "topk": 47,
   "picked": 0,
   "cost_est_mean": 0.0015844136382978723,
   "cost_est_min": 0.0011159355,
   "cost_est_max": 0.002262765,
-  "risk_penalty_mean": 0.015792655993062874,
-  "risk_penalty_min": 0.009112752618319061,
-  "risk_penalty_max": 0.03385818242263056,
-  "ev_base_mean": -0.009088692817221302,
-  "ev_final_mean": -0.009088692817221302,
+  "risk_penalty_mean": 0.019689875865297694,
+  "risk_penalty_min": 0.013887678673055239,
+  "risk_penalty_max": 0.0275214,
+  "ev_base_mean": -0.01589667801502251,
+  "ev_final_mean": -0.01589667801502251,
   "pfill_penalty_extra_mean": 0.0,
   "risk_penalty_extra_mean": 0.0,
   "intraday_penalty_extra_mean": 0.0,
@@ -37,8 +37,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260924",
-      "created_at_utc": "2026-09-24T17:53:57+00:00",
-      "commit_sha": "6a0a5c364fcf13d6ca06004952fcea703b89cb7d",
+      "created_at_utc": "2026-09-25T17:59:08+00:00",
+      "commit_sha": "912f1847415389c96b09c722093488048ca0c73b",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -246,7 +246,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260924",
-            "created_at_utc": "2026-09-24T17:51:52+00:00",
+            "created_at_utc": "2026-09-25T17:57:03+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -261,7 +261,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260924",
-              "generated_at_bj": "2026-09-24 22:37:31",
+              "generated_at_bj": "2026-09-25 22:59:06",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -477,17 +477,12 @@
                   "preserved_nonrequired_count": 27,
                   "selected_count": 80
                 },
-                "minute_end": "2026-09-24 15:00:00",
+                "minute_end": "",
                 "symbols_requested": 80,
-                "symbols_success": 80,
+                "symbols_success": 0,
                 "symbols_failed": 0,
                 "errors": [],
-                "fallback_symbol_query_count": 80,
-                "required_symbols_success": 53,
-                "required_symbols_failed": 0,
-                "required_failed_codes": [],
-                "required_coverage_ratio": 1.0,
-                "coverage_status": "complete"
+                "skip_reason": "REALTIME_MINUTE_ONLY enabled; trade_date 20260924 is not today 20260925"
               },
               "intraday_features": {
                 "ok": true,
@@ -523,7 +518,7 @@
               },
               "realtime_snapshot": {
                 "ok": true,
-                "rows": 80,
+                "rows": 0,
                 "columns": [
                   "ts_code",
                   "trade_date",
@@ -597,7 +592,7 @@
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260924/intraday_features.csv",
                 "latest_path": "data/market/raw/latest/intraday_features.csv",
-                "bytes": 11543
+                "bytes": 7725
               },
               {
                 "name": "limit_break_d",
@@ -706,7 +701,7 @@
                 "error": "",
                 "dated_path": "data/market/raw/2026/20260924/stock_basic.csv",
                 "latest_path": "data/market/raw/latest/stock_basic.csv",
-                "bytes": 363619
+                "bytes": 363618
               },
               {
                 "name": "top_list",
@@ -993,35 +988,35 @@
       "intraday_confidence_score"
     ],
     "rows": 47,
-    "available_rows": 47,
+    "available_rows": 0,
     "status_counts": {
-      "ok": 47
+      "degenerate_features": 47
     },
-    "hard_risk_rows": 4,
-    "risk_intraday_hard_penalty_mean": 0.000851063829787234,
-    "risk_intraday_hard_penalty_max": 0.01,
-    "risk_intraday_hard_penalty_sum": 0.04,
-    "risk_intraday_soft_penalty_mean": 0.0008820781276595743,
-    "risk_intraday_soft_penalty_max": 0.0020731499999999997,
-    "risk_intraday_soft_penalty_sum": 0.041457671999999994,
-    "risk_intraday_confidence_penalty_mean": 0.0,
-    "risk_intraday_confidence_penalty_max": 0.0,
-    "risk_intraday_confidence_penalty_sum": 0.0,
-    "risk_intraday_missing_penalty_mean": 0.0,
-    "risk_intraday_missing_penalty_max": 0.0,
-    "risk_intraday_missing_penalty_sum": 0.0,
-    "risk_late_withdraw_penalty_mean": 0.00023896968085106377,
-    "risk_late_withdraw_penalty_max": 0.0027448549999999996,
-    "risk_late_withdraw_penalty_sum": 0.011231574999999997,
-    "risk_reseal_weakness_penalty_mean": 0.002232252301740812,
+    "hard_risk_rows": 0,
+    "risk_intraday_hard_penalty_mean": 0.0,
+    "risk_intraday_hard_penalty_max": 0.0,
+    "risk_intraday_hard_penalty_sum": 0.0,
+    "risk_intraday_soft_penalty_mean": 0.004500000000000001,
+    "risk_intraday_soft_penalty_max": 0.0045000000000000005,
+    "risk_intraday_soft_penalty_sum": 0.21150000000000005,
+    "risk_intraday_confidence_penalty_mean": 0.0023467247872340433,
+    "risk_intraday_confidence_penalty_max": 0.002688275000000001,
+    "risk_intraday_confidence_penalty_sum": 0.11029606500000004,
+    "risk_intraday_missing_penalty_mean": 0.0020000000000000005,
+    "risk_intraday_missing_penalty_max": 0.002,
+    "risk_intraday_missing_penalty_sum": 0.09400000000000001,
+    "risk_late_withdraw_penalty_mean": 0.0,
+    "risk_late_withdraw_penalty_max": 0.0,
+    "risk_late_withdraw_penalty_sum": 0.0,
+    "risk_reseal_weakness_penalty_mean": 0.004000000000000001,
     "risk_reseal_weakness_penalty_max": 0.004,
-    "risk_reseal_weakness_penalty_sum": 0.10491585818181817,
-    "risk_auction_weakness_penalty_mean": 0.0013828542065918055,
+    "risk_reseal_weakness_penalty_sum": 0.18800000000000003,
+    "risk_auction_weakness_penalty_mean": 0.0013828542065918053,
     "risk_auction_weakness_penalty_max": 0.003,
-    "risk_auction_weakness_penalty_sum": 0.06499414770981486,
-    "intraday_execution_penalty_mean": 0.004736154316843257,
-    "intraday_execution_penalty_max": 0.008222150056379942,
-    "intraday_execution_penalty_sum": 0.22259925289163307,
+    "risk_auction_weakness_penalty_sum": 0.06499414770981485,
+    "intraday_execution_penalty_mean": 0.012000000000000002,
+    "intraday_execution_penalty_max": 0.012,
+    "intraday_execution_penalty_sum": 0.5640000000000001,
     "intraday_ev_bonus_mean": 0.0,
     "intraday_ev_bonus_max": 0.0,
     "intraday_ev_bonus_sum": 0.0,
@@ -1030,94 +1025,94 @@
     "intraday_penalty_extra_sum": 0.0,
     "top_penalty_rows": [
       {
-        "ts_code": "000905.SZ",
-        "name": "厦门港务",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.008222150056379942,
+        "ts_code": "000498.SZ",
+        "name": "山东路桥",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.008216693271927825
+        "ev_pred": -0.013527080046987503
       },
       {
-        "ts_code": "600815.SH",
-        "name": "厦工股份",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.00821090989684075,
+        "ts_code": "000592.SZ",
+        "name": "平潭发展",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.037156375071306674
-      },
-      {
-        "ts_code": "002679.SZ",
-        "name": "福建金森",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.007893113737218335,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.010444941786989384
-      },
-      {
-        "ts_code": "002264.SZ",
-        "name": "新 华 都",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.007458703091647187,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.006666222867693937
-      },
-      {
-        "ts_code": "000753.SZ",
-        "name": "漳州发展",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.007315212727272726,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.00798658851408643
-      },
-      {
-        "ts_code": "603278.SH",
-        "name": "大业股份",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.007288531818181818,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.009851298106134056
-      },
-      {
-        "ts_code": "603122.SH",
-        "name": "合富中国",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.007152809359918268,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.01452811018245277
-      },
-      {
-        "ts_code": "600358.SH",
-        "name": "国旅联合",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.007039786993006993,
-        "intraday_penalty_extra": 0.0,
-        "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.03220814563238755
+        "ev_pred": -0.012176559079027292
       },
       {
         "ts_code": "000678.SZ",
         "name": "襄阳轴承",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.006953446512959637,
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.022464007089026673
+        "ev_pred": -0.011377084396828845
       },
       {
-        "ts_code": "002614.SZ",
-        "name": "奥佳华",
-        "intraday_status": "ok",
-        "intraday_execution_penalty": 0.006822681302029543,
+        "ts_code": "000710.SZ",
+        "name": "贝瑞基因",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.027024976584849217
+        "ev_pred": -0.010898585390428015
+      },
+      {
+        "ts_code": "000753.SZ",
+        "name": "漳州发展",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.0120377403608408
+      },
+      {
+        "ts_code": "000790.SZ",
+        "name": "华神科技",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.013661561110946152
+      },
+      {
+        "ts_code": "000850.SZ",
+        "name": "华茂股份",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.0174888586111864
+      },
+      {
+        "ts_code": "000905.SZ",
+        "name": "厦门港务",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.011220158476848142
+      },
+      {
+        "ts_code": "001234.SZ",
+        "name": "泰慕士",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.017632466232483532
+      },
+      {
+        "ts_code": "001317.SZ",
+        "name": "三羊马",
+        "intraday_status": "degenerate_features",
+        "intraday_execution_penalty": 0.012,
+        "intraday_penalty_extra": 0.0,
+        "intraday_ev_bonus": 0.0,
+        "ev_pred": -0.01921075465842899
       }
     ]
   },
@@ -1126,21 +1121,21 @@
     "selected_rows": 0,
     "risk_budget": 0.7,
     "stop_reason": "",
-    "p_fill_pred_min": 0.5545151975819991,
-    "p_fill_pred_max": 0.8553942298898477,
-    "p_fill_pred_mean": 0.7239309640807029,
-    "e_ret_pred_min": -0.002275350071200796,
-    "e_ret_pred_max": 0.019958139181151892,
-    "e_ret_pred_mean": 0.011282378884749025,
+    "p_fill_pred_min": 0.44558326737196197,
+    "p_fill_pred_max": 0.7777365385036434,
+    "p_fill_pred_mean": 0.6443903133394029,
+    "e_ret_pred_min": 0.006607936667954357,
+    "e_ret_pred_max": 0.012724987167418765,
+    "e_ret_pred_mean": 0.008371162325026051,
     "cost_est_min": 0.0011159355,
     "cost_est_max": 0.002262765,
     "cost_est_mean": 0.0015844136382978723,
-    "risk_penalty_min": 0.009112752618319061,
-    "risk_penalty_max": 0.03385818242263056,
-    "risk_penalty_mean": 0.015792655993062874,
-    "ev_base_min": -0.037156375071306674,
-    "ev_base_max": -0.0010644572804880976,
-    "ev_base_mean": -0.009088692817221302,
+    "risk_penalty_min": 0.013887678673055239,
+    "risk_penalty_max": 0.0275214,
+    "risk_penalty_mean": 0.019689875865297694,
+    "ev_base_min": -0.02397222743882795,
+    "ev_base_max": -0.010201282343906683,
+    "ev_base_mean": -0.01589667801502251,
     "pfill_penalty_extra_min": 0.0,
     "pfill_penalty_extra_max": 0.0,
     "pfill_penalty_extra_mean": 0.0,
@@ -1156,21 +1151,21 @@
     "ev_penalty_total_extra_min": 0.0,
     "ev_penalty_total_extra_max": 0.0,
     "ev_penalty_total_extra_mean": 0.0,
-    "ev_final_min": -0.037156375071306674,
-    "ev_final_max": -0.0010644572804880976,
-    "ev_final_mean": -0.009088692817221302,
-    "ev_pred_min": -0.037156375071306674,
-    "ev_pred_max": -0.0010644572804880976,
-    "ev_pred_mean": -0.009088692817221302,
+    "ev_final_min": -0.02397222743882795,
+    "ev_final_max": -0.010201282343906683,
+    "ev_final_mean": -0.01589667801502251,
+    "ev_pred_min": -0.02397222743882795,
+    "ev_pred_max": -0.010201282343906683,
+    "ev_pred_mean": -0.01589667801502251,
     "positive_ev_rows": 0,
     "positive_ev_base_rows": 0,
-    "positive_e_ret_rows": 45,
+    "positive_e_ret_rows": 47,
     "high_pfill_rows": 0,
-    "low_risk_rows": 4,
+    "low_risk_rows": 0,
     "top_mean_penalty_drivers": [
       {
         "name": "risk_penalty",
-        "mean": 0.015792655993062874
+        "mean": 0.019689875865297694
       },
       {
         "name": "cost_est",
@@ -1180,62 +1175,62 @@
     "primary_no_trade_reason": "positive_e_ret_cannot_cover_cost_and_risk",
     "top_ev_rows": [
       {
-        "ts_code": "002819.SZ",
-        "name": "东方中科",
-        "ev_pred": -0.0010644572804880976,
-        "ev_base": -0.0010644572804880976,
-        "p_fill_pred": 0.7954434239346195,
-        "e_ret_pred": 0.016719943804195923,
-        "cost_est": 0.0013441195000000001,
-        "risk_penalty": 0.013020107128092128,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
-        "ts_code": "600825.SH",
-        "name": "新华传媒",
-        "ev_pred": -0.0010955987787876018,
-        "ev_base": -0.0010955987787876018,
-        "p_fill_pred": 0.6119733998299378,
-        "e_ret_pred": 0.019958139181151892,
-        "cost_est": 0.0022140799999999998,
-        "risk_penalty": 0.011095369067756216,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
-        "ts_code": "002622.SZ",
-        "name": "皓宸医疗",
-        "ev_pred": -0.0016860202573081642,
-        "ev_base": -0.0016860202573081642,
-        "p_fill_pred": 0.7302825639433803,
-        "e_ret_pred": 0.012032015818047309,
-        "cost_est": 0.0013600390000000002,
-        "risk_penalty": 0.009112752618319061,
-        "extra_penalty": 0.0,
-        "intraday_ev_bonus": 0.0
-      },
-      {
         "ts_code": "600843.SH",
         "name": "上工申贝",
-        "ev_pred": -0.002077751012902288,
-        "ev_base": -0.002077751012902288,
-        "p_fill_pred": 0.7336444579483817,
-        "e_ret_pred": 0.011567773630337317,
+        "ev_pred": -0.010201282343906683,
+        "ev_base": -0.010201282343906683,
+        "p_fill_pred": 0.6342223762497595,
+        "e_ret_pred": 0.007772059160535529,
         "cost_est": 0.0012428175,
-        "risk_penalty": 0.009321566527600692,
+        "risk_penalty": 0.013887678673055239,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       },
       {
         "ts_code": "000710.SZ",
         "name": "贝瑞基因",
-        "ev_pred": -0.0022765018665116717,
-        "ev_base": -0.0022765018665116717,
-        "p_fill_pred": 0.7226955503107441,
-        "e_ret_pred": 0.011355875125011078,
+        "ev_pred": -0.010898585390428015,
+        "ev_base": -0.010898585390428015,
+        "p_fill_pred": 0.617557441904411,
+        "e_ret_pred": 0.007810116699845332,
         "cost_est": 0.0011159355,
-        "risk_penalty": 0.009367406789241643,
+        "risk_penalty": 0.01460584558055942,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "000905.SZ",
+        "name": "厦门港务",
+        "ev_pred": -0.011220158476848142,
+        "ev_base": -0.011220158476848142,
+        "p_fill_pred": 0.5911594176735039,
+        "e_ret_pred": 0.008709781529085582,
+        "cost_est": 0.0011829255,
+        "risk_penalty": 0.015186102353645814,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "002264.SZ",
+        "name": "新 华 都",
+        "ev_pred": -0.011247435971184874,
+        "ev_base": -0.011247435971184874,
+        "p_fill_pred": 0.6342642349877161,
+        "e_ret_pred": 0.007862156714369392,
+        "cost_est": 0.0013374995,
+        "risk_penalty": 0.014896621284977912,
+        "extra_penalty": 0.0,
+        "intraday_ev_bonus": 0.0
+      },
+      {
+        "ts_code": "000678.SZ",
+        "name": "襄阳轴承",
+        "ev_pred": -0.011377084396828845,
+        "ev_base": -0.011377084396828845,
+        "p_fill_pred": 0.6110088611394042,
+        "e_ret_pred": 0.008589984801062486,
+        "cost_est": 0.001176867,
+        "risk_penalty": 0.015448774227330826,
         "extra_penalty": 0.0,
         "intraday_ev_bonus": 0.0
       }
@@ -1268,5 +1263,5 @@
     "topn_rows": 0,
     "full_candidate_rows": 47
   },
-  "intraday_execution_penalty_mean": 0.004736154316843206
+  "intraday_execution_penalty_mean": 0.012000000000000002
 }
