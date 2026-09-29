@@ -1,8 +1,8 @@
 trade_date: 20260929
-run_id: gh_36613531898
-commit_sha: 53098b516745
+run_id: gh_36619788386
+commit_sha: 83426be62cc1
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-09-29T19:32:54Z
+created_at_utc: 2026-09-29T19:38:08Z
 ok: True
 buy_date: 20260930
 target_date: 20261008
@@ -105,8 +105,8 @@ t1_calibration_reason: ok
 t1_calibration_raw_brier: 0.26658013930875
 t1_calibration_brier: 0.24764068075101478
 t1_calibration_kind: platt_monotonic
-t1_calibration_avg_delta: -0.05412175449277233
-t1_calibration_slope: 0.07224774859055091
+t1_calibration_avg_delta: -0.054121754492772324
+t1_calibration_slope: 0.0722477485905509
 t1_calibration_intercept: -0.17116539644706072
 adaptive_rank_mode: history_ic_weighted_v1
 adaptive_weight_limitup: 0.60635
