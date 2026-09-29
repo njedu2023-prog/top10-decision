@@ -6862,7 +6862,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-29T13:41:03+00:00",
+      "truth_generated_at_utc": "2026-09-29T14:54:06+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -6986,7 +6986,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-29T13:41:03+00:00",
+      "truth_generated_at_utc": "2026-09-29T14:54:06+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7110,7 +7110,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-29T13:41:03+00:00",
+      "truth_generated_at_utc": "2026-09-29T14:54:06+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7234,7 +7234,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-29T13:41:03+00:00",
+      "truth_generated_at_utc": "2026-09-29T14:54:06+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7358,7 +7358,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-29T13:41:03+00:00",
+      "truth_generated_at_utc": "2026-09-29T14:54:06+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7482,7 +7482,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-29T13:41:03+00:00",
+      "truth_generated_at_utc": "2026-09-29T14:54:06+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7606,7 +7606,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-09-29T13:41:03+00:00",
+      "truth_generated_at_utc": "2026-09-29T14:54:06+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -12320,99 +12320,109 @@
       "up_count": 3471,
       "down_count": 1933,
       "flat_count": 155,
-      "limit_up_count": 57,
-      "classified_limit_up_count": 57,
+      "limit_up_count": 75,
+      "classified_limit_up_count": 75,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "元件",
           "limit_up_count": 7,
-          "share": 0.12280701754385964
+          "share": 0.09333333333333334
         },
         {
           "rank": 2,
           "industry": "房地产开发",
-          "limit_up_count": 6,
-          "share": 0.10526315789473684
+          "limit_up_count": 7,
+          "share": 0.09333333333333334
         },
         {
           "rank": 3,
           "industry": "电池",
           "limit_up_count": 6,
-          "share": 0.10526315789473684
+          "share": 0.08
         },
         {
           "rank": 4,
-          "industry": "汽车零部件",
+          "industry": "化学制品",
           "limit_up_count": 4,
-          "share": 0.07017543859649122
+          "share": 0.05333333333333334
         },
         {
           "rank": 5,
-          "industry": "出版",
-          "limit_up_count": 3,
-          "share": 0.05263157894736842
+          "industry": "汽车零部件",
+          "limit_up_count": 4,
+          "share": 0.05333333333333334
         },
         {
           "rank": 6,
-          "industry": "包装印刷",
+          "industry": "出版",
           "limit_up_count": 3,
-          "share": 0.05263157894736842
+          "share": 0.04
         },
         {
           "rank": 7,
-          "industry": "广告营销",
+          "industry": "包装印刷",
           "limit_up_count": 3,
-          "share": 0.05263157894736842
+          "share": 0.04
         },
         {
           "rank": 8,
-          "industry": "化学制品",
-          "limit_up_count": 2,
-          "share": 0.03508771929824561
+          "industry": "广告营销",
+          "limit_up_count": 3,
+          "share": 0.04
         },
         {
           "rank": 9,
           "industry": "环境治理",
-          "limit_up_count": 2,
-          "share": 0.03508771929824561
+          "limit_up_count": 3,
+          "share": 0.04
         },
         {
           "rank": 10,
-          "industry": "电力",
+          "industry": "农产品加",
           "limit_up_count": 2,
-          "share": 0.03508771929824561
+          "share": 0.02666666666666667
         }
       ],
       "industry_counts": {
         "元件": 7,
-        "房地产开发": 6,
+        "房地产开发": 7,
         "电池": 6,
+        "化学制品": 4,
         "汽车零部件": 4,
         "出版": 3,
         "包装印刷": 3,
         "广告营销": 3,
-        "化学制品": 2,
-        "环境治理": 2,
+        "环境治理": 3,
+        "农产品加": 2,
+        "医疗服务": 2,
+        "服装家纺": 2,
         "电力": 2,
+        "纺织制造": 2,
         "饮料乳品": 2,
         "IT服务Ⅱ": 1,
+        "一般零售": 1,
+        "专业工程": 1,
         "乘用车": 1,
-        "农产品加": 1,
+        "光伏设备": 1,
+        "光学光电": 1,
         "化妆品": 1,
         "化学制药": 1,
         "化学原料": 1,
+        "半导体": 1,
         "基础建设": 1,
         "小家电": 1,
         "数字媒体": 1,
-        "服装家纺": 1,
+        "文娱用品": 1,
         "水泥": 1,
         "消费电子": 1,
         "电网设备": 1,
+        "种植业": 1,
         "航空装备": 1,
         "计算机设": 1,
         "软件开发": 1,
-        "通信服务": 1
+        "通信服务": 1,
+        "非白酒": 1
       },
       "maturity_status": "FINAL_D_CLOSE"
     },
@@ -12444,7 +12454,7 @@
     "premarket_valid_rows": 7,
     "retrospective_rows": 0,
     "pending_rows": 7,
-    "generated_at_utc": "2026-09-29T13:41:03+00:00",
+    "generated_at_utc": "2026-09-29T14:54:06+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -12454,7 +12464,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-09-29T13:41:03+00:00",
+    "generated_at_utc": "2026-09-29T14:54:07+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
