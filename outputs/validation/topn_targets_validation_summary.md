@@ -1,7 +1,7 @@
 # top10-decision 最终 weights Top10 后验验证摘要
 
 - 数据源：docs/weights/weights_YYYYMMDD.csv::target_rank_then_backup_rank
-- 生成时间：2026-09-30T19:49:47
+- 生成时间：2026-10-01T20:10:24
 - 原始预测样本数：1490
 - 已验证样本数：1456
 - 未验证样本数：34
