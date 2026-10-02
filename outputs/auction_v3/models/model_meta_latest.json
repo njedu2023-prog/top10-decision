@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-09-30T19:40:04+00:00",
+  "generated_at_utc": "2026-10-02T19:32:39+00:00",
   "model_version": "auction_v13_five_year_promotion_blend_oos_1",
   "model_artifact_sha256": "7b00b5ccb4dad0b56631861d0531909d0951aee23397e45f3004b9be2c91913f",
   "ready": true,
@@ -2835,7 +2835,7 @@
       "path": "outputs/auction_v3/verification/verify_latest.csv",
       "metrics": {
         "status": "ok",
-        "generated_at_utc": "2026-09-30T19:37:45+00:00",
+        "generated_at_utc": "2026-10-02T19:30:31+00:00",
         "frozen_predictions": 3361,
         "selected_predictions": 0,
         "verified_trades": 0,
@@ -2880,7 +2880,7 @@
       "metrics": {
         "schema_version": "decision_observation_validation_v4_auction_truth",
         "status": "ok",
-        "generated_at_utc": "2026-09-30T19:37:47+00:00",
+        "generated_at_utc": "2026-10-02T19:30:33+00:00",
         "validation_start_exec_date": "20260721",
         "validation_mode": "market_at_open_proxy",
         "market_open_fill_assumption": true,
@@ -5334,7 +5334,7 @@
       "path": "outputs/auction_v3/verification/manual_actual_latest.csv",
       "metrics": {
         "schema_version": "decision_manual_actual_v1",
-        "generated_at_utc": "2026-09-30T19:37:45+00:00",
+        "generated_at_utc": "2026-10-02T19:30:31+00:00",
         "truth_source": "manual_actual",
         "trades": 0,
         "win_rate": null,
@@ -5526,7 +5526,7 @@
   },
   "backtest_gate": {
     "status": "ok",
-    "generated_at_utc": "2026-09-30T19:34:58+00:00",
+    "generated_at_utc": "2026-10-02T19:27:40+00:00",
     "model_version": "auction_v13_five_year_promotion_blend_oos_1",
     "history_dates": 715,
     "oos_dates": 544,

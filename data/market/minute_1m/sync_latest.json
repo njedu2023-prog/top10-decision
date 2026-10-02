@@ -1,6 +1,6 @@
 {
   "source": "tushare",
-  "trade_date": "20261001",
+  "trade_date": "20261003",
   "signal_date": "",
   "calendar_path": "data/market/trade_cal_sse.csv",
   "calendar_rows": 365,
