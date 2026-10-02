@@ -37,8 +37,8 @@
     "meta_loaded": true,
     "meta": {
       "trade_date": "20260930",
-      "created_at_utc": "2026-10-01T18:52:09+00:00",
-      "commit_sha": "24e3ddd3caaeb102cdeada0a7ca19a233e2beb01",
+      "created_at_utc": "2026-10-02T18:24:04+00:00",
+      "commit_sha": "652c512bee1437d1a426af510e4f6625bffd9ba8",
       "fs_version": "v0.6-intraday-auction-features",
       "richness_target": 0.75,
       "richness_estimate": 0.989899,
@@ -246,7 +246,7 @@
           "loaded": true,
           "content": {
             "trade_date": "20260930",
-            "created_at_utc": "2026-10-01T18:51:17+00:00",
+            "created_at_utc": "2026-10-02T18:23:14+00:00",
             "source_repo": {
               "owner": "njedu2023-prog",
               "repo": "a-share-top3-data",
@@ -261,7 +261,7 @@
             "upstream_meta": {
               "requested_trade_date": null,
               "resolved_trade_date": "20260930",
-              "generated_at_bj": "2026-10-02 00:52:21",
+              "generated_at_bj": "2026-10-03 00:05:11",
               "jobs": [
                 {
                   "key": "limit_list_d",
@@ -482,7 +482,7 @@
                 "symbols_success": 0,
                 "symbols_failed": 0,
                 "errors": [],
-                "skip_reason": "REALTIME_MINUTE_ONLY enabled; trade_date 20260930 is not today 20261002"
+                "skip_reason": "REALTIME_MINUTE_ONLY enabled; trade_date 20260930 is not today 20261003"
               },
               "intraday_features": {
                 "ok": true,
@@ -1067,7 +1067,7 @@
         "intraday_execution_penalty": 0.012,
         "intraday_penalty_extra": 0.0,
         "intraday_ev_bonus": 0.0,
-        "ev_pred": -0.01101110158168009
+        "ev_pred": -0.011011101581680088
       },
       {
         "ts_code": "001206.SZ",
@@ -1189,10 +1189,10 @@
       {
         "ts_code": "000710.SZ",
         "name": "贝瑞基因",
-        "ev_pred": -0.01101110158168009,
-        "ev_base": -0.01101110158168009,
+        "ev_pred": -0.011011101581680088,
+        "ev_base": -0.011011101581680088,
         "p_fill_pred": 0.5903356425770956,
-        "e_ret_pred": 0.009521340759368719,
+        "e_ret_pred": 0.00952134075936872,
         "cost_est": 0.0011167545000000001,
         "risk_penalty": 0.015515133897057514,
         "extra_penalty": 0.0,
