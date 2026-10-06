@@ -1,7 +1,7 @@
 {
   "trade_date": "20260930",
-  "created_at_utc": "2026-10-05T21:18:29+00:00",
-  "commit_sha": "f7cadb889c47ed90fb52af40e7220ab7dddb55cc",
+  "created_at_utc": "2026-10-06T18:55:25+00:00",
+  "commit_sha": "608e151e7d935f7d818af46279b6dac11c4ff172",
   "fs_version": "v0.6-intraday-auction-features",
   "richness_target": 0.75,
   "richness_estimate": 0.989899,
@@ -209,7 +209,7 @@
       "loaded": true,
       "content": {
         "trade_date": "20260930",
-        "created_at_utc": "2026-10-05T21:16:28+00:00",
+        "created_at_utc": "2026-10-06T18:54:16+00:00",
         "source_repo": {
           "owner": "njedu2023-prog",
           "repo": "a-share-top3-data",
@@ -224,7 +224,7 @@
         "upstream_meta": {
           "requested_trade_date": null,
           "resolved_trade_date": "20260930",
-          "generated_at_bj": "2026-10-06 03:02:49",
+          "generated_at_bj": "2026-10-07 00:29:18",
           "jobs": [
             {
               "key": "limit_list_d",
@@ -445,7 +445,7 @@
             "symbols_success": 0,
             "symbols_failed": 0,
             "errors": [],
-            "skip_reason": "REALTIME_MINUTE_ONLY enabled; trade_date 20260930 is not today 20261006"
+            "skip_reason": "REALTIME_MINUTE_ONLY enabled; trade_date 20260930 is not today 20261007"
           },
           "intraday_features": {
             "ok": true,
