@@ -12458,21 +12458,114 @@
     },
     "t": {
       "trade_date": "20261008",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5557,
+      "return_coverage": 1.0,
+      "up_count": 1698,
+      "down_count": 3748,
+      "flat_count": 111,
+      "limit_up_count": 43,
+      "classified_limit_up_count": 43,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "电池",
+          "limit_up_count": 8,
+          "share": 0.18604651162790697
+        },
+        {
+          "rank": 2,
+          "industry": "专用设备",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 3,
+          "industry": "化学制品",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 4,
+          "industry": "化学制药",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 5,
+          "industry": "服装家纺",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 6,
+          "industry": "航运港口",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 7,
+          "industry": "光伏设备",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        },
+        {
+          "rank": 8,
+          "industry": "其他电源",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        },
+        {
+          "rank": 9,
+          "industry": "出版",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        },
+        {
+          "rank": 10,
+          "industry": "包装印刷",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        }
+      ],
+      "industry_counts": {
+        "电池": 8,
+        "专用设备": 2,
+        "化学制品": 2,
+        "化学制药": 2,
+        "服装家纺": 2,
+        "航运港口": 2,
+        "光伏设备": 1,
+        "其他电源": 1,
+        "出版": 1,
+        "包装印刷": 1,
+        "化学原料": 1,
+        "化学纤维": 1,
+        "基础建设": 1,
+        "塑料": 1,
+        "家电零部": 1,
+        "小家电": 1,
+        "房地产开发": 1,
+        "文娱用品": 1,
+        "汽车零部件": 1,
+        "消费电子": 1,
+        "焦炭Ⅱ": 1,
+        "燃气Ⅱ": 1,
+        "环保设备": 1,
+        "环境治理": 1,
+        "电力": 1,
+        "装修装饰": 1,
+        "计算机设": 1,
+        "轨交设备": 1,
+        "造纸": 1,
+        "非白酒": 1,
+        "食品加工": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 0.999280704909189,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
