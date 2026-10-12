@@ -1,28 +1,28 @@
-trade_date: 20260923
+trade_date: 20261008
 model_version: premium_v4_a_share_d_t_t1
-run_id: gh_36417930094
-commit_sha: 5c75cf89b727
-created_at_utc: 2026-09-28T12:04:17Z
+run_id: gh_38244987827
+commit_sha: e989cf46ccea
+created_at_utc: 2026-10-12T12:14:50Z
 trained: False
-reason: validation_not_pass:days=23;samples=1332;raw_mae=0.05998046181548815;plus_mae=0.061679713910762796;improve_rate=0.466966966966967;raw_daily_ic=-0.0337043282661409;plus_daily_ic=-0.015117107463279269;bias=0.0001295499723187231
-n_samples: 4141
-n_days: 76
+reason: validation_not_pass:days=25;samples=1391;raw_mae=0.062055207250266566;plus_mae=0.06333505369563591;improve_rate=0.4802300503235083;raw_daily_ic=-0.019924032540683548;plus_daily_ic=-0.010165203237069327;bias=0.005072537900131057
+n_samples: 4354
+n_days: 81
 ehx_trained: False
-ehx_reason: validation_not_pass:days=23;samples=1332;raw_mae=0.05998046181548815;plus_mae=0.061679713910762796;improve_rate=0.466966966966967;raw_daily_ic=-0.0337043282661409;plus_daily_ic=-0.015117107463279269;bias=0.0001295499723187231
-ehx_n_samples: 4141
+ehx_reason: validation_not_pass:days=25;samples=1391;raw_mae=0.062055207250266566;plus_mae=0.06333505369563591;improve_rate=0.4802300503235083;raw_daily_ic=-0.019924032540683548;plus_daily_ic=-0.010165203237069327;bias=0.005072537900131057
+ehx_n_samples: 4354
 ehx_min_samples: 30
 ehx_model_path: 
 ehx_candidate_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_delta_candidate.joblib
 ehx_meta_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/ehx_meta.json
-delta_mae: 0.061679713910762796
-delta_rmse: 0.0801950268675688
-plus_improve_rate: 0.466966966966967
+delta_mae: 0.06333505369563591
+delta_rmse: 0.08113662897838333
+plus_improve_rate: 0.4802300503235083
 ehx_validation_pass: False
-ehx_plus_daily_rank_ic: -0.015117107463279269
+ehx_plus_daily_rank_ic: -0.010165203237069327
 limitup_trained: True
 limitup_reason: ok_promoted
-limitup_n_samples: 5683
-limitup_n_days: 127
+limitup_n_samples: 5911
+limitup_n_days: 132
 limitup_min_samples: 20
 limitup_model_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine.joblib
 limitup_metrics_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_metrics.csv
@@ -32,14 +32,14 @@ limitup_promoted: True
 limitup_candidate_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/models/limitup_probability_engine_candidate.joblib
 limitup_trainset_path: /home/runner/work/top10-decision/top10-decision/outputs/premium/learning/limitup_probability_training_samples.csv
 limitup_feature_n: 66
-limitup_train_end_date: 20260924
-limitup_valid_start_date: 20260629
+limitup_train_end_date: 20261009
+limitup_valid_start_date: 20260702
 limitup_gate_version: premium_target_gate_v4_walkforward_provenance
 limitup_artifact_version: 3
 limitup_target_gate_status: {'t_limit': 'ACTIVE', 't_touch': 'ACTIVE', 't1': 'SHADOW', 't_return': 'ACTIVE', 't1_return': 'SHADOW'}
-limitup_target_probability_status: {'t_limit': 'ACTIVE', 't_touch': 'ACTIVE', 't1': 'SHADOW'}
+limitup_target_probability_status: {'t_limit': 'SHADOW', 't_touch': 'ACTIVE', 't1': 'SHADOW'}
 limitup_validation_mode: purged_expanding_walk_forward_v1
 limitup_walk_forward_folds: 3
-limitup_data_fingerprint: f3bc489592fb60c7420a4cb9e2d6deeedffc5ff8c71889e26f03c25561c3502e
+limitup_data_fingerprint: f79fb21f777e5851f60fa4520fad25cab7f0877540f7b2c20d7fe1c290b3b1b5
 limitup_feature_fingerprint: 108ba332adb9fed736bdfe80ed8349bb5e7e239ca96ff45f8a210666543b20ea
 limitup_feature_contract_version: premium_d_close_features_v1
