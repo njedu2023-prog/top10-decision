@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Premium TOP 10 20261013</title>
+  <style>
+    :root{color-scheme:light;--page:#f5f5f7;--panel:#ffffff;--panel-soft:#fbfbfd;--ink:#1d1d1f;--muted:#6e6e73;--line:#d2d2d7;--line-soft:#ececf0;--accent:#c4251a;--warn:#b26a00;--shadow:0 8px 24px rgba(0,0,0,.06)}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth;background:var(--page)}
+    body{margin:0;min-width:320px;font-family:-apple-system,BlinkMacSystemFont,SF Pro SC,SF Pro Text,PingFang SC,Microsoft YaHei,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--page);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+    header{position:static;padding:18px 28px 14px;background:rgba(251,251,253,.88);border-bottom:1px solid rgba(210,210,215,.72)}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1440px;margin:0 auto}
+    .kicker{color:var(--muted);font-weight:600;font-size:12px;line-height:1.35;letter-spacing:0}
+    h1{margin:5px 0 0;font-size:24px;line-height:1.18;letter-spacing:0;font-weight:700}
+    .status-pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:7px 12px;color:var(--muted);font-size:13px;line-height:1;white-space:nowrap;background:rgba(255,255,255,.8)}
+    .status-pill b{color:var(--ink)}
+    main{padding:20px 28px 40px;max-width:1440px;margin:0 auto}
+    .report-nav{position:sticky;top:8px;z-index:20;display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:14px;width:100%;margin:0 0 16px;padding:10px;overflow-x:auto;scrollbar-width:none;background:rgba(255,255,255,.92);border:1px solid var(--line-soft);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.09);backdrop-filter:saturate(180%) blur(18px)}
+    .report-nav::-webkit-scrollbar{display:none}
+    .nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+    .nav-actions,.date-chips{flex:0 0 auto}
+    .nav-btn,.date-chip,.tab-btn{border:1px solid transparent;background:transparent;color:#1d1d1f;text-decoration:none;border-radius:999px;padding:8px 13px;font-size:13px;line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}
+    .nav-btn.nav-icon{width:42px;height:42px;min-width:42px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:600}
+    .nav-btn.nav-icon span{display:block;transform:translateY(-1px)}
+    .nav-btn:hover,.date-chip:hover,.tab-btn:hover{background:#fff;border-color:var(--line-soft)}
+    .nav-btn.primary,.date-chip.active,.tab-btn.active{color:#fff;background:#1d1d1f;border-color:#1d1d1f;font-weight:600}
+    .nav-btn.disabled{color:#a1a1a6;background:transparent;cursor:not-allowed}
+    .metrics-details{margin:0 0 16px}
+    .metrics-details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;color:#3a3a3c;font-size:14px;font-weight:600;user-select:none}
+    .metrics-details>summary::-webkit-details-marker{display:none}
+    .metrics-details>summary::marker{content:""}
+    .metrics-toggle{width:30px;height:30px;flex:0 0 30px;display:grid;place-items:center;border:1px solid #b8b8bd;border-radius:50%;color:#1d1d1f;background:#fff;font-size:20px;line-height:1;font-weight:400}
+    .metrics-toggle::before{content:"+";transform:translateY(-1px)}
+    .metrics-details[open] .metrics-toggle::before{content:"−";transform:none}
+    .metrics-details[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+    .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:12px;margin-bottom:16px}
+    .metrics-details .metrics{padding:12px;margin:0;border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px;background:#f7f7f9}
+    .metric{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:16px 17px;min-height:104px;box-shadow:var(--shadow)}
+    .metric-wide{grid-column:span 2}
+    .metric span{display:block;color:var(--muted);font-size:11.5px;line-height:1.35;font-weight:600}
+    .metric strong{display:block;margin-top:9px;color:var(--ink);font-size:21px;line-height:1.2;font-weight:700}
+    .metric small{display:block;margin-top:8px;color:var(--muted);font-size:11.5px;line-height:1.42}
+    .metric-verify-current small{color:#424245}
+    .metric-lines{margin-top:10px;display:grid;gap:8px}
+    .metric-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line-soft)}
+    .metric-line:first-child{border-top:0;padding-top:0}
+    .metric-line span{color:#424245;font-weight:600;line-height:1.3}
+    .metric-line strong{margin:0;font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums}
+    .metric-line small{margin:0;color:var(--muted);font-size:12px;white-space:nowrap}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;background:rgba(255,255,255,.86);border:1px solid var(--line-soft);border-radius:8px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
+    .hint{color:var(--muted);font-size:13px;line-height:1.35}
+    section{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;margin-top:14px;overflow:hidden;box-shadow:var(--shadow)}
+    section.hidden{display:none}
+    .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid var(--line-soft);background:var(--panel)}
+    h2{margin:0;font-size:18px;letter-spacing:0;font-weight:700}
+    .badge{border:1px solid var(--line-soft);border-radius:999px;padding:5px 10px;font-size:12px;color:var(--muted);white-space:nowrap;background:var(--panel-soft)}
+    .table-wrap{overflow:auto;width:100%;max-height:72vh}
+    table{width:100%;border-collapse:collapse;min-width:1100px}
+    th,td{padding:11px 13px;border-bottom:1px solid var(--line-soft);text-align:left;white-space:nowrap;font-size:13px;line-height:1.35;vertical-align:top}
+    th{background:#f7f7fa;color:#55555b;font-weight:700;position:sticky;top:0;z-index:2}
+    td{color:#1d1d1f}
+    tbody tr:nth-child(even) td{background:#fbfbfd}
+    tbody tr:hover td{background:#fff7f5}
+    th:first-child,td:first-child{position:sticky;left:0;z-index:1;background:#fff}
+    tbody tr:nth-child(even) td:first-child{background:#fbfbfd}
+    tbody tr:hover td:first-child{background:#fff7f5}
+    th:first-child{z-index:3}
+    .num{font-variant-numeric:tabular-nums;font-weight:650}
+    .good{color:var(--accent)}
+    .mid{color:var(--warn)}
+    .quiet{color:#5f6368}
+    .truth-up{color:#c4251a;font-weight:750}
+    .truth-down{color:#087a4f;font-weight:750}
+    .truth-flat{color:#6e6e73;font-weight:700}
+    .section-sub{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.45;font-weight:400}
+    .shadow-details{margin:0 0 14px;border-radius:8px;background:#fff;box-shadow:var(--shadow)}
+    .shadow-details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:66px;padding:12px 14px 12px 18px;border:1px solid var(--line-soft);border-radius:8px;background:#fff;cursor:pointer;user-select:none}
+    .shadow-details>summary::-webkit-details-marker{display:none}
+    .shadow-details>summary::marker{content:""}
+    .shadow-details[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+    .shadow-details[open] .metrics-toggle::before{content:"−";transform:none}
+    .shadow-summary-copy{min-width:0}
+    .shadow-summary-actions{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+    .shadow-details .shadow-grid{border:1px solid var(--line-soft);border-top:0;border-radius:0 0 8px 8px;overflow:hidden}
+    .shadow-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+    .shadow-item{min-height:94px;padding:14px 16px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+    .shadow-item:nth-child(4n){border-right:0}
+    .shadow-item span,.shadow-item small{display:block;color:var(--muted);font-size:12px}
+    .shadow-item strong{display:block;margin-top:7px;font-size:18px;line-height:1.25}
+    .shadow-item small{margin-top:7px;line-height:1.35}
+    .shadow-route{grid-column:span 2}
+    .explain{padding:16px 18px 18px;color:#424245;line-height:1.7}
+    .explain div{padding:8px 0;border-bottom:1px solid var(--line-soft)}
+    .explain div:last-of-type{border-bottom:0}
+    .explain ul{margin:8px 0 0;padding-left:18px}
+    .verify-table-wrap{overflow:auto;width:100%}
+    .verify-table{min-width:0;width:100%;table-layout:auto}
+    .verify-table th,.verify-table td{white-space:normal;font-size:13px;line-height:1.55;padding:12px 14px}
+    .verify-table th{position:static;top:auto;width:260px;background:#f7f7fa;color:#55555b}
+    .verify-table td{color:#424245;word-break:break-word}
+    .verify-table th:first-child,.verify-table td:first-child{position:static;left:auto;background:inherit}
+    .verify-table tbody tr:nth-child(even) th,.verify-table tbody tr:nth-child(even) td{background:#fbfbfd}
+    .verify-table tbody tr:hover th,.verify-table tbody tr:hover td{background:#fff7f5}
+    .empty{margin:0;padding:16px 18px;color:var(--muted)}
+    .footnote{color:var(--muted);font-size:12px;margin:14px 0 0;line-height:1.5}
+    @media(max-width:900px){header,main{padding-left:16px;padding-right:16px}.topbar,.toolbar{align-items:flex-start;flex-direction:column}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-wide{grid-column:1 / -1}.shadow-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shadow-item:nth-child(4n){border-right:1px solid var(--line-soft)}.shadow-item:nth-child(2n){border-right:0}h1{font-size:24px}}
+    @media(max-width:560px){.metrics{grid-template-columns:1fr}.metric-line{grid-template-columns:1fr auto}.metric-line small{grid-column:1 / -1}.section-head{align-items:flex-start;flex-direction:column}.shadow-details>summary{align-items:flex-start;padding-left:14px}.shadow-summary-actions{gap:6px}.shadow-grid{grid-template-columns:1fr}.shadow-item,.shadow-item:nth-child(2n),.shadow-item:nth-child(4n){border-right:0}.shadow-route{grid-column:auto}}
+    .metrics-collapsible{margin:0 0 16px;padding:10px;background:rgba(255,255,255,.72);border:1px solid var(--line-soft);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
+    .metrics-collapse-head{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:42px;padding:2px 4px 2px 8px}
+    .metrics-collapse-title{display:flex;align-items:baseline;gap:10px;min-width:0}
+    .metrics-collapse-title span{color:var(--muted);font-size:12px;line-height:1.35;font-weight:600;white-space:nowrap}
+    .metrics-collapse-title strong{color:var(--ink);font-size:16px;line-height:1.2;font-weight:700;white-space:nowrap}
+    .metrics-toggle{width:34px;height:34px;min-width:34px;border:1px solid #1d1d1f;border-radius:50%;background:#1d1d1f;color:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.10);transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease}
+    .metrics-toggle:hover{background:#000;border-color:#000;transform:translateY(-1px)}
+    .metrics-toggle span{display:block;font-size:22px;line-height:1;font-weight:500;transform:translateY(-1px)}
+    .metrics-collapsible .metrics{margin:10px 0 0}
+    .metrics-collapsible.collapsed .metrics{display:none}
+    @media(max-width:560px){.metrics-collapse-title{flex-direction:column;align-items:flex-start;gap:2px}.metrics-collapse-head{padding-left:4px}}
+
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div>
+        <div class="kicker">Premium V4 量化引擎</div>
+        <h1>Premium TOP 10</h1>
+      </div>
+      <div class="status-pill">验证状态 <b>待验证</b></div>
+    </div>
+  </header>
+  <main>
+    
+      <nav class="report-nav" aria-label="报告导航">
+        <div class="nav-actions">
+          <a class="nav-btn nav-icon" href="premium_20261012.html" aria-label="上一份报告" title="上一份报告"><span aria-hidden="true">&#8592;</span></a>
+          <a class="nav-btn primary" href="premium_latest.html">最新报告</a>
+          <span class="nav-btn nav-icon disabled" aria-label="下一份报告" title="下一份报告"><span aria-hidden="true">&#8594;</span></span>
+        </div>
+        <div class="date-chips"><a class="date-chip" href="premium_20260929.html">20260929</a><a class="date-chip" href="premium_20260930.html">20260930</a><a class="date-chip" href="premium_20261008.html">20261008</a><a class="date-chip" href="premium_20261009.html">20261009</a><a class="date-chip" href="premium_20261012.html">20261012</a><a class="date-chip active" href="premium_20261013.html">20261013</a></div>
+      </nav>
+    
+    <details class="metrics-details">
+      <summary><span>核心指标</span><span class="metrics-toggle" aria-hidden="true"></span></summary>
+      <div class="metrics"><div class="metric"><span>D日分析日期</span><strong>20261013</strong><small>只使用D日收盘后可见数据</small></div><div class="metric"><span>T日竞价买入日期</span><strong>20261014</strong><small>严格按中国A股交易日历</small></div><div class="metric"><span>T+1择时卖出日期</span><strong>20261015</strong><small>接力验证和择时卖出日期</small></div><div class="metric metric-wide metric-verify-current"><span>当前TOP10涨停命中率</span><strong>-</strong><small>TOP10：D 20261013 -&gt; T 20261014，等待T日收盘后的市场真值，当前不计入命中率</small></div><div class="metric"><span>历史TOP10累计涨停命中率</span><strong>32.57%</strong><small>269/826，交易日 83, limitup_probability_training_samples.csv+premium_verify_*.csv</small></div><div class="metric metric-wide"><span>头部历史累计涨停命中率</span><div class="metric-lines"><div class="metric-line"><span>TOP1 历史累计涨停命中率</span><strong>53.01%</strong><small>44/83</small></div><div class="metric-line"><span>TOP3 历史累计涨停命中率</span><strong>42.17%</strong><small>105/249</small></div><div class="metric-line"><span>TOP5 历史累计涨停命中率</span><strong>37.44%</strong><small>155/414</small></div></div></div><div class="metric metric-wide"><span>头部历史累计上涨率</span><div class="metric-lines"><div class="metric-line"><span>TOP1 历史累计上涨率</span><strong>78.31%</strong><small>65/83，T日收盘&gt;D日收盘</small></div><div class="metric-line"><span>TOP3 历史累计上涨率</span><strong>67.87%</strong><small>169/249，T日收盘&gt;D日收盘</small></div><div class="metric-line"><span>TOP5 历史累计上涨率</span><strong>64.98%</strong><small>269/414，T日收盘&gt;D日收盘</small></div></div></div><div class="metric"><span>近20日TOP10命中率</span><strong>42.71%</strong><small>近5日 53.06%; 近60日 37.19%</small></div><div class="metric"><span>概率校准质量</span><strong>Brier 0.1700</strong><small>Brier/ECE越低越好；最佳0，最差1；当前可用；ECE 0.0645；样本 4458</small></div><div class="metric"><span>涨停Rank IC</span><strong>0.1140</strong><small>越高越好；&gt;0有效，&lt;0反向；当前有效；近20日 0.1172；正值率 81.93%；83日</small></div><div class="metric"><span>T+1收益Rank IC</span><strong>0.0096</strong><small>越高越好；&gt;0有效，&lt;0反向；当前有效；近20日 -0.0022；正值率 52.24%；67日</small></div><div class="metric"><span>自适应排序权重</span><strong>涨停 61.33% / T+1 5.00%</strong><small>强度 22.91%; 执行 10.76%</small></div><div class="metric"><span>专业门槛</span><strong>0 合格 / 59 仅排名</strong><small>观察 0；不交易 4；rank 模型验证通过排序模式；model t_limit_active__t_touch_active__t1_shadow</small></div><div class="metric"><span>分层有效性</span><strong>12.61%</strong><small>TOP10 32.57%; 11-20 19.95%</small></div><div class="metric"><span>D日市场情绪</span><strong>38.96%</strong><small>上涨占比 52.25%; 强势股 85</small></div></div>
+    </details>
+    
+    <details class="shadow-details" aria-label="TOP1 影子验证">
+      <summary>
+        <div class="shadow-summary-copy"><h2>TOP1 影子验证</h2><p class="section-sub">固定规则：T日集合竞价真实成交价买入，T+1 11:00分钟开盘价卖出；扣除 35.0 bp 成本。</p></div>
+        <div class="shadow-summary-actions">
+          <span class="badge">等待T日竞价</span>
+          <span class="metrics-toggle" aria-hidden="true"></span>
+        </div>
+      </summary>
+      <div class="shadow-grid">
+        <div class="shadow-item"><span>股票</span><strong>新经典</strong><small>603096.SH</small></div>
+        <div class="shadow-item shadow-route"><span>验证路径</span><strong>D 20261013 → T 20261014 → T+1 20261015</strong><small>原始 Rank 1，不事后换票</small></div>
+        <div class="shadow-item"><span>T竞价买入</span><strong>-</strong><small>09:25 集合竞价</small></div>
+        <div class="shadow-item"><span>T+1卖出</span><strong>-</strong><small></small></div>
+        <div class="shadow-item"><span>单笔净收益</span><strong class="truth-flat">-</strong><small>-</small></div>
+        <div class="shadow-item"><span>累计验证</span><strong>67 笔 / 39 胜</strong><small>胜率 58.21%；待验证 2；缺失 0</small></div>
+        <div class="shadow-item"><span>TOP1 涨停统计</span><strong>44 / 83</strong><small>过去 83 个可验证交易日；T日收盘涨停率 53.01%</small></div>
+        <div class="shadow-item"><span>TOP1 总收益</span><strong class="truth-up">57.33%</strong><small>等额单笔累计，已扣成本</small></div>
+        <div class="shadow-item"><span>逐笔复合</span><strong>19.62%</strong><small>单位资金影子指数</small></div>
+        <div class="shadow-item"><span>Max Drawdown</span><strong>-59.81%</strong><small>已完成影子交易</small></div>
+      </div>
+    </details>
+    
+    <div class="toolbar">
+      <div class="tabs" role="tablist" aria-label="列表切换">
+        <button class="tab-btn active" type="button" data-target="top10-panel">TOP10 执行名单</button>
+        <button class="tab-btn" type="button" data-target="verify-panel">验证与学习</button>
+      </div>
+    </div>
+    <section id="top10-panel">
+      <div class="section-head"><h2>TOP10: T日涨停概率最高 · D 20261013</h2><span class="badge">核心执行名单</span></div>
+      <div class="table-wrap"><table id="top10-table"><thead><tr><th>排名</th><th>代码</th><th>名称</th><th>晋阶</th><th>板块</th><th>D收盘</th><th>T收盘</th><th>候选池</th><th>T涨停概率</th><th>T强度</th><th>T日攻击力</th><th>T+1上涨概率</th><th>T+1承接力</th><th>接力综合分</th><th>综合分</th><th>筛选原因</th><th>T竞价动作</th><th>买入价</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td class="num">1</td><td>603096.SH</td><td>新经典</td><td>3→4</td><td>出版</td><td class="num">20.97</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">29.84%</td><td class="num good">89.71</td><td class="num good">77.04</td><td class="num quiet">48.78%</td><td class="num quiet">50.00</td><td class="num good">96.11</td><td class="num mid">65.10</td><td>t1_accept&lt;0.52；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤21.07</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">2</td><td>002343.SZ</td><td>慈文传媒</td><td>3→4</td><td>影视院线</td><td class="num">7.36</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">23.95%</td><td class="num good">83.73</td><td class="num good">72.30</td><td class="num quiet">47.62%</td><td class="num quiet">50.00</td><td class="num good">87.37</td><td class="num mid">61.41</td><td>t1_accept&lt;0.52；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤7.40</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">3</td><td>002696.SZ</td><td>百洋股份</td><td>3→4</td><td>饲料</td><td class="num">8.86</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">26.99%</td><td class="num good">75.54</td><td class="num good">71.95</td><td class="num quiet">46.93%</td><td class="num quiet">50.00</td><td class="num good">92.38</td><td class="num mid">60.79</td><td>t1_accept&lt;0.52；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤8.90</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">4</td><td>605136.SH</td><td>丽人丽妆</td><td>3→4</td><td>互联网电</td><td class="num">11.42</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">25.07%</td><td class="num good">70.95</td><td class="num good">70.70</td><td class="num quiet">47.56%</td><td class="num quiet">50.00</td><td class="num good">91.41</td><td class="num mid">59.82</td><td>t1_accept&lt;0.52；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤11.48</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">5</td><td>002917.SZ</td><td>金奥博</td><td>1→2</td><td>化学制品</td><td class="num">11.00</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">23.68%</td><td class="num mid">64.36</td><td class="num mid">66.83</td><td class="num quiet">47.03%</td><td class="num quiet">50.00</td><td class="num good">86.82</td><td class="num mid">56.40</td><td>t1_accept&lt;0.52；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤11.05</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">6</td><td>000668.SZ</td><td>荣丰控股</td><td>1→2</td><td>房地产开发</td><td class="num">20.56</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">21.20%</td><td class="num mid">63.09</td><td class="num mid">65.55</td><td class="num quiet">45.96%</td><td class="num quiet">50.00</td><td class="num good">78.35</td><td class="num mid">55.30</td><td>t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤20.66</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">7</td><td>600831.SH</td><td>广电网络</td><td>2→3</td><td>电视广播</td><td class="num">4.30</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">20.61%</td><td class="num mid">60.87</td><td class="num mid">59.98</td><td class="num quiet">45.74%</td><td class="num quiet">50.00</td><td class="num good">72.51</td><td class="num quiet">51.35</td><td>t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤4.32</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">8</td><td>002549.SZ</td><td>凯美特气</td><td>1→2</td><td>化学制品</td><td class="num">14.25</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">29.84%</td><td class="num quiet">47.32</td><td class="num mid">56.42</td><td class="num quiet">47.86%</td><td class="num quiet">50.00</td><td class="num good">82.37</td><td class="num quiet">51.17</td><td>t1_accept&lt;0.52；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤14.32</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">9</td><td>001231.SZ</td><td>农心科技</td><td>2→3</td><td>农化制品</td><td class="num">28.17</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">21.95%</td><td class="num mid">58.64</td><td class="num mid">57.87</td><td class="num quiet">46.90%</td><td class="num quiet">50.00</td><td class="num good">71.06</td><td class="num quiet">49.79</td><td>t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤28.31</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td class="num">10</td><td>002639.SZ</td><td>雪人集团</td><td>1→2</td><td>通用设备</td><td class="num">14.59</td><td class="num truth-flat">-</td><td>仅排名</td><td class="num quiet">28.86%</td><td class="num quiet">52.27</td><td class="num mid">55.39</td><td class="num quiet">47.87%</td><td class="num quiet">50.00</td><td class="num good">75.51</td><td class="num quiet">49.50</td><td>t1_accept&lt;0.52；t1_evidence&lt;0.35</td><td>只观察不追</td><td>≤14.66</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr></tbody></table></div>
+    </section>
+    <section id="verify-panel" class="hidden">
+      <div class="section-head"><h2>验证与学习</h2><span class="badge">待验证</span></div>
+      <div class="explain"><div class="verify-table-wrap"><table class="verify-table"><thead><tr><th>项目</th><th>内容</th></tr></thead><tbody><tr><th>验证状态</th><td>T日真值未就绪：D 20261013 预测 T 20261014，等待T日收盘后的市场真值数据；当前报告不计入实时命中率。</td></tr><tr><th>当前TOP10涨停预测命中率</th><td>TOP10：D 20261013 -&gt; T 20261014，等待T日收盘后的市场真值，当前不计入命中率</td></tr><tr><th>当前TOP20涨停预测命中率</th><td>TOP20：D 20261013 -&gt; T 20261014，等待T日收盘后的市场真值，当前不计入命中率</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计涨停命中率</th><td>TOP1 53.01% (44/83); TOP3 42.17% (105/249); TOP5 37.44% (155/414)</td></tr><tr><th>历史TOP1 / TOP3 / TOP5累计上涨率</th><td>TOP1 78.31% (65/83); TOP3 67.87% (169/249); TOP5 64.98% (269/414)</td></tr><tr><th>历史TOP10累计涨停命中率</th><td>32.57% (269/826)</td></tr><tr><th>历史TOP20累计涨停命中率</th><td>26.26% (434/1653)</td></tr><tr><th>滚动TOP10命中率</th><td>近5日 53.06%; 近20日 42.71%; 近60日 37.19%</td></tr><tr><th>概率校准</th><td>Brier 0.1700; ECE 0.0645; 样本 4458</td></tr><tr><th>涨停Rank IC</th><td>Spearman均值 0.1140; 近20日 0.1172; Kendall Tau 0.0931; 正值率 81.93%; 有效天数 83</td></tr><tr><th>T+1收益Rank IC</th><td>Spearman均值 0.0096; 近20日 -0.0022; 正值率 52.24%; 有效天数 67</td></tr><tr><th>自适应排序权重</th><td>涨停 61.33%; T+1 5.00%; 强度 22.91%; 执行 10.76%. 当T+1 Rank IC为负时，系统会降低T+1权重；转正后再逐步提高。</td></tr><tr><th>分层命中/收益摘要</th><td>TOP1-10:269/826/0.326/收益=-0.0029 | TOP11-20:165/827/0.200/收益=-0.0047 | TOP21-30:143/826/0.173/收益=-0.0035 | TOP31+:290/1979/0.147/收益=-0.0011</td></tr><tr><th>D日市场情绪</th><td>情绪 38.96%; 上涨占比 52.25%; 强势股 85</td></tr><tr><th>历史统计样本</th><td>有效交易日 83; 来源： limitup_probability_training_samples.csv+premium_verify_*.csv; 状态： 正常</td></tr><tr><th>模型版本</th><td>premium_v4_a_share_d_t_t1; 生成时间： 2026-10-13T12:09:34Z</td></tr><tr><th>备注</th><td>归档已重建=是</td></tr><tr><th>备注</th><td>历史样本来源=limitup_probability_training_samples.csv+premium_verify_*.csv</td></tr><tr><th>备注</th><td>真值刷新=T日行情未就绪:远端拉取失败: HTTP请求失败: 状态=404 URL=https://raw.githubusercontent.com/njedu2023-prog/a-share-top3-data/main/data/raw/2026/20261014/daily.csv 响应片段=404: 未找到</td></tr></tbody></table></div></div>
+    </section>
+    <p class="footnote">本报告由 Premium 自动生成。上一页/下一页导航基于仓库中已有的历史HTML报告日期。</p>
+  </main>
+  <script>
+    const premiumScrollStateKey = 'premium-report-nav-scroll-state-v1';
+
+    const activatePremiumTab = (target) => {
+      if (!target) return;
+      const buttons = Array.from(document.querySelectorAll('.tab-btn'));
+      const selected = buttons.find((button) => button.getAttribute('data-target') === target);
+      const panel = document.getElementById(target);
+      if (!selected || !panel) return;
+      buttons.forEach((button) => button.classList.remove('active'));
+      document.querySelectorAll('#top10-panel, #verify-panel').forEach((item) => item.classList.add('hidden'));
+      selected.classList.add('active');
+      panel.classList.remove('hidden');
+    };
+
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activatePremiumTab(btn.getAttribute('data-target'));
+      });
+    });
+
+    const reportNav = document.querySelector('.report-nav');
+    if (reportNav) {
+      reportNav.querySelectorAll('a[href]').forEach((link) => {
+        link.addEventListener('click', () => {
+          try {
+            const target = new URL(link.href, window.location.href);
+            if (target.origin !== window.location.origin) return;
+            const activeTab = document.querySelector('.tab-btn.active');
+            sessionStorage.setItem(premiumScrollStateKey, JSON.stringify({
+              target: `${target.pathname}${target.search}`,
+              pageY: window.scrollY,
+              navX: reportNav.scrollLeft,
+              activeTab: activeTab ? activeTab.getAttribute('data-target') : '',
+              savedAt: Date.now(),
+            }));
+          } catch (error) {
+            // Navigation still works when storage is unavailable.
+          }
+        });
+      });
+    }
+
+    let savedNavigationState = null;
+    try {
+      const rawState = sessionStorage.getItem(premiumScrollStateKey);
+      if (rawState) {
+        sessionStorage.removeItem(premiumScrollStateKey);
+        savedNavigationState = JSON.parse(rawState);
+      }
+    } catch (error) {
+      savedNavigationState = null;
+    }
+
+    if (savedNavigationState) {
+      const currentTarget = `${window.location.pathname}${window.location.search}`;
+      const savedAt = Number(savedNavigationState.savedAt);
+      const isFresh = Number.isFinite(savedAt) && Date.now() - savedAt < 120000;
+      if (isFresh && savedNavigationState.target === currentTarget) {
+        activatePremiumTab(savedNavigationState.activeTab);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            window.scrollTo({
+              top: Number(savedNavigationState.pageY) || 0,
+              left: 0,
+              behavior: 'auto',
+            });
+            if (reportNav) reportNav.scrollLeft = Number(savedNavigationState.navX) || 0;
+          });
+        });
+      }
+    }
+    (function premiumMetricsCollapse(){
+      const box = document.querySelector('.metrics-collapsible');
+      if (!box) return;
+      const btn = box.querySelector('.metrics-toggle');
+      if (!btn) return;
+      const icon = btn.querySelector('span');
+      const sync = () => {
+        const collapsed = box.classList.contains('collapsed');
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('title', collapsed ? '展开指标' : '折叠指标');
+        btn.setAttribute('aria-label', collapsed ? '展开指标' : '折叠指标');
+        if (icon) icon.textContent = collapsed ? '+' : '-';
+      };
+      btn.addEventListener('click', () => {
+        box.classList.toggle('collapsed');
+        sync();
+      });
+      sync();
+    })();
+
+  </script>
+</body>
+</html>
