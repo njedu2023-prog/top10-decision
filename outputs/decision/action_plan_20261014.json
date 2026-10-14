@@ -14178,21 +14178,111 @@
     },
     "t": {
       "trade_date": "20261014",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5563,
+      "return_coverage": 1.0,
+      "up_count": 979,
+      "down_count": 4496,
+      "flat_count": 88,
+      "limit_up_count": 36,
+      "classified_limit_up_count": 36,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "出版",
+          "limit_up_count": 3,
+          "share": 0.08333333333333333
+        },
+        {
+          "rank": 2,
+          "industry": "元件",
+          "limit_up_count": 2,
+          "share": 0.05555555555555555
+        },
+        {
+          "rank": 3,
+          "industry": "化学制品",
+          "limit_up_count": 2,
+          "share": 0.05555555555555555
+        },
+        {
+          "rank": 4,
+          "industry": "家居用品",
+          "limit_up_count": 2,
+          "share": 0.05555555555555555
+        },
+        {
+          "rank": 5,
+          "industry": "房地产开发",
+          "limit_up_count": 2,
+          "share": 0.05555555555555555
+        },
+        {
+          "rank": 6,
+          "industry": "游戏Ⅱ",
+          "limit_up_count": 2,
+          "share": 0.05555555555555555
+        },
+        {
+          "rank": 7,
+          "industry": "通用设备",
+          "limit_up_count": 2,
+          "share": 0.05555555555555555
+        },
+        {
+          "rank": 8,
+          "industry": "专用设备",
+          "limit_up_count": 1,
+          "share": 0.027777777777777776
+        },
+        {
+          "rank": 9,
+          "industry": "中药Ⅱ",
+          "limit_up_count": 1,
+          "share": 0.027777777777777776
+        },
+        {
+          "rank": 10,
+          "industry": "化学制药",
+          "limit_up_count": 1,
+          "share": 0.027777777777777776
+        }
+      ],
+      "industry_counts": {
+        "出版": 3,
+        "元件": 2,
+        "化学制品": 2,
+        "家居用品": 2,
+        "房地产开发": 2,
+        "游戏Ⅱ": 2,
+        "通用设备": 2,
+        "专用设备": 1,
+        "中药Ⅱ": 1,
+        "化学制药": 1,
+        "化学原料": 1,
+        "家电零部": 1,
+        "广告营销": 1,
+        "影视院线": 1,
+        "数字媒体": 1,
+        "服装家纺": 1,
+        "汽车零部件": 1,
+        "渔业": 1,
+        "焦炭Ⅱ": 1,
+        "煤炭开采": 1,
+        "燃气Ⅱ": 1,
+        "电力": 1,
+        "电池": 1,
+        "纺织制造": 1,
+        "航空装备": 1,
+        "铁路公路": 1,
+        "饮料乳品": 1,
+        "饲料": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.0003596475454055,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
