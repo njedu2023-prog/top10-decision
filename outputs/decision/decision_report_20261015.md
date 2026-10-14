@@ -3,7 +3,7 @@
 - signal_date: **20261014**
 - exec_date: **20261015**
 - exit_date: **20261016**
-- requested_trade_date: **20261014**
+- requested_trade_date: **auto**
 - regime: **CAUTION**
 - risk_budget: **0.7**
 - regime_reason: **tail_risk_mean=0.1708,volatility_mean=0.0491**
