@@ -40,7 +40,7 @@
     "strong_minute_opening_proxy": 1
   },
   "sample_maturity_distribution": {
-    "PFILL_READY": 39
+    "FULLY_READY": 39
   },
   "column_groups": {
     "base_cols": [
