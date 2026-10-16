@@ -10847,21 +10847,113 @@
     },
     "t": {
       "trade_date": "20261016",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5567,
+      "return_coverage": 1.0,
+      "up_count": 3301,
+      "down_count": 2128,
+      "flat_count": 138,
+      "limit_up_count": 63,
+      "classified_limit_up_count": 63,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "汽车零部件",
+          "limit_up_count": 15,
+          "share": 0.23809523809523808
+        },
+        {
+          "rank": 2,
+          "industry": "专用设备",
+          "limit_up_count": 5,
+          "share": 0.07936507936507936
+        },
+        {
+          "rank": 3,
+          "industry": "通用设备",
+          "limit_up_count": 5,
+          "share": 0.07936507936507936
+        },
+        {
+          "rank": 4,
+          "industry": "出版",
+          "limit_up_count": 4,
+          "share": 0.06349206349206349
+        },
+        {
+          "rank": 5,
+          "industry": "航空装备",
+          "limit_up_count": 4,
+          "share": 0.06349206349206349
+        },
+        {
+          "rank": 6,
+          "industry": "化学制品",
+          "limit_up_count": 3,
+          "share": 0.047619047619047616
+        },
+        {
+          "rank": 7,
+          "industry": "地面兵装",
+          "limit_up_count": 2,
+          "share": 0.031746031746031744
+        },
+        {
+          "rank": 8,
+          "industry": "水泥",
+          "limit_up_count": 2,
+          "share": 0.031746031746031744
+        },
+        {
+          "rank": 9,
+          "industry": "照明设备",
+          "limit_up_count": 2,
+          "share": 0.031746031746031744
+        },
+        {
+          "rank": 10,
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 1,
+          "share": 0.015873015873015872
+        }
+      ],
+      "industry_counts": {
+        "汽车零部件": 15,
+        "专用设备": 5,
+        "通用设备": 5,
+        "出版": 4,
+        "航空装备": 4,
+        "化学制品": 3,
+        "地面兵装": 2,
+        "水泥": 2,
+        "照明设备": 2,
+        "IT服务Ⅱ": 1,
+        "专业工程": 1,
+        "其他家电": 1,
+        "军工电子": 1,
+        "化学制药": 1,
+        "化学原料": 1,
+        "化学纤维": 1,
+        "商用车": 1,
+        "基础建设": 1,
+        "工程咨询": 1,
+        "广告营销": 1,
+        "房地产开发": 1,
+        "物流": 1,
+        "自动化设": 1,
+        "航空机场": 1,
+        "计算机设": 1,
+        "贸易Ⅱ": 1,
+        "软件开发": 1,
+        "通信设备": 1,
+        "风电设备": 1,
+        "饲料": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.0003593890386344,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
