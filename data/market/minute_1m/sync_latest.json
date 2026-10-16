@@ -7,93 +7,12 @@
   "candidate_codes": 62,
   "request_timeout_seconds": 8,
   "workers": 6,
-  "minute_files_written": 0,
+  "minute_files_written": 62,
   "minute_sync_skipped_non_current_date": false,
   "auction_truth_source": "tushare:stk_auction_o",
   "auction_truth_status": "source_pending_or_empty",
   "auction_truth_rows": 0,
   "auction_truth_path": "",
-  "failures": [
-    {
-      "ts_code": "000668.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "000530.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603968.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "600391.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "600847.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "001318.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "000823.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002917.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "600202.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "601188.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002696.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002343.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "000573.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603656.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "605189.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002860.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603096.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002029.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "001299.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "600252.SH",
-      "reason": "empty"
-    }
-  ],
+  "failures": [],
   "token_persisted": false
 }
