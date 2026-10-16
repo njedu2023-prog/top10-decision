@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Premium 最终竞价买入名单 20261016</title>
+  <style>
+    :root{color-scheme:light;--page:#f5f5f7;--panel:#ffffff;--panel-soft:#fbfbfd;--ink:#1d1d1f;--muted:#6e6e73;--line:#d2d2d7;--line-soft:#ececf0;--accent:#c4251a;--warn:#b26a00;--shadow:0 8px 24px rgba(0,0,0,.06)}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth;background:var(--page)}
+    body{margin:0;min-width:320px;font-family:-apple-system,BlinkMacSystemFont,SF Pro SC,SF Pro Text,PingFang SC,Microsoft YaHei,Segoe UI,Arial,sans-serif;color:var(--ink);background:var(--page);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+    header{position:static;padding:18px 28px 14px;background:rgba(251,251,253,.88);border-bottom:1px solid rgba(210,210,215,.72)}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1440px;margin:0 auto}
+    .kicker{color:var(--muted);font-weight:600;font-size:12px;line-height:1.35;letter-spacing:0}
+    h1{margin:5px 0 0;font-size:24px;line-height:1.18;letter-spacing:0;font-weight:700}
+    .status-pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:7px 12px;color:var(--muted);font-size:13px;line-height:1;white-space:nowrap;background:rgba(255,255,255,.8)}
+    .status-pill b{color:var(--ink)}
+    main{padding:20px 28px 40px;max-width:1440px;margin:0 auto}
+    .report-nav{position:sticky;top:8px;z-index:20;display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:14px;width:100%;margin:0 0 16px;padding:10px;overflow-x:auto;scrollbar-width:none;background:rgba(255,255,255,.92);border:1px solid var(--line-soft);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.09);backdrop-filter:saturate(180%) blur(18px)}
+    .report-nav::-webkit-scrollbar{display:none}
+    .nav-actions,.date-chips,.tabs{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+    .nav-actions,.date-chips{flex:0 0 auto}
+    .nav-btn,.date-chip,.tab-btn{border:1px solid transparent;background:transparent;color:#1d1d1f;text-decoration:none;border-radius:999px;padding:8px 13px;font-size:13px;line-height:1;cursor:pointer;transition:background .18s ease,color .18s ease,border-color .18s ease}
+    .nav-btn.nav-icon{width:42px;height:42px;min-width:42px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:22px;font-weight:600}
+    .nav-btn.nav-icon span{display:block;transform:translateY(-1px)}
+    .nav-btn:hover,.date-chip:hover,.tab-btn:hover{background:#fff;border-color:var(--line-soft)}
+    .nav-btn.primary,.date-chip.active,.tab-btn.active{color:#fff;background:#1d1d1f;border-color:#1d1d1f;font-weight:600}
+    .nav-btn.disabled{color:#a1a1a6;background:transparent;cursor:not-allowed}
+    .metrics-details{margin:0 0 16px}
+    .metrics-details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;color:#3a3a3c;font-size:14px;font-weight:600;user-select:none}
+    .metrics-details>summary::-webkit-details-marker{display:none}
+    .metrics-details>summary::marker{content:""}
+    .metrics-toggle{width:30px;height:30px;flex:0 0 30px;display:grid;place-items:center;border:1px solid #b8b8bd;border-radius:50%;color:#1d1d1f;background:#fff;font-size:20px;line-height:1;font-weight:400}
+    .metrics-toggle::before{content:"+";transform:translateY(-1px)}
+    .metrics-details[open] .metrics-toggle::before{content:"−";transform:none}
+    .metrics-details[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+    .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:12px;margin-bottom:16px}
+    .metrics-details .metrics{padding:12px;margin:0;border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px;background:#f7f7f9}
+    .metric{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:16px 17px;min-height:104px;box-shadow:var(--shadow)}
+    .metric-wide{grid-column:span 2}
+    .metric span{display:block;color:var(--muted);font-size:11.5px;line-height:1.35;font-weight:600}
+    .metric strong{display:block;margin-top:9px;color:var(--ink);font-size:21px;line-height:1.2;font-weight:700}
+    .metric small{display:block;margin-top:8px;color:var(--muted);font-size:11.5px;line-height:1.42}
+    .metric-verify-current small{color:#424245}
+    .metric-lines{margin-top:10px;display:grid;gap:8px}
+    .metric-line{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line-soft)}
+    .metric-line:first-child{border-top:0;padding-top:0}
+    .metric-line span{color:#424245;font-weight:600;line-height:1.3}
+    .metric-line strong{margin:0;font-size:18px;color:var(--accent);font-variant-numeric:tabular-nums}
+    .metric-line small{margin:0;color:var(--muted);font-size:12px;white-space:nowrap}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;background:rgba(255,255,255,.86);border:1px solid var(--line-soft);border-radius:8px;margin-bottom:14px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
+    .hint{color:var(--muted);font-size:13px;line-height:1.35}
+    section{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;margin-top:14px;overflow:hidden;box-shadow:var(--shadow)}
+    section.hidden{display:none}
+    .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid var(--line-soft);background:var(--panel)}
+    h2{margin:0;font-size:18px;letter-spacing:0;font-weight:700}
+    .badge{border:1px solid var(--line-soft);border-radius:999px;padding:5px 10px;font-size:12px;color:var(--muted);white-space:nowrap;background:var(--panel-soft)}
+    .table-wrap{overflow:auto;width:100%;max-height:72vh}
+    table{width:100%;border-collapse:collapse;min-width:1100px}
+    th,td{padding:11px 13px;border-bottom:1px solid var(--line-soft);text-align:left;white-space:nowrap;font-size:13px;line-height:1.35;vertical-align:top}
+    th{background:#f7f7fa;color:#55555b;font-weight:700;position:sticky;top:0;z-index:2}
+    td{color:#1d1d1f}
+    tbody tr:nth-child(even) td{background:#fbfbfd}
+    tbody tr:hover td{background:#fff7f5}
+    th:first-child,td:first-child{position:sticky;left:0;z-index:1;background:#fff}
+    tbody tr:nth-child(even) td:first-child{background:#fbfbfd}
+    tbody tr:hover td:first-child{background:#fff7f5}
+    th:first-child{z-index:3}
+    .num{font-variant-numeric:tabular-nums;font-weight:650}
+    .good{color:var(--accent)}
+    .mid{color:var(--warn)}
+    .quiet{color:#5f6368}
+    .truth-up{color:#c4251a;font-weight:750}
+    .truth-down{color:#087a4f;font-weight:750}
+    .truth-flat{color:#6e6e73;font-weight:700}
+    .section-sub{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.45;font-weight:400}
+    .shadow-details{margin:0 0 14px;border-radius:8px;background:#fff;box-shadow:var(--shadow)}
+    .shadow-details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:66px;padding:12px 14px 12px 18px;border:1px solid var(--line-soft);border-radius:8px;background:#fff;cursor:pointer;user-select:none}
+    .shadow-details>summary::-webkit-details-marker{display:none}
+    .shadow-details>summary::marker{content:""}
+    .shadow-details[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+    .shadow-details[open] .metrics-toggle::before{content:"−";transform:none}
+    .shadow-summary-copy{min-width:0}
+    .shadow-summary-actions{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+    .shadow-details .shadow-grid{border:1px solid var(--line-soft);border-top:0;border-radius:0 0 8px 8px;overflow:hidden}
+    .shadow-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+    .shadow-item{min-height:94px;padding:14px 16px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+    .shadow-item:nth-child(4n){border-right:0}
+    .shadow-item span,.shadow-item small{display:block;color:var(--muted);font-size:12px}
+    .shadow-item strong{display:block;margin-top:7px;font-size:18px;line-height:1.25}
+    .shadow-item small{margin-top:7px;line-height:1.35}
+    .shadow-route{grid-column:span 2}
+    .explain{padding:16px 18px 18px;color:#424245;line-height:1.7}
+    .explain div{padding:8px 0;border-bottom:1px solid var(--line-soft)}
+    .explain div:last-of-type{border-bottom:0}
+    .explain ul{margin:8px 0 0;padding-left:18px}
+    .verify-table-wrap{overflow:auto;width:100%}
+    .verify-table{min-width:0;width:100%;table-layout:auto}
+    .verify-table th,.verify-table td{white-space:normal;font-size:13px;line-height:1.55;padding:12px 14px}
+    .verify-table th{position:static;top:auto;width:260px;background:#f7f7fa;color:#55555b}
+    .verify-table td{color:#424245;word-break:break-word}
+    .verify-table th:first-child,.verify-table td:first-child{position:static;left:auto;background:inherit}
+    .verify-table tbody tr:nth-child(even) th,.verify-table tbody tr:nth-child(even) td{background:#fbfbfd}
+    .verify-table tbody tr:hover th,.verify-table tbody tr:hover td{background:#fff7f5}
+    .empty{margin:0;padding:16px 18px;color:var(--muted)}
+    .footnote{color:var(--muted);font-size:12px;margin:14px 0 0;line-height:1.5}
+    @media(max-width:900px){header,main{padding-left:16px;padding-right:16px}.topbar,.toolbar{align-items:flex-start;flex-direction:column}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-wide{grid-column:1 / -1}.shadow-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shadow-item:nth-child(4n){border-right:1px solid var(--line-soft)}.shadow-item:nth-child(2n){border-right:0}h1{font-size:24px}}
+    @media(max-width:560px){.metrics{grid-template-columns:1fr}.metric-line{grid-template-columns:1fr auto}.metric-line small{grid-column:1 / -1}.section-head{align-items:flex-start;flex-direction:column}.shadow-details>summary{align-items:flex-start;padding-left:14px}.shadow-summary-actions{gap:6px}.shadow-grid{grid-template-columns:1fr}.shadow-item,.shadow-item:nth-child(2n),.shadow-item:nth-child(4n){border-right:0}.shadow-route{grid-column:auto}}
+    .metrics-collapsible{margin:0 0 16px;padding:10px;background:rgba(255,255,255,.72);border:1px solid var(--line-soft);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.03)}
+    .metrics-collapse-head{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:42px;padding:2px 4px 2px 8px}
+    .metrics-collapse-title{display:flex;align-items:baseline;gap:10px;min-width:0}
+    .metrics-collapse-title span{color:var(--muted);font-size:12px;line-height:1.35;font-weight:600;white-space:nowrap}
+    .metrics-collapse-title strong{color:var(--ink);font-size:16px;line-height:1.2;font-weight:700;white-space:nowrap}
+    .metrics-toggle{width:34px;height:34px;min-width:34px;border:1px solid #1d1d1f;border-radius:50%;background:#1d1d1f;color:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.10);transition:background .18s ease,color .18s ease,border-color .18s ease,transform .18s ease}
+    .metrics-toggle:hover{background:#000;border-color:#000;transform:translateY(-1px)}
+    .metrics-toggle span{display:block;font-size:22px;line-height:1;font-weight:500;transform:translateY(-1px)}
+    .metrics-collapsible .metrics{margin:10px 0 0}
+    .metrics-collapsible.collapsed .metrics{display:none}
+    @media(max-width:560px){.metrics-collapse-title{flex-direction:column;align-items:flex-start;gap:2px}.metrics-collapse-head{padding-left:4px}}
+
+  </style>
+</head>
+<body>
+  <header>
+    <div class="top">
+      <div>
+        <div class="kicker">Premium 最终交易执行层</div>
+        <h1>最终竞价买入名单</h1>
+        <p class="sub">只基于 Premium 产物生成，不改动 a-top10、Decision、a-share-top3-data 主线。最终买入名单才是可执行名单；观察名单和剔除名单不参与实盘买入。</p>
+      </div>
+      <div class="pill">D日 20261016</div>
+    </div>
+  </header>
+  <main>
+    <div class="metrics">
+      <div class="metric"><span>今日策略</span><strong>空仓</strong></div>
+      <div class="metric"><span>市场模式</span><strong>谨慎</strong></div>
+      <div class="metric"><span>允许买入数量</span><strong>1</strong></div>
+      <div class="metric"><span>T+1因子状态</span><strong>净收益模型保护</strong></div>
+      <div class="metric"><span>T+1 Rank IC</span><strong>0.0071</strong></div>
+      <div class="metric"><span>净收益模型</span><strong>保护模式</strong></div>
+      <div class="metric"><span>可成交模型 AUC</span><strong>0.6142</strong></div>
+      <div class="metric"><span>净收益 Rank IC</span><strong>-0.0174</strong></div>
+      <div class="metric"><span>样本外头部净收益</span><strong>0.2%</strong></div>
+      <div class="metric"><span>成本假设</span><strong>35 bp</strong></div>
+      <div class="metric"><span>4个月 Walk-forward</span><strong>6/13 成交</strong></div>
+      <div class="metric"><span>成交后胜率</span><strong>66.7%</strong></div>
+      <div class="metric"><span>10%仓位累计</span><strong>1.1%</strong></div>
+      <div class="metric"><span>10%仓位 Max Drawdown</span><strong>-0.6%</strong></div>
+      <div class="metric"><span>近期独立成交样本</span><strong>5 笔</strong></div>
+      <div class="metric"><span>生成时间</span><strong>2026-10-16T12:42:49Z</strong></div>
+    </div>
+    <section>
+      <div class="section-head"><h2>最终买入名单</h2><span class="badge">最多 1 只，可执行</span></div>
+      <p class="empty">今日无可执行买入名单，策略为空仓或只观察。</p>
+    </section>
+    <section>
+      <div class="section-head"><h2>观察名单</h2><span class="badge">观察，不追</span></div>
+      <div class="table-wrap"><table><thead><tr><th>最终排名</th><th>Premium排名</th><th>代码</th><th>股票</th><th>行业</th><th>最终动作</th><th>最终分</th><th>可成交率</th><th>盈利率</th><th>涨停率</th><th>大亏率</th><th>净收益EV</th><th>盈利优势</th><th>模型状态</th><th>最高买入价</th><th>T日涨停概率</th><th>T日强度</th><th>T+1延续率</th><th>候选池</th><th>Premium原建议</th><th>原因</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td>1</td><td>14</td><td>002085.SZ</td><td>万丰奥威</td><td>汽车零部件</td><td>只观察不追</td><td>100.00</td><td>17.8%</td><td>45.5%</td><td>25.7%</td><td>28.3%</td><td>-0.0%</td><td>-0.4%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤9.96</td><td>25.7%</td><td>45.95</td><td>48.0%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>2</td><td>6</td><td>603197.SH</td><td>保隆科技</td><td>汽车零部件</td><td>只观察不追</td><td>98.18</td><td>17.7%</td><td>36.5%</td><td>24.4%</td><td>33.6%</td><td>-0.2%</td><td>-0.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤29.54</td><td>24.4%</td><td>53.58</td><td>47.5%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>3</td><td>3</td><td>600825.SH</td><td>新华传媒</td><td>出版</td><td>只观察不追</td><td>96.36</td><td>5.0%</td><td>53.0%</td><td>29.8%</td><td>47.6%</td><td>-0.1%</td><td>-0.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤15.24</td><td>29.8%</td><td>72.05</td><td>49.8%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>4</td><td>23</td><td>600860.SH</td><td>京城股份</td><td>通用设备</td><td>只观察不追</td><td>94.55</td><td>31.0%</td><td>44.1%</td><td>20.4%</td><td>27.4%</td><td>-0.5%</td><td>-0.9%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤7.95</td><td>20.4%</td><td>36.91</td><td>45.9%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>5</td><td>1</td><td>002889.SZ</td><td>东方嘉盛</td><td>物流</td><td>只观察不追</td><td>92.73</td><td>22.4%</td><td>39.4%</td><td>24.6%</td><td>55.5%</td><td>-0.1%</td><td>-0.9%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤14.38</td><td>24.6%</td><td>69.00</td><td>47.3%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>6</td><td>10</td><td>600148.SH</td><td>长春一东</td><td>汽车零部件</td><td>只观察不追</td><td>90.91</td><td>40.4%</td><td>39.9%</td><td>21.7%</td><td>33.1%</td><td>-0.6%</td><td>-1.1%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤16.36</td><td>21.7%</td><td>49.86</td><td>46.7%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>7</td><td>24</td><td>603013.SH</td><td>亚普股份</td><td>汽车零部件</td><td>只观察不追</td><td>89.09</td><td>24.1%</td><td>31.5%</td><td>22.5%</td><td>42.3%</td><td>-0.5%</td><td>-1.1%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤15.07</td><td>22.5%</td><td>31.10</td><td>46.5%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>8</td><td>17</td><td>000576.SZ</td><td>甘化科工</td><td>地面兵装</td><td>只观察不追</td><td>87.27</td><td>41.0%</td><td>32.9%</td><td>21.5%</td><td>43.6%</td><td>-0.6%</td><td>-1.2%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤8.81</td><td>21.5%</td><td>41.32</td><td>46.3%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>9</td><td>25</td><td>002933.SZ</td><td>新兴装备</td><td>航空装备</td><td>只观察不追</td><td>85.45</td><td>28.8%</td><td>37.7%</td><td>15.6%</td><td>34.4%</td><td>-0.7%</td><td>-1.2%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤27.89</td><td>15.6%</td><td>36.14</td><td>44.2%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>10</td><td>27</td><td>600501.SH</td><td>航天晨光</td><td>专用设备</td><td>只观察不追</td><td>83.64</td><td>31.8%</td><td>38.8%</td><td>18.7%</td><td>32.2%</td><td>-0.8%</td><td>-1.2%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤15.41</td><td>18.7%</td><td>32.06</td><td>45.5%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>11</td><td>29</td><td>001358.SZ</td><td>兴欣新材</td><td>化学制品</td><td>只观察不追</td><td>81.82</td><td>20.2%</td><td>34.6%</td><td>14.3%</td><td>39.3%</td><td>-0.7%</td><td>-1.2%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤25.04</td><td>14.3%</td><td>33.65</td><td>44.2%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>12</td><td>18</td><td>600178.SH</td><td>东安动力</td><td>汽车零部件</td><td>只观察不追</td><td>80.00</td><td>26.6%</td><td>36.1%</td><td>21.4%</td><td>44.2%</td><td>-0.6%</td><td>-1.2%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤10.30</td><td>21.4%</td><td>42.67</td><td>46.6%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>13</td><td>34</td><td>001319.SZ</td><td>铭科精技</td><td>汽车零部件</td><td>只观察不追</td><td>78.18</td><td>28.1%</td><td>40.2%</td><td>14.2%</td><td>29.4%</td><td>-0.8%</td><td>-1.3%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤21.51</td><td>14.2%</td><td>30.45</td><td>45.0%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>14</td><td>8</td><td>000607.SZ</td><td>华媒控股</td><td>广告营销</td><td>只观察不追</td><td>76.36</td><td>35.7%</td><td>37.0%</td><td>19.0%</td><td>38.0%</td><td>-0.7%</td><td>-1.3%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤4.63</td><td>19.0%</td><td>61.69</td><td>45.6%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>15</td><td>36</td><td>001696.SZ</td><td>宗申动力</td><td>通用设备</td><td>只观察不追</td><td>74.55</td><td>24.5%</td><td>34.1%</td><td>20.8%</td><td>33.1%</td><td>-1.0%</td><td>-1.5%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤15.95</td><td>20.8%</td><td>30.51</td><td>46.4%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>16</td><td>5</td><td>601999.SH</td><td>出版传媒</td><td>出版</td><td>只观察不追</td><td>72.73</td><td>37.0%</td><td>26.5%</td><td>21.4%</td><td>46.3%</td><td>-0.8%</td><td>-1.5%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤8.29</td><td>21.4%</td><td>63.35</td><td>47.2%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>17</td><td>28</td><td>603278.SH</td><td>大业股份</td><td>通用设备</td><td>只观察不追</td><td>70.91</td><td>21.8%</td><td>28.0%</td><td>17.7%</td><td>40.6%</td><td>-0.9%</td><td>-1.5%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤9.96</td><td>17.7%</td><td>29.53</td><td>45.5%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>18</td><td>7</td><td>000701.SZ</td><td>厦门信达</td><td>贸易Ⅱ</td><td>只观察不追</td><td>69.09</td><td>50.2%</td><td>35.3%</td><td>24.1%</td><td>38.4%</td><td>-1.0%</td><td>-1.6%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤5.39</td><td>24.1%</td><td>59.55</td><td>46.0%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>19</td><td>2</td><td>000573.SZ</td><td>粤宏远Ａ</td><td>房地产开发</td><td>只观察不追</td><td>67.27</td><td>18.1%</td><td>21.9%</td><td>23.6%</td><td>58.0%</td><td>-0.8%</td><td>-1.7%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤4.49</td><td>23.6%</td><td>80.46</td><td>46.9%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>20</td><td>19</td><td>002510.SZ</td><td>天汽模</td><td>汽车零部件</td><td>只观察不追</td><td>65.45</td><td>42.8%</td><td>36.5%</td><td>22.5%</td><td>32.7%</td><td>-1.2%</td><td>-1.7%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤5.99</td><td>22.5%</td><td>43.55</td><td>46.6%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>21</td><td>38</td><td>000099.SZ</td><td>中信海直</td><td>航空机场</td><td>只观察不追</td><td>63.64</td><td>26.9%</td><td>32.9%</td><td>19.2%</td><td>43.6%</td><td>-1.1%</td><td>-1.7%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤14.82</td><td>19.2%</td><td>30.60</td><td>45.3%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>22</td><td>26</td><td>002869.SZ</td><td>金溢科技</td><td>计算机设</td><td>只观察不追</td><td>61.82</td><td>22.6%</td><td>27.1%</td><td>17.9%</td><td>43.6%</td><td>-1.1%</td><td>-1.7%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤20.68</td><td>17.9%</td><td>44.22</td><td>44.6%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>23</td><td>31</td><td>600699.SH</td><td>均胜电子</td><td>汽车零部件</td><td>只观察不追</td><td>60.00</td><td>40.6%</td><td>40.1%</td><td>18.3%</td><td>40.2%</td><td>-1.2%</td><td>-1.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤20.40</td><td>18.3%</td><td>30.73</td><td>46.2%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>24</td><td>16</td><td>601606.SH</td><td>长城军工</td><td>地面兵装</td><td>只观察不追</td><td>58.18</td><td>44.9%</td><td>28.1%</td><td>26.5%</td><td>40.4%</td><td>-1.2%</td><td>-1.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤32.08</td><td>26.5%</td><td>33.16</td><td>47.1%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>25</td><td>41</td><td>603173.SH</td><td>福斯达</td><td>专用设备</td><td>只观察不追</td><td>56.36</td><td>21.6%</td><td>27.5%</td><td>16.0%</td><td>41.5%</td><td>-1.2%</td><td>-1.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤30.20</td><td>16.0%</td><td>23.51</td><td>45.0%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>26</td><td>4</td><td>603999.SH</td><td>读者传媒</td><td>出版</td><td>只观察不追</td><td>54.55</td><td>29.0%</td><td>29.9%</td><td>19.7%</td><td>59.4%</td><td>-0.9%</td><td>-1.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤8.42</td><td>19.7%</td><td>64.52</td><td>47.0%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>27</td><td>49</td><td>002683.SZ</td><td>广东宏大</td><td>化学制品</td><td>只观察不追</td><td>52.73</td><td>21.6%</td><td>28.8%</td><td>15.0%</td><td>41.5%</td><td>-1.2%</td><td>-1.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤28.04</td><td>15.0%</td><td>11.91</td><td>44.1%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>28</td><td>33</td><td>603305.SH</td><td>旭升集团</td><td>汽车零部件</td><td>只观察不追</td><td>50.91</td><td>28.5%</td><td>30.5%</td><td>19.3%</td><td>42.1%</td><td>-1.2%</td><td>-1.8%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤10.93</td><td>19.3%</td><td>24.96</td><td>46.2%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>29</td><td>32</td><td>600843.SH</td><td>上工申贝</td><td>专用设备</td><td>只观察不追</td><td>49.09</td><td>25.3%</td><td>32.9%</td><td>17.3%</td><td>43.2%</td><td>-1.2%</td><td>-1.9%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤8.98</td><td>17.3%</td><td>30.29</td><td>45.6%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr><tr><td>30</td><td>39</td><td>002076.SZ</td><td>星光股份</td><td>照明设备</td><td>只观察不追</td><td>47.27</td><td>39.0%</td><td>38.4%</td><td>17.5%</td><td>33.2%</td><td>-1.4%</td><td>-1.9%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>≤2.18</td><td>17.5%</td><td>25.89</td><td>44.7%</td><td>观察池</td><td>只观察不追</td><td>净收益模型样本外验证未通过，仅观察</td><td>观察池：t_attack&lt;0.55；t1_accept&lt;0.52；t1_high_profit&lt;0.50；t1_evidence&lt;0.35；若竞价弱于预期不追</td></tr></tbody></table></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>剔除名单</h2><span class="badge">禁止买入</span></div>
+      <div class="table-wrap"><table><thead><tr><th>最终排名</th><th>Premium排名</th><th>代码</th><th>股票</th><th>行业</th><th>最终动作</th><th>最终分</th><th>可成交率</th><th>盈利率</th><th>涨停率</th><th>大亏率</th><th>净收益EV</th><th>盈利优势</th><th>模型状态</th><th>最高买入价</th><th>T日涨停概率</th><th>T日强度</th><th>T+1延续率</th><th>候选池</th><th>Premium原建议</th><th>原因</th><th>T+1卖出计划</th></tr></thead><tbody><tr><td>1</td><td>54</td><td>601811.SH</td><td>新华文轩</td><td>出版</td><td>禁止买入</td><td>9.09</td><td>22.0%</td><td>5.9%</td><td>17.8%</td><td>89.5%</td><td>-2.3%</td><td>-3.6%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>不建议买入</td><td>17.8%</td><td>25.35</td><td>44.6%</td><td>排除池</td><td>放弃</td><td>Premium动作为放弃；Premium专业门槛剔除；分钟硬风险；分钟风险惩罚高；净收益模型样本外验证未通过，仅观察</td><td>风控排除：intraday_hard_risk=1</td></tr><tr><td>2</td><td>55</td><td>600668.SH</td><td>尖峰集团</td><td>水泥</td><td>禁止买入</td><td>7.27</td><td>26.0%</td><td>8.6%</td><td>14.1%</td><td>84.9%</td><td>-2.4%</td><td>-3.7%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>不建议买入</td><td>14.1%</td><td>33.41</td><td>44.1%</td><td>排除池</td><td>放弃</td><td>Premium动作为放弃；Premium专业门槛剔除；分钟硬风险；分钟风险惩罚高；净收益模型样本外验证未通过，仅观察</td><td>风控排除：intraday_hard_risk=1</td></tr><tr><td>3</td><td>53</td><td>002767.SZ</td><td>先锋电子</td><td>通用设备</td><td>禁止买入</td><td>5.45</td><td>30.7%</td><td>3.8%</td><td>13.5%</td><td>90.5%</td><td>-3.6%</td><td>-4.9%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>不建议买入</td><td>13.5%</td><td>35.16</td><td>43.9%</td><td>排除池</td><td>放弃</td><td>Premium动作为放弃；Premium专业门槛剔除；分钟硬风险；净收益模型样本外验证未通过，仅观察</td><td>风控排除：intraday_hard_risk=1</td></tr><tr><td>4</td><td>52</td><td>003029.SZ</td><td>吉大正元</td><td>软件开发</td><td>禁止买入</td><td>3.64</td><td>24.6%</td><td>2.4%</td><td>24.7%</td><td>94.1%</td><td>-3.6%</td><td>-5.0%</td><td>guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb</td><td>不建议买入</td><td>24.7%</td><td>53.97</td><td>46.2%</td><td>排除池</td><td>放弃</td><td>Premium动作为放弃；Premium专业门槛剔除；分钟硬风险；净收益模型样本外验证未通过，仅观察</td><td>风控排除：intraday_hard_risk=1</td></tr></tbody></table></div>
+    </section>
+    <p class="note">规则摘要：最终排名以竞价可成交概率、净盈利概率、T日涨停概率和大亏风险共同计算；样本外门槛未通过、保守净收益不足或没有可执行候选时自动空仓。Decision 否决、分钟硬风险和市场禁止交易仍会直接剔除。模型状态：guarded:profit_rank_ic,top_net_return,net_return_lcb,top_lift,post_release_lcb。历史回测不能保证未来收益，近期独立成交样本仍不足。</p>
+  </main>
+  <script>
+    (function premiumMetricsCollapse(){
+      const box = document.querySelector('.metrics-collapsible');
+      if (!box) return;
+      const btn = box.querySelector('.metrics-toggle');
+      if (!btn) return;
+      const icon = btn.querySelector('span');
+      const sync = () => {
+        const collapsed = box.classList.contains('collapsed');
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('title', collapsed ? '展开指标' : '折叠指标');
+        btn.setAttribute('aria-label', collapsed ? '展开指标' : '折叠指标');
+        if (icon) icon.textContent = collapsed ? '+' : '-';
+      };
+      btn.addEventListener('click', () => {
+        box.classList.toggle('collapsed');
+        sync();
+      });
+      sync();
+    })();
+
+  </script>
+</body>
+</html>
