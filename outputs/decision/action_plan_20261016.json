@@ -7229,7 +7229,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-10-16T12:54:27+00:00",
+      "truth_generated_at_utc": "2026-10-16T13:17:17+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7353,7 +7353,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-10-16T12:54:27+00:00",
+      "truth_generated_at_utc": "2026-10-16T13:17:17+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7477,7 +7477,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-10-16T12:54:27+00:00",
+      "truth_generated_at_utc": "2026-10-16T13:17:17+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7601,7 +7601,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "tushare_stk_auction_o",
-      "truth_generated_at_utc": "2026-10-16T12:54:27+00:00",
+      "truth_generated_at_utc": "2026-10-16T13:17:17+00:00",
       "validation_status_label": "T日市价已验证，等待T+1",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -10855,101 +10855,124 @@
       "up_count": 3301,
       "down_count": 2128,
       "flat_count": 138,
-      "limit_up_count": 63,
-      "classified_limit_up_count": 63,
+      "limit_up_count": 120,
+      "classified_limit_up_count": 120,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "汽车零部件",
-          "limit_up_count": 15,
-          "share": 0.23809523809523808
+          "limit_up_count": 21,
+          "share": 0.175
         },
         {
           "rank": 2,
           "industry": "专用设备",
-          "limit_up_count": 5,
-          "share": 0.07936507936507936
+          "limit_up_count": 7,
+          "share": 0.058333333333333334
         },
         {
           "rank": 3,
-          "industry": "通用设备",
-          "limit_up_count": 5,
-          "share": 0.07936507936507936
+          "industry": "航空装备",
+          "limit_up_count": 7,
+          "share": 0.058333333333333334
         },
         {
           "rank": 4,
-          "industry": "出版",
-          "limit_up_count": 4,
-          "share": 0.06349206349206349
+          "industry": "通用设备",
+          "limit_up_count": 7,
+          "share": 0.058333333333333334
         },
         {
           "rank": 5,
-          "industry": "航空装备",
-          "limit_up_count": 4,
-          "share": 0.06349206349206349
+          "industry": "房地产开发",
+          "limit_up_count": 5,
+          "share": 0.041666666666666664
         },
         {
           "rank": 6,
-          "industry": "化学制品",
-          "limit_up_count": 3,
-          "share": 0.047619047619047616
+          "industry": "出版",
+          "limit_up_count": 4,
+          "share": 0.03333333333333333
         },
         {
           "rank": 7,
-          "industry": "地面兵装",
-          "limit_up_count": 2,
-          "share": 0.031746031746031744
+          "industry": "化学制品",
+          "limit_up_count": 4,
+          "share": 0.03333333333333333
         },
         {
           "rank": 8,
-          "industry": "水泥",
-          "limit_up_count": 2,
-          "share": 0.031746031746031744
+          "industry": "化学制药",
+          "limit_up_count": 4,
+          "share": 0.03333333333333333
         },
         {
           "rank": 9,
-          "industry": "照明设备",
-          "limit_up_count": 2,
-          "share": 0.031746031746031744
+          "industry": "元件",
+          "limit_up_count": 3,
+          "share": 0.025
         },
         {
           "rank": 10,
-          "industry": "IT服务Ⅱ",
-          "limit_up_count": 1,
-          "share": 0.015873015873015872
+          "industry": "软件开发",
+          "limit_up_count": 3,
+          "share": 0.025
         }
       ],
       "industry_counts": {
-        "汽车零部件": 15,
-        "专用设备": 5,
-        "通用设备": 5,
+        "汽车零部件": 21,
+        "专用设备": 7,
+        "航空装备": 7,
+        "通用设备": 7,
+        "房地产开发": 5,
         "出版": 4,
-        "航空装备": 4,
-        "化学制品": 3,
+        "化学制品": 4,
+        "化学制药": 4,
+        "元件": 3,
+        "软件开发": 3,
+        "一般零售": 2,
+        "中药Ⅱ": 2,
+        "军工电子": 2,
         "地面兵装": 2,
+        "基础建设": 2,
+        "家居用品": 2,
+        "工程咨询": 2,
+        "影视院线": 2,
         "水泥": 2,
         "照明设备": 2,
+        "物流": 2,
+        "饲料": 2,
         "IT服务Ⅱ": 1,
         "专业工程": 1,
+        "个护用品": 1,
+        "光伏设备": 1,
         "其他家电": 1,
-        "军工电子": 1,
-        "化学制药": 1,
+        "包装印刷": 1,
         "化学原料": 1,
         "化学纤维": 1,
+        "医疗服务": 1,
+        "半导体": 1,
         "商用车": 1,
-        "基础建设": 1,
-        "工程咨询": 1,
+        "家电零部": 1,
         "广告营销": 1,
-        "房地产开发": 1,
-        "物流": 1,
+        "房地产服务": 1,
+        "游戏Ⅱ": 1,
+        "电力": 1,
+        "电机Ⅱ": 1,
+        "电网设备": 1,
+        "白酒Ⅱ": 1,
+        "种植业": 1,
         "自动化设": 1,
+        "航海装备": 1,
         "航空机场": 1,
+        "装修建材": 1,
         "计算机设": 1,
         "贸易Ⅱ": 1,
-        "软件开发": 1,
         "通信设备": 1,
+        "铁路公路": 1,
         "风电设备": 1,
-        "饲料": 1
+        "食品加工": 1,
+        "饮料乳品": 1
       },
       "raw_close_available": true,
       "coverage_against_d": 1.0003593890386344,
@@ -10965,7 +10988,7 @@
     "premarket_valid_rows": 4,
     "retrospective_rows": 0,
     "pending_rows": 4,
-    "generated_at_utc": "2026-10-16T12:54:27+00:00",
+    "generated_at_utc": "2026-10-16T13:17:17+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -10975,7 +10998,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-10-16T12:54:28+00:00",
+    "generated_at_utc": "2026-10-16T13:17:18+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
