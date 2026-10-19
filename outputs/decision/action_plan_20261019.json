@@ -12979,115 +12979,95 @@
       "up_count": 2275,
       "down_count": 3129,
       "flat_count": 160,
-      "limit_up_count": 89,
-      "classified_limit_up_count": 89,
+      "limit_up_count": 47,
+      "classified_limit_up_count": 47,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "汽车零部件",
           "limit_up_count": 10,
-          "share": 0.11235955056179775
+          "share": 0.2127659574468085
         },
         {
           "rank": 2,
-          "industry": "电力",
-          "limit_up_count": 6,
-          "share": 0.06741573033707865
+          "industry": "塑料",
+          "limit_up_count": 4,
+          "share": 0.0851063829787234
         },
         {
           "rank": 3,
-          "industry": "IT服务Ⅱ",
-          "limit_up_count": 5,
-          "share": 0.056179775280898875
+          "industry": "元件",
+          "limit_up_count": 3,
+          "share": 0.06382978723404255
         },
         {
           "rank": 4,
-          "industry": "通用设备",
-          "limit_up_count": 5,
-          "share": 0.056179775280898875
+          "industry": "家居用品",
+          "limit_up_count": 3,
+          "share": 0.06382978723404255
         },
         {
           "rank": 5,
-          "industry": "元件",
-          "limit_up_count": 4,
-          "share": 0.0449438202247191
+          "industry": "电力",
+          "limit_up_count": 3,
+          "share": 0.06382978723404255
         },
         {
           "rank": 6,
-          "industry": "出版",
-          "limit_up_count": 4,
-          "share": 0.0449438202247191
+          "industry": "通用设备",
+          "limit_up_count": 3,
+          "share": 0.06382978723404255
         },
         {
           "rank": 7,
-          "industry": "塑料",
-          "limit_up_count": 4,
-          "share": 0.0449438202247191
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
         },
         {
           "rank": 8,
-          "industry": "软件开发",
-          "limit_up_count": 4,
-          "share": 0.0449438202247191
+          "industry": "化学制品",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
         },
         {
           "rank": 9,
-          "industry": "化学制品",
-          "limit_up_count": 3,
-          "share": 0.033707865168539325
+          "industry": "软件开发",
+          "limit_up_count": 2,
+          "share": 0.0425531914893617
         },
         {
           "rank": 10,
-          "industry": "家居用品",
-          "limit_up_count": 3,
-          "share": 0.033707865168539325
+          "industry": "专用设备",
+          "limit_up_count": 1,
+          "share": 0.02127659574468085
         }
       ],
       "industry_counts": {
         "汽车零部件": 10,
-        "电力": 6,
-        "IT服务Ⅱ": 5,
-        "通用设备": 5,
-        "元件": 4,
-        "出版": 4,
         "塑料": 4,
-        "软件开发": 4,
-        "化学制品": 3,
+        "元件": 3,
         "家居用品": 3,
-        "电池": 3,
-        "专用设备": 2,
-        "地面兵装": 2,
-        "广告营销": 2,
-        "数字媒体": 2,
-        "旅游及景": 2,
-        "一般零售": 1,
+        "电力": 3,
+        "通用设备": 3,
+        "IT服务Ⅱ": 2,
+        "化学制品": 2,
+        "软件开发": 2,
+        "专用设备": 1,
         "中药Ⅱ": 1,
-        "农产品加": 1,
         "化学制药": 1,
-        "化学原料": 1,
-        "化学纤维": 1,
-        "医疗服务": 1,
-        "半导体": 1,
         "商用车": 1,
-        "小家电": 1,
-        "工程咨询": 1,
+        "地面兵装": 1,
         "影视院线": 1,
-        "房地产开发": 1,
-        "文娱用品": 1,
-        "水泥": 1,
+        "数字媒体": 1,
         "消费电子": 1,
         "照明设备": 1,
         "物流": 1,
         "电机Ⅱ": 1,
-        "电网设备": 1,
-        "白酒Ⅱ": 1,
-        "航空装备": 1,
         "计算机设": 1,
         "通信服务": 1,
         "通信设备": 1,
-        "食品加工": 1,
-        "饮料乳品": 1,
-        "饲料": 1
+        "食品加工": 1
       },
       "raw_close_available": true,
       "coverage_against_d": 0.9994611101131669,
