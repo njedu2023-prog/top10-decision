@@ -15,14 +15,6 @@
   "auction_truth_path": "",
   "failures": [
     {
-      "ts_code": "600668.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "003029.SZ",
-      "reason": "empty"
-    },
-    {
       "ts_code": "000530.SZ",
       "reason": "empty"
     },
@@ -31,31 +23,19 @@
       "reason": "empty"
     },
     {
-      "ts_code": "601811.SH",
-      "reason": "empty"
-    },
-    {
       "ts_code": "002889.SZ",
       "reason": "empty"
     },
     {
-      "ts_code": "603955.SH",
+      "ts_code": "600668.SH",
       "reason": "empty"
     },
     {
-      "ts_code": "000573.SZ",
+      "ts_code": "601811.SH",
       "reason": "empty"
     },
     {
-      "ts_code": "001319.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603636.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "000678.SZ",
+      "ts_code": "003029.SZ",
       "reason": "empty"
     },
     {
@@ -63,11 +43,39 @@
       "reason": "empty"
     },
     {
-      "ts_code": "603173.SH",
+      "ts_code": "000573.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603955.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001319.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "000678.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603636.SH",
       "reason": "empty"
     },
     {
       "ts_code": "603239.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002535.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "605178.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603173.SH",
       "reason": "empty"
     },
     {
@@ -79,19 +87,11 @@
       "reason": "empty"
     },
     {
-      "ts_code": "605178.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002535.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "600843.SH",
-      "reason": "empty"
-    },
-    {
       "ts_code": "600860.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600802.SH",
       "reason": "empty"
     }
   ],
