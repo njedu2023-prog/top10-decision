@@ -10,7 +10,7 @@
   "limit_rows": 0,
   "feature_count": 19,
   "fill_auc": 0.6151658194141855,
-  "fill_brier": 0.2177067457629451,
+  "fill_brier": 0.2177067457629462,
   "fill_baseline_brier": 0.24179544948053708,
   "profit_rank_ic": -0.015873015873015872,
   "top_quintile_mean_net_return": 0.005894595689507937,
