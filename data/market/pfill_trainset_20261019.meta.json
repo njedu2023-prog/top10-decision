@@ -39,7 +39,7 @@
     "strong_opening_auction_limit_up_unconfirmed": 4
   },
   "sample_maturity_distribution": {
-    "PFILL_READY": 40
+    "FULLY_READY": 40
   },
   "column_groups": {
     "base_cols": [
