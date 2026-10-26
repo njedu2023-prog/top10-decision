@@ -4,10 +4,10 @@
   "target_date": "20261026",
   "rows": 30,
   "sample_maturity": {
-    "PFILL_READY": 30
+    "FULLY_READY": 30
   },
   "label_ready_fill": 30,
-  "label_ready_ret": 0,
+  "label_ready_ret": 30,
   "y_fill_rate": 0.8333333333333334,
   "public_market_buyable_rate": 0.8333333333333334,
   "actual_order_fill_rate": null,
