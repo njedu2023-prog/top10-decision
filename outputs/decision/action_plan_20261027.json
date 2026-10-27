@@ -13169,21 +13169,108 @@
     },
     "t": {
       "trade_date": "20261027",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5570,
+      "return_coverage": 1.0,
+      "up_count": 606,
+      "down_count": 4922,
+      "flat_count": 42,
+      "limit_up_count": 43,
+      "classified_limit_up_count": 43,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "汽车零部件",
+          "limit_up_count": 8,
+          "share": 0.18604651162790697
+        },
+        {
+          "rank": 2,
+          "industry": "一般零售",
+          "limit_up_count": 7,
+          "share": 0.16279069767441862
+        },
+        {
+          "rank": 3,
+          "industry": "电机Ⅱ",
+          "limit_up_count": 3,
+          "share": 0.06976744186046512
+        },
+        {
+          "rank": 4,
+          "industry": "休闲食品",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 5,
+          "industry": "家电零部",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 6,
+          "industry": "通信设备",
+          "limit_up_count": 2,
+          "share": 0.046511627906976744
+        },
+        {
+          "rank": 7,
+          "industry": "专业服务",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        },
+        {
+          "rank": 8,
+          "industry": "专用设备",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        },
+        {
+          "rank": 9,
+          "industry": "光伏设备",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        },
+        {
+          "rank": 10,
+          "industry": "光学光电",
+          "limit_up_count": 1,
+          "share": 0.023255813953488372
+        }
+      ],
+      "industry_counts": {
+        "汽车零部件": 8,
+        "一般零售": 7,
+        "电机Ⅱ": 3,
+        "休闲食品": 2,
+        "家电零部": 2,
+        "通信设备": 2,
+        "专业服务": 1,
+        "专用设备": 1,
+        "光伏设备": 1,
+        "光学光电": 1,
+        "军工电子": 1,
+        "商用车": 1,
+        "塑料": 1,
+        "教育": 1,
+        "旅游及景": 1,
+        "服装家纺": 1,
+        "水泥": 1,
+        "游戏Ⅱ": 1,
+        "照明设备": 1,
+        "燃气Ⅱ": 1,
+        "物流": 1,
+        "航运港口": 1,
+        "软件开发": 1,
+        "通用设备": 1,
+        "饮料乳品": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.0,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
