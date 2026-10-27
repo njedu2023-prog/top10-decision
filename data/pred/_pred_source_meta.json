@@ -1,7 +1,7 @@
 {
-  "created_at_utc": "2026-10-27T11:23:27+00:00",
+  "created_at_utc": "2026-10-27T11:54:08+00:00",
   "source": "url",
-  "source_ref": "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_20261027.csv",
+  "source_ref": "https://raw.githubusercontent.com/njedu2023-prog/a-top10/main/outputs/decisio/pred_decisio_latest.csv",
   "sha256": "5c1f6ee7e84a79e7f7bdadd07bfb325d5e9390c273c991f07cea38f4af8c33e6",
   "resolved_trade_date": "20261027",
   "csv_profile": {
