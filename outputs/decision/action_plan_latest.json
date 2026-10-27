@@ -7655,7 +7655,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7779,7 +7779,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -7903,7 +7903,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -8027,7 +8027,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -8151,7 +8151,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -8275,7 +8275,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -8399,7 +8399,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     },
@@ -8523,7 +8523,7 @@
       "actual_net_return": null,
       "exit_reason": null,
       "truth_source": "pending",
-      "truth_generated_at_utc": "2026-10-27T12:08:40+00:00",
+      "truth_generated_at_utc": "2026-10-27T14:33:44+00:00",
       "validation_status_label": "等待T日收盘",
       "prediction_timing_label": "9:25前冻结"
     }
@@ -12041,96 +12041,121 @@
       "up_count": 606,
       "down_count": 4922,
       "flat_count": 42,
-      "limit_up_count": 43,
-      "classified_limit_up_count": 43,
+      "limit_up_count": 91,
+      "classified_limit_up_count": 91,
       "industry_top10": [
         {
           "rank": 1,
           "industry": "汽车零部件",
-          "limit_up_count": 8,
-          "share": 0.18604651162790697
+          "limit_up_count": 16,
+          "share": 0.17582417582417584
         },
         {
           "rank": 2,
           "industry": "一般零售",
           "limit_up_count": 7,
-          "share": 0.16279069767441862
+          "share": 0.07692307692307693
         },
         {
           "rank": 3,
           "industry": "电机Ⅱ",
-          "limit_up_count": 3,
-          "share": 0.06976744186046512
+          "limit_up_count": 5,
+          "share": 0.054945054945054944
         },
         {
           "rank": 4,
-          "industry": "休闲食品",
-          "limit_up_count": 2,
-          "share": 0.046511627906976744
+          "industry": "通用设备",
+          "limit_up_count": 4,
+          "share": 0.04395604395604396
         },
         {
           "rank": 5,
-          "industry": "家电零部",
-          "limit_up_count": 2,
-          "share": 0.046511627906976744
+          "industry": "专用设备",
+          "limit_up_count": 3,
+          "share": 0.03296703296703297
         },
         {
           "rank": 6,
-          "industry": "通信设备",
-          "limit_up_count": 2,
-          "share": 0.046511627906976744
+          "industry": "半导体",
+          "limit_up_count": 3,
+          "share": 0.03296703296703297
         },
         {
           "rank": 7,
-          "industry": "专业服务",
-          "limit_up_count": 1,
-          "share": 0.023255813953488372
+          "industry": "家电零部",
+          "limit_up_count": 3,
+          "share": 0.03296703296703297
         },
         {
           "rank": 8,
-          "industry": "专用设备",
-          "limit_up_count": 1,
-          "share": 0.023255813953488372
+          "industry": "休闲食品",
+          "limit_up_count": 2,
+          "share": 0.02197802197802198
         },
         {
           "rank": 9,
           "industry": "光伏设备",
-          "limit_up_count": 1,
-          "share": 0.023255813953488372
+          "limit_up_count": 2,
+          "share": 0.02197802197802198
         },
         {
           "rank": 10,
           "industry": "光学光电",
-          "limit_up_count": 1,
-          "share": 0.023255813953488372
+          "limit_up_count": 2,
+          "share": 0.02197802197802198
         }
       ],
       "industry_counts": {
-        "汽车零部件": 8,
+        "汽车零部件": 16,
         "一般零售": 7,
-        "电机Ⅱ": 3,
+        "电机Ⅱ": 5,
+        "通用设备": 4,
+        "专用设备": 3,
+        "半导体": 3,
+        "家电零部": 3,
         "休闲食品": 2,
-        "家电零部": 2,
+        "光伏设备": 2,
+        "光学光电": 2,
+        "燃气Ⅱ": 2,
+        "电网设备": 2,
+        "计算机设": 2,
         "通信设备": 2,
         "专业服务": 1,
-        "专用设备": 1,
-        "光伏设备": 1,
-        "光学光电": 1,
+        "中药Ⅱ": 1,
+        "元件": 1,
+        "其他电子": 1,
         "军工电子": 1,
+        "农产品加": 1,
+        "出版": 1,
+        "化学制药": 1,
+        "厨卫电器": 1,
         "商用车": 1,
         "塑料": 1,
+        "多元金融": 1,
+        "家居用品": 1,
+        "工业金属": 1,
+        "工程机械": 1,
+        "广告营销": 1,
+        "影视院线": 1,
+        "房地产开发": 1,
         "教育": 1,
         "旅游及景": 1,
         "服装家纺": 1,
         "水泥": 1,
+        "消费电子": 1,
         "游戏Ⅱ": 1,
         "照明设备": 1,
-        "燃气Ⅱ": 1,
         "物流": 1,
+        "生物制品": 1,
+        "电子化学": 1,
+        "自动化设": 1,
+        "航空装备": 1,
         "航运港口": 1,
         "软件开发": 1,
-        "通用设备": 1,
-        "饮料乳品": 1
+        "通信服务": 1,
+        "饮料乳品": 1,
+        "饰品": 1,
+        "黑色家电": 1
       },
       "maturity_status": "FINAL_D_CLOSE"
     },
@@ -12162,7 +12187,7 @@
     "premarket_valid_rows": 8,
     "retrospective_rows": 0,
     "pending_rows": 8,
-    "generated_at_utc": "2026-10-27T12:08:40+00:00",
+    "generated_at_utc": "2026-10-27T14:33:44+00:00",
     "public_market_proxy": true,
     "execution_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
@@ -12172,7 +12197,7 @@
   "observation_statistics": {
     "schema_version": "decision_observation_validation_v4_auction_truth",
     "status": "ok",
-    "generated_at_utc": "2026-10-27T12:08:41+00:00",
+    "generated_at_utc": "2026-10-27T14:33:44+00:00",
     "validation_start_exec_date": "20260721",
     "validation_mode": "market_at_open_proxy",
     "market_open_fill_assumption": true,
