@@ -1,18 +1,99 @@
 {
   "source": "tushare",
-  "trade_date": "20261028",
+  "trade_date": "20261029",
   "signal_date": "",
   "calendar_path": "data/market/trade_cal_sse.csv",
   "calendar_rows": 365,
-  "candidate_codes": 73,
+  "candidate_codes": 80,
   "request_timeout_seconds": 8,
   "workers": 6,
-  "minute_files_written": 73,
+  "minute_files_written": 0,
   "minute_sync_skipped_non_current_date": false,
   "auction_truth_source": "tushare:stk_auction_o",
-  "auction_truth_status": "written",
-  "auction_truth_rows": 73,
-  "auction_truth_path": "data/market/raw/2026/20261028/stk_auction_o.csv",
-  "failures": [],
+  "auction_truth_status": "source_pending_or_empty",
+  "auction_truth_rows": 0,
+  "auction_truth_path": "",
+  "failures": [
+    {
+      "ts_code": "600826.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "605333.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001318.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001219.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002820.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001331.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "000678.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002708.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603528.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "600838.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603028.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002093.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002823.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603037.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002205.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002623.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603370.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603813.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603758.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "601956.SH",
+      "reason": "empty"
+    }
+  ],
   "token_persisted": false
 }
