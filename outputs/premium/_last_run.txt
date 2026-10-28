@@ -1,8 +1,8 @@
 trade_date: 20261028
-run_id: gh_40749090505
-commit_sha: a0b0c59e8beb
+run_id: gh_40757030366
+commit_sha: 4204827074b1
 model_version: premium_v4_a_share_d_t_t1
-created_at_utc: 2026-10-28T19:46:35Z
+created_at_utc: 2026-10-28T19:50:54Z
 ok: True
 buy_date: 20261029
 target_date: 20261030
@@ -106,8 +106,8 @@ t1_calibration_raw_brier: 0.2684274555609694
 t1_calibration_brier: 0.24414915851565644
 t1_calibration_kind: platt_monotonic
 t1_calibration_avg_delta: -0.06705695537520638
-t1_calibration_slope: 0.10152264717560833
-t1_calibration_intercept: -0.22430425792191686
+t1_calibration_slope: 0.10152264717560847
+t1_calibration_intercept: -0.22430425792191688
 adaptive_rank_mode: history_ic_weighted_v1
 adaptive_weight_limitup: 0.637518
 adaptive_weight_t1: 0.05
@@ -196,8 +196,8 @@ history_limitup_spearman_ic_20d: 0.22317689271591118
 history_limitup_spearman_ic_positive_rate: 0.8404255319148937
 history_limitup_kendall_tau_mean: 0.1065756396893465
 history_t1_ret_rank_ic_days: 78
-history_t1_ret_spearman_ic_mean: 0.005567728908175251
-history_t1_ret_spearman_ic_20d: 0.014644771441638556
+history_t1_ret_spearman_ic_mean: 0.005567728908175252
+history_t1_ret_spearman_ic_20d: 0.01464477144163856
 history_t1_ret_spearman_ic_positive_rate: 0.5128205128205128
 history_tier_top10_hit_rate: 0.34294871794871795
 history_tier_top20_tail_hit_rate: 0.20490928495197439
