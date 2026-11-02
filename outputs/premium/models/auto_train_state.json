@@ -1,5 +1,5 @@
 {
-  "checked_at_utc": "2026-11-02T12:43:13.887231+00:00",
+  "checked_at_utc": "2026-11-02T22:51:59.468383+00:00",
   "attempted_n_days": 147,
   "attempted_t_days": 147,
   "attempted_t1_days": 96,
@@ -7,9 +7,9 @@
   "matured_n_days": 147,
   "matured_t_days": 147,
   "matured_t1_days": 96,
-  "new_n_days": 5,
-  "new_t_days": 5,
-  "new_t1_days": 5,
+  "new_n_days": 0,
+  "new_t_days": 0,
+  "new_t1_days": 0,
   "truth_fingerprint": "b8f4f739047ff3eedbdf69d3b19b334fb1ad367d3835801d7f114ea36cd8b0bb",
   "truth_fingerprint_files": 98,
   "truth_fingerprint_rows": 11673,
@@ -18,9 +18,10 @@
   "truth_snapshot_upgrade": false,
   "gate_version": "premium_target_gate_v4_walkforward_provenance",
   "contract_upgrade": false,
-  "decision": "trained",
+  "decision": "skip_no_increment",
   "trained": false,
   "reason": "validation_not_pass:days=29;samples=1413;raw_mae=0.0670941397295287;plus_mae=0.06842952393161311;improve_rate=0.4699221514508139;raw_daily_ic=0.010043520883399156;plus_daily_ic=-0.023927350092937016;bias=0.010819995382527378",
   "n_samples": 5044,
-  "n_days": 96
+  "n_days": 96,
+  "previous_n_days": 147
 }
