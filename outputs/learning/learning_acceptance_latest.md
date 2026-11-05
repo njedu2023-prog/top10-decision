@@ -1,6 +1,6 @@
 # Learning Acceptance Latest
 
-- generated_at_utc: 2026-11-05T12:02:56+00:00
+- generated_at_utc: 2026-11-05T21:32:35+00:00
 - current_run_date: 20261105
 - overall_pass: FAIL
 
