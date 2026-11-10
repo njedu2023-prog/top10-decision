@@ -13938,21 +13938,128 @@
     },
     "t": {
       "trade_date": "20261110",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5573,
+      "return_coverage": 1.0,
+      "up_count": 4273,
+      "down_count": 1149,
+      "flat_count": 151,
+      "limit_up_count": 93,
+      "classified_limit_up_count": 93,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "汽车零部件",
+          "limit_up_count": 11,
+          "share": 0.11827956989247312
+        },
+        {
+          "rank": 2,
+          "industry": "光学光电",
+          "limit_up_count": 6,
+          "share": 0.06451612903225806
+        },
+        {
+          "rank": 3,
+          "industry": "通用设备",
+          "limit_up_count": 6,
+          "share": 0.06451612903225806
+        },
+        {
+          "rank": 4,
+          "industry": "专用设备",
+          "limit_up_count": 4,
+          "share": 0.043010752688172046
+        },
+        {
+          "rank": 5,
+          "industry": "影视院线",
+          "limit_up_count": 4,
+          "share": 0.043010752688172046
+        },
+        {
+          "rank": 6,
+          "industry": "消费电子",
+          "limit_up_count": 4,
+          "share": 0.043010752688172046
+        },
+        {
+          "rank": 7,
+          "industry": "IT服务Ⅱ",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        },
+        {
+          "rank": 8,
+          "industry": "光伏设备",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        },
+        {
+          "rank": 9,
+          "industry": "广告营销",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        },
+        {
+          "rank": 10,
+          "industry": "游戏Ⅱ",
+          "limit_up_count": 3,
+          "share": 0.03225806451612903
+        }
+      ],
+      "industry_counts": {
+        "汽车零部件": 11,
+        "光学光电": 6,
+        "通用设备": 6,
+        "专用设备": 4,
+        "影视院线": 4,
+        "消费电子": 4,
+        "IT服务Ⅱ": 3,
+        "光伏设备": 3,
+        "广告营销": 3,
+        "游戏Ⅱ": 3,
+        "一般零售": 2,
+        "元件": 2,
+        "包装印刷": 2,
+        "半导体": 2,
+        "塑料": 2,
+        "工业金属": 2,
+        "数字媒体": 2,
+        "燃气Ⅱ": 2,
+        "自动化设": 2,
+        "计算机设": 2,
+        "通信设备": 2,
+        "专业工程": 1,
+        "其他家电": 1,
+        "出版": 1,
+        "化学纤维": 1,
+        "医疗器械": 1,
+        "医药商业": 1,
+        "厨卫电器": 1,
+        "基础建设": 1,
+        "家居用品": 1,
+        "小家电": 1,
+        "小金属": 1,
+        "工程机械": 1,
+        "房地产开发": 1,
+        "焦炭Ⅱ": 1,
+        "照明设备": 1,
+        "电力": 1,
+        "电网设备": 1,
+        "电视广播": 1,
+        "软件开发": 1,
+        "造纸": 1,
+        "铁路公路": 1,
+        "食品加工": 1,
+        "饮料乳品": 1,
+        "黑色家电": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.0,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
