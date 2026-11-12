@@ -1,0 +1,3 @@
+trade_date,target_trade_date,jq_code,target_weight,risk_budget,regime,reason
+20261112,20261113,603706.XSHG,0.06999999999999999,0.7,CAUTION,P0_EV_weight
+20261112,20261113,600853.XSHG,0.06999999999999999,0.7,CAUTION,P0_EV_weight
