@@ -4,7 +4,7 @@
   "signal_date": "",
   "calendar_path": "data/market/trade_cal_sse.csv",
   "calendar_rows": 365,
-  "candidate_codes": 60,
+  "candidate_codes": 52,
   "request_timeout_seconds": 8,
   "workers": 6,
   "minute_files_written": 0,
@@ -15,11 +15,7 @@
   "auction_truth_path": "",
   "failures": [
     {
-      "ts_code": "603324.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "600410.SH",
+      "ts_code": "002771.SZ",
       "reason": "empty"
     },
     {
@@ -27,19 +23,19 @@
       "reason": "empty"
     },
     {
-      "ts_code": "000707.SZ",
-      "reason": "empty"
-    },
-    {
       "ts_code": "002843.SZ",
       "reason": "empty"
     },
     {
-      "ts_code": "002771.SZ",
+      "ts_code": "600410.SH",
       "reason": "empty"
     },
     {
-      "ts_code": "002197.SZ",
+      "ts_code": "000707.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603324.SH",
       "reason": "empty"
     },
     {
@@ -51,11 +47,11 @@
       "reason": "empty"
     },
     {
-      "ts_code": "603985.SH",
+      "ts_code": "002685.SZ",
       "reason": "empty"
     },
     {
-      "ts_code": "002685.SZ",
+      "ts_code": "603985.SH",
       "reason": "empty"
     },
     {
@@ -63,19 +59,15 @@
       "reason": "empty"
     },
     {
-      "ts_code": "002403.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603887.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002955.SZ",
+      "ts_code": "002197.SZ",
       "reason": "empty"
     },
     {
       "ts_code": "600162.SH",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603887.SH",
       "reason": "empty"
     },
     {
@@ -87,11 +79,19 @@
       "reason": "empty"
     },
     {
+      "ts_code": "002403.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002955.SZ",
+      "reason": "empty"
+    },
+    {
       "ts_code": "002148.SZ",
       "reason": "empty"
     },
     {
-      "ts_code": "603220.SH",
+      "ts_code": "600405.SH",
       "reason": "empty"
     }
   ],
