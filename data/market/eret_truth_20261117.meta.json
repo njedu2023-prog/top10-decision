@@ -1,0 +1,43 @@
+{
+  "trade_date": "20261117",
+  "exec_date": "20261118",
+  "target_date": "20261119",
+  "rows": 33,
+  "eret_sample_eligible_rows": 27,
+  "sample_maturity": {
+    "FULLY_READY": 33
+  },
+  "label_ready_fill": 33,
+  "label_ready_ret": 33,
+  "quality_counts": {
+    "strong_tplus1_open_0930_fixed_open_0930": 27,
+    "not_filled_no_trade": 6
+  },
+  "ret_stats": {
+    "mean": -0.03728424975379224,
+    "median": -0.04255319148936143,
+    "min": -0.21446153846153848,
+    "max": 0.10700538876058507,
+    "positive_rate": 0.2222222222222222
+  },
+  "target_column": "realized_ret_open_to_tplus1_open_0930",
+  "eret_truth_version": "eret_truth_v5_tplus1_open0930",
+  "return_holding_mode": "manual_buy_t_0925_auction_to_tplus1_open0930_exit",
+  "execution_contract": "D_signal_manual_T_0925_auction_guidance_Tplus1_open0930_exit",
+  "exit_policy": {
+    "version": "tplus1_open_0930_v1",
+    "latest_exit_time": "09:30",
+    "source_counts": {
+      "tplus1_open_0930": 27,
+      "": 6
+    }
+  },
+  "source": {
+    "pred_source": "/home/runner/work/top10-decision/top10-decision/data/pred/archive/pred_source_20261117.csv",
+    "fill_truth": "/home/runner/work/top10-decision/top10-decision/data/market/fill_truth_20261117.csv",
+    "target_daily": "/home/runner/work/top10-decision/top10-decision/data/market/raw/2026/20261119/daily.csv",
+    "target_auction": "/home/runner/work/top10-decision/top10-decision/data/market/raw/2026/20261119/stk_auction.csv",
+    "sample_maturity_csv": "/home/runner/work/top10-decision/top10-decision/data/market/sample_maturity_latest.csv"
+  },
+  "output": "/home/runner/work/top10-decision/top10-decision/data/market/eret_truth_20261117.csv"
+}
