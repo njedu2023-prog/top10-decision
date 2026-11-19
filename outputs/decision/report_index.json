@@ -1,10 +1,17 @@
 {
   "schema_version": "decision_report_index_v1",
-  "generated_at_utc": "2026-11-19T07:23:08+00:00",
-  "latest_report_date": "20261119",
-  "latest_report_file": "decision_report_20261119.md",
+  "generated_at_utc": "2026-11-19T16:50:48+00:00",
+  "latest_report_date": "20261120",
+  "latest_report_file": "decision_report_20261120.md",
   "latest_action_url": "outputs/decision/action_plan_latest.json",
   "reports": [
+    {
+      "report_date": "20261120",
+      "report_file": "decision_report_20261120.md",
+      "report_url": "outputs/decision/decision_report_20261120.md",
+      "eval_url": "outputs/decision/eval_20261120.json",
+      "action_url": "outputs/decision/action_plan_20261120.json"
+    },
     {
       "report_date": "20261119",
       "report_file": "decision_report_20261119.md",
