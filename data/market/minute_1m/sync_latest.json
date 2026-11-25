@@ -15,19 +15,7 @@
   "auction_truth_path": "",
   "failures": [
     {
-      "ts_code": "002036.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "605018.SH",
-      "reason": "empty"
-    },
-    {
       "ts_code": "002164.SZ",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "002122.SZ",
       "reason": "empty"
     },
     {
@@ -35,23 +23,19 @@
       "reason": "empty"
     },
     {
+      "ts_code": "002122.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002036.SZ",
+      "reason": "empty"
+    },
+    {
       "ts_code": "603960.SH",
       "reason": "empty"
     },
     {
-      "ts_code": "603040.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603516.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "603926.SH",
-      "reason": "empty"
-    },
-    {
-      "ts_code": "001229.SZ",
+      "ts_code": "605018.SH",
       "reason": "empty"
     },
     {
@@ -59,15 +43,23 @@
       "reason": "empty"
     },
     {
+      "ts_code": "603926.SH",
+      "reason": "empty"
+    },
+    {
       "ts_code": "603662.SH",
       "reason": "empty"
     },
     {
-      "ts_code": "002724.SZ",
+      "ts_code": "603516.SH",
       "reason": "empty"
     },
     {
-      "ts_code": "001358.SZ",
+      "ts_code": "001229.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "603040.SH",
       "reason": "empty"
     },
     {
@@ -76,6 +68,14 @@
     },
     {
       "ts_code": "002086.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "002724.SZ",
+      "reason": "empty"
+    },
+    {
+      "ts_code": "001358.SZ",
       "reason": "empty"
     },
     {
@@ -91,7 +91,7 @@
       "reason": "empty"
     },
     {
-      "ts_code": "605488.SH",
+      "ts_code": "603666.SH",
       "reason": "empty"
     }
   ],
