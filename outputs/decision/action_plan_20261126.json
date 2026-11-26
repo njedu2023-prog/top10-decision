@@ -14198,21 +14198,116 @@
     },
     "t": {
       "trade_date": "20261126",
-      "available": false,
-      "status": "DAILY_CLOSE_UNAVAILABLE",
+      "available": true,
+      "status": "FINAL_CLOSE",
       "scope": "all_a_share_daily_close",
-      "stock_count": 0,
-      "return_coverage": 0.0,
-      "up_count": 0,
-      "down_count": 0,
-      "flat_count": 0,
-      "limit_up_count": 0,
-      "classified_limit_up_count": 0,
-      "industry_top10": [],
-      "industry_counts": {},
-      "raw_close_available": false,
-      "coverage_against_d": 0.0,
-      "maturity_status": "WAITING_T_CLOSE"
+      "stock_count": 5578,
+      "return_coverage": 1.0,
+      "up_count": 1766,
+      "down_count": 3642,
+      "flat_count": 170,
+      "limit_up_count": 67,
+      "classified_limit_up_count": 67,
+      "industry_top10": [
+        {
+          "rank": 1,
+          "industry": "元件",
+          "limit_up_count": 5,
+          "share": 0.07462686567164178
+        },
+        {
+          "rank": 2,
+          "industry": "化学制品",
+          "limit_up_count": 5,
+          "share": 0.07462686567164178
+        },
+        {
+          "rank": 3,
+          "industry": "通用设备",
+          "limit_up_count": 5,
+          "share": 0.07462686567164178
+        },
+        {
+          "rank": 4,
+          "industry": "一般零售",
+          "limit_up_count": 4,
+          "share": 0.05970149253731343
+        },
+        {
+          "rank": 5,
+          "industry": "农化制品",
+          "limit_up_count": 4,
+          "share": 0.05970149253731343
+        },
+        {
+          "rank": 6,
+          "industry": "汽车零部件",
+          "limit_up_count": 4,
+          "share": 0.05970149253731343
+        },
+        {
+          "rank": 7,
+          "industry": "装修装饰",
+          "limit_up_count": 3,
+          "share": 0.04477611940298507
+        },
+        {
+          "rank": 8,
+          "industry": "造纸",
+          "limit_up_count": 3,
+          "share": 0.04477611940298507
+        },
+        {
+          "rank": 9,
+          "industry": "农产品加",
+          "limit_up_count": 2,
+          "share": 0.029850746268656716
+        },
+        {
+          "rank": 10,
+          "industry": "包装印刷",
+          "limit_up_count": 2,
+          "share": 0.029850746268656716
+        }
+      ],
+      "industry_counts": {
+        "元件": 5,
+        "化学制品": 5,
+        "通用设备": 5,
+        "一般零售": 4,
+        "农化制品": 4,
+        "汽车零部件": 4,
+        "装修装饰": 3,
+        "造纸": 3,
+        "农产品加": 2,
+        "包装印刷": 2,
+        "化学原料": 2,
+        "半导体": 2,
+        "工程咨询": 2,
+        "渔业": 2,
+        "计算机设": 2,
+        "通信服务": 2,
+        "通信设备": 2,
+        "IT服务Ⅱ": 1,
+        "专业服务": 1,
+        "专用设备": 1,
+        "光伏设备": 1,
+        "光学光电": 1,
+        "出版": 1,
+        "化学制药": 1,
+        "旅游零售": 1,
+        "环保设备": 1,
+        "电力": 1,
+        "电网设备": 1,
+        "纺织制造": 1,
+        "自动化设": 1,
+        "航空装备": 1,
+        "贵金属": 1,
+        "软件开发": 1
+      },
+      "raw_close_available": true,
+      "coverage_against_d": 1.000897182845864,
+      "maturity_status": "FINAL_T_CLOSE"
     }
   },
   "observation_validation": {
